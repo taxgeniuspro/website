@@ -1,0 +1,7 @@
+import { loginMetadata } from '@/lib/seo-llm/1-core-seo/metadata/application-auth-metadata';
+
+export const metadata = loginMetadata;
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

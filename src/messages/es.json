@@ -1,0 +1,3210 @@
+{
+  "navigation": {
+    "home": "Inicio",
+    "services": "Servicios",
+    "resources": "Recursos",
+    "joinUs": "Únase",
+    "about": "Acerca de",
+    "contact": "Contacto",
+    "blog": "Blog",
+    "testimonials": "Testimonios",
+    "taxCalculator": "Calculadora de Impuestos",
+    "taxGuide": "Guía de Impuestos",
+    "findRefund": "Encontrar Reembolso",
+    "refundAdvance": "Anticipo de Reembolso",
+    "signIn": "Iniciar Sesión",
+    "signUp": "Registrarse",
+    "signOut": "Cerrar Sesión",
+    "dashboard": "Panel de Control",
+    "cart": "Carrito",
+    "getStarted": "Comenzar",
+    "login": "Iniciar Sesión",
+    "bookAppointment": "Reservar Cita",
+    "becomeAffiliate": "Convertirse en Afiliado",
+    "joinAsPreparer": "Únase como Preparador de Impuestos",
+    "servicesMenu": {
+      "personalTaxFiling": "Declaración de Impuestos Personales",
+      "businessTaxServices": "Servicios de Impuestos Comerciales",
+      "taxPlanningAdvisory": "Planificación y Asesoría Fiscal",
+      "auditProtection": "Protección contra Auditorías",
+      "irsResolutionServices": "Servicios de Resolución del IRS",
+      "viewAllServices": "Ver Todos los Servicios"
+    },
+    "resourcesMenu": {
+      "taxGuide2024": "Guía Fiscal 2024",
+      "taxBlogTips": "Blog y Consejos Fiscales",
+      "helpCenter": "Centro de Ayuda",
+      "taxCalculator": "Calculadora de Impuestos",
+      "findMyRefund": "Encontrar Mi Reembolso"
+    },
+    "joinUsMenu": {
+      "becomeTaxPreparer": "Conviértase en Preparador de Impuestos",
+      "joinAsAffiliate": "Únase como Afiliado",
+      "referralProgram": "Programa de Referidos"
+    },
+    "mobileMenu": {
+      "languageIdioma": "Language / Idioma"
+    }
+  },
+  "footer": {
+    "productsTitle": "Productos",
+    "servicesTitle": "Servicios",
+    "companyTitle": "Empresa",
+    "supportTitle": "Soporte",
+    "professionalEmail": "Correo Electrónico Profesional",
+    "refundAdvance": "Anticipo de Reembolso",
+    "taxForms": "Formularios de Impuestos",
+    "personalTax": "Declaración de Impuestos Personales",
+    "businessTax": "Servicios de Impuestos Comerciales",
+    "taxPlanning": "Planificación Fiscal",
+    "auditProtection": "Protección contra Auditorías",
+    "irsResolution": "Resolución del IRS",
+    "aboutUs": "Acerca de Nosotros",
+    "careers": "Carreras",
+    "affiliateProgram": "Programa de Afiliados",
+    "blog": "Blog",
+    "helpCenter": "Centro de Ayuda",
+    "contactUs": "Contáctenos",
+    "liveChat": "Chat en Vivo",
+    "termsOfService": "Términos de Servicio",
+    "privacyPolicy": "Política de Privacidad",
+    "securityInfo": "Información de Seguridad",
+    "accessibility": "Accesibilidad",
+    "copyright": "© {year} Tax Genius Pro. Todos los derechos reservados.",
+    "tagline": "Servicios Fiscales Profesionales en los que Puede Confiar"
+  },
+  "common": {
+    "loading": "Cargando...",
+    "submit": "Enviar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "create": "Crear",
+    "update": "Actualizar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "finish": "Finalizar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "actions": "Acciones",
+    "status": "Estado",
+    "date": "Fecha",
+    "name": "Nombre",
+    "email": "Correo Electrónico",
+    "phone": "Teléfono",
+    "address": "Dirección",
+    "city": "Ciudad",
+    "state": "Estado",
+    "zip": "Código Postal",
+    "country": "País",
+    "yes": "Sí",
+    "no": "No",
+    "required": "Obligatorio",
+    "optional": "Opcional",
+    "selectOption": "Seleccione una opción",
+    "noResults": "No se encontraron resultados",
+    "errorOccurred": "Ocurrió un error",
+    "successMessage": "¡Éxito!",
+    "uploadFile": "Subir Archivo",
+    "downloadFile": "Descargar Archivo",
+    "viewDetails": "Ver Detalles",
+    "learnMore": "Más Información",
+    "readMore": "Leer Más",
+    "showMore": "Mostrar Más",
+    "showLess": "Mostrar Menos",
+    "all": "Todos",
+    "none": "Ninguno",
+    "other": "Otro"
+  },
+  "validation": {
+    "required": "Este campo es obligatorio",
+    "invalidEmail": "Dirección de correo electrónico inválida",
+    "invalidPhone": "Número de teléfono inválido",
+    "invalidZip": "Código postal inválido",
+    "invalidSSN": "Número de Seguro Social inválido",
+    "invalidDate": "Fecha inválida",
+    "invalidUrl": "URL inválida",
+    "minLength": "Debe tener al menos {min} caracteres",
+    "maxLength": "Debe tener como máximo {max} caracteres",
+    "minValue": "Debe ser al menos {min}",
+    "maxValue": "Debe ser como máximo {max}",
+    "mustMatch": "Los campos deben coincidir",
+    "passwordTooWeak": "La contraseña es demasiado débil",
+    "mustAcceptTerms": "Debe aceptar los términos y condiciones",
+    "invalidFormat": "Formato inválido",
+    "fileTooBig": "El archivo es demasiado grande (máx. {max}MB)",
+    "invalidFileType": "Tipo de archivo inválido"
+  },
+  "roles": {
+    "admin": "Administrador",
+    "super_admin": "Super Administrador",
+    "tax_preparer": "Preparador de Impuestos",
+    "client": "Cliente",
+    "affiliate": "Afiliado",
+    "lead": "Cliente Potencial"
+  },
+  "status": {
+    "pending": "Pendiente",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "approved": "Aprobado",
+    "rejected": "Rechazado",
+    "completed": "Completado",
+    "inProgress": "En Progreso",
+    "cancelled": "Cancelado",
+    "scheduled": "Programado",
+    "confirmed": "Confirmado",
+    "requested": "Solicitado"
+  },
+  "forms": {
+    "taxIntake": {
+      "title": "Formulario de Admisión de Impuestos",
+      "progressStep": "Paso {current} de {total}",
+      "page1": {
+        "title": "Bienvenido",
+        "subtitle": "Comencemos con su declaración de impuestos",
+        "description": "Le guiaremos a través de un proceso simple para recopilar la información que necesitamos para preparar sus impuestos con precisión y maximizar su reembolso.",
+        "startButton": "Comenzar su Declaración de Impuestos"
+      },
+      "page2": {
+        "title": "Información Personal",
+        "subtitle": "Cuéntenos sobre usted",
+        "firstName": "Nombre",
+        "middleName": "Segundo Nombre",
+        "lastName": "Apellido",
+        "email": "Correo Electrónico",
+        "phone": "Número de Teléfono",
+        "countryCode": "Código de País",
+        "firstNamePlaceholder": "Juan",
+        "middleNamePlaceholder": "M.",
+        "lastNamePlaceholder": "Pérez",
+        "emailPlaceholder": "juan.perez@ejemplo.com",
+        "phonePlaceholder": "(555) 123-4567"
+      },
+      "page3": {
+        "title": "Dirección",
+        "subtitle": "¿Dónde vive?",
+        "addressLine1": "Dirección",
+        "addressLine2": "Apartamento, Suite, etc.",
+        "city": "Ciudad",
+        "state": "Estado",
+        "zipCode": "Código Postal",
+        "addressLine1Placeholder": "123 Calle Principal",
+        "addressLine2Placeholder": "Apto 4B",
+        "cityPlaceholder": "Nueva York",
+        "statePlaceholder": "Seleccione su estado",
+        "zipCodePlaceholder": "10001"
+      },
+      "page4": {
+        "title": "Información de Identidad",
+        "subtitle": "Necesitamos esto para presentar sus impuestos",
+        "dateOfBirth": "Fecha de Nacimiento",
+        "ssn": "Número de Seguro Social",
+        "dateOfBirthPlaceholder": "MM/DD/AAAA",
+        "ssnPlaceholder": "XXX-XX-XXXX",
+        "ssnHint": "Su SSN se mantiene seguro y encriptado"
+      },
+      "page5": {
+        "title": "Estado de Dependiente",
+        "subtitle": "¿Alguien puede reclamarlo como dependiente?",
+        "claimedAsDependent": "¿Alguien puede reclamarlo como dependiente en su declaración de impuestos?",
+        "yes": "Sí",
+        "no": "No"
+      },
+      "page6": {
+        "title": "Empleo y Estado Civil",
+        "subtitle": "Cuéntenos sobre su trabajo y estado civil",
+        "filingStatus": "Estado Civil",
+        "filingStatusPlaceholder": "Seleccione su estado civil",
+        "filingStatusSingle": "Soltero(a)",
+        "filingStatusMarriedJoint": "Casado(a) Declarando Conjuntamente",
+        "filingStatusMarriedSeparate": "Casado(a) Declarando Por Separado",
+        "filingStatusHOH": "Jefe de Familia",
+        "filingStatusQualifyingWidow": "Viudo(a) Calificado(a)",
+        "employmentType": "Tipo de Empleo",
+        "employmentW2": "Empleado W-2",
+        "employment1099": "Contratista 1099",
+        "employmentBoth": "Ambos W-2 y 1099",
+        "occupation": "Ocupación",
+        "occupationPlaceholder": "ej., Ingeniero de Software"
+      },
+      "page7": {
+        "title": "Educación",
+        "subtitle": "¿Está actualmente en la universidad?",
+        "inCollege": "¿Está actualmente inscrito en la universidad?",
+        "yes": "Sí",
+        "no": "No"
+      },
+      "page8": {
+        "title": "Dependientes",
+        "subtitle": "¿Tiene dependientes?",
+        "hasDependents": "¿Tiene dependientes?",
+        "none": "Sin dependientes",
+        "yes": "Sí, tengo dependientes",
+        "numberOfDependents": "Número de Dependientes",
+        "numberOfDependentsPlaceholder": "ej., 2",
+        "under24StudentOrDisabled": "¿Algún dependiente menor de 24 años que sea estudiante o discapacitado?",
+        "dependentsInCollege": "¿Algún dependiente en la universidad?",
+        "childCareProvider": "¿Pagó por cuidado de niños?",
+        "yesOption": "Sí",
+        "noOption": "No"
+      },
+      "page9": {
+        "title": "Propiedad",
+        "subtitle": "¿Es propietario de una vivienda?",
+        "hasMortgage": "¿Tiene una hipoteca o paga impuestos sobre la propiedad?",
+        "yes": "Sí",
+        "no": "No"
+      },
+      "page10": {
+        "title": "Créditos Fiscales",
+        "subtitle": "Información importante sobre créditos fiscales",
+        "deniedEITC": "¿Le han negado el Crédito por Ingreso del Trabajo (EITC) en el pasado?",
+        "yes": "Sí",
+        "no": "No",
+        "eitcInfo": "EITC es un beneficio para personas trabajadoras con ingresos bajos a moderados"
+      },
+      "page11": {
+        "title": "PIN del IRS",
+        "subtitle": "¿Tiene un PIN de Protección de Identidad del IRS?",
+        "hasIRSPin": "¿Tiene un PIN de IP del IRS?",
+        "no": "No",
+        "yes": "Sí, lo tengo",
+        "yesLocate": "Sí, pero necesito localizarlo",
+        "irsPinNumber": "PIN de IP del IRS",
+        "irsPinPlaceholder": "Ingrese su PIN de 6 dígitos",
+        "irsPinInfo": "Un PIN de IP es un número de 6 dígitos que evita que alguien más presente una declaración de impuestos usando su SSN"
+      },
+      "page12": {
+        "title": "Anticipo de Reembolso",
+        "subtitle": "¿Le gustaría recibir su reembolso más rápido?",
+        "wantsRefundAdvance": "¿Está interesado en un anticipo de reembolso?",
+        "yes": "Sí",
+        "no": "No",
+        "refundAdvanceInfo": "Reciba su reembolso en tan solo 24 horas (pueden aplicar tarifas)"
+      },
+      "page13": {
+        "title": "Documentos de Identificación",
+        "subtitle": "Suba su licencia de conducir o identificación estatal",
+        "driversLicense": "Número de Licencia de Conducir / ID Estatal",
+        "driversLicensePlaceholder": "ej., D1234567",
+        "licenseExpiration": "Fecha de Vencimiento",
+        "licenseExpirationPlaceholder": "MM/DD/AAAA",
+        "uploadLicense": "Subir Foto de Licencia",
+        "uploadInstructions": "Por favor suba una foto clara del frente de su licencia de conducir o identificación estatal",
+        "fileFormatInfo": "Formatos aceptados: JPG, PNG, PDF (máx. 5MB)",
+        "chooseFile": "Elegir Archivo",
+        "noFileChosen": "Ningún archivo elegido"
+      },
+      "thankYou": {
+        "title": "¡Gracias!",
+        "subtitle": "Su formulario de admisión de impuestos se ha enviado exitosamente",
+        "message": "Hemos recibido su información y nos pondremos en contacto pronto.",
+        "preparerAssigned": "Su preparador de impuestos asignado:",
+        "nextSteps": "Próximos Pasos:",
+        "step1": "Revisar su información",
+        "step2": "Reunir documentos requeridos",
+        "step3": "Programar una consulta",
+        "backToDashboard": "Volver al Panel de Control",
+        "scheduleConsultation": "Programar Consulta"
+      },
+      "errors": {
+        "submissionFailed": "Error al enviar el formulario. Por favor intente de nuevo.",
+        "uploadFailed": "Error al subir el archivo. Por favor intente de nuevo.",
+        "invalidFile": "Tipo de archivo inválido. Por favor suba un JPG, PNG o PDF.",
+        "fileTooLarge": "El archivo es demasiado grande. El tamaño máximo es 5MB."
+      }
+    },
+    "preparerApplication": {
+      "badge": "Solicitud de Preparador de Impuestos",
+      "title": "Únase a Tax Genius como Preparador",
+      "subtitle": "Complete el formulario a continuación para aplicar. Después de enviar, programará su entrevista.",
+      "firstName": "Nombre",
+      "middleName": "Segundo Nombre",
+      "lastName": "Apellido",
+      "email": "Correo Electrónico",
+      "phone": "Teléfono/Móvil (USA)",
+      "languages": "¿Qué idiomas puede hablar?",
+      "languagesPlaceholder": "- Seleccionar -",
+      "languageEnglish": "Inglés",
+      "languageSpanish": "Español",
+      "languageBoth": "Ambos",
+      "experienceLevel": "Experiencia en Preparación de Impuestos",
+      "experienceLevelPlaceholder": "- Seleccionar -",
+      "experienceNew": "Nuevo en Preparación de Impuestos - Necesito Capacitación",
+      "experienceIntermediate": "1-3 Años de Experiencia",
+      "experienceSeasoned": "Profesional Experimentado en Impuestos (3+ años)",
+      "taxSoftwareTitle": "Experiencia con Software de Impuestos",
+      "taxSoftwareDescription": "Seleccione todos los programas de software de impuestos que haya utilizado (marque todos los que correspondan)",
+      "smsConsentLabel": "Al seleccionar Sí a continuación, doy mi consentimiento para recibir mensajes de texto de Tax Genius o sus proveedores de servicios, con respecto a oportunidades de empleo en el número de teléfono indicado arriba. Entiendo que mi consentimiento no es una condición de empleo.",
+      "smsConsentPlaceholder": "Seleccione una opción",
+      "smsConsentYes": "Sí",
+      "smsConsentNo": "No",
+      "privacyNotice": "Al enviar este formulario, usted reconoce que Tax Genius puede procesar los datos que proporciona para contactarlo con información relacionada con su solicitud/envío según se describe en nuestra Declaración de Privacidad.",
+      "submitButton": "Enviar Solicitud",
+      "submitting": "Enviando Solicitud...",
+      "formComplete": "✓ Listo para enviar",
+      "formIncomplete": "Complete todos los campos requeridos",
+      "successTitle": "¡Solicitud Recibida!",
+      "successSubtitle": "Nos pondremos en contacto pronto sobre los próximos pasos",
+      "confirmationMessage": "✓ Hemos recibido su solicitud:",
+      "scheduleInterviewTitle": "📅 Programe Su Entrevista (Opcional)",
+      "scheduleInterviewDescription": "Puede programar su cita de entrevista ahora, o nos pondremos en contacto con usted por correo electrónico o teléfono para configurarla.",
+      "confirmationEmailSent": "📧 Se ha enviado un correo de confirmación a {email}",
+      "confirmationSmsSent": "📱 Le enviaremos un mensaje de texto a {phone} con detalles de la entrevista",
+      "closePageMessage": "Puede cerrar esta página. ¡Nos pondremos en contacto pronto!",
+      "firstNamePlaceholder": "Juan",
+      "middleNamePlaceholder": "Miguel",
+      "lastNamePlaceholder": "García",
+      "emailPlaceholder": "juan.garcia@example.com",
+      "phonePlaceholder": "(555) 123-4567"
+    },
+    "affiliateApplication": {
+      "pageTitle": "Conviértase en Socio Afiliado",
+      "pageSubtitle": "Únase a nuestra red y gane comisiones por cada referencia",
+      "bondingBanner": "Vinculándose con Preparador de Impuestos",
+      "bondingDescription": "Está solicitando trabajar con {username}. Esto crea una asociación donde gana tasas de comisión personalizadas establecidas por este preparador.",
+      "personalInfoTitle": "Información Personal",
+      "personalInfoSubtitle": "Cuéntenos sobre usted",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo Electrónico",
+      "phone": "Número de Teléfono",
+      "marketingExpTitle": "Experiencia en Marketing",
+      "marketingExpSubtitle": "Cuéntenos sobre su audiencia y plataformas",
+      "experience": "Experiencia en Marketing",
+      "experiencePlaceholder": "Describa su experiencia en marketing, programas de afiliados o campos relevantes...",
+      "audience": "Audiencia Objetivo",
+      "audiencePlaceholder": "¿Quién es su audiencia? (por ejemplo, propietarios de pequeñas empresas, freelancers, familias)",
+      "platformsLabel": "Plataformas (Seleccione todas las que apliquen)",
+      "onlinePresenceTitle": "Presencia en Línea",
+      "onlinePresenceSubtitle": "Comparta su sitio web y perfiles de redes sociales",
+      "website": "Sitio Web/Blog (Opcional)",
+      "websitePlaceholder": "https://tublog.com",
+      "facebook": "Perfil/Página de Facebook",
+      "facebookPlaceholder": "facebook.com/tupagina",
+      "instagram": "Usuario de Instagram",
+      "instagramPlaceholder": "@tuusuario",
+      "twitter": "Usuario de Twitter/X",
+      "twitterPlaceholder": "@tuusuario",
+      "youtube": "Canal de YouTube",
+      "youtubePlaceholder": "youtube.com/@tucanal",
+      "additionalInfoTitle": "Información Adicional",
+      "whyAffiliate": "¿Por qué quiere convertirse en afiliado?",
+      "whyAffiliatePlaceholder": "Cuéntenos por qué está interesado en nuestro programa de afiliados...",
+      "agreeToTerms": "Acepto los {termsLink} y la {privacyLink}. Entiendo que mi solicitud será revisada y recibiré credenciales de inicio de sesión una vez aprobada.",
+      "termsAndConditions": "Términos y Condiciones",
+      "privacyPolicy": "Política de Privacidad",
+      "submitButton": "Enviar Solicitud",
+      "submitting": "Enviando...",
+      "successTitle": "¡Solicitud Enviada!",
+      "successSubtitleDefault": "Revisaremos su solicitud y nos comunicaremos con usted dentro de 24-48 horas.",
+      "successSubtitleBonded": "Su solicitud de vinculación ha sido enviada al preparador de impuestos para su revisión.",
+      "whatHappensNext": "¿Qué sigue?",
+      "nextStep1": "Revise su correo electrónico para un mensaje de confirmación",
+      "nextStep2": "Nuestro equipo revisará su solicitud",
+      "nextStep3Bonded": "El preparador de impuestos revisará su solicitud de vinculación",
+      "nextStep4": "Recibirá credenciales de inicio de sesión una vez aprobado",
+      "nextStep5": "Acceso a materiales de marketing y sus enlaces personalizados",
+      "backToHome": "Volver al Inicio",
+      "loadingForm": "Cargando formulario de solicitud..."
+    },
+    "contact": {
+      "badge": "Póngase en Contacto",
+      "pageTitle": "Hablemos Sobre Sus",
+      "pageTitleHighlight": "Necesidades Fiscales",
+      "pageSubtitle": "¿Listo para maximizar su reembolso? Nuestros expertos en impuestos están aquí para ayudar. Contáctenos para una consulta gratuita y vea cómo podemos ahorrarle dinero.",
+      "formTitle": "Obtenga Su Consulta Gratuita",
+      "formSubtitle": "Complete el formulario a continuación y nos comunicaremos con usted dentro de 24 horas",
+      "name": "Nombre Completo",
+      "email": "Correo Electrónico",
+      "phone": "Número de Teléfono",
+      "phonePlaceholder": "123-456-7890",
+      "service": "Servicio Necesario",
+      "serviceSelect": "Seleccione un servicio",
+      "serviceIndividual": "Declaración de Impuestos Individual",
+      "serviceBusiness": "Declaración de Impuestos Empresariales",
+      "serviceRealEstate": "Profesional de Bienes Raíces",
+      "serviceAuditDefense": "Defensa de Auditoría",
+      "serviceTaxPlanning": "Planificación Fiscal",
+      "serviceOther": "Otro",
+      "message": "Mensaje",
+      "messagePlaceholder": "Cuéntenos sobre su situación fiscal específica o preguntas... (mínimo 10 caracteres)",
+      "messageCounter": "{count}/1000 caracteres",
+      "sendMessage": "Enviar Mensaje",
+      "sending": "Enviando...",
+      "successTitle": "¡Mensaje Enviado Exitosamente!",
+      "successMessage": "Gracias por contactarnos. Hemos recibido su mensaje y nos comunicaremos con usted dentro de 24 horas.",
+      "sendAnother": "Enviar Otro Mensaje",
+      "contactInfoTitle": "Información de Contacto",
+      "contactPhone": "Teléfono",
+      "contactEmail": "Correo Electrónico",
+      "contactLocation": "Ubicación",
+      "contactHours": "Horario de Atención",
+      "monday": "Lunes: 9:00 AM - 7:00 PM",
+      "tuesday": "Martes: 9:00 AM - 7:00 PM",
+      "wednesday": "Miércoles: 9:00 AM - 7:00 PM",
+      "thursday": "Jueves: 9:00 AM - 7:00 PM",
+      "friday": "Viernes: 9:00 AM - 7:00 PM",
+      "saturday": "Sábado: 10:00 AM - 5:00 PM",
+      "sunday": "Domingo: Cerrado",
+      "quickActionsTitle": "Acciones Rápidas",
+      "quickActionsSubtitle": "¿Necesita asistencia inmediata? Pruebe estas opciones",
+      "scheduleConsultation": "Programar Consulta Gratuita",
+      "liveChat": "Soporte por Chat en Vivo",
+      "checkRefund": "Verificar Estado del Reembolso",
+      "guaranteeTitle": "Garantía de Servicio",
+      "guaranteeMessage": "Garantizamos reembolsos máximos, presentación precisa y protección completa contra auditorías. Su satisfacción es nuestro compromiso.",
+      "faqTitle": "Preguntas Frecuentes",
+      "faqSubtitle": "Respuestas rápidas a preguntas comunes sobre nuestros servicios",
+      "faqQ1": "¿Qué tan rápido puede preparar mi declaración?",
+      "faqA1": "La mayoría de las declaraciones individuales se completan dentro de 24-48 horas. Las declaraciones comerciales generalmente toman de 3 a 5 días hábiles según la complejidad.",
+      "faqQ2": "¿Ofrecen protección contra auditorías?",
+      "faqA2": "¡Sí! La defensa completa contra auditorías está incluida con cada declaración de impuestos que preparamos. Lo representaremos ante el IRS sin costo adicional.",
+      "faqQ3": "¿Puedo presentar desde cualquier lugar de los EE. UU.?",
+      "faqA3": "¡Absolutamente! Servimos a clientes en los 50 estados y ofrecemos consultas virtuales y reuniones en persona donde estén disponibles.",
+      "faqQ4": "¿Qué pasa si no estoy satisfecho con su servicio?",
+      "faqA4": "Ofrecemos una garantía de satisfacción del 100%. Si no está completamente satisfecho, lo arreglaremos o proporcionaremos un reembolso completo."
+    }
+  },
+  "home": {
+    "hero": {
+      "irsAuthorized": "Autorizado por el IRS",
+      "bbbRated": "Calificación A+ BBB",
+      "yearsExperience": "Más de 25 Años",
+      "title": "Preparación Profesional de Impuestos",
+      "titleHighlight": "En la Que Puede Confiar",
+      "subtitle": "CPAs Expertos. Reembolsos Máximos. Tranquilidad. Obtenga servicios fiscales profesionales de profesionales licenciados que saben cómo ahorrarle dinero.",
+      "ctaFile": "Presente Sus Impuestos en Línea",
+      "ctaSchedule": "Programe una Consulta",
+      "helpText": "Comience su declaración en línea o hable con un CPA licenciado. Llame al",
+      "happyClients": "Clientes Satisfechos",
+      "imageAlt": "Asesor fiscal profesional ayudando a un cliente"
+    },
+    "services": {
+      "sectionTitle": "Nuestros Servicios Fiscales",
+      "sectionSubtitle": "Soluciones fiscales profesionales adaptadas a sus necesidades",
+      "personal": {
+        "title": "Declaración de Impuestos Personales",
+        "description": "Preparación profesional para individuos y familias. Manejamos W-2s, deducciones y créditos.",
+        "badge": "Más Popular"
+      },
+      "business": {
+        "title": "Servicios Fiscales para Negocios",
+        "description": "Preparación y planificación fiscal integral para pequeñas empresas, LLCs y S-Corps.",
+        "badge": "Para Negocios"
+      },
+      "planning": {
+        "title": "Planificación y Asesoría Fiscal",
+        "description": "Planificación fiscal estratégica durante todo el año para minimizar la responsabilidad y maximizar los ahorros.",
+        "badge": "Asesoramiento Experto"
+      },
+      "learnMore": "Más Información",
+      "supportNote": "Todos los servicios incluyen protección gratuita contra auditorías y soporte durante todo el año",
+      "ctaFileOnline": "Presente en Línea",
+      "ctaViewAll": "Ver Todos los Servicios"
+    },
+    "trustBadges": {
+      "irsEfile": "Proveedor Autorizado de E-File del IRS",
+      "bbbAccredited": "Calificación A+ de Better Business Bureau",
+      "cpaBoardCertified": "CPAs Licenciados por el Estado",
+      "natpMember": "Asociación Profesional de Impuestos"
+    },
+    "howItWorks": {
+      "sectionTitle": "Cómo Funciona",
+      "sectionSubtitle": "Cuatro simples pasos para la preparación profesional de impuestos",
+      "step1": {
+        "title": "Reserve una Consulta",
+        "description": "Programe una consulta gratuita de 30 minutos con un CPA licenciado"
+      },
+      "step2": {
+        "title": "Cargue Documentos",
+        "description": "Cargue de forma segura W-2s, 1099s y recibos a través de nuestro portal"
+      },
+      "step3": {
+        "title": "Revisión Experta",
+        "description": "El CPA encuentra todas las deducciones elegibles y prepara su declaración"
+      },
+      "step4": {
+        "title": "Presente y Relájese",
+        "description": "Manejamos la presentación ante el IRS y rastreamos el estado de su reembolso"
+      },
+      "ctaGetStarted": "Comience Hoy"
+    },
+    "whyChooseUs": {
+      "sectionTitle": "Por Qué Más de 50,000 Estadounidenses Confían en Nosotros",
+      "sectionSubtitle": "Preparación profesional de impuestos con el toque personal que merece",
+      "benefit1": {
+        "title": "CPAs Licenciados con Más de 25 Años de Experiencia",
+        "description": "Nuestro equipo de profesionales certificados se mantiene actualizado con los cambios en las leyes fiscales para maximizar su reembolso."
+      },
+      "benefit2": {
+        "title": "Reembolso Máximo Garantizado por Escrito",
+        "description": "Garantizamos que obtendrá el mayor reembolso posible, o le pagaremos la diferencia."
+      },
+      "benefit3": {
+        "title": "Soporte Durante Todo el Año (No Solo en Temporada Fiscal)",
+        "description": "Obtenga respuestas a sus preguntas fiscales en cualquier momento. Estamos aquí para usted todo el año, no solo en abril."
+      },
+      "benefit4": {
+        "title": "Seguridad y Encriptación de Nivel Bancario",
+        "description": "Su información confidencial está protegida con encriptación de grado militar de 256 bits."
+      },
+      "imageAlt": "Equipo fiscal profesional colaborando",
+      "ctaFile": "Presente Sus Impuestos",
+      "ctaLearnMore": "Conozca Más Sobre Nosotros",
+      "badgeTitle": "BBB A+",
+      "badgeSubtitle": "Calificado"
+    },
+    "credentials": {
+      "sectionTitle": "Confiable y Certificado",
+      "sectionSubtitle": "Profesionales licenciados con credenciales verificadas",
+      "credential1": {
+        "title": "Proveedor de E-File del IRS",
+        "subtitle": "Autorizado"
+      },
+      "credential2": {
+        "title": "Acreditado por BBB",
+        "subtitle": "Calificación A+"
+      },
+      "credential3": {
+        "title": "Licenciado por el Estado",
+        "subtitle": "Certificado por el Consejo de CPAs"
+      },
+      "credential4": {
+        "title": "SSL de 256 Bits",
+        "subtitle": "Seguridad de Nivel Bancario"
+      },
+      "bottomNote": "Todos nuestros preparadores están licenciados, afianzados y asegurados para su protección"
+    },
+    "testimonials": {
+      "rating": "4.9 de 5",
+      "sectionTitle": "Lo Que Dicen Nuestros Clientes",
+      "sectionSubtitle": "Basado en más de 50,000 reseñas verificadas",
+      "testimonial1": {
+        "name": "Sarah Johnson",
+        "role": "Propietaria de Pequeño Negocio",
+        "location": "Austin, TX",
+        "content": "El equipo de CPAs fue increíblemente conocedor y me ayudó a encontrar deducciones que ni siquiera sabía que existían. Servicio profesional de principio a fin."
+      },
+      "testimonial2": {
+        "name": "Michael Chen",
+        "role": "Ingeniero de Software",
+        "location": "San Francisco, CA",
+        "content": "Rápido, eficiente y profesional. Todo el proceso fue perfecto y mi CPA respondió todas mis preguntas con prontitud."
+      },
+      "testimonial3": {
+        "name": "Maria Garcia",
+        "role": "Maestra",
+        "location": "Miami, FL",
+        "content": "El mejor servicio fiscal que he usado. Hicieron que todo fuera fácil de entender y siempre estuvieron disponibles cuando tenía preguntas."
+      },
+      "verifiedClient": "Cliente Verificado",
+      "ctaReadMore": "Leer Más Reseñas"
+    },
+    "faq": {
+      "sectionTitle": "Preguntas Frecuentes",
+      "faq1": {
+        "question": "¿Qué tan rápido puedo obtener mi reembolso?",
+        "answer": "Con depósito directo, puede recibir su reembolso federal en tan solo 24 horas después de la aceptación del IRS. Los cheques en papel generalmente tardan de 2 a 3 semanas."
+      },
+      "faq2": {
+        "question": "¿Qué documentos necesito para presentar?",
+        "answer": "Necesitará sus W-2s, 1099s, recibos de deducciones, declaración de impuestos del año pasado y cualquier otro documento de ingresos o deducciones. Nuestra plataforma lo guiará a través de todo lo que necesite."
+      },
+      "faq3": {
+        "question": "¿Es segura mi información?",
+        "answer": "¡Sí! Usamos encriptación de 256 bits de nivel bancario y estamos autorizados por el IRS. Sus datos están protegidos con los mismos estándares de seguridad utilizados por las principales instituciones financieras."
+      },
+      "faq4": {
+        "question": "¿Qué pasa si necesito ayuda durante la presentación?",
+        "answer": "Nuestros CPAs están disponibles por chat, teléfono o videollamada. Los planes premium incluyen soporte ilimitado de CPA durante todo el proceso de presentación."
+      },
+      "faq5": {
+        "question": "¿Ofrecen protección contra auditorías?",
+        "answer": "¡Sí! Todos nuestros planes incluyen protección gratuita contra auditorías. Si es auditado, lo representaremos y manejaremos todas las comunicaciones con el IRS sin costo adicional."
+      }
+    },
+    "finalCTA": {
+      "imageAlt": "Familia feliz planificando sus finanzas",
+      "satisfactionBadge": "98%",
+      "satisfactionLabel": "Satisfacción",
+      "sectionTitle": "¿Listo para Comenzar?",
+      "sectionDescription": "Presente sus impuestos en línea en minutos, o programe una consulta gratuita con un CPA licenciado.",
+      "ctaFile": "Presente Su Declaración de Impuestos en Línea",
+      "ctaSchedule": "Programe Consulta Gratuita",
+      "trustIndicator1": "CPAs Licenciados",
+      "trustIndicator2": "100% Seguro",
+      "trustIndicator3": "Calificación A+ BBB",
+      "helpText": "¿Tiene preguntas? Llámenos al",
+      "helpTextOr": "o",
+      "contactLink": "contáctenos en línea"
+    },
+    "opportunities": {
+      "sectionTitle": "Únase a Nuestro Equipo",
+      "sectionSubtitle": "¿Busca oportunidades profesionales o quiere ganar ingresos adicionales?",
+      "preparer": {
+        "alt": "Profesional trabajando en computadora portátil",
+        "badge": "$45-75 por declaración",
+        "categoryBadge": "Oportunidad Profesional",
+        "title": "Conviértase en Preparador de Impuestos",
+        "description": "Únase a nuestra red de preparadores de impuestos profesionales. Gane $45-75 por declaración con horarios flexibles y trabajo remoto.",
+        "benefit1": "Horario flexible - trabaje cuando quiera",
+        "benefit2": "100% remoto - trabaje desde cualquier lugar",
+        "benefit3": "Seguro profesional E&O incluido",
+        "buttonText": "Solicitar Ahora"
+      },
+      "affiliate": {
+        "alt": "Personas celebrando el éxito",
+        "badge": "Hasta $50 por referido",
+        "categoryBadge": "Gane Dinero Extra",
+        "title": "Programa de Afiliados",
+        "description": "Gane comisiones por cada cliente que refiera. Perfecto para especialistas en marketing e influencers con potencial de ingresos ilimitado.",
+        "benefit1": "Gane comisión por referido exitoso",
+        "benefit2": "Materiales de marketing proporcionados",
+        "benefit3": "Panel de seguimiento en tiempo real",
+        "buttonText": "Únase Ahora"
+      }
+    }
+  },
+  "services": {
+    "overview": {
+      "badge": "Servicios Fiscales Profesionales",
+      "title": "Soluciones Fiscales",
+      "titleHighlight": "Completas",
+      "subtitle": "Desde declaraciones individuales hasta presentaciones comerciales complejas, nuestros profesionales certificados manejan todas sus necesidades fiscales con precisión y cuidado.",
+      "individual": {
+        "title": "Declaraciones de Impuestos Individuales",
+        "description": "Preparación de impuestos personales para individuos y familias",
+        "feature1": "Deducciones Estándar e Detalladas",
+        "feature2": "Múltiples Fuentes de Ingresos",
+        "feature3": "Planificación de Inversiones y Jubilación",
+        "feature4": "Créditos y Deducciones Educativas",
+        "price": "Desde $149",
+        "cta": "Comenzar Presentación"
+      },
+      "business": {
+        "title": "Declaraciones de Impuestos Comerciales",
+        "description": "Servicios fiscales comerciales integrales para todos los tipos de entidades",
+        "feature1": "Declaraciones de LLC, Corp, Sociedad",
+        "feature2": "Impuesto sobre el Trabajo por Cuenta Propia",
+        "feature3": "Pagos Estimados Trimestrales",
+        "feature4": "Optimización de Deducciones Comerciales",
+        "price": "Desde $299",
+        "cta": "Comenzar Presentación"
+      },
+      "realEstate": {
+        "title": "Profesional de Bienes Raíces",
+        "description": "Servicios especializados para agentes e inversores de bienes raíces",
+        "feature1": "Estado de Profesional de Bienes Raíces",
+        "feature2": "Optimización de Propiedades de Alquiler",
+        "feature3": "Planificación de Intercambio 1031",
+        "feature4": "Estrategias de Depreciación",
+        "price": "Desde $399",
+        "cta": "Comenzar Presentación"
+      },
+      "additionalServices": {
+        "title": "Servicios Adicionales",
+        "subtitle": "Soluciones fiscales integrales para satisfacer todas sus necesidades",
+        "taxAdvance": {
+          "title": "Préstamos Anticipados de Impuestos",
+          "description": "Obtenga su reembolso más rápido con nuestro programa de préstamos anticipados"
+        },
+        "auditProtection": {
+          "title": "Protección contra Auditorías",
+          "description": "Defensa completa de auditorías y servicios de representación ante el IRS"
+        },
+        "taxPlanning": {
+          "title": "Planificación Fiscal",
+          "description": "Sesiones de planificación y estrategia fiscal durante todo el año"
+        },
+        "priorYear": {
+          "title": "Declaraciones de Años Anteriores",
+          "description": "Declaraciones enmendadas y servicios de presentación retroactiva"
+        }
+      },
+      "process": {
+        "title": "Cómo Funciona",
+        "subtitle": "Nuestro proceso simplificado hace que la preparación de impuestos sea simple y sin estrés",
+        "step1": {
+          "title": "Cargar Documentos",
+          "description": "Cargue de forma segura sus documentos fiscales a través de nuestro portal encriptado"
+        },
+        "step2": {
+          "title": "Revisión Experta",
+          "description": "Nuestros profesionales certificados revisan y preparan su declaración"
+        },
+        "step3": {
+          "title": "Control de Calidad",
+          "description": "Múltiples controles de calidad aseguran la precisión y el reembolso máximo"
+        },
+        "step4": {
+          "title": "Presentar Electrónicamente y Rastrear",
+          "description": "Presente electrónicamente su declaración y rastree el estado de su reembolso en tiempo real"
+        }
+      },
+      "whyChoose": {
+        "title": "¿Por Qué Elegir Tax Genius Pro?",
+        "benefit1": {
+          "title": "Profesionales Certificados",
+          "description": "Nuestro equipo incluye CPAs, EAs y expertos fiscales con décadas de experiencia"
+        },
+        "benefit2": {
+          "title": "Garantía de Reembolso Máximo",
+          "description": "Encontramos cada deducción y crédito al que tiene derecho"
+        },
+        "benefit3": {
+          "title": "Rápido y Preciso",
+          "description": "Tiempos de respuesta rápidos con una tasa de precisión del 99.9%"
+        },
+        "benefit4": {
+          "title": "Protección contra Auditorías",
+          "description": "Defensa completa contra auditorías incluida con cada declaración que preparamos"
+        },
+        "imageAlt": "Profesional fiscal"
+      },
+      "finalCTA": {
+        "title": "¿Listo para Maximizar Su Reembolso?",
+        "subtitle": "Únase a miles que confían en Tax Genius Pro para sus necesidades fiscales",
+        "ctaStart": "Comience Su Declaración",
+        "ctaQuote": "Obtenga Cotización Gratuita"
+      }
+    }
+  },
+  "about": {
+    "hero": {
+      "badge": "Establecidos en los Años 90",
+      "title": "Más de 30 Años de",
+      "titleHighlight": "Excelencia Fiscal",
+      "subtitle": "Desde una pequeña operación familiar en Atlanta y Chicago hasta un socio nacional de confianza, nuestro viaje ha sido guiado por un simple compromiso: ayudar a cada cliente a sentirse apoyado, informado y seguro en sus decisiones financieras."
+    },
+    "stats": {
+      "years": "30+",
+      "yearsLabel": "Años de Servicio",
+      "clients": "100K+",
+      "clientsLabel": "Clientes Satisfechos",
+      "refunds": "$5B+",
+      "refundsLabel": "Reembolsos Procesados",
+      "rating": "4.9/5",
+      "ratingLabel": "Satisfacción del Cliente"
+    },
+    "beginnings": {
+      "title": "Nuestros Humildes Comienzos",
+      "imageBadge": "Est. Años 90 • Atlanta y Chicago",
+      "imageAlt": "Pequeño negocio familiar sirviendo a la comunidad local",
+      "paragraph1": "Hace más de 30 años, Tax Genius nació de una pequeña operación familiar que servía a las comunidades locales de Atlanta y Chicago. En ese entonces, trabajábamos codo a codo con vecinos, propietarios de pequeños negocios y familias trabajadoras que necesitaban orientación a través de las complejidades del código tributario.",
+      "paragraph2": "En esos primeros días, nuestro compromiso era simple: ayudar a cada cliente a sentirse apoyado, informado y seguro en sus decisiones financieras."
+    },
+    "trust": {
+      "title": "Construyendo Confianza y Experiencia",
+      "imageAlt": "Profesionales fiscales consultando con clientes",
+      "paragraph1": "Con cada año que pasaba, nuestro equipo crecía en conocimiento y capacidad. Escuchábamos atentamente las preocupaciones de nuestros clientes, aprendíamos de sus experiencias y perfeccionábamos nuestro oficio.",
+      "paragraph2": "Al ofrecer asesoramiento transparente, soluciones fiscales personalizadas y apoyo práctico, nos convertimos en más que otro servicio de preparación de impuestos: nos convertimos en socios de confianza que se preocupaban profundamente por mejorar el bienestar financiero de nuestros clientes.",
+      "card1Title": "Transparente",
+      "card1Subtitle": "Asesoramiento Honesto",
+      "card2Title": "Personalizado",
+      "card2Subtitle": "Soluciones Personalizadas"
+    },
+    "community": {
+      "title": "Invirtiendo en Personas y Comunidades",
+      "imageAlt": "Taller comunitario y capacitación en educación financiera",
+      "badgeTitle": "Programas Comunitarios",
+      "badgeSubtitle": "Talleres de educación financiera",
+      "paragraph1": "Nuestro compromiso con la comunidad siempre ha estado en el corazón de Tax Genius. Hemos creado empleos, apoyado iniciativas de capacitación local e invertido en programas benéficos que devuelven a los vecindarios que hemos servido desde el principio.",
+      "paragraph2": "Al ofrecer talleres de educación financiera, patrocinar esfuerzos educativos y empoderar a los miembros de nuestro equipo para que sean voluntarios, buscamos elevar a las comunidades que han sido fundamentales para nuestro éxito.",
+      "item1Title": "Creación de Empleos",
+      "item1Description": "Apoyando el empleo local y el crecimiento profesional",
+      "item2Title": "Programas de Capacitación",
+      "item2Description": "Invirtiendo en desarrollo profesional y educación",
+      "item3Title": "Donaciones Benéficas",
+      "item3Description": "Apoyando causas comunitarias e iniciativas de voluntariado"
+    },
+    "innovation": {
+      "title": "Adoptando Tecnología e Innovación",
+      "imageAlt": "Software moderno de preparación de impuestos e innovación digital",
+      "paragraph1": "A medida que el mundo de las finanzas evolucionó, nosotros también lo hicimos. Nos expandimos más allá de los servicios tradicionales en la oficina para desarrollar software intuitivo de preparación de impuestos en línea.",
+      "paragraph2": "Hoy, nuestra innovadora plataforma digital combina décadas de experiencia fiscal con herramientas fáciles de usar. Esto asegura que cualquiera, desde personas que presentan por primera vez hasta propietarios de negocios experimentados, pueda navegar sus impuestos con facilidad y tranquilidad.",
+      "cardTitle": "Digital Primero, Humano Siempre",
+      "cardDescription": "Nuestra plataforma combina tecnología de vanguardia con acceso a CPAs reales cuando necesite orientación personalizada."
+    },
+    "vision": {
+      "title": "Nuestra Visión Hacia Adelante",
+      "paragraph1": "Hoy, Tax Genius se erige como una empresa moderna y con visión de futuro arraigada en los valores que dieron forma a nuestros primeros días. A medida que continuamos creciendo y adaptándonos, nuestra misión permanece constante: proporcionar orientación experta, herramientas accesibles y apoyo inquebrantable a todos los que confían en nosotros con sus necesidades fiscales.",
+      "paragraph2": "Es nuestro honor ayudarle a encontrar claridad, confianza y comodidad en su viaje financiero, ahora y en los años venideros.",
+      "teamImageAlt": "Equipo diverso colaborando en Tax Genius",
+      "teamCaption": "Nuestro equipo está listo para servirle"
+    },
+    "cta": {
+      "title": "¿Listo para Experimentar la Diferencia de Tax Genius?",
+      "subtitle": "Únase a más de 100,000 clientes satisfechos que confían en nosotros con sus necesidades fiscales. Escribamos juntos el próximo capítulo de su éxito financiero.",
+      "ctaStart": "Comience Hoy",
+      "ctaContact": "Contáctenos"
+    }
+  },
+  "testimonials": {
+    "hero": {
+      "badge": "Confiado por Miles",
+      "title": "Lo Que Dicen Nuestros Clientes",
+      "description": "No solo tome nuestra palabra. Esto es lo que los clientes reales tienen que decir sobre su experiencia con TaxGeniusPro."
+    },
+    "stats": {
+      "clients": "10,000+",
+      "clientsLabel": "Clientes Satisfechos",
+      "rating": "4.9/5",
+      "ratingLabel": "Calificación Promedio",
+      "experience": "25+ Años",
+      "experienceLabel": "Experiencia Combinada",
+      "retention": "98%",
+      "retentionLabel": "Retención de Clientes"
+    },
+    "trust": {
+      "title": "Por Qué Los Clientes Confían en TaxGeniusPro",
+      "card1Title": "Autorizado por el IRS",
+      "card1Description": "Profesionales fiscales licenciados y certificados",
+      "card2Title": "Calificación A+ de BBB",
+      "card2Description": "Reconocido por excelencia e integridad",
+      "card3Title": "Satisfacción Garantizada",
+      "card3Description": "Respaldamos nuestro trabajo al 100%"
+    },
+    "cta": {
+      "title": "¿Listo para Experimentar la Diferencia de TaxGeniusPro?",
+      "description": "Únase a miles de clientes satisfechos que confían en nosotros con sus impuestos. ¡Comience hoy!",
+      "ctaStart": "Comience su Declaración",
+      "ctaContact": "Contáctenos"
+    }
+  },
+  "startFiling": {
+    "hero": {
+      "badge": "Presente en 15 Minutos",
+      "title": "Obtenga Cada Dólar Que",
+      "titleHighlight": "Merece",
+      "titleEnd": "Esta Temporada de Impuestos",
+      "subtitle": "CPAs expertos encuentran todas las deducciones y créditos para los que califica. Rápido, fácil, y usted conserva más dinero.",
+      "ctaButton": "Comience su Declaración Ahora",
+      "noSignup": "No requiere registro para comenzar",
+      "stat1": "15min",
+      "stat1Label": "Tiempo promedio de presentación",
+      "stat2": "$3,200",
+      "stat2Label": "Reembolso promedio",
+      "stat3": "4.9★",
+      "stat3Label": "Calificación de clientes",
+      "imageAlt": "Persona feliz celebrando reembolso de impuestos en laptop",
+      "floatingCardStat": "50,000+",
+      "floatingCardLabel": "Reembolsos Procesados"
+    },
+    "whyChoose": {
+      "title": "Por Qué La Gente Elige Tax Genius Pro",
+      "subtitle": "Nos enfocamos en lo que más importa: su tiempo y su dinero",
+      "speed": {
+        "title": "Presentación Ultra Rápida",
+        "description": "La mayoría de los clientes completan su declaración en menos de 15 minutos. Nuestro formulario inteligente pregunta solo lo necesario para SU situación.",
+        "feature1": "Preguntas simples, sin jerga fiscal",
+        "feature2": "Guarde y continúe en cualquier momento",
+        "feature3": "Declaraciones presentadas en 48 horas"
+      },
+      "refund": {
+        "title": "Promesa de Reembolso Máximo",
+        "description": "Nuestros CPAs encuentran cada deducción y crédito para el que califica. Vea a qué tiene derecho - la mayoría de los clientes obtienen $3,200+.",
+        "feature1": "Revisión experta de su declaración",
+        "feature2": "Encuentre deducciones ocultas",
+        "feature3": "Garantía de precisión del 100%"
+      },
+      "ctaButton": "Vea Para Qué Califica"
+    },
+    "testimonials": {
+      "title": "Personas Reales, Resultados Reales",
+      "subtitle": "Vea lo que los clientes dicen sobre sus reembolsos y experiencia",
+      "joinText": "Únase a 50,000+ clientes satisfechos"
+    },
+    "howItWorks": {
+      "title": "Obtenga su Reembolso en 3 Pasos Simples",
+      "subtitle": "Rápido, fácil y diseñado para personas reales",
+      "step1Title": "Responda Preguntas Rápidas",
+      "step1Description": "Toma 15 minutos o menos. Preguntas simples sobre sus ingresos, familia y deducciones.",
+      "step2Title": "Revisión de CPA Experto",
+      "step2Description": "Profesionales fiscales licenciados revisan su declaración y encuentran cada deducción para la que califica.",
+      "step3Title": "Obtenga su Reembolso Máximo",
+      "step3Description": "Presentamos su declaración y usted obtiene cada dólar que merece. Rápido, seguro, garantizado."
+    },
+    "finalCta": {
+      "title": "¿Listo para Ver Para Qué Califica?",
+      "subtitle": "Comience su declaración ahora. No requiere registro. La mayoría de las personas terminan en menos de 15 minutos.",
+      "feature1": "Encuentre todas las deducciones y créditos",
+      "feature2": "Un CPA experto revisa su declaración",
+      "feature3": "Garantía de precisión del 100%",
+      "ctaButton": "Comience su Declaración de Impuestos Ahora",
+      "subtext": "Reembolso promedio: $3,200 • Presente en 15 minutos",
+      "imageAlt": "Persona emocionada por el reembolso de impuestos"
+    },
+    "trust": {
+      "badge1": "Proveedor Autorizado de E-File del IRS",
+      "badge2": "Encriptación de Nivel Bancario de 256 Bits",
+      "badge3": "Calificación A+ de BBB"
+    }
+  },
+  "taxPlanning": {
+    "hero": {
+      "badge": "Planificación Fiscal Estratégica",
+      "title": "Planificación Fiscal Proactiva y",
+      "titleHighlight": "Servicios de Asesoría",
+      "subtitle": "No espere hasta abril. Planificación estratégica durante todo el año para minimizar su carga fiscal y maximizar la preservación de su patrimonio.",
+      "ctaButton": "Programar Sesión de Estrategia",
+      "ctaPhone": "(404) 627-1015",
+      "feature1": "Soporte Durante Todo el Año",
+      "feature2": "Ahorre 20-40% en Impuestos",
+      "feature3": "Estrategas Fiscales CPA",
+      "imageAlt": "Consulta de planificación financiera",
+      "statNumber": "35%",
+      "statLabel": "Ahorro Fiscal Promedio"
+    },
+    "whyPlan": {
+      "title": "Por Qué Importa la Planificación Anual",
+      "subtitle": "La planificación fiscal no es solo para abril. Las decisiones estratégicas durante todo el año pueden ahorrarle miles.",
+      "card1Title": "Revisiones Trimestrales",
+      "card1Description": "Revisiones regulares para optimizar su posición fiscal durante todo el año",
+      "card2Title": "Decisiones Estratégicas",
+      "card2Description": "Tome decisiones informadas sobre inversiones, gastos comerciales, jubilación",
+      "card3Title": "Maximice Deducciones",
+      "card3Description": "Identifique oportunidades antes de fin de año para reducir ingresos gravables",
+      "card4Title": "Gestión de Riesgos",
+      "card4Description": "Evite multas, problemas de impuestos estimados y facturas fiscales sorpresa"
+    },
+    "process": {
+      "title": "Nuestro Proceso de Planificación",
+      "subtitle": "Un enfoque sistemático para minimizar su obligación tributaria",
+      "step1": "1",
+      "step1Title": "Descubrimiento Inicial",
+      "step1Description": "Inmersión profunda en su situación financiera, objetivos y posición fiscal actual",
+      "step2": "2",
+      "step2Title": "Desarrollo de Estrategia",
+      "step2Description": "Crear plan fiscal personalizado con elementos de acción específicos y cronogramas",
+      "step3": "3",
+      "step3Title": "Implementación",
+      "step3Description": "Ejecutar estrategias con orientación sobre tiempo, documentación y cumplimiento",
+      "step4": "4",
+      "step4Title": "Monitoreo Continuo",
+      "step4Description": "Revisiones trimestrales y ajustes basados en cambios de vida y actualizaciones de leyes fiscales"
+    },
+    "services": {
+      "title": "Servicios de Planificación que Ofrecemos",
+      "subtitle": "Asesoría integral que cubre todos los aspectos de la optimización fiscal",
+      "service1Title": "Planificación de Jubilación",
+      "service1Description": "Estrategias IRA, 401(k), SEP, Solo 401(k) para reducir impuestos actuales",
+      "service2Title": "Estrategias de Bienes Raíces",
+      "service2Description": "Intercambios 1031, optimización de propiedades de alquiler, reglas de casas de vacaciones",
+      "service3Title": "Planificación Fiscal de Inversiones",
+      "service3Description": "Cosecha de ganancias de capital, estrategias de dividendos calificados, ventas ficticias",
+      "service4Title": "Planificación de Patrimonio y Donaciones",
+      "service4Description": "Minimizar impuestos sobre el patrimonio, optimizar donaciones, estructuras de fideicomisos",
+      "service5Title": "Selección de Entidad Comercial",
+      "service5Description": "Análisis LLC vs S-Corp vs C-Corp para tratamiento fiscal óptimo",
+      "service6Title": "Planificación Multiestatal",
+      "service6Description": "Estrategia de domicilio, minimización de impuestos estatales para personas de altos ingresos",
+      "imageAlt": "Sesión de planificación estratégica"
+    },
+    "pricing": {
+      "title": "Paquetes de Planificación",
+      "subtitle": "Elija el nivel de soporte que se ajuste a sus necesidades",
+      "essentials": {
+        "name": "Esencial",
+        "price": "$500",
+        "period": "/trimestre",
+        "feature1": "Llamadas de planificación fiscal trimestrales",
+        "feature2": "Cálculos de impuestos estimados",
+        "feature3": "Recomendaciones de estrategia básicas",
+        "feature4": "Soporte por correo electrónico",
+        "cta": "Comenzar"
+      },
+      "professional": {
+        "name": "Profesional",
+        "price": "$1,200",
+        "period": "/trimestre",
+        "feature1": "Sesiones de estrategia mensuales",
+        "feature2": "Modelado fiscal integral",
+        "feature3": "Planificación comercial y personal",
+        "feature4": "Soporte prioritario por teléfono/correo",
+        "feature5": "Sesión de planificación de fin de año",
+        "badge": "Más Popular",
+        "cta": "Más Popular"
+      },
+      "executive": {
+        "name": "Ejecutivo",
+        "price": "$2,500",
+        "period": "/trimestre",
+        "feature1": "Acceso ilimitado a CPA",
+        "feature2": "Planificación multi-entidad",
+        "feature3": "Planificación de patrimonio y sucesión",
+        "feature4": "Revisión de estrategia de inversión",
+        "feature5": "Estratega fiscal dedicado",
+        "feature6": "Respuesta el mismo día",
+        "cta": "Soporte Premium"
+      },
+      "footnote": "Todos los paquetes incluyen preparación de declaración de impuestos sin costo adicional"
+    },
+    "cta": {
+      "title": "Deje de Pagar de Más en Impuestos",
+      "subtitle": "Programe su consulta gratuita de estrategia fiscal hoy y descubra cuánto podría estar ahorrando",
+      "ctaButton": "Programar Consulta Gratuita",
+      "ctaPhone": "(404) 627-1015"
+    }
+  },
+  "personalTaxFiling": {
+    "hero": {
+      "badge": "Preparación Profesional de Impuestos",
+      "title": "Presentación de Impuestos Personales",
+      "titleHighlight": "Simplificada",
+      "subtitle": "CPAs expertos manejan su declaración de impuestos personal de principio a fin. Reembolso máximo garantizado.",
+      "ctaStart": "Comenzar a Presentar en Línea",
+      "ctaSchedule": "Programar Consulta"
+    },
+    "whatsIncluded": {
+      "title": "Qué Está Incluido",
+      "service1Title": "Declaraciones Simples",
+      "service1Description": "Ingresos W-2, deducción estándar",
+      "service2Title": "Propietarios de Vivienda",
+      "service2Description": "Intereses hipotecarios, impuestos a la propiedad",
+      "service3Title": "Familias",
+      "service3Description": "Crédito tributario por hijos, cuidado de dependientes",
+      "service4Title": "Inversiones",
+      "service4Description": "Acciones, bonos, dividendos",
+      "service5Title": "Jubilación",
+      "service5Description": "IRA, 401(k), Seguro Social",
+      "service6Title": "Protección contra Auditorías",
+      "service6Description": "Defensa completa ante auditorías del IRS incluida"
+    },
+    "pricing": {
+      "title": "Precios Transparentes",
+      "basicLabel": "Básico",
+      "basicPrice": "$149",
+      "basicDescription": "Declaraciones W-2 simples",
+      "standardLabel": "Estándar",
+      "standardPrice": "$249",
+      "standardDescription": "Deducciones detalladas, créditos",
+      "standardBadge": "Más Popular",
+      "complexLabel": "Complejo",
+      "complexPrice": "$399+",
+      "complexDescription": "Inversiones, propiedad de alquiler"
+    },
+    "cta": {
+      "title": "¿Listo para Presentar sus Impuestos?",
+      "subtitle": "Únase a 100,000+ clientes satisfechos. Presente con confianza.",
+      "ctaButton": "Comience su Declaración"
+    }
+  },
+  "irsResolution": {
+    "hero": {
+      "badge": "¿Problemas Urgentes con el IRS?",
+      "title": "¿Problema con el IRS?",
+      "titleHighlight": "Lo Solucionamos.",
+      "subtitle": "Gravámenes, embargos, impuestos atrasados, declaraciones no presentadas. Nuestros especialistas en resolución fiscal negocian con el IRS para resolver su deuda tributaria y detener las cobranzas.",
+      "ctaImmediate": "Obtenga Ayuda Inmediata",
+      "ctaPhone": "Llame Ahora - Urgente",
+      "imageAlt": "Profesional fiscal trabajando en resolución",
+      "urgentBadge": "No Espere",
+      "urgentMessage": "Actúe ahora para detener las cobranzas",
+      "features": {
+        "response": "Respuesta en 24 Horas",
+        "licensed": "Profesionales Fiscales Licenciados",
+        "stopCollections": "Detenga las Cobranzas",
+        "successRate": "95% de Tasa de Éxito"
+      }
+    },
+    "problemsWeResolve": {
+      "title": "Problemas del IRS que Resolvemos",
+      "subtitle": "Representación experta para los problemas fiscales más serios",
+      "taxLiens": {
+        "title": "Gravámenes Fiscales",
+        "description": "Eliminar gravámenes del IRS de su propiedad y reporte de crédito",
+        "badge": "Urgente"
+      },
+      "bankLevies": {
+        "title": "Embargos Bancarios",
+        "description": "Detener embargos salariales y confiscaciones de cuentas bancarias"
+      },
+      "unfiledReturns": {
+        "title": "Declaraciones No Presentadas",
+        "description": "Ponerse al día con años de declaraciones de impuestos no presentadas"
+      },
+      "backTaxes": {
+        "title": "Impuestos Atrasados",
+        "description": "Negociar planes de pago y acuerdos para deuda tributaria"
+      },
+      "offerInCompromise": {
+        "title": "Oferta de Transacción",
+        "description": "Liquidar deuda tributaria por menos de lo que debe"
+      },
+      "penaltyAbatement": {
+        "title": "Reducción de Multas",
+        "description": "Reducir o eliminar multas e intereses del IRS"
+      },
+      "weCanHelp": "Podemos Ayudar"
+    },
+    "resolutionProcess": {
+      "title": "Nuestro Proceso de Resolución",
+      "subtitle": "Camino paso a paso hacia la resolución con el IRS",
+      "step1": {
+        "step": "1",
+        "title": "Evaluación de Emergencia",
+        "description": "Consulta gratuita para evaluar urgencia y opciones"
+      },
+      "step2": {
+        "step": "2",
+        "title": "Protección Inmediata",
+        "description": "Presentar poder notarial, detener cobranzas del IRS"
+      },
+      "step3": {
+        "step": "3",
+        "title": "Investigación",
+        "description": "Revisar transcripciones fiscales, identificar problemas"
+      },
+      "step4": {
+        "step": "4",
+        "title": "Estrategia y Negociación",
+        "description": "Desarrollar plan de resolución, negociar con el IRS"
+      },
+      "step5": {
+        "step": "5",
+        "title": "Resolución",
+        "description": "Lograr acuerdo, establecer cumplimiento"
+      },
+      "stepLabel": "Paso"
+    },
+    "successStories": {
+      "title": "Resultados Reales para Personas Reales",
+      "subtitle": "Historias de éxito de clientes (nombres cambiados por privacidad)",
+      "story1": {
+        "name": "James R.",
+        "situation": "$180,000 en Impuestos Atrasados",
+        "result": "Liquidado por $25,000 vía Oferta de Transacción",
+        "savings": "86%",
+        "timeline": "8 meses"
+      },
+      "story2": {
+        "name": "Linda M.",
+        "situation": "Embargo Salarial",
+        "result": "Embargo liberado, plan de pago a $400/mes",
+        "savings": "Ingresos restaurados",
+        "timeline": "3 semanas"
+      },
+      "story3": {
+        "name": "David K.",
+        "situation": "5 Años de Declaraciones No Presentadas",
+        "result": "Todas las declaraciones presentadas, $45K en multas reducidas",
+        "savings": "$45K ahorrados",
+        "timeline": "4 meses"
+      },
+      "resolved": "Resuelto",
+      "savingsLabel": "Ahorros",
+      "timelineLabel": "Cronograma"
+    },
+    "urgencyCTA": {
+      "badge": "El tiempo es crítico al tratar con el IRS",
+      "title": "No Enfrente al IRS Solo",
+      "subtitle": "Cada día que espera, los intereses y multas aumentan. Permita que nuestros expertos en resolución fiscal lo manejen.",
+      "ctaEmergency": "Obtenga Ayuda de Emergencia Ahora",
+      "ctaCall": "Llame al (404) 627-1015",
+      "features": {
+        "response": "Respuesta en 24 Horas",
+        "stopCollections": "Detenga las Cobranzas Rápidamente",
+        "licensedPros": "Profesionales Fiscales Licenciados",
+        "freeConsultation": "Consulta Gratuita"
+      }
+    },
+    "whyChooseUs": {
+      "title": "Por Qué Elegirnos para Resolución con el IRS",
+      "imageAlt": "Equipo profesional de resolución fiscal",
+      "reason1": {
+        "title": "Agentes Inscritos y CPAs Licenciados",
+        "description": "Autorizados para representarlo ante el IRS"
+      },
+      "reason2": {
+        "title": "95% de Tasa de Éxito",
+        "description": "Historial comprobado de resultados favorables"
+      },
+      "reason3": {
+        "title": "Acción Rápida",
+        "description": "Tiempo de respuesta de 24 horas para casos urgentes"
+      },
+      "reason4": {
+        "title": "Planes de Pago Asequibles",
+        "description": "Financiamiento flexible para servicios de resolución"
+      }
+    }
+  },
+  "businessTax": {
+    "hero": {
+      "badge": "Servicios Fiscales para Empresas",
+      "title": "Soluciones Fiscales Expertas para",
+      "titleHighlight": "Su Negocio",
+      "subtitle": "Preparación y planificación fiscal integral para pequeñas empresas, startups y compañías en crecimiento. Maximice deducciones, minimice responsabilidad.",
+      "ctaConsultation": "Programar Consulta de Negocios",
+      "ctaPhone": "(404) 627-1015",
+      "stat1": "Más de 500 Empresas Atendidas",
+      "stat2": "Autorizado por el IRS",
+      "stat3": "Protección contra Auditorías Incluida",
+      "imageAlt": "Profesionales de negocios en oficina moderna",
+      "savingsAmount": "$25K+",
+      "savingsLabel": "Ahorro Fiscal Promedio"
+    },
+    "businessTypes": {
+      "title": "Servimos Todos los Tipos de Negocios",
+      "subtitle": "Preparación fiscal experta para cada estructura empresarial",
+      "soleProprietor": {
+        "title": "Propietario Único",
+        "description": "Presentación de Anexo C, optimización de impuestos sobre trabajo por cuenta propia"
+      },
+      "llc": {
+        "title": "LLC",
+        "description": "Declaraciones de LLC de un solo miembro y de múltiples miembros, estrategia de elección de entidad"
+      },
+      "sCorp": {
+        "title": "Corporación S",
+        "description": "Formulario 1120-S, compensación razonable, distribuciones K-1"
+      },
+      "cCorp": {
+        "title": "Corporación C",
+        "description": "Formulario 1120, planificación fiscal corporativa, optimización de ganancias"
+      }
+    },
+    "servicesIncluded": {
+      "title": "Qué Está Incluido",
+      "subtitle": "Servicios fiscales integrales adaptados a las necesidades de su negocio",
+      "imageAlt": "Profesional fiscal analizando documentos empresariales",
+      "service1Title": "Declaraciones Fiscales Federales y Estatales",
+      "service1Description": "Preparación completa y presentación electrónica para todas las entidades",
+      "service2Title": "Planificación y Estrategia Fiscal",
+      "service2Description": "Orientación durante todo el año para minimizar la obligación tributaria",
+      "service3Title": "Impuestos Estimados Trimestrales",
+      "service3Description": "Calcule y presente pagos trimestrales para evitar multas",
+      "service4Title": "Protección contra Auditorías",
+      "service4Description": "Representación completa si el IRS selecciona su declaración",
+      "service5Title": "Maximización de Deducciones",
+      "service5Description": "Identifique todas las deducciones empresariales elegibles",
+      "service6Title": "Soporte Durante Todo el Año",
+      "service6Description": "Acceso continuo a su equipo de CPAs"
+    },
+    "industryExpertise": {
+      "title": "Experiencia en la Industria",
+      "subtitle": "Entendemos los desafíos fiscales únicos de su industria",
+      "ecommerce": "E-Commerce y Comercio Minorista en Línea",
+      "professionalServices": "Servicios Profesionales",
+      "realEstate": "Bienes Raíces",
+      "healthcare": "Salud",
+      "construction": "Construcción y Contratistas",
+      "hospitality": "Restaurantes y Hospitalidad"
+    },
+    "pricing": {
+      "title": "Precios de Impuestos Empresariales",
+      "subtitle": "Precios transparentes sin tarifas ocultas",
+      "soleProprietor": {
+        "name": "Propietario Único",
+        "price": "$299",
+        "startingPrice": "Precio inicial",
+        "feature1": "Presentación de Anexo C",
+        "feature2": "Impuesto sobre trabajo por cuenta propia",
+        "feature3": "Deducciones básicas",
+        "feature4": "Presentación electrónica incluida"
+      },
+      "llcSCorp": {
+        "name": "LLC / Corporación S",
+        "price": "$799",
+        "popularBadge": "Más Popular",
+        "startingPrice": "Precio inicial",
+        "feature1": "Formulario 1065/1120-S",
+        "feature2": "Preparación K-1",
+        "feature3": "Revisión de impuestos sobre nómina",
+        "feature4": "Estimaciones trimestrales",
+        "feature5": "Protección contra auditorías"
+      },
+      "cCorp": {
+        "name": "Corporación C",
+        "price": "$1,299",
+        "startingPrice": "Precio inicial",
+        "feature1": "Formulario 1120",
+        "feature2": "Planificación fiscal corporativa",
+        "feature3": "Presentación multiestatal",
+        "feature4": "Consultoría de estrategia fiscal",
+        "feature5": "Soporte prioritario"
+      },
+      "ctaGetStarted": "Comenzar"
+    },
+    "cta": {
+      "title": "¿Listo para Optimizar los Impuestos de su Negocio?",
+      "subtitle": "Programe una consulta gratuita con un especialista en impuestos comerciales hoy",
+      "ctaConsultation": "Programar Consulta",
+      "ctaCall": "Llamar Ahora"
+    }
+  },
+  "auditProtection": {
+    "hero": {
+      "badge": "Protección Completa contra Auditorías",
+      "title": "Protección y",
+      "titleHighlight": "Defensa ante Auditorías del IRS",
+      "subtitle": "Representación integral ante auditorías incluida con cada declaración de impuestos. Si el IRS llama, nosotros manejamos todo.",
+      "ctaProtect": "Protéjase Hoy",
+      "ctaPhone": "(404) 627-1015",
+      "feature1": "Cobertura 100%",
+      "feature2": "Representación de CPA",
+      "feature3": "98% de Tasa de Éxito",
+      "imageAlt": "Profesional revisando documentos"
+    },
+    "stats": {
+      "auditsResolved": "Auditorías Resueltas Favorablemente",
+      "clientsProtected": "Clientes Protegidos",
+      "avgResponseTime": "Tiempo Promedio de Respuesta",
+      "outOfPocketCosts": "Costos de Bolsillo",
+      "days": " Días"
+    },
+    "coverage": {
+      "title": "Qué Cubrimos",
+      "subtitle": "Protección completa para todos los tipos de exámenes del IRS",
+      "correspondence": {
+        "title": "Auditorías por Correspondencia",
+        "description": "Cartas del IRS solicitando documentación o aclaración"
+      },
+      "office": {
+        "title": "Auditorías en Oficina",
+        "description": "Reuniones en persona en la oficina del IRS con representación completa"
+      },
+      "field": {
+        "title": "Auditorías de Campo",
+        "description": "Visitas del IRS a su negocio con CPA presente"
+      },
+      "cp2000": {
+        "title": "Avisos CP2000",
+        "description": "Avisos de discrepancia de ingresos y ajustes automatizados"
+      },
+      "amended": {
+        "title": "Declaraciones Enmendadas",
+        "description": "Defensa de declaraciones enmendadas y ajustes de años anteriores"
+      },
+      "appeals": {
+        "title": "Proceso de Apelaciones",
+        "description": "Representación a través de apelaciones del IRS si es necesario"
+      },
+      "fullyCovered": "Totalmente Cubierto"
+    },
+    "process": {
+      "title": "Cómo Lo Protegemos",
+      "subtitle": "Nuestro proceso paso a paso de defensa ante auditorías",
+      "step1": {
+        "title": "Notificación Inmediata",
+        "description": "Usted nos reenvía el aviso del IRS. Confirmamos la recepción dentro de 24 horas."
+      },
+      "step2": {
+        "title": "Evaluación del Caso",
+        "description": "El CPA revisa su declaración y la consulta del IRS para desarrollar una estrategia de defensa."
+      },
+      "step3": {
+        "title": "Recopilación de Documentos",
+        "description": "Solicitamos y organizamos toda la documentación de respaldo necesaria."
+      },
+      "step4": {
+        "title": "Respuesta al IRS",
+        "description": "El CPA maneja toda la comunicación con el IRS en su nombre."
+      },
+      "step5": {
+        "title": "Resolución",
+        "description": "Negociamos el mejor resultado y cerramos la auditoría."
+      }
+    },
+    "peaceOfMind": {
+      "title": "Completa Tranquilidad",
+      "subtitle": "Con protección contra auditorías, nunca enfrentará al IRS solo",
+      "benefit1": {
+        "title": "Sin Costos de Bolsillo",
+        "description": "Defensa ante auditorías incluida con su declaración de impuestos - sin tarifas adicionales si es auditado"
+      },
+      "benefit2": {
+        "title": "Representación Experta de CPA",
+        "description": "Profesionales licenciados con años de experiencia en auditorías del IRS manejan su caso"
+      },
+      "benefit3": {
+        "title": "Manejamos Todo",
+        "description": "Usted no habla con el IRS. Nosotros gestionamos toda la correspondencia y reuniones."
+      },
+      "benefit4": {
+        "title": "98% de Tasa de Éxito",
+        "description": "Historial comprobado de resultados favorables para nuestros clientes"
+      },
+      "ctaProtect": "Protéjase Ahora",
+      "imageAlt": "Familia feliz sintiéndose segura"
+    },
+    "finalCta": {
+      "title": "Presente sus Impuestos con Confianza",
+      "subtitle": "Obtenga protección completa contra auditorías incluida con su declaración de impuestos sin costo adicional",
+      "ctaStart": "Comience Hoy",
+      "ctaPhone": "(404) 627-1015"
+    }
+  },
+  "auth": {
+    "login": {
+      "redirecting": "Redirigiendo a iniciar sesión...",
+      "loading": "Cargando..."
+    },
+    "selectRole": {
+      "loading": {
+        "title": "Cargando...",
+        "subtitle": "Verificando el estado de su cuenta"
+      },
+      "header": {
+        "title": "Seleccione su Rol",
+        "subtitle": "Elija la opción que mejor describa cómo usará Tax Genius Pro"
+      },
+      "roles": {
+        "client": {
+          "label": "Cliente de Impuestos",
+          "description": "Necesito servicios de preparación de impuestos"
+        },
+        "taxPreparer": {
+          "label": "Preparador de Impuestos",
+          "description": "Preparo impuestos y quiero materiales de marketing personalizados"
+        },
+        "affiliate": {
+          "label": "Afiliado de Marketing",
+          "description": "Quiero comercializar servicios de impuestos y ganar comisiones por referidos"
+        }
+      },
+      "buttons": {
+        "continue": "Continuar",
+        "settingUp": "Configurando su cuenta..."
+      },
+      "error": "Error al actualizar el rol. Por favor intente de nuevo."
+    },
+    "error": {
+      "loading": "Cargando...",
+      "errors": {
+        "Configuration": {
+          "title": "Error de Configuración del Servidor",
+          "description": "Hay un problema con la configuración del servidor. Por favor contacte a soporte si esto persiste."
+        },
+        "AccessDenied": {
+          "title": "Acceso Denegado",
+          "description": "No tiene permiso para iniciar sesión. Por favor contacte a un administrador."
+        },
+        "Verification": {
+          "title": "Verificación Fallida",
+          "description": "El token de verificación ha expirado o ya ha sido utilizado."
+        },
+        "OAuthSignin": {
+          "title": "Error de Inicio de Sesión OAuth",
+          "description": "Ocurrió un error al intentar iniciar sesión con el proveedor OAuth."
+        },
+        "OAuthCallback": {
+          "title": "Error de Callback OAuth",
+          "description": "Ocurrió un error durante el callback de OAuth."
+        },
+        "OAuthCreateAccount": {
+          "title": "Error de Creación de Cuenta OAuth",
+          "description": "No se pudo crear la cuenta del proveedor OAuth."
+        },
+        "EmailCreateAccount": {
+          "title": "Error de Creación de Cuenta de Correo",
+          "description": "No se pudo crear la cuenta de correo electrónico."
+        },
+        "Callback": {
+          "title": "Error de Callback",
+          "description": "Ocurrió un error durante el callback de autenticación."
+        },
+        "OAuthAccountNotLinked": {
+          "title": "Cuenta No Vinculada",
+          "description": "Este correo electrónico ya está asociado con otra cuenta. Por favor inicie sesión con su método original."
+        },
+        "EmailSignin": {
+          "title": "Error de Inicio de Sesión por Correo",
+          "description": "Ocurrió un error al enviar el correo electrónico de verificación."
+        },
+        "CredentialsSignin": {
+          "title": "Inicio de Sesión Fallido",
+          "description": "Correo electrónico o contraseña inválidos. Por favor verifique sus credenciales e intente de nuevo."
+        },
+        "SessionRequired": {
+          "title": "Sesión Requerida",
+          "description": "Debe iniciar sesión para acceder a esta página."
+        },
+        "Default": {
+          "title": "Error de Autenticación",
+          "description": "Ocurrió un error durante la autenticación. Por favor intente de nuevo."
+        }
+      },
+      "technicalDetails": "Detalles Técnicos:",
+      "contactSupport": "Por favor contacte a support@taxgeniuspro.tax",
+      "tip": "Consejo:",
+      "correctCredentials": "Asegúrese de usar el correo electrónico y la contraseña correctos. Las contraseñas distinguen entre mayúsculas y minúsculas.",
+      "tryAgain": "Intentar de Nuevo",
+      "goHome": "Ir al Inicio",
+      "needHelp": "¿Necesita ayuda?",
+      "contactSupportLink": "Contactar Soporte"
+    },
+    "signin": {
+      "logoAlt": "Tax Genius Pro",
+      "client": {
+        "badge": "Bienvenido de Nuevo",
+        "heading": "Continúe su Declaración de Impuestos",
+        "subheading": "Inicie sesión para acceder a sus documentos fiscales, rastrear su reembolso y administrar su cuenta",
+        "benefit1": "Continúe donde lo dejó",
+        "benefit2": "Rastree el estado de su reembolso",
+        "benefit3": "Seguro y encriptado",
+        "ctaText": "Iniciar Sesión en su Cuenta",
+        "imageSuggestion": "Profesional revisando documentos con confianza",
+        "welcomeBack": "¡Bienvenido de nuevo! Hagamos sus impuestos.",
+        "formSubheading": "Continúe su viaje de declaración de impuestos"
+      },
+      "preparer": {
+        "badge": "Portal del Preparador",
+        "heading": "Bienvenido de Nuevo, Profesional",
+        "subheading": "Acceda a su panel de clientes, administre declaraciones de impuestos y rastree sus ganancias",
+        "benefit1": "Administre sus clientes",
+        "benefit2": "Rastree sus ganancias",
+        "benefit3": "Acceda a sus herramientas",
+        "ctaText": "Iniciar Sesión en el Panel",
+        "imageSuggestion": "Profesional fiscal en el trabajo",
+        "welcomeBack": "¿Listo para ayudar a más clientes hoy?",
+        "formSubheading": "Acceda a su panel profesional"
+      },
+      "affiliate": {
+        "badge": "💰 Portal de Afiliados",
+        "heading": "¡Bienvenido de Nuevo!",
+        "subheading": "¡Revise sus ganancias, comparta su enlace y vea cuánto dinero ha ganado!",
+        "benefit1": "Vea sus ganancias al instante",
+        "benefit2": "Rastree referencias activas",
+        "benefit3": "Solicite pagos",
+        "ctaText": "Iniciar Sesión y Comenzar a Ganar",
+        "imageSuggestion": "Persona revisando ganancias en el teléfono felizmente",
+        "welcomeBack": "¡Veamos cuánto has ganado! 🤑",
+        "formSubheading": "Inicie sesión para revisar sus ganancias y compartir su enlace"
+      },
+      "form": {
+        "email": "Correo Electrónico",
+        "emailPlaceholder": "tu@ejemplo.com",
+        "password": "Contraseña",
+        "passwordPlaceholder": "Ingrese su contraseña",
+        "rememberMe": "Recordarme",
+        "forgotPassword": "¿Olvidó su contraseña?",
+        "signInButton": "Iniciar Sesión",
+        "signingInButton": "Iniciando sesión...",
+        "showPassword": "Mostrar contraseña",
+        "hidePassword": "Ocultar contraseña",
+        "dontHaveAccount": "¿No tiene una cuenta?",
+        "signUp": "Regístrese",
+        "orContinueWith": "O continuar con",
+        "signInWithGoogle": "Iniciar sesión con Google",
+        "emailForMagicLink": "Ingrese correo para enlace mágico",
+        "signInWithMagicLink": "Iniciar sesión con enlace mágico",
+        "sendingMagicLink": "Enviando enlace...",
+        "magicLinkSent": "¡Enlace mágico enviado!",
+        "emailRequired": "Por favor ingrese su dirección de correo electrónico",
+        "orUseEmailPassword": "O usar correo electrónico y contraseña",
+        "showEmailPasswordOptions": "Mostrar opciones de correo/contraseña",
+        "hideEmailPasswordOptions": "Ocultar opciones de correo/contraseña"
+      },
+      "errors": {
+        "invalidCredentials": "Correo electrónico o contraseña inválidos. Por favor intente de nuevo.",
+        "unexpectedError": "Ocurrió un error inesperado. Por favor intente de nuevo.",
+        "magicLinkFailed": "No se pudo enviar el enlace mágico. Por favor intente de nuevo."
+      },
+      "imagePlaceholder": {
+        "replaceWith": "[Reemplazar con imagen]",
+        "recommended": "Recomendado: 800x450px"
+      }
+    },
+    "signup": {
+      "logoAlt": "Tax Genius Pro",
+      "client": {
+        "badge": "Servicios Fiscales Profesionales",
+        "heading": "Haga sus Impuestos con Profesionales",
+        "subheading": "Únase a más de 50,000 clientes satisfechos que confían en nosotros para la declaración de impuestos precisa y sin estrés",
+        "benefit1": "Reembolso máximo garantizado",
+        "benefit2": "CPAs certificados por el IRS",
+        "benefit3": "Reembolso promedio: $3,259",
+        "ctaText": "Comience su Declaración Gratuita",
+        "imageSuggestion": "Familia feliz recibiendo reembolso de impuestos",
+        "trustIndicator": "Confiado por más de 50,000 clientes satisfechos",
+        "accountSubtext": "Cree su cuenta para comenzar a presentar"
+      },
+      "preparer": {
+        "badge": "Oportunidad Profesional",
+        "heading": "Construya su Carrera en Preparación de Impuestos",
+        "subheading": "Únase a nuestra red de preparadores de impuestos profesionales. Horarios flexibles, trabajo remoto, gane $45-75 por declaración",
+        "benefit1": "Gane hasta $5,000/mes",
+        "benefit2": "100% remoto - trabaje desde cualquier lugar",
+        "benefit3": "Seguro E&O incluido",
+        "ctaText": "Comience su Solicitud",
+        "imageSuggestion": "Preparador de impuestos profesional trabajando con confianza",
+        "trustIndicator": "Confiado por más de 500 preparadores de impuestos profesionales",
+        "accountSubtext": "Cree su cuenta profesional para comenzar"
+      },
+      "affiliate": {
+        "badge": "Comience a Ganar Hoy",
+        "heading": "¡Comience a Ganar Dinero Ahora!",
+        "subheading": "Gane hasta $50 por cada amigo que refiera. Dinero fácil, potencial ilimitado. ¡Únase a miles ganando efectivo extra!",
+        "benefit1": "¡Hasta $50 por referido - Sin límites!",
+        "benefit2": "Reciba su pago en 7 días",
+        "benefit3": "Súper fácil - solo comparta su enlace",
+        "ctaText": "Obtenga su Enlace de Referido Ahora",
+        "imageSuggestion": "Personas emocionadas celebrando ganancias de dinero",
+        "trustIndicator": "Únase a más de 10,000 personas que ya ganan efectivo extra",
+        "accountSubtext": "Cree su cuenta y comience a ganar en minutos"
+      },
+      "form": {
+        "fullName": "Nombre Completo",
+        "email": "Correo Electrónico",
+        "password": "Contraseña",
+        "confirmPassword": "Confirmar Contraseña",
+        "namePlaceholder": "Juan M Pérez (incluya segundo nombre para preparadores de impuestos)",
+        "emailPlaceholder": "tu@ejemplo.com",
+        "passwordPlaceholder": "Al menos 8 caracteres",
+        "confirmPasswordPlaceholder": "Vuelva a ingresar su contraseña",
+        "preparerNameHint": "Incluya su segundo nombre/inicial para un código de seguimiento personalizado (ej., \"jmp\")",
+        "createAccountButton": "Crear Cuenta",
+        "creatingAccountButton": "Creando cuenta...",
+        "termsText": "Al crear una cuenta, acepta nuestros",
+        "termsLink": "Términos de Servicio",
+        "termsAnd": "y",
+        "privacyLink": "Política de Privacidad",
+        "alreadyHaveAccount": "¿Ya tiene una cuenta?",
+        "signInLink": "Iniciar sesión"
+      },
+      "errors": {
+        "passwordsDoNotMatch": "Las contraseñas no coinciden",
+        "passwordTooShort": "La contraseña debe tener al menos 8 caracteres",
+        "failedToCreateAccount": "Error al crear la cuenta",
+        "unexpectedError": "Ocurrió un error inesperado. Por favor intente de nuevo."
+      },
+      "imagePlaceholder": {
+        "replaceWith": "[Reemplazar con imagen]",
+        "recommended": "Recomendado: 800x450px"
+      }
+    },
+    "signout": {
+      "signingOut": "Cerrando sesión...",
+      "pleaseWait": "Por favor espere mientras cerramos su sesión"
+    },
+    "verify": {
+      "title": "Verificación de Correo Electrónico",
+      "description": "La verificación de correo electrónico ahora se maneja automáticamente por nuestro proveedor de autenticación",
+      "alertMessage": "Cuando se registre, recibirá un correo electrónico de verificación automáticamente. Haga clic en el enlace de ese correo electrónico para verificar su cuenta.",
+      "signUpButton": "Registrarse",
+      "signInButton": "¿Ya tiene una cuenta? Iniciar Sesión"
+    },
+    "setupPassword": {
+      "validating": "Validando su invitación...",
+      "invalidLinkTitle": "Enlace Inválido",
+      "invalidLinkDescription": "Este enlace de invitación es inválido o ha expirado.",
+      "invalidLinkMessage": "Los enlaces de invitación expiran después de 24 horas. Por favor contacte a su administrador para una nueva invitación.",
+      "goToLoginButton": "Ir a Iniciar Sesión",
+      "setPasswordTitle": "Establezca su Contraseña",
+      "setPasswordDescription": "¡Bienvenido a Tax Genius Pro! Establezca su contraseña para comenzar.",
+      "nameLabel": "Nombre",
+      "emailLabel": "Correo Electrónico",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Ingrese su contraseña",
+      "passwordHint": "Debe tener al menos 8 caracteres",
+      "confirmPasswordLabel": "Confirmar Contraseña",
+      "confirmPasswordPlaceholder": "Confirme su contraseña",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
+      "setPasswordButton": "Establecer Contraseña y Continuar",
+      "settingPasswordButton": "Estableciendo Contraseña...",
+      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres",
+      "passwordsDoNotMatch": "Las contraseñas no coinciden",
+      "passwordSetSuccess": "¡Contraseña establecida exitosamente! Iniciando sesión...",
+      "loginFailed": "Error al iniciar sesión. Por favor intente iniciar sesión manualmente.",
+      "setPasswordFailed": "Error al establecer la contraseña",
+      "invalidMagicLink": "Enlace mágico inválido o expirado"
+    }
+  },
+  "booking": {
+    "header": {
+      "title": "Reserve Su Cita",
+      "subtitle": "Programe una consulta gratuita con un profesional fiscal licenciado"
+    },
+    "preparer": {
+      "yourTaxProfessional": "Su Profesional Fiscal",
+      "licensedTaxProfessional": "Profesional Fiscal Licenciado",
+      "expertTaxProfessionals": "Profesionales Fiscales Expertos",
+      "scheduleWithCPAs": "Programe con nuestros CPAs licenciados"
+    },
+    "features": {
+      "title": "Qué Esperar",
+      "subtitle": "Asistencia fiscal profesional adaptada a sus necesidades",
+      "consultation": {
+        "title": "Consulta Gratuita de 30 Minutos",
+        "description": "Videollamada o teléfono - usted elige"
+      },
+      "cpaReview": {
+        "title": "Revisión de CPA Licenciado",
+        "description": "Análisis experto de su situación fiscal"
+      },
+      "strategy": {
+        "title": "Estrategia Fiscal Personalizada",
+        "description": "Recomendaciones personalizadas para sus necesidades"
+      }
+    },
+    "imageAlt": "Tax Genius Pro - Oliver el Búho"
+  },
+  "store": {
+    "metadata": {
+      "title": "Tienda de Marketing - Tax Genius Pro",
+      "description": "Compre materiales de marketing, páginas de destino y suscripciones para hacer crecer su negocio"
+    },
+    "header": {
+      "title": "Tienda de Marketing",
+      "subtitle": "Materiales y herramientas de marketing profesionales para hacer crecer su negocio de impuestos"
+    },
+    "subscriptions": {
+      "title": "Suscripciones de Páginas de Destino",
+      "free": {
+        "name": "Gratis",
+        "badge": "Básico",
+        "description": "Comience con la generación de clientes potenciales",
+        "price": "$0",
+        "priceUnit": "/mes",
+        "feature1": "1 Página de Destino",
+        "feature2": "Análisis Básico",
+        "feature3": "Marca Genérica"
+      },
+      "monthly": {
+        "name": "Mensual",
+        "badge": "Más Popular",
+        "badgeProfessional": "Profesional",
+        "description": "Perfecto para comercializadores activos",
+        "price": "$49",
+        "priceUnit": "/mes",
+        "feature1": "5 Páginas de Destino",
+        "feature2": "Análisis Avanzado",
+        "feature3": "Marca Personalizada (Preparadores de Impuestos)",
+        "feature4": "Pruebas A/B"
+      },
+      "annual": {
+        "name": "Anual",
+        "badge": "Mejor Valor",
+        "description": "Ahorre 41% con facturación anual",
+        "price": "$29",
+        "priceUnit": "/mes",
+        "priceBilledAnnually": "Facturado anualmente a $348",
+        "feature1": "Páginas de Destino Ilimitadas",
+        "feature2": "Análisis Premium",
+        "feature3": "Soporte Prioritario",
+        "feature4": "Todas las Características Profesionales"
+      }
+    },
+    "tabs": {
+      "all": "Todos los Productos",
+      "materials": "Materiales de Marketing",
+      "digital": "Activos Digitales",
+      "qr": "Códigos QR",
+      "email": "Direcciones de Correo Electrónico"
+    },
+    "empty": {
+      "noProducts": "No hay productos disponibles en este momento. ¡Vuelva pronto!",
+      "noMaterials": "No hay materiales de marketing disponibles",
+      "noDigitalAssets": "No hay activos digitales disponibles",
+      "qrCodesInfo": "Los códigos QR se generan automáticamente con sus campañas",
+      "emailAddressesComingSoon": "Las direcciones de correo electrónico profesionales estarán disponibles pronto"
+    }
+  },
+  "referral": {
+    "header": {
+      "backToHome": "Volver al Inicio",
+      "joinNow": "Únete Ahora"
+    },
+    "hero": {
+      "badge": "Gana Dinero Extra Durante la Temporada de Impuestos",
+      "title": "Obtén un Bono en Efectivo de hasta",
+      "titleAmount": "$50",
+      "subtitle": "Por Cada Amigo que Refieras*",
+      "description": "Gana hasta $50 por cada amigo que complete su declaración de impuestos con nosotros. ¡Es dinero fácil durante la temporada de impuestos!",
+      "ctaStartReferring": "Comienza a Referir Ahora",
+      "ctaHowItWorks": "Cómo Funciona",
+      "imageReplaceText": "[Reemplazar con imagen del héroe de referidos]",
+      "imageRecommendation": "Recomendado: 1200x675px (16:9)",
+      "imageSuggestion": "Sugerencia: Personas felices recibiendo dinero, amigos celebrando, o captura de pantalla de la aplicación móvil",
+      "termsApply": "*Se aplican términos y condiciones"
+    },
+    "earnings": {
+      "title": "¿Cuánto Puedes Ganar?",
+      "subtitle": "Mientras más refieras, más ganas",
+      "tier1": {
+        "referrals": "5 Referidos",
+        "amount": "$250",
+        "description": "Ingreso a tiempo parcial"
+      },
+      "tier2": {
+        "referrals": "10 Referidos",
+        "amount": "$500",
+        "description": "Buen bono",
+        "badge": "Más Popular"
+      },
+      "tier3": {
+        "referrals": "20+ Referidos",
+        "amount": "$1,000+",
+        "description": "Ganancias serias"
+      }
+    },
+    "howItWorks": {
+      "title": "Cómo Funciona - Tan Simple como 1, 2, 3",
+      "step1": {
+        "step": "1",
+        "title": "Comparte Tu Enlace",
+        "description": "Obtén tu enlace único de referido y compártelo con amigos, familia y en redes sociales"
+      },
+      "step2": {
+        "step": "2",
+        "title": "Ellos Presentan Sus Impuestos",
+        "description": "Tus amigos usan tu enlace para registrarse y completar su declaración de impuestos con nosotros"
+      },
+      "step3": {
+        "step": "3",
+        "title": "Tú Recibes Tu Pago",
+        "description": "Gana hasta $50 por referido, pagado directamente a tu cuenta. ¡Sin límites!"
+      }
+    },
+    "benefits": {
+      "title": "¿Por Qué Unirse a Nuestro Programa de Referidos?",
+      "highPayouts": {
+        "title": "Pagos Altos",
+        "description": "Gana hasta $50 por cada referido exitoso"
+      },
+      "noLimits": {
+        "title": "Sin Límites",
+        "description": "Refiere a tantas personas como quieras - potencial de ganancias ilimitado"
+      },
+      "quickPayments": {
+        "title": "Pagos Rápidos",
+        "description": "Recibe tu pago dentro de 7 días del referido exitoso"
+      },
+      "trackEverything": {
+        "title": "Rastrea Todo",
+        "description": "Panel de control en tiempo real para rastrear todos tus referidos y ganancias"
+      },
+      "easySharing": {
+        "title": "Compartir Fácil",
+        "description": "Comparte por texto, correo electrónico, redes sociales o aplicaciones de mensajería"
+      },
+      "bonusRewards": {
+        "title": "Recompensas Adicionales",
+        "description": "Bonos extra para los mejores referidores cada mes"
+      },
+      "passiveIncome": {
+        "title": "Ingreso Pasivo",
+        "description": "Gana dinero sin ningún trabajo continuo"
+      },
+      "friendsSave": {
+        "title": "Tus Amigos También Ahorran",
+        "description": "Tus amigos obtienen descuentos especiales cuando usan tu enlace"
+      }
+    },
+    "sharing": {
+      "title": "Formas Fáciles de Compartir",
+      "socialMedia": {
+        "title": "Redes Sociales",
+        "description": "Publica tu enlace en Facebook, Instagram, Twitter, TikTok"
+      },
+      "emailText": {
+        "title": "Correo y Texto",
+        "description": "Envía a tus contactos por correo electrónico o SMS"
+      },
+      "wordOfMouth": {
+        "title": "Boca a Boca",
+        "description": "Cuéntale a amigos, familia y compañeros de trabajo sobre los beneficios"
+      }
+    },
+    "faq": {
+      "title": "Preguntas Comunes",
+      "q1": {
+        "question": "¿Cuánto puedo ganar por referido?",
+        "answer": "Puedes ganar hasta $50 por cada referido exitoso. La cantidad exacta depende del paquete de impuestos que compre tu referido."
+      },
+      "q2": {
+        "question": "¿Hay un límite de cuántas personas puedo referir?",
+        "answer": "¡No! No hay límite. Refiere a tantas personas como quieras y gana ingresos ilimitados."
+      },
+      "q3": {
+        "question": "¿Cuándo recibo mi pago?",
+        "answer": "Recibirás el pago dentro de 7 días después de que tu referido complete exitosamente su declaración de impuestos y pago."
+      },
+      "q4": {
+        "question": "¿Cómo rastrea mis referidos?",
+        "answer": "Tendrás acceso a un panel de control en tiempo real que muestra todos tus referidos, su estado y tus ganancias."
+      },
+      "q5": {
+        "question": "¿Puedo referir a mis propios familiares?",
+        "answer": "¡Sí! Puedes referir a cualquiera - amigos, familia, compañeros de trabajo o cualquier persona que necesite ayuda con impuestos."
+      }
+    },
+    "finalCTA": {
+      "title": "¿Listo para Comenzar a Ganar?",
+      "subtitle": "Únete a miles de personas que ganan dinero extra refiriendo amigos a Tax Genius Pro",
+      "ctaButton": "Obtén Tu Enlace de Referido",
+      "badge1": "Hasta $50 por referido",
+      "badge2": "Sin límites",
+      "badge3": "Pagos rápidos"
+    },
+    "footer": {
+      "copyright": "© 2024 Tax Genius Pro. Todos los derechos reservados.",
+      "disclaimer": "*Los bonos de referidos se pagan cuando los clientes referidos completan su declaración de impuestos y pago. Las cantidades de bonos varían según el paquete seleccionado. Consulte los términos y condiciones completos."
+    }
+  },
+  "blog": {
+    "hero": {
+      "badge": "Blog de Impuestos y Recursos",
+      "title": "Consejos Fiscales y",
+      "titleHighlight": "Perspectivas Expertas",
+      "subtitle": "Manténgase informado con las últimas noticias, estrategias y consejos fiscales de nuestro equipo de CPAs licenciados.",
+      "searchPlaceholder": "Buscar temas fiscales..."
+    },
+    "categories": {
+      "allPosts": "Todas las Publicaciones",
+      "businessTax": "Impuestos de Negocios",
+      "deductions": "Deducciones",
+      "investments": "Inversiones",
+      "credits": "Créditos"
+    },
+    "featuredSection": {
+      "title": "Artículos Destacados"
+    },
+    "latestSection": {
+      "title": "Últimos Artículos",
+      "subtitle": "Consejos y estrategias fiscales de expertos"
+    },
+    "loadMore": "Cargar Más Artículos",
+    "newsletter": {
+      "title": "Reciba Consejos Fiscales en Su Bandeja de Entrada",
+      "subtitle": "Únase a más de 10,000 suscriptores que reciben consejos, estrategias y actualizaciones fiscales semanales.",
+      "placeholder": "Su dirección de correo electrónico",
+      "button": "Suscribirse Gratis",
+      "disclaimer": "Sin spam. Cancele en cualquier momento.",
+      "imageAlt": "Suscripción al boletín"
+    },
+    "cta": {
+      "title": "¿Necesita Ayuda Fiscal Profesional?",
+      "subtitle": "Leer es genial, pero nada supera trabajar con un CPA licenciado que conoce su situación.",
+      "buttonCPA": "Trabajar con un CPA",
+      "buttonContact": "Contáctenos"
+    },
+    "posts": {
+      "post1": {
+        "title": "10 Deducciones Fiscales Que Podría Estar Perdiendo en 2024",
+        "excerpt": "Descubra deducciones a menudo pasadas por alto que podrían ahorrarle miles en su declaración de impuestos este año.",
+        "category": "Deducciones",
+        "author": "Sarah Johnson, CPA",
+        "date": "15 Ene 2025",
+        "readTime": "8 min de lectura"
+      },
+      "post2": {
+        "title": "Guía de Impuestos para Trabajadores Independientes: Lo Que Necesita Saber",
+        "excerpt": "Guía completa para entender y administrar los impuestos de trabajo independiente, incluidas las estimaciones trimestrales.",
+        "category": "Impuestos de Negocios",
+        "author": "Michael Chen, EA",
+        "date": "12 Ene 2025",
+        "readTime": "10 min de lectura"
+      },
+      "post3": {
+        "title": "Deducción de Oficina en Casa: Guía Completa 2024",
+        "excerpt": "Cómo calcular y reclamar la deducción de oficina en casa para trabajadores remotos y dueños de negocios.",
+        "category": "Deducciones",
+        "author": "Lisa Martinez, CPA",
+        "date": "10 Ene 2025",
+        "readTime": "7 min de lectura"
+      },
+      "post4": {
+        "title": "Reporte de Impuestos de Criptomonedas: Todo Lo Que Necesita Saber",
+        "excerpt": "Navegue por los requisitos de reporte de impuestos de criptomonedas y evite errores comunes.",
+        "category": "Inversiones",
+        "author": "David Kim, CPA",
+        "date": "8 Ene 2025",
+        "readTime": "12 min de lectura"
+      },
+      "post5": {
+        "title": "Maximice Sus Contribuciones de Jubilación para Ahorros Fiscales",
+        "excerpt": "Guía estratégica para contribuciones a 401(k), IRA y otras cuentas de jubilación.",
+        "category": "Jubilación",
+        "author": "Sarah Johnson, CPA",
+        "date": "5 Ene 2025",
+        "readTime": "9 min de lectura"
+      },
+      "post6": {
+        "title": "Fechas Límite de Impuestos para Pequeñas Empresas: Calendario 2024",
+        "excerpt": "Nunca pierda una fecha límite con nuestro calendario integral de impuestos para pequeñas empresas.",
+        "category": "Impuestos de Negocios",
+        "author": "Michael Chen, EA",
+        "date": "3 Ene 2025",
+        "readTime": "6 min de lectura"
+      },
+      "post7": {
+        "title": "Estrategias Fiscales para Inversiones Inmobiliarias",
+        "excerpt": "Aprenda cómo minimizar impuestos en propiedades de alquiler, ventas rápidas e inversiones inmobiliarias.",
+        "category": "Inversiones",
+        "author": "Lisa Martinez, CPA",
+        "date": "28 Dic 2024",
+        "readTime": "11 min de lectura"
+      },
+      "post8": {
+        "title": "Cambios en el Crédito Fiscal por Hijos para 2024",
+        "excerpt": "Lo que los padres necesitan saber sobre cómo reclamar el Crédito Fiscal por Hijos este año.",
+        "category": "Créditos",
+        "author": "David Kim, CPA",
+        "date": "22 Dic 2024",
+        "readTime": "5 min de lectura"
+      },
+      "post9": {
+        "title": "Créditos Fiscales para Vehículos Eléctricos Explicados",
+        "excerpt": "Guía sobre créditos fiscales federales y estatales para compras de vehículos eléctricos e híbridos.",
+        "category": "Créditos",
+        "author": "Sarah Johnson, CPA",
+        "date": "18 Dic 2024",
+        "readTime": "8 min de lectura"
+      }
+    }
+  },
+  "apply": {
+    "header": {
+      "badge": "Solicitud de Empleo para Preparador de Impuestos",
+      "title": "Solicitud de Empleo para Preparador de Impuestos",
+      "subtitle": "Comience su camino hacia la libertad financiera. Complete el formulario a continuación para aplicar."
+    },
+    "form": {
+      "title": "Formulario de Solicitud",
+      "description": "Todos los campos son obligatorios a menos que se marquen como opcionales. Nos comunicaremos con usted dentro de 2-3 días hábiles.",
+      "firstName": "Nombre",
+      "middleName": "Segundo Nombre",
+      "lastName": "Apellido",
+      "email": "Correo Electrónico",
+      "phone": "Teléfono/Móvil",
+      "languages": "Idiomas",
+      "languagesPlaceholder": "Seleccione idioma(s)",
+      "languageEnglish": "Inglés",
+      "languageSpanish": "Español",
+      "languageBoth": "Inglés y Español",
+      "languageFrench": "Francés",
+      "languageMandarin": "Mandarín",
+      "languageOther": "Otro",
+      "smsConsent": "Consentimiento de SMS",
+      "smsConsentQuestion": "¿Consiente recibir mensajes de texto de Tax Genius Pro sobre su solicitud y capacitación?",
+      "smsConsentYes": "Sí, consiento recibir mensajes SMS",
+      "smsConsentNo": "No, no consiento",
+      "firstNamePlaceholder": "Juan",
+      "middleNamePlaceholder": "Roberto",
+      "lastNamePlaceholder": "Pérez",
+      "emailPlaceholder": "juan.perez@ejemplo.com",
+      "phonePlaceholder": "(555) 123-4567",
+      "submitButton": "Enviar Solicitud",
+      "submitting": "Enviando Solicitud...",
+      "privacyText": "Al enviar este formulario, acepta nuestros",
+      "termsLink": "Términos de Servicio",
+      "privacyLink": "Política de Privacidad",
+      "and": "y"
+    },
+    "success": {
+      "title": "¡Solicitud Enviada!",
+      "message": "Gracias por su interés en unirse a Tax Genius Pro. Hemos recibido su solicitud y la revisaremos en breve.",
+      "contactMessage": "Un miembro de nuestro equipo se comunicará con usted dentro de 2-3 días hábiles para discutir los próximos pasos.",
+      "backToLanding": "Volver a la Página Principal",
+      "viewTraining": "Ver Curso de Capacitación"
+    },
+    "footer": {
+      "question": "¿Preguntas sobre el proceso de solicitud?",
+      "contactTeam": "Contacte a nuestro equipo de reclutamiento"
+    }
+  },
+  "help": {
+    "hero": {
+      "badge": "Centro de Ayuda",
+      "title": "¿Cómo Podemos",
+      "titleHighlight": "Ayudarte?",
+      "subtitle": "Busque en nuestra base de conocimientos o contacte a nuestro equipo de soporte",
+      "searchPlaceholder": "Buscar respuestas... (ej., '¿Cómo subo documentos?')",
+      "searchButton": "Buscar"
+    },
+    "stats": {
+      "articles": "Más de 150 Artículos",
+      "videos": "Más de 50 Videos",
+      "support": "Soporte 24/7"
+    },
+    "contact": {
+      "title": "Opciones de Contacto",
+      "phone": {
+        "title": "Soporte Telefónico",
+        "description": "Lun-Vie: 9AM-7PM ET",
+        "action": "(404) 627-1015"
+      },
+      "chat": {
+        "title": "Chat en Vivo",
+        "description": "Espera promedio: < 2 min",
+        "action": "Iniciar Chat"
+      },
+      "email": {
+        "title": "Soporte por Correo",
+        "description": "Respuesta en 24 horas",
+        "action": "Enviar Correo"
+      },
+      "video": {
+        "title": "Videollamada",
+        "description": "Programe con su CPA",
+        "action": "Reservar Llamada"
+      }
+    },
+    "categories": {
+      "title": "Explorar por Categoría",
+      "subtitle": "Encuentre respuestas organizadas por tema",
+      "filing": {
+        "title": "Presentar su Declaración",
+        "description": "Comenzar, subir documentos, estado civil",
+        "articles": "12 artículos"
+      },
+      "payments": {
+        "title": "Pagos y Precios",
+        "description": "Métodos de pago, reembolsos, preguntas sobre precios",
+        "articles": "8 artículos"
+      },
+      "security": {
+        "title": "Seguridad y Privacidad",
+        "description": "Protección de datos, seguridad de cuenta, política de privacidad",
+        "articles": "6 artículos"
+      },
+      "cpas": {
+        "title": "Trabajar con CPAs",
+        "description": "Comunicación, solicitudes de documentos, consulta",
+        "articles": "10 artículos"
+      },
+      "deductions": {
+        "title": "Deducciones y Créditos",
+        "description": "Qué puede reclamar, documentación necesaria",
+        "articles": "15 artículos"
+      },
+      "irs": {
+        "title": "Problemas del IRS",
+        "description": "Avisos, auditorías, planes de pago, resolución",
+        "articles": "9 artículos"
+      },
+      "viewArticles": "Ver Artículos"
+    },
+    "popular": {
+      "title": "Artículos Populares",
+      "subtitle": "Más vistos este mes",
+      "article1": {
+        "title": "¿Cómo subo mis documentos fiscales?",
+        "views": "12.5K vistas"
+      },
+      "article2": {
+        "title": "¿Cuándo recibiré mi reembolso?",
+        "views": "10.2K vistas"
+      },
+      "article3": {
+        "title": "¿Qué documentos necesito para presentar?",
+        "views": "9.8K vistas"
+      },
+      "article4": {
+        "title": "¿Cómo contacto a mi CPA asignado?",
+        "views": "8.4K vistas"
+      },
+      "article5": {
+        "title": "¿Puedo enmendar mi declaración después de presentarla?",
+        "views": "7.9K vistas"
+      },
+      "article6": {
+        "title": "¿Qué métodos de pago aceptan?",
+        "views": "6.5K vistas"
+      }
+    },
+    "faq": {
+      "title": "Preguntas Frecuentes",
+      "subtitle": "Respuestas rápidas a preguntas comunes",
+      "gettingStarted": {
+        "category": "Comenzando",
+        "q1": {
+          "question": "¿Cuánto tiempo toma presentar mis impuestos?",
+          "answer": "La mayoría de las declaraciones se completan dentro de 3-5 días hábiles después de que envíe todos los documentos requeridos. Las declaraciones complejas (negocios, inversiones, propiedad de alquiler) pueden tomar de 5-7 días. El servicio urgente está disponible para situaciones urgentes."
+        },
+        "q2": {
+          "question": "¿Qué documentos necesito para presentar?",
+          "answer": "Necesitará W-2s de empleadores, formularios 1099 para otros ingresos, recibos de deducciones, declaración de impuestos del año pasado y cualquier documento fiscal relevante como 1098 (interés hipotecario), 1095-A (seguro médico), etc. Su CPA proporcionará una lista de verificación personalizada."
+        },
+        "q3": {
+          "question": "¿Puedo presentar impuestos desde cualquier estado?",
+          "answer": "¡Sí! Preparamos declaraciones federales y estatales para los 50 estados. Nuestros CPAs están licenciados y tienen experiencia con presentaciones en múltiples estados, incluidas declaraciones de residentes de parte del año."
+        }
+      },
+      "paymentsRefunds": {
+        "category": "Pagos y Reembolsos",
+        "q1": {
+          "question": "¿Cuándo pago por la preparación de impuestos?",
+          "answer": "Paga después de que se complete su declaración y la haya revisado y aprobado. No cobramos hasta que esté 100% satisfecho. El pago vence antes de que presentemos ante el IRS."
+        },
+        "q2": {
+          "question": "¿Qué tan rápido recibiré mi reembolso?",
+          "answer": "Con depósito directo, los reembolsos federales generalmente llegan en 7-21 días después de la aceptación del IRS. Los reembolsos con cheque en papel toman de 2-4 semanas más. Rastreamos el estado de su reembolso y le notificamos sobre actualizaciones."
+        },
+        "q3": {
+          "question": "¿Ofrecen anticipos de reembolso?",
+          "answer": "¡Sí! Los clientes elegibles pueden recibir su reembolso en 24 horas con nuestro programa de anticipo de reembolso instantáneo. La aprobación y el monto del préstamo dependen de su reembolso esperado y verificación de crédito."
+        }
+      },
+      "cpaServices": {
+        "category": "Servicios de CPA",
+        "q1": {
+          "question": "¿Trabajaré con el mismo CPA?",
+          "answer": "Sí. Se le asigna un CPA dedicado que maneja su declaración de principio a fin. Están disponibles durante todo el año para preguntas y se familiarizan con su situación fiscal."
+        },
+        "q2": {
+          "question": "¿Cómo me comunico con mi CPA?",
+          "answer": "Puede enviar mensajes a su CPA directamente a través de nuestro portal seguro, programar videollamadas o llamar a su línea directa. La mayoría de los CPAs responden dentro de 24 horas en días hábiles."
+        },
+        "q3": {
+          "question": "¿Están licenciados sus preparadores de impuestos?",
+          "answer": "Todos nuestros preparadores son CPAs licenciados (Contadores Públicos Certificados) o Agentes Inscritos (EA) autorizados para representar a clientes ante el IRS. Todos tienen licencias activas y completan educación continua."
+        }
+      },
+      "securityPrivacy": {
+        "category": "Seguridad y Privacidad",
+        "q1": {
+          "question": "¿Es segura mi información?",
+          "answer": "Absolutamente. Usamos cifrado de 256 bits de nivel bancario, servidores seguros y controles de acceso estrictos. Estamos certificados SOC 2 Tipo II y cumplimos con los requisitos de seguridad del IRS para preparadores de impuestos."
+        },
+        "q2": {
+          "question": "¿Quién tiene acceso a mi información fiscal?",
+          "answer": "Solo su CPA asignado y el personal de soporte autorizado. Nunca vendemos sus datos. Todos los empleados firman acuerdos de confidencialidad y se someten a verificaciones de antecedentes."
+        },
+        "q3": {
+          "question": "¿Qué pasa con mis documentos después de presentar?",
+          "answer": "Los documentos se almacenan de forma segura durante 7 años (requisito del IRS) y luego se eliminan permanentemente. Puede descargar su declaración y documentos en cualquier momento desde su portal seguro."
+        }
+      }
+    },
+    "cta": {
+      "title": "¿Aún Necesita Ayuda?",
+      "subtitle": "Nuestro equipo de soporte está disponible para ayudarlo con cualquier pregunta.",
+      "callButton": "Llamar al (404) 627-1015",
+      "chatButton": "Iniciar Chat en Vivo",
+      "available": "Disponible 24/7",
+      "responseTime": "Respuesta promedio en 2 min",
+      "imageAlt": "Equipo de soporte"
+    }
+  },
+  "privacy": {
+    "metadata": {
+      "title": "Política de Privacidad | Tax Genius Pro",
+      "description": "Política de Privacidad de Tax Genius Pro - Cómo recopilamos, usamos y protegemos su información"
+    },
+    "title": "Política de Privacidad",
+    "lastUpdated": "Última Actualización:",
+    "lastUpdatedDate": "10 de octubre de 2025",
+    "sections": {
+      "informationWeCollect": {
+        "title": "Información que Recopilamos",
+        "personalInfo": {
+          "title": "Información Personal",
+          "description": "Recopilamos información que usted nos proporciona directamente, incluyendo:",
+          "items": {
+            "item1": "Nombre, dirección de correo electrónico, número de teléfono",
+            "item2": "Información de identificación fiscal (SSN, EIN)",
+            "item3": "Información financiera (ingresos, deducciones, gastos)",
+            "item4": "Información de pago (procesada de forma segura a través de Square)",
+            "item5": "Documentos fiscales (W2, 1099, recibos, etc.)"
+          }
+        },
+        "automaticInfo": {
+          "title": "Información Recopilada Automáticamente",
+          "description": "Cuando utiliza nuestro servicio, recopilamos automáticamente:",
+          "items": {
+            "item1": "Dirección IP e información del dispositivo",
+            "item2": "Tipo y versión del navegador",
+            "item3": "Páginas visitadas y tiempo empleado",
+            "item4": "Fuente de referencia"
+          }
+        }
+      },
+      "howWeUseInfo": {
+        "title": "Cómo Usamos Su Información",
+        "description": "Usamos su información para:",
+        "items": {
+          "item1": "Preparar y presentar sus declaraciones de impuestos",
+          "item2": "Procesar pagos y comisiones",
+          "item3": "Comunicarnos con usted sobre el estado de su declaración de impuestos",
+          "item4": "Mejorar nuestros servicios y experiencia del usuario",
+          "item5": "Cumplir con los requisitos legales y reglamentarios",
+          "item6": "Prevenir fraudes y garantizar la seguridad de la plataforma"
+        }
+      },
+      "informationSharing": {
+        "title": "Compartir Información",
+        "description": "No vendemos ni alquilamos su información personal. Podemos compartir su información con:",
+        "items": {
+          "item1": {
+            "title": "Preparadores de Impuestos Asignados:",
+            "description": "Para completar su declaración de impuestos"
+          },
+          "item2": {
+            "title": "Procesadores de Pagos:",
+            "description": "Square para procesamiento de pagos"
+          },
+          "item3": {
+            "title": "Servicio de Correo Electrónico:",
+            "description": "Resend para correos electrónicos transaccionales"
+          },
+          "item4": {
+            "title": "Proveedor de Autenticación:",
+            "description": "Clerk para inicio de sesión seguro"
+          },
+          "item5": {
+            "title": "Autoridades Legales:",
+            "description": "Cuando lo exija la ley o para proteger nuestros derechos"
+          }
+        }
+      },
+      "dataSecurity": {
+        "title": "Seguridad de Datos",
+        "description": "Implementamos medidas de seguridad estándar de la industria para proteger su información:",
+        "items": {
+          "item1": "Cifrado SSL/TLS para datos en tránsito",
+          "item2": "Autenticación segura a través de Clerk",
+          "item3": "Control de acceso basado en roles",
+          "item4": "Acceso a documentos por tiempo limitado (las URL firmadas expiran en 15 minutos)",
+          "item5": "Limitación de velocidad para prevenir abusos",
+          "item6": "Auditorías de seguridad regulares"
+        }
+      },
+      "dataRetention": {
+        "title": "Retención de Datos",
+        "description": "Conservamos su información durante el tiempo necesario para:",
+        "items": {
+          "item1": "Proporcionar nuestros servicios",
+          "item2": "Cumplir con los requisitos de mantenimiento de registros del IRS (mínimo 7 años)",
+          "item3": "Resolver disputas y hacer cumplir acuerdos",
+          "item4": "Cumplir con obligaciones legales"
+        }
+      },
+      "yourRights": {
+        "title": "Sus Derechos",
+        "description": "Usted tiene derecho a:",
+        "items": {
+          "item1": "Acceder a su información personal",
+          "item2": "Corregir información incorrecta",
+          "item3": "Solicitar la eliminación de su información (sujeto a requisitos legales de retención)",
+          "item4": "Optar por no recibir comunicaciones de marketing",
+          "item5": "Exportar sus datos"
+        },
+        "contact": "Para ejercer estos derechos, contáctenos en",
+        "email": "privacy@taxgeniuspro.tax"
+      },
+      "cookiesTracking": {
+        "title": "Cookies y Seguimiento",
+        "description": "Utilizamos cookies y tecnologías similares para:",
+        "items": {
+          "item1": "Mantener su sesión",
+          "item2": "Recordar sus preferencias",
+          "item3": "Rastrear fuentes de referencia",
+          "item4": "Analizar el uso de la plataforma"
+        },
+        "browserControl": "Puede controlar las cookies a través de la configuración de su navegador."
+      },
+      "thirdPartyServices": {
+        "title": "Servicios de Terceros",
+        "description": "Nuestro servicio se integra con:",
+        "items": {
+          "clerk": {
+            "name": "Clerk:",
+            "description": "Autenticación",
+            "linkText": "Política de Privacidad"
+          },
+          "square": {
+            "name": "Square:",
+            "description": "Procesamiento de pagos",
+            "linkText": "Política de Privacidad"
+          },
+          "resend": {
+            "name": "Resend:",
+            "description": "Entrega de correo electrónico",
+            "linkText": "Política de Privacidad"
+          }
+        }
+      },
+      "childrensPrivacy": {
+        "title": "Privacidad de los Niños",
+        "description": "Nuestro servicio no está destinado a personas menores de 18 años. No recopilamos información de niños a sabiendas."
+      },
+      "policyChanges": {
+        "title": "Cambios a Esta Política",
+        "description": "Podemos actualizar esta Política de Privacidad de vez en cuando. Le notificaremos sobre cambios significativos por correo electrónico o a través de nuestra plataforma."
+      },
+      "contactUs": {
+        "title": "Contáctenos",
+        "description": "Si tiene preguntas sobre esta Política de Privacidad, contáctenos:",
+        "email": {
+          "label": "Correo Electrónico:",
+          "value": "privacy@taxgeniuspro.tax"
+        },
+        "support": {
+          "label": "Soporte:",
+          "value": "taxgenius.tax@gmail.com"
+        },
+        "address": {
+          "label": "Dirección:",
+          "value": "[Dirección de la Empresa - Por añadir]"
+        }
+      }
+    },
+    "disclaimer": {
+      "note": "Nota:",
+      "text": "Esta política de privacidad es efectiva a partir del 10 de octubre de 2025. Al usar Tax Genius Pro, usted acepta esta Política de Privacidad."
+    }
+  },
+  "terms": {
+    "metadata": {
+      "title": "Términos de Servicio | Tax Genius Pro",
+      "description": "Términos de Servicio de Tax Genius Pro - Acuerdo legal para usar nuestra plataforma"
+    },
+    "title": "Términos de Servicio",
+    "lastUpdated": "Última Actualización:",
+    "lastUpdatedDate": "10 de octubre de 2025",
+    "sections": {
+      "acceptance": {
+        "title": "Aceptación de los Términos",
+        "description": "Al acceder o usar Tax Genius Pro (\"Servicio\"), usted acepta estar sujeto a estos Términos de Servicio (\"Términos\"). Si no está de acuerdo con estos Términos, no puede usar el Servicio."
+      },
+      "serviceDescription": {
+        "title": "Descripción del Servicio",
+        "description": "Tax Genius Pro proporciona:",
+        "items": {
+          "item1": "Servicios de preparación y presentación de impuestos",
+          "item2": "Conexión con preparadores de impuestos calificados",
+          "item3": "Programa de referidos para ganar comisiones",
+          "item4": "Tienda de comercio electrónico para productos relacionados con impuestos",
+          "item5": "Capacitación y certificación de preparadores de impuestos"
+        }
+      },
+      "userAccounts": {
+        "title": "Cuentas de Usuario",
+        "registration": {
+          "title": "Registro",
+          "description": "Debe crear una cuenta para usar nuestro Servicio. Usted acepta:",
+          "items": {
+            "item1": "Proporcionar información precisa y actual",
+            "item2": "Mantener la seguridad de sus credenciales de cuenta",
+            "item3": "Notificarnos inmediatamente sobre acceso no autorizado",
+            "item4": "Ser responsable de todas las actividades bajo su cuenta"
+          }
+        },
+        "accountTypes": {
+          "title": "Tipos de Cuenta",
+          "items": {
+            "client": {
+              "label": "Cliente:",
+              "description": "Presentar declaraciones de impuestos"
+            },
+            "referrer": {
+              "label": "Referidor:",
+              "description": "Ganar comisiones refiriendo clientes"
+            },
+            "taxPreparer": {
+              "label": "Preparador de Impuestos:",
+              "description": "Preparar y presentar declaraciones de impuestos (requiere certificación)"
+            },
+            "admin": {
+              "label": "Administrador:",
+              "description": "Gestión de la plataforma (solo por invitación)"
+            }
+          }
+        }
+      },
+      "taxFilingServices": {
+        "title": "Servicios de Presentación de Impuestos",
+        "accuracyGuarantee": {
+          "title": "Garantía de Precisión",
+          "description": "Garantizamos 100% de precisión en los cálculos de impuestos. Si el IRS determina que se cometieron errores, nosotros:",
+          "items": {
+            "item1": "Presentaremos una declaración enmendada sin cargo",
+            "item2": "Pagaremos cualquier penalización resultante de nuestros errores",
+            "item3": "Proporcionaremos apoyo adicional para resolver el problema"
+          },
+          "disclaimer": "Esta garantía no cubre penalizaciones por información incorrecta que usted proporcione."
+        },
+        "maxRefundGuarantee": {
+          "title": "Garantía de Reembolso Máximo",
+          "description": "Garantizamos que recibirá el reembolso máximo al que tiene derecho según la ley fiscal actual."
+        },
+        "yourResponsibilities": {
+          "title": "Sus Responsabilidades",
+          "description": "Usted es responsable de:",
+          "items": {
+            "item1": "Proporcionar información completa y precisa",
+            "item2": "Cargar todos los documentos requeridos",
+            "item3": "Revisar su declaración antes de presentarla",
+            "item4": "Responder a las preguntas del preparador con prontitud"
+          }
+        }
+      },
+      "referralProgram": {
+        "title": "Programa de Referidos",
+        "eligibility": {
+          "title": "Elegibilidad",
+          "description": "Para participar en el programa de referidos, debe:",
+          "items": {
+            "item1": "Tener 18 años o más",
+            "item2": "Mantener una cuenta activa en buen estado",
+            "item3": "Cumplir con todos los términos del programa"
+          }
+        },
+        "commissionStructure": {
+          "title": "Estructura de Comisiones",
+          "items": {
+            "basic": "Paquete Básico: $25 por declaración completada",
+            "standard": "Paquete Estándar: $35 por declaración completada",
+            "premium": "Paquete Premium: $50 por declaración completada",
+            "deluxe": "Paquete Deluxe: $75 por declaración completada"
+          }
+        },
+        "commissionPayment": {
+          "title": "Pago de Comisiones",
+          "description": "Las comisiones son:",
+          "items": {
+            "item1": "Creadas automáticamente cuando se presenta la declaración de un cliente referido",
+            "item2": "Pagadas cuando solicita el pago (mínimo $50)",
+            "item3": "Procesadas dentro de 5-7 días hábiles de aprobación",
+            "item4": "Pagadas a través de transferencia bancaria, PayPal, Square Cash o Venmo"
+          }
+        },
+        "prohibitedActivities": {
+          "title": "Actividades Prohibidas",
+          "description": "No puede:",
+          "items": {
+            "item1": "Usar marketing engañoso o fraudulento",
+            "item2": "Enviar spam o correos electrónicos no solicitados",
+            "item3": "Crear cuentas o referencias falsas",
+            "item4": "Violar cualquier ley o regulación",
+            "item5": "Hacerse pasar por Tax Genius Pro o sus empleados"
+          },
+          "violation": "La violación puede resultar en la terminación de la cuenta y la pérdida de comisiones no pagadas."
+        }
+      },
+      "taxPreparerTerms": {
+        "title": "Términos para Preparadores de Impuestos",
+        "certification": {
+          "title": "Certificación",
+          "description": "Los preparadores de impuestos deben:",
+          "items": {
+            "item1": "Completar la capacitación requerida",
+            "item2": "Aprobar el examen de certificación",
+            "item3": "Mantener credenciales activas (CPA, EA o equivalente)",
+            "item4": "Completar educación continua anual"
+          }
+        },
+        "professionalStandards": {
+          "title": "Estándares Profesionales",
+          "description": "Los preparadores aceptan:",
+          "items": {
+            "item1": "Seguir las directrices de la circular 230 del IRS",
+            "item2": "Mantener la confidencialidad del cliente",
+            "item3": "Proporcionar servicio preciso y oportuno",
+            "item4": "Comunicarse profesionalmente con los clientes"
+          }
+        }
+      },
+      "paymentsRefunds": {
+        "title": "Pagos y Reembolsos",
+        "paymentProcessing": {
+          "title": "Procesamiento de Pagos",
+          "description": "Todos los pagos se procesan de forma segura a través de Square. No almacenamos información de tarjetas de crédito."
+        },
+        "pricing": {
+          "title": "Precios",
+          "description": "Los precios de los servicios de presentación de impuestos se basan en la complejidad y el paquete seleccionado. Todos los precios se muestran claramente antes de la compra."
+        },
+        "refundPolicy": {
+          "title": "Política de Reembolso",
+          "description": "Los reembolsos están disponibles:",
+          "items": {
+            "item1": "Antes de que se presente su declaración: Reembolso completo",
+            "item2": "Después de la presentación, debido a nuestro error: Reembolso completo",
+            "item3": "Después de la presentación, por otras razones: Caso por caso"
+          },
+          "storePolicy": "Las compras en la tienda (productos) no son reembolsables a menos que sean defectuosas."
+        }
+      },
+      "intellectualProperty": {
+        "title": "Propiedad Intelectual",
+        "description": "Todo el contenido del Servicio, incluidos texto, gráficos, logotipos y software, es propiedad de Tax Genius Pro y está protegido por leyes de derechos de autor, marcas comerciales y otras leyes de propiedad intelectual.",
+        "disclaimer": "No puede copiar, modificar, distribuir o crear obras derivadas sin nuestro permiso por escrito."
+      },
+      "limitationOfLiability": {
+        "title": "Limitación de Responsabilidad",
+        "description": "En la máxima medida permitida por la ley:",
+        "items": {
+          "item1": "Tax Genius Pro se proporciona \"tal cual\" sin garantías",
+          "item2": "No somos responsables de daños indirectos, incidentales o consecuentes",
+          "item3": "Nuestra responsabilidad total está limitada a la cantidad que nos pagó en los últimos 12 meses",
+          "item4": "No somos responsables de las penalizaciones del IRS resultantes de la información que usted proporciona"
+        }
+      },
+      "indemnification": {
+        "title": "Indemnización",
+        "description": "Usted acepta indemnizar y eximir de responsabilidad a Tax Genius Pro de cualquier reclamación, daño, pérdida o gasto que surja de:",
+        "items": {
+          "item1": "Su uso del Servicio",
+          "item2": "Su violación de estos Términos",
+          "item3": "Su violación de los derechos de terceros",
+          "item4": "Información que nos proporciona"
+        }
+      },
+      "termination": {
+        "title": "Terminación",
+        "description": "Podemos terminar o suspender su cuenta en cualquier momento por:",
+        "items": {
+          "item1": "Violación de estos Términos",
+          "item2": "Actividad fraudulenta",
+          "item3": "Falta de pago",
+          "item4": "Cualquier razón a nuestra discreción"
+        },
+        "userTermination": "Puede terminar su cuenta en cualquier momento contactándonos."
+      },
+      "governingLaw": {
+        "title": "Ley Aplicable",
+        "description": "Estos Términos se rigen por las leyes de [Estado], sin tener en cuenta los principios de conflicto de leyes. Cualquier disputa se resolverá en los tribunales de [Condado, Estado]."
+      },
+      "changesToTerms": {
+        "title": "Cambios a los Términos",
+        "description": "Podemos modificar estos Términos en cualquier momento. Le notificaremos sobre cambios significativos por correo electrónico o a través del Servicio. El uso continuo después de los cambios constituye aceptación."
+      },
+      "contactUs": {
+        "title": "Contáctenos",
+        "description": "¿Preguntas sobre estos Términos? Contáctenos:",
+        "email": {
+          "label": "Correo Electrónico:",
+          "value": "legal@taxgeniuspro.tax"
+        },
+        "support": {
+          "label": "Soporte:",
+          "value": "taxgenius.tax@gmail.com"
+        },
+        "address": {
+          "label": "Dirección:",
+          "value": "[Dirección de la Empresa - Por añadir]"
+        }
+      }
+    },
+    "disclaimer": {
+      "note": "Nota:",
+      "text": "Al usar Tax Genius Pro, usted reconoce que ha leído, comprendido y acepta estar sujeto a estos Términos de Servicio."
+    }
+  },
+  "taxPreparerCities": {
+    "shared": {
+      "branding": {
+        "joinTheTeam": "Únete al Equipo",
+        "owlAlt": "Mascota Búho de Tax Genius Pro"
+      },
+      "meta": {
+        "titleTemplate": "Empleos de Preparador de Impuestos en {city}, {stateCode} - Gane ${income}+ al Año",
+        "descriptionTemplate": "Únase a Tax Genius Pro en {city}, {state}. Sin experiencia necesaria. Trabaje desde casa. Capacitación gratuita. Gane ${income}+ anuales como preparador de impuestos certificado.",
+        "keywordsTemplate": "empleos preparador de impuestos {city}, trabajos preparador de impuestos {city} {stateCode}, preparador de impuestos remoto {city}, capacitación preparador de impuestos gratis {city}, preparador de impuestos desde casa {city}"
+      },
+      "hero": {
+        "badge": "{city}, {state}",
+        "titlePart1": "Empleos de Preparador de Impuestos en {city}, {stateCode} - Gane",
+        "titleIncome": "${income}+",
+        "titlePart2": "al Año",
+        "subtitle": "¡Sin experiencia necesaria! Trabaje desde casa en {neighborhoods} o en cualquier lugar de {city}",
+        "highlights": "Capacitación gratuita • Horarios flexibles • Trabajo remoto • Ingresos durante todo el año",
+        "cta": {
+          "primary": "Aplique Ahora - Comience a Ganar",
+          "secondary": "Más Información - Ingresos de $75,000+"
+        },
+        "contact": {
+          "phone": "+1 (404) 627-1015",
+          "text": "+1 (404) 627-1015 - Envíe mensaje para información"
+        }
+      },
+      "keyBenefits": {
+        "title": "Beneficios Principales",
+        "benefit1": {
+          "title": "$75,000-$150,000",
+          "description": "Potencial de ingresos anuales con los mejores ganando $150k+. Incluso los preparadores de medio tiempo ganan $75k+",
+          "imageAlt": "Gane $75,000-$150,000 como preparador de impuestos en {city} {state}"
+        },
+        "benefit2": {
+          "title": "Trabaje Desde Casa",
+          "description": "Trabaje desde cualquier lugar de {city} - {neighborhoods} o su hogar",
+          "imageAlt": "Trabaje desde casa como preparador de impuestos en {city} {state}"
+        },
+        "benefit3": {
+          "title": "Horarios Flexibles",
+          "description": "Establezca su propio horario. Perfecto para padres, jubilados o cualquiera que busque equilibrio vida-trabajo",
+          "imageAlt": "Empleos de preparador de impuestos con horarios flexibles en {city} {state}"
+        }
+      },
+      "breakFreeSection": {
+        "title": "Libérese de Trabajos Sin Futuro en {city}",
+        "paragraph1": "La creciente demanda de la temporada de impuestos en {city} está creando una oportunidad de oro para quienes buscan cambiar de carrera, jubilados y trabajadores de medio tiempo listos para liberarse de empleos sin futuro, tráfico congestionado y horarios inflexibles. Con {companyLink}, puede ganar {strongIncome1} anuales—o incluso los {strongIncome2} de los mejores ganadores—desde la comodidad de su hogar, mientras sirve a vecindarios de alta demanda como {strongNeighborhoods}.",
+        "companyLinkText": "Tax Genius Pro",
+        "calloutBox": {
+          "title": "Por Qué Ahora es el Momento Perfecto",
+          "intro": "Diga adiós a salarios bajos y horarios rígidos de 9 a 5. Como Tax Genius Pro, disfrutará de:",
+          "items": {
+            "item1": {
+              "strong": "Horarios flexibles",
+              "text": "que se adaptan a SU agenda"
+            },
+            "item2": {
+              "strong": "Trabajo remoto",
+              "text": "- sin desplazamientos, sin política de oficina"
+            },
+            "item3": {
+              "strong": "Sea su propio jefe",
+              "text": "- perfecto para padres que se quedan en casa y jubilados"
+            },
+            "item4": {
+              "strong": "Capacitación GRATUITA de 4-6 semanas",
+              "text": "(a su propio ritmo, sin costo)"
+            },
+            "item5": {
+              "strong": "Certificación sin costo",
+              "text": "incluida"
+            }
+          }
+        }
+      },
+      "marketSection": {
+        "title": "Mercado Próspero en {city}",
+        "description": "La población de {city} de {strongPopulation} significa un mercado próspero para preparadores de impuestos, especialmente con {strongSeasonalPeaks} y {strongYearRound}. Ya sea bilingüe o recién comenzando, esta es su oportunidad de prosperar en una ciudad donde la oportunidad se encuentra con la demanda.",
+        "opportunityCard": {
+          "title": "La Oportunidad de {city}",
+          "metrics": {
+            "population": {
+              "value": "{population}+",
+              "label": "Población"
+            },
+            "yearRound": {
+              "value": "Todo el Año",
+              "label": "Potencial de Ingresos"
+            },
+            "bilingual": {
+              "value": "Bilingüe",
+              "label": "Oportunidad Extra"
+            },
+            "remote": {
+              "value": "Remoto",
+              "label": "Configuración de Trabajo"
+            }
+          }
+        }
+      },
+      "urgencySection": {
+        "title": "Actúe Ahora - Cupos Limitados Disponibles",
+        "paragraph1": "Los {strongSpots} están limitados, y la temporada de impuestos se acerca rápidamente. No deje que pase otro año mientras está atrapado en un trabajo que no le paga lo que vale.",
+        "paragraph2": "{strongJoin} hoy y transforme su vida—{applyLink} antes de que se acaben las oportunidades!",
+        "strongSpots": "cupos de capacitación",
+        "strongJoin": "Únase a Tax Genius Pro en {city}",
+        "applyLinkText": "haga clic para aplicar"
+      },
+      "howToBecome": {
+        "title": "Cómo Convertirse en Preparador de Impuestos en {city}",
+        "intro": "Incursionar en la industria de preparación de impuestos en {city} es más fácil de lo que piensa. A diferencia de muchas carreras que requieren años de educación costosa, puede convertirse en un {strongCertified} en solo 4-6 semanas con el programa de capacitación gratuita de Tax Genius Pro. Este es su plan paso a paso:",
+        "strongCertified": "preparador de impuestos certificado",
+        "steps": {
+          "step1": {
+            "number": "1",
+            "title": "Aplique a Tax Genius Pro",
+            "description": "Comience su viaje {submitLink}. No se requiere experiencia previa—aceptamos principiantes, personas que cambian de carrera, jubilados y padres que se quedan en casa.",
+            "submitLinkText": "enviando su solicitud"
+          },
+          "step2": {
+            "number": "2",
+            "title": "Complete la Capacitación GRATUITA (4-6 Semanas)",
+            "description": "Acceda a nuestro {trainingLink} integral que cubre ley tributaria federal, regulaciones del IRS, software de impuestos y escenarios tributarios específicos de {city}. Estudie a su propio ritmo desde casa.",
+            "trainingLinkText": "programa de capacitación a su propio ritmo"
+          },
+          "step3": {
+            "number": "3",
+            "title": "Obtenga su PTIN y Certificación",
+            "description": "Lo guiamos para obtener su Número de Identificación de Preparador de Impuestos del IRS (PTIN) y completar el Programa Anual de Temporada de Presentación (AFSP) o convertirse en Preparador de Declaraciones de Impuestos Registrado del IRS (RTRP)."
+          },
+          "step4": {
+            "number": "4",
+            "title": "Comience a Preparar Declaraciones y Ganar",
+            "description": "Comience a aceptar clientes inmediatamente a través de nuestra plataforma o construya su propia base de clientes en {city}. La mayoría de los preparadores completan su primera declaración a los pocos días de la certificación."
+          }
+        }
+      },
+      "salaryBreakdown": {
+        "title": "Salario de Preparador de Impuestos en {city}: Lo Que Realmente Ganará",
+        "intro": "Los preparadores de impuestos de {city} con Tax Genius Pro ganan significativamente más que los empleados tradicionales de H&R Block o Liberty Tax. Este es un desglose realista del potencial de ganancias en el mercado de {city}:",
+        "cards": {
+          "partTime": {
+            "amount": "$75,000",
+            "title": "Promedio Medio Tiempo",
+            "description": "Trabajando 20-25 horas/semana durante la temporada de impuestos (Ene-Abr) + 10 horas/semana fuera de temporada"
+          },
+          "fullTime": {
+            "amount": "$115,000",
+            "title": "Promedio Tiempo Completo",
+            "description": "Trabajando 40 horas/semana durante todo el año con servicios fiscales diversificados y clientes comerciales"
+          },
+          "topEarners": {
+            "amount": "$150,000+",
+            "title": "Mejores Ganadores",
+            "description": "Construyendo una base de clientes leales, ofreciendo contabilidad y sirviendo al mercado bilingüe de {city}"
+          }
+        },
+        "pricingInfo": "Precios por declaración en {city}: Las declaraciones simples (solo W-2) promedian {strongSimple}, mientras que las declaraciones comerciales y las presentaciones complejas ganan {strongComplex}. Con la población de {city} de {population}+ y alta demanda de preparadores bilingües, construir una base de 200-300 clientes es alcanzable en 2-3 años.",
+        "strongSimple": "$150-$250",
+        "strongComplex": "$500-$2,000+"
+      },
+      "requirements": {
+        "title": "Requisitos y Calificaciones para Preparadores de Impuestos en {city}",
+        "intro": "Las barreras de entrada son más bajas de lo que piensa. Esto es todo lo que necesita para convertirse en un preparador de impuestos exitoso en {city}:",
+        "whatYouNeed": {
+          "title": "✅ Lo Que SÍ Necesita",
+          "items": {
+            "item1": "Diploma de escuela secundaria o GED",
+            "item2": "Número de Seguro Social válido",
+            "item3": "Habilidades básicas de computación",
+            "item4": "18+ años de edad",
+            "item5": "PTIN del IRS (le ayudamos a obtenerlo)"
+          }
+        },
+        "whatYouDontNeed": {
+          "title": "❌ Lo Que NO Necesita",
+          "items": {
+            "item1": "Título universitario",
+            "item2": "Experiencia previa en impuestos",
+            "item3": "Capacitación costosa (la nuestra es GRATIS)",
+            "item4": "Certificación CPA o EA",
+            "item5": "Espacio de oficina física"
+          }
+        },
+        "bonus": "Ventaja para {city}: Ser bilingüe (Inglés/Español) aumenta significativamente su potencial de ganancias en el diverso mercado de {city}, pero no es obligatorio para comenzar."
+      },
+      "dayInLife": {
+        "title": "Un Día en la Vida de un Preparador de Impuestos en {city}",
+        "intro": "¿Se pregunta cómo será su rutina diaria? Este es un panorama realista de un preparador de impuestos exitoso en {city} durante la temporada alta (Enero-Abril):",
+        "schedule": {
+          "time1": {
+            "time": "9:00 AM - Café Matutino y Revisión de Correos",
+            "description": "Revise los correos electrónicos de clientes desde su {localArea}. Responda solicitudes de documentos y programe citas virtuales. Sin desplazamientos—¡ya está en el trabajo en pijama si quiere!"
+          },
+          "time2": {
+            "time": "10:00 AM - Consultas con Clientes (Virtual)",
+            "description": "Reúnase con 2-3 clientes vía Zoom. Revise sus W-2, 1099 y discuta deducciones. La mayoría de las reuniones duran 30-45 minutos y pueden ganarle $150-$500 por declaración."
+          },
+          "time3": {
+            "time": "12:00 PM - Almuerzo (¡Su Horario!)",
+            "description": "Tome un verdadero descanso para almorzar—{localActivity}. Usted controla su tiempo."
+          },
+          "time4": {
+            "time": "1:00 PM - Preparación de Declaraciones de Impuestos",
+            "description": "Use el software de Tax Genius Pro para preparar 3-5 declaraciones. Las declaraciones simples W-2 toman 30-45 minutos. Las declaraciones más complejas con Schedule C o propiedades de alquiler toman 1-2 horas."
+          },
+          "time5": {
+            "time": "4:00 PM - Presentación Electrónica y Seguimiento con Clientes",
+            "description": "Envíe las declaraciones completadas al IRS electrónicamente. Haga seguimiento con los clientes sobre los plazos de reembolso y responda cualquier pregunta."
+          },
+          "time6": {
+            "time": "5:00 PM - ¡Listo por el Día!",
+            "description": "Cierre su computadora sabiendo que ganó $800-$1,500 hoy. Pase su tarde como quiera—sin jefe, sin oficina, sin problema. Consulte la {servicesLink} completa que puede ofrecer para maximizar ingresos.",
+            "servicesLinkText": "gama completa de servicios de {city}"
+          }
+        },
+        "offSeason": "Durante la temporada baja (Mayo-Diciembre), puede trabajar 10-15 horas por semana sirviendo a clientes comerciales con contabilidad, impuestos trimestrales y servicios de planificación—manteniendo ingresos constantes durante todo el año. Aprenda más sobre {joinLink} y construir su práctica fiscal en {city}.",
+        "joinLinkText": "unirse a nuestro equipo"
+      },
+      "testimonials": {
+        "title": "Historias de Éxito Reales de Preparadores de Impuestos en {city}",
+        "subtitle": "Únase a cientos de preparadores de impuestos exitosos ganando $75k-$150k anuales",
+        "people": {
+          "angela": {
+            "name": "Angela Richards",
+            "location": "{neighborhood1}, {city} {stateCode}",
+            "income": "$92,000",
+            "quote": "¡La capacitación gratuita cambió mi vida. Ahora trabajo desde casa y gano más que en mi trabajo corporativo!"
+          },
+          "chelsea": {
+            "name": "Chelsea Michelle Lowe",
+            "location": "{neighborhood2}, {city} {stateCode}",
+            "income": "$115,000",
+            "quote": "La mejor decisión profesional que he tomado. Horarios flexibles, excelentes ingresos y ayudo a familias."
+          },
+          "gelsia": {
+            "name": "Gelsia White",
+            "location": "{neighborhood3}, {city} {stateCode}",
+            "income": "$87,500",
+            "quote": "¡Es verdad que no se necesita experiencia! La capacitación fue excelente y el apoyo es increíble."
+          },
+          "yaumar": {
+            "name": "Yaumar Williams",
+            "location": "{neighborhood4}, {city} {stateCode}",
+            "income": "$105,000",
+            "quote": "El equilibrio vida-trabajo es increíble. Elijo mis horarios y gano más que nunca."
+          }
+        },
+        "yearSuffix": "/año"
+      },
+      "finalCta": {
+        "title": "Su Futuro Como Profesional de Impuestos Comienza Ahora",
+        "subtitle": "Capacitación gratuita • Sin experiencia necesaria • Trabaje desde casa • $75,000-$150,000/año",
+        "buttons": {
+          "primary": "Aplique Ahora - Conviértase en Preparador de Impuestos",
+          "secondary": "Más Información - Ingresos de $75,000+"
+        }
+      },
+      "serviceAreas": {
+        "title": "Sirviendo Todos los Vecindarios de {city}",
+        "neighborhoodsLabel": "Vecindarios"
+      },
+      "faq": {
+        "sectionTitle": "Preguntas Frecuentes",
+        "questions": {
+          "q1": {
+            "question": "¿Cuánto ganan los preparadores de impuestos en {city}?",
+            "answer": "Los preparadores de impuestos en {city} con Tax Genius Pro ganan entre $75,000 y $150,000+ anuales. Los preparadores de medio tiempo promedian $75,000, mientras que los profesionales de tiempo completo con una base de clientes establecida ganan $115,000-$150,000. Los mejores ganadores que sirven al mercado bilingüe de {city} y ofrecen servicios adicionales como contabilidad superan los $150,000."
+          },
+          "q2": {
+            "question": "¿Necesito experiencia previa para ser preparador de impuestos en {city}?",
+            "answer": "No, no se requiere experiencia previa. Tax Genius Pro proporciona capacitación gratuita de 4-6 semanas que cubre todo lo que necesita saber. Aceptamos principiantes, personas que cambian de carrera, jubilados y padres que se quedan en casa. Solo necesita un diploma de escuela secundaria, habilidades básicas de computación y estar dispuesto a aprender."
+          },
+          "q3": {
+            "question": "¿Cuánto tiempo toma convertirse en un preparador de impuestos certificado?",
+            "answer": "Puede convertirse en un preparador de impuestos certificado en solo 4-6 semanas con nuestro programa de capacitación gratuito a su propio ritmo. Después de completar la capacitación, lo guiaremos para obtener su PTIN del IRS y certificación. La mayoría de los nuevos preparadores están listos para comenzar a aceptar clientes dentro de 6-8 semanas desde el inicio."
+          },
+          "q4": {
+            "question": "¿Puedo trabajar desde casa como preparador de impuestos en {city}?",
+            "answer": "¡Absolutamente! Todos nuestros preparadores de impuestos en {city} trabajan de forma remota. No necesita una oficina física—puede trabajar desde cualquier lugar en {city}, ya sea {neighborhood1}, {neighborhood2} o cualquier vecindario. Todo lo que necesita es una computadora, internet confiable y un espacio de trabajo tranquilo."
+          },
+          "q5": {
+            "question": "¿Cuánto cuesta la capacitación de Tax Genius Pro?",
+            "answer": "Nuestra capacitación es completamente GRATUITA. Cero costo para acceder a nuestro programa integral de capacitación, materiales de estudio y apoyo de mentores. También lo ayudamos a obtener su certificación PTIN sin costo adicional. No hay tarifas ocultas ni gastos por adelantado."
+          },
+          "q6": {
+            "question": "¿Qué horarios tendré como preparador de impuestos?",
+            "answer": "Establece sus propios horarios. Durante la temporada alta de impuestos (Enero-Abril), la mayoría de los preparadores trabajan 20-40 horas por semana dependiendo de sus objetivos de ingresos. Fuera de temporada, puede trabajar 10-15 horas por semana sirviendo a clientes comerciales. La flexibilidad es perfecta para padres, estudiantes, jubilados o cualquiera que busque equilibrio vida-trabajo."
+          },
+          "q7": {
+            "question": "¿Ser bilingüe ayuda en el mercado de {city}?",
+            "answer": "Sí, ser bilingüe (Inglés/Español) es una gran ventaja en el diverso mercado de {city}. Los preparadores bilingües pueden servir a una base de clientes más amplia y a menudo obtienen tarifas premium. Sin embargo, no es obligatorio—muchos preparadores exitosos solo hablan inglés."
+          },
+          "q8": {
+            "question": "¿Cómo consigo clientes en {city}?",
+            "answer": "Tax Genius Pro proporciona clientes a través de nuestra plataforma, especialmente al principio. También puede construir su propia base de clientes a través del marketing local, referencias y presencia en redes sociales. Muchos preparadores combinan ambos enfoques para maximizar ingresos. Le proporcionamos todo el entrenamiento y herramientas de marketing necesarios."
+          },
+          "q9": {
+            "question": "¿Puedo ganar dinero fuera de la temporada de impuestos?",
+            "answer": "¡Definitivamente! Mientras que Enero-Abril es la temporada alta, puede ofrecer servicios durante todo el año como: impuestos trimestrales para negocios, contabilidad, planificación fiscal, enmiendas a declaraciones y extensiones. Muchos preparadores mantienen ingresos constantes durante todo el año sirviendo a clientes comerciales."
+          },
+          "q10": {
+            "question": "¿Qué hace diferente a Tax Genius Pro de H&R Block o Liberty Tax?",
+            "answer": "A diferencia de H&R Block o Liberty Tax donde trabaja como empleado con salario fijo, Tax Genius Pro le permite ser su propio jefe. Usted establece sus tarifas, elige sus clientes, trabaja desde casa y mantiene una porción mucho mayor de sus ganancias. Además, nuestra capacitación es GRATUITA mientras que otras compañías cobran $500-$2,000 por capacitación."
+          }
+        },
+        "sectionSubtitle": "Obtenga respuestas a preguntas comunes sobre convertirse en preparador de impuestos",
+        "ctaTitle": "¿Listo para Comenzar su Carrera como Preparador de Impuestos?",
+        "ctaSubtitle": "Únase a cientos de preparadores de impuestos exitosos ganando $75,000-$150,000 anuales",
+        "ctaButton": "Aplique Ahora - Comience a Ganar",
+        "ctaPhone": "Llame: +1 (404) 627-1015"
+      }
+    },
+    "miami": {
+      "meta": {
+        "title": "Empleos de Preparador de Impuestos en Miami, FL - Gane $150,000+ al Año",
+        "description": "Únase a Tax Genius Pro en Miami, Florida. Sin experiencia necesaria. Trabaje desde casa. Capacitación gratuita. Gane $75,000-$150,000+ anuales como preparador de impuestos certificado.",
+        "keywords": "empleos preparador de impuestos Miami, trabajos preparador de impuestos Miami FL, preparador de impuestos remoto Miami, capacitación preparador de impuestos gratis Miami, preparador de impuestos desde casa Miami, preparador de impuestos bilingüe Miami"
+      },
+      "city": "Miami",
+      "state": "Florida",
+      "stateCode": "FL",
+      "population": "467,963",
+      "targetIncome": "150000",
+      "neighborhoods": {
+        "hero": "South Beach, Brickell, Wynwood",
+        "main": "South Beach, Downtown Miami, Coral Gables, Wynwood, y Brickell",
+        "list": [
+          "South Beach",
+          "Downtown Miami",
+          "Coral Gables",
+          "Wynwood",
+          "Brickell",
+          "Little Havana",
+          "Coconut Grove",
+          "Miami Beach"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "picos de temporada de impuestos",
+        "marketHighlight2": "potencial de ingresos durante todo el año",
+        "localActivity": "camine por Miami Beach, tome comida cubana en Little Havana o prepare comida en casa",
+        "localArea": "condominio en South Beach",
+        "neighborhoodReferences": {
+          "neighborhood1": "South Beach",
+          "neighborhood2": "Brickell",
+          "neighborhood3": "Coral Gables",
+          "neighborhood4": "Wynwood"
+        }
+      }
+    },
+    "losAngeles": {
+      "city": "Los Angeles",
+      "state": "California",
+      "stateCode": "CA",
+      "population": "3,979,576",
+      "targetIncome": "150000",
+      "neighborhoods": {
+        "hero": "Hollywood, Santa Monica, Downtown LA",
+        "list": [
+          "Hollywood",
+          "Santa Monica",
+          "Downtown LA",
+          "Beverly Hills",
+          "Venice Beach",
+          "Pasadena"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "picos de temporada de impuestos",
+        "marketHighlight2": "oportunidades durante todo el año",
+        "localActivity": "explore las playas de Santa Monica, visite Hollywood o disfrute de la escena artística del centro",
+        "localArea": "apartamento en Santa Monica",
+        "neighborhoodReferences": {
+          "neighborhood1": "Hollywood",
+          "neighborhood2": "Santa Monica",
+          "neighborhood3": "Downtown LA",
+          "neighborhood4": "Venice Beach"
+        }
+      }
+    },
+    "atlanta": {
+      "city": "Atlanta",
+      "state": "Georgia",
+      "stateCode": "GA",
+      "population": "498,715",
+      "targetIncome": "120000",
+      "neighborhoods": {
+        "hero": "Buckhead, Midtown, Downtown",
+        "list": [
+          "Buckhead",
+          "Midtown",
+          "Downtown Atlanta",
+          "Virginia Highland",
+          "Decatur",
+          "East Atlanta"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "picos de temporada de impuestos",
+        "marketHighlight2": "demanda constante durante todo el año",
+        "localActivity": "explore Piedmont Park, visite el Acuario de Georgia o disfrute de la escena culinaria de Midtown",
+        "localArea": "casa en Buckhead",
+        "neighborhoodReferences": {
+          "neighborhood1": "Buckhead",
+          "neighborhood2": "Midtown",
+          "neighborhood3": "Downtown Atlanta",
+          "neighborhood4": "Virginia Highland"
+        }
+      }
+    },
+    "houston": {
+      "city": "Houston",
+      "state": "Texas",
+      "stateCode": "TX",
+      "population": "2,304,580",
+      "targetIncome": "130000",
+      "neighborhoods": {
+        "hero": "The Woodlands, Galleria, Downtown",
+        "list": [
+          "The Woodlands",
+          "Galleria",
+          "Downtown Houston",
+          "Heights",
+          "Montrose",
+          "Sugar Land"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "temporada alta de impuestos",
+        "marketHighlight2": "oportunidades continuas",
+        "localActivity": "visite el Museo Espacial, explore el distrito de los museos o disfrute de la escena gastronómica de Heights",
+        "localArea": "casa en The Woodlands",
+        "neighborhoodReferences": {
+          "neighborhood1": "The Woodlands",
+          "neighborhood2": "Galleria",
+          "neighborhood3": "Downtown Houston",
+          "neighborhood4": "Heights"
+        }
+      }
+    },
+    "newYork": {
+      "city": "New York",
+      "state": "New York",
+      "stateCode": "NY",
+      "population": "8,336,817",
+      "targetIncome": "160000",
+      "neighborhoods": {
+        "hero": "Manhattan, Brooklyn, Queens",
+        "list": [
+          "Manhattan",
+          "Brooklyn",
+          "Queens",
+          "Bronx",
+          "Staten Island",
+          "Long Island"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "temporada alta de impuestos",
+        "marketHighlight2": "demanda durante todo el año",
+        "localActivity": "explore Central Park, visite museos de clase mundial o disfrute de la escena cultural de Brooklyn",
+        "localArea": "apartamento en Manhattan",
+        "neighborhoodReferences": {
+          "neighborhood1": "Manhattan",
+          "neighborhood2": "Brooklyn",
+          "neighborhood3": "Queens",
+          "neighborhood4": "Bronx"
+        }
+      }
+    }
+  },
+  "preparerStart": {
+    "meta": {
+      "title": "Formulario de Nuevos Preparadores de Tax Genius | Comience su Solicitud",
+      "description": "¡Está en camino de convertirse en preparador de impuestos! Complete su información y programe su cita."
+    },
+    "header": {
+      "title": "Formulario de Nuevos Preparadores de Tax Genius",
+      "description": "Gracias por mostrar interés en nuestro programa de preparación de impuestos de Tax Genius. Complete la información a continuación, programe una cita y alguien le llamará para discutir sus próximos pasos."
+    },
+    "benefits": {
+      "title": "¡TRABAJE DESDE CASA COMO TRABAJADOR REMOTO!",
+      "subtitle": "¿Quiere un trabajo que se adapte a usted para variar? Disfrute de un horario flexible, gane ingresos adicionales, perfeccione una habilidad de vida que ayuda a millones cada año, y más como PREPARADOR DE TAX GENIUS PRO.",
+      "cards": {
+        "income": {
+          "icon": "💰",
+          "title": "Alto Potencial de Ingresos",
+          "description": "Desbloquee un Alto Potencial de Ganancias. Explore oportunidades de ingresos adicionales que pueden impulsar sus objetivos financieros durante todo el año."
+        },
+        "flexibility": {
+          "icon": "⏰",
+          "title": "Horarios Flexibles",
+          "description": "Trabaje desde la comodidad de su hogar o cualquier ubicación elegida, establezca sus propios horarios y tome el control de su agenda."
+        },
+        "stability": {
+          "icon": "📊",
+          "title": "Estabilidad Profesional",
+          "description": "Una carrera en el negocio de impuestos ofrece estabilidad debido a la necesidad constante de servicios fiscales, independientemente de las condiciones económicas."
+        },
+        "more": {
+          "icon": "✨",
+          "title": "Y MUCHO, MUCHO MÁS",
+          "description": "Capacitación gratuita, materiales de marketing, soporte 24/7 y una comunidad de preparadores de impuestos exitosos."
+        }
+      }
+    },
+    "footer": {
+      "title": "¿Todavía Tiene Preguntas?",
+      "description": "¿Preguntas? Llámenos al",
+      "or": "o envíe un correo electrónico a"
+    }
+  }
+}

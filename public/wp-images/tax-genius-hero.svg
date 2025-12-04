@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <rect width="800" height="600" fill="#F8F9FA"/>
+
+  <!-- Background pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E5E7EB" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="600" fill="url(#grid)" />
+
+  <!-- Main circle background -->
+  <circle cx="400" cy="300" r="150" fill="#3B82F6" opacity="0.1"/>
+
+  <!-- Calculator icon -->
+  <g transform="translate(350, 250)">
+    <rect x="0" y="0" width="100" height="120" rx="8" fill="#3B82F6"/>
+    <rect x="10" y="10" width="80" height="30" rx="4" fill="white"/>
+    <text x="50" y="30" text-anchor="middle" fill="#3B82F6" font-family="Arial" font-size="18" font-weight="bold">TAX</text>
+
+    <!-- Calculator buttons -->
+    <rect x="10" y="50" width="20" height="15" rx="2" fill="white"/>
+    <rect x="35" y="50" width="20" height="15" rx="2" fill="white"/>
+    <rect x="60" y="50" width="20" height="15" rx="2" fill="white"/>
+
+    <rect x="10" y="70" width="20" height="15" rx="2" fill="white"/>
+    <rect x="35" y="70" width="20" height="15" rx="2" fill="white"/>
+    <rect x="60" y="70" width="20" height="15" rx="2" fill="white"/>
+
+    <rect x="10" y="90" width="20" height="15" rx="2" fill="white"/>
+    <rect x="35" y="90" width="20" height="15" rx="2" fill="white"/>
+    <rect x="60" y="90" width="30" height="15" rx="2" fill="#10B981"/>
+  </g>
+
+  <!-- Dollar signs floating -->
+  <text x="250" y="200" fill="#10B981" font-family="Arial" font-size="24" opacity="0.3">$</text>
+  <text x="550" y="250" fill="#10B981" font-family="Arial" font-size="24" opacity="0.3">$</text>
+  <text x="500" y="400" fill="#10B981" font-family="Arial" font-size="24" opacity="0.3">$</text>
+  <text x="300" y="380" fill="#10B981" font-family="Arial" font-size="24" opacity="0.3">$</text>
+
+  <!-- Text label -->
+  <text x="400" y="450" text-anchor="middle" fill="#1F2937" font-family="Arial" font-size="24" font-weight="bold">Tax Genius Pro</text>
+  <text x="400" y="480" text-anchor="middle" fill="#6B7280" font-family="Arial" font-size="16">Professional Tax Services</text>
+</svg>

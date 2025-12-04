@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tax Genius Pro - Offline</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      background: #ff6b35;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon svg {
+      width: 40px;
+      height: 40px;
+      fill: white;
+    }
+
+    h1 {
+      color: #1a202c;
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    p {
+      color: #718096;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      background: #f7fafc;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .status-label {
+      color: #4a5568;
+      font-size: 14px;
+    }
+
+    .status-value {
+      color: #2d3748;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .offline-badge {
+      background: #feb2b2;
+      color: #c53030;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .online-badge {
+      background: #9ae6b4;
+      color: #22543d;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    button {
+      background: #ff6b35;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #e55a2b;
+    }
+
+    button:disabled {
+      background: #cbd5e0;
+      cursor: not-allowed;
+    }
+
+    .saved-data {
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .saved-data h2 {
+      font-size: 18px;
+      color: #2d3748;
+      margin-bottom: 15px;
+    }
+
+    .saved-item {
+      background: #f7fafc;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      text-align: left;
+    }
+
+    .saved-item-title {
+      font-weight: 600;
+      color: #2d3748;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .saved-item-date {
+      color: #718096;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+      </svg>
+    </div>
+
+    <h1>You're Offline</h1>
+    <p>Don't worry! Your work is saved locally and will sync automatically when you're back online.</p>
+
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">Connection Status</span>
+        <span class="offline-badge" id="connection-status">OFFLINE</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Last Sync</span>
+        <span class="status-value" id="last-sync">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Pending Uploads</span>
+        <span class="status-value" id="pending-count">0</span>
+      </div>
+    </div>
+
+    <button onclick="tryReconnect()" id="retry-btn">Try to Reconnect</button>
+
+    <div class="saved-data" id="saved-data" style="display: none;">
+      <h2>Saved Locally</h2>
+      <div id="saved-items"></div>
+    </div>
+  </div>
+
+  <script>
+    // Check connection status
+    function checkConnection() {
+      fetch('/api/health', { method: 'HEAD' })
+        .then(() => {
+          document.getElementById('connection-status').className = 'online-badge';
+          document.getElementById('connection-status').textContent = 'ONLINE';
+          document.getElementById('retry-btn').textContent = 'Back Online!';
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        })
+        .catch(() => {
+          document.getElementById('connection-status').className = 'offline-badge';
+          document.getElementById('connection-status').textContent = 'OFFLINE';
+        });
+    }
+
+    // Try to reconnect
+    function tryReconnect() {
+      const btn = document.getElementById('retry-btn');
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+
+      checkConnection();
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = 'Try to Reconnect';
+      }, 2000);
+    }
+
+    // Get last sync time from localStorage
+    function updateLastSync() {
+      const lastSync = localStorage.getItem('lastSync');
+      if (lastSync) {
+        const date = new Date(lastSync);
+        const now = new Date();
+        const diff = Math.floor((now - date) / 1000 / 60); // minutes
+
+        if (diff < 1) {
+          document.getElementById('last-sync').textContent = 'Just now';
+        } else if (diff < 60) {
+          document.getElementById('last-sync').textContent = `${diff} minute${diff > 1 ? 's' : ''} ago`;
+        } else {
+          const hours = Math.floor(diff / 60);
+          document.getElementById('last-sync').textContent = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        }
+      } else {
+        document.getElementById('last-sync').textContent = 'Never';
+      }
+    }
+
+    // Check for pending uploads
+    function checkPendingUploads() {
+      const pending = localStorage.getItem('pendingUploads');
+      if (pending) {
+        const uploads = JSON.parse(pending);
+        document.getElementById('pending-count').textContent = uploads.length;
+
+        if (uploads.length > 0) {
+          document.getElementById('saved-data').style.display = 'block';
+          const container = document.getElementById('saved-items');
+          container.innerHTML = '';
+
+          uploads.forEach(upload => {
+            const item = document.createElement('div');
+            item.className = 'saved-item';
+            item.innerHTML = `
+              <div class="saved-item-title">${upload.name || 'Document'}</div>
+              <div class="saved-item-date">${new Date(upload.timestamp).toLocaleString()}</div>
+            `;
+            container.appendChild(item);
+          });
+        }
+      }
+    }
+
+    // Initialize
+    updateLastSync();
+    checkPendingUploads();
+    checkConnection();
+
+    // Auto-check every 10 seconds
+    setInterval(() => {
+      checkConnection();
+      updateLastSync();
+      checkPendingUploads();
+    }, 10000);
+
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      checkConnection();
+    });
+
+    window.addEventListener('offline', () => {
+      document.getElementById('connection-status').className = 'offline-badge';
+      document.getElementById('connection-status').textContent = 'OFFLINE';
+    });
+  </script>
+</body>
+</html>

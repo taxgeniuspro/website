@@ -1,0 +1,3534 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ Authentication & Users (NextAuth) ============
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  image          String?
+  hashedPassword String?   // For credentials provider
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+  magicLinks    MagicLink[]
+
+  // CRM Relations (Epic 7)
+  crmContact      CRMContact?
+  crmInteractions CRMInteraction[]
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+model MagicLink {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("magic_links")
+}
+
+// ============ User Profiles ============
+
+enum UserRole {
+  super_admin   // Super administrator with full system access
+  admin         // Administrator with limited system access
+  lead          // Default role for new signups (pending admin approval)
+  client        // User who has completed tax preparation with Tax Genius
+  tax_preparer  // Tax professional
+  affiliate     // Referrer working for Tax Genius (hasn't done taxes with us)
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique // NextAuth user ID
+  user        User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+  role        UserRole
+  firstName   String?
+  lastName    String?
+  middleName  String? // Middle name for personalized tracking codes (tax preparers)
+  phone       String?
+  vanitySlug  String?  @unique // For referrers: TaxGenius.com/YourName
+  avatarUrl   String?
+  bio         String?
+  companyName String? // For preparers
+  licenseNo   String? // For preparers
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Universal Tracking System (Auto-generated on signup)
+  trackingCode         String?  @unique // Auto-generated unique code (e.g., "TGP-123456")
+  customTrackingCode   String?  @unique // One-time customizable vanity code
+  trackingCodeChanged  Boolean  @default(false) // Enforce one-time change rule (legacy)
+  trackingCodeFinalized Boolean @default(false) // Permanently lock code after user finalizes
+  trackingCodeQRUrl    String?  @db.Text // Pre-generated QR code data URL
+  qrCodeLogoUrl        String?  @db.Text // Custom logo for QR codes (tax preparer's image or Tax Genius logo)
+
+  // Short Link System (NEW - Epic 6)
+  shortLinkUsername        String?  @unique // Username for short links (e.g., "irawatkins")
+  shortLinkUsernameChanged Boolean  @default(false) // One-time change enforcement
+
+  // Affiliate Bonding (NEW - Epic 6)
+  affiliateBondedToPreparerId String? // For affiliates: which preparer they're bonded to
+
+  // Booking Preferences (For Tax Preparers)
+  bookingEnabled              Boolean @default(true) // Master toggle for all booking
+  allowPhoneBookings          Boolean @default(true) // Allow phone call appointments
+  allowVideoBookings          Boolean @default(true) // Allow video call appointments
+  allowInPersonBookings       Boolean @default(true) // Allow in-person appointments
+  requireApprovalForBookings  Boolean @default(false) // Require manual approval for all bookings
+  customBookingMessage        String? @db.Text // Custom message shown on booking page
+  bookingCalendarColor        String? // Hex color for calendar display (#3B82F6)
+
+  // QR Code Branding (For Tax Preparers - Epic 6)
+  usePhotoInQRCodes           Boolean @default(false) // Use profile photo in QR codes instead of Tax Genius logo
+
+  // Marketing Materials Contact Info (For Tax Preparers - Epic 7)
+  professionalTitle String? // e.g., "Licensed Tax Preparer", "CPA", "EA"
+  website           String? // Public website URL for marketing materials
+  publicAddress     String? // Public-facing address for marketing materials (not encrypted)
+
+  // Encrypted sensitive data
+  ssn         String? // Encrypted
+  dateOfBirth String? // Encrypted
+  address     Json? // Encrypted JSON
+  bankDetails Json? // Encrypted JSON for commission payments
+
+  // CRM Permissions (Admin-Controlled Access for Tax Preparers)
+  crmEmailAutomation     Boolean @default(false) // Can use email automation features
+  crmWorkflowAutomation  Boolean @default(false) // Can use workflow automation features
+  crmActivityTracking    Boolean @default(false) // Can view activity timeline
+  crmAdvancedAnalytics   Boolean @default(false) // Can view advanced analytics
+  crmTaskManagement      Boolean @default(false) // Can create and manage tasks
+  crmLeadScoring         Boolean @default(false) // Can view lead scores
+  crmBulkActions         Boolean @default(false) // Can perform bulk operations
+
+  // Relations
+  referrerReferrals   Referral[]           @relation("ReferrerReferrals")
+  clientReferrals     Referral[]           @relation("ClientReferrals")
+  preparerClients     ClientPreparer[]     @relation("PreparerClients")
+  clientPreparers     ClientPreparer[]     @relation("ClientPreparers")
+  notifications       Notification[]
+  contestParticipant  ContestParticipant[]
+  documents           Document[]
+  taxReturns          TaxReturn[]
+  payments            Payment[]
+  commissions         Commission[]
+  payoutRequests      PayoutRequest[]      @relation("PayoutRequests")
+  orders              Order[]
+  subscriptions       Subscription[]
+  campaigns           MarketingCampaign[]
+  affiliateBondings   AffiliateBonding[]   @relation("AffiliateBondings")
+  preparerBondings    AffiliateBonding[]   @relation("PreparerBondings")
+  taxIntakeLeads      TaxIntakeLead[]      // Leads converted to this profile
+  folders             Folder[]             @relation("OwnedFolders") // File manager folders
+  fileOperations      FileOperation[]      // File operation audit trail
+
+  // Support Ticket Relations
+  createdTickets      SupportTicket[]      @relation("TicketCreator") // Tickets created by this user
+  assignedTickets     SupportTicket[]      @relation("TicketAssignee") // Tickets assigned to this preparer
+  ticketMessages      TicketMessage[]      @relation("TicketMessageSender") // Messages sent in tickets
+  savedReplies        SavedReply[]         @relation("SavedReplyCreator") // Saved reply templates
+  createdWorkflows    TicketWorkflow[]     @relation("WorkflowCreator") // Workflows created by this user
+  timeEntries         TicketTimeEntry[]    @relation("TimeEntryPreparer") // Time tracking entries
+  settingsUpdates     SystemSettings[]     @relation("SettingsUpdater") // Settings updated by this user
+
+  // Tax Form Relations
+  assignedTaxForms    ClientTaxForm[]      @relation("ClientTaxForms")
+  formsAssignedByMe   ClientTaxForm[]      @relation("AssignedForms")
+  taxFormEdits        TaxFormEdit[]        @relation("FormEdits")
+  formSignatures      FormSignature[]      @relation("FormSignatures")
+
+  // Folder Upload Links (NEW - Epic: Calendar + CRM + File Sharing)
+  clientUploadLinks   FolderUploadLink[]   @relation("ClientUploadLinks") // Upload links for this client
+  createdUploadLinks  FolderUploadLink[]   @relation("CreatedUploadLinks") // Upload links created by this preparer
+
+  // Marketing Assets (Photos, Logos, etc.)
+  marketingAssets     MarketingAsset[]     @relation("MarketingAssets")
+
+  // Gamification Relations
+  userStats           UserStats?           @relation("UserStats")
+  userAchievements    UserAchievement[]    @relation("UserAchievements")
+  dailyCompletions    DailyChallengeCompletion[] @relation("DailyChallengeCompletions")
+
+  // Professional Email System
+  professionalEmails  ProfessionalEmailAlias[] @relation("ProfessionalEmailAliases")
+  emailTemplates      EmailTemplate[]          @relation("EmailTemplates")
+
+  // AI Image Generation
+  generatedImages     GeneratedImage[]         @relation("GeneratedImages")
+  acceptedImages      GeneratedImage[]         @relation("AcceptedImages")
+
+  @@index([role])
+  @@index([vanitySlug])
+  @@index([trackingCode])
+  @@index([customTrackingCode])
+  @@index([shortLinkUsername])
+  @@index([affiliateBondedToPreparerId])
+  @@map("profiles")
+}
+
+// ============ Referral System ============
+
+enum ReferralStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  INACTIVE
+}
+
+model Referral {
+  id               String         @id @default(cuid())
+  referrerId       String
+  referrer         Profile        @relation("ReferrerReferrals", references: [id], fields: [referrerId], onDelete: Cascade)
+  clientId         String
+  client           Profile        @relation("ClientReferrals", references: [id], fields: [clientId], onDelete: Cascade)
+  referralCode     String         @unique
+  signupDate       DateTime       @default(now())
+  status           ReferralStatus @default(PENDING)
+  returnFiledDate  DateTime?
+  commissionEarned Decimal        @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  analytics   ReferralAnalytics[]
+  commissions Commission[]
+
+  @@index([referrerId])
+  @@index([clientId])
+  @@index([referralCode])
+  @@map("referrals")
+}
+
+enum AnalyticsEventType {
+  LINK_CLICK
+  SIGNUP
+  RETURN_FILED
+  COMMISSION_EARNED
+}
+
+model ReferralAnalytics {
+  id             String             @id @default(cuid())
+  referralId     String?
+  referral       Referral?          @relation(references: [id], fields: [referralId], onDelete: Cascade)
+  eventType      AnalyticsEventType
+  eventDate      DateTime           @default(now())
+  ipAddress      String?
+  userAgent      String?
+  referralSource String?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  @@index([referralId])
+  @@index([eventType])
+  @@map("referral_analytics")
+}
+
+// ============ Contest System ============
+
+enum ContestType {
+  MOST_REFERRALS
+  MOST_RETURNS
+  HIGHEST_EARNINGS
+}
+
+model Contest {
+  id               String      @id @default(cuid())
+  title            String
+  description      String?
+  startDate        DateTime
+  endDate          DateTime
+  contestType      ContestType
+  prizeDescription String?
+  rules            Json?
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  // Relations
+  participants ContestParticipant[]
+  leaderboard  ContestLeaderboard[]
+
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@map("contests")
+}
+
+model ContestParticipant {
+  id        String   @id @default(cuid())
+  contestId String
+  contest   Contest  @relation(references: [id], fields: [contestId], onDelete: Cascade)
+  profileId String
+  profile   Profile  @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  score     Decimal  @default(0)
+  rank      Int?
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contestId, profileId])
+  @@index([contestId])
+  @@index([profileId])
+  @@map("contest_participants")
+}
+
+model ContestLeaderboard {
+  id             String   @id @default(cuid())
+  contestId      String
+  contest        Contest  @relation(references: [id], fields: [contestId], onDelete: Cascade)
+  rank           Int
+  profileId      String
+  score          Decimal
+  lastCalculated DateTime @default(now())
+
+  @@unique([contestId, rank])
+  @@index([contestId])
+  @@map("contest_leaderboards")
+}
+
+// ============ Landing Pages (Epic 4) ============
+
+model LandingPage {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  city            String
+  state           String?
+  headline        String
+  bodyContent     String   @db.Text
+  metaTitle       String
+  metaDescription String
+  qaAccordion     Json // Array of {question: string, answer: string}
+  generatedBy     String? // Clerk user ID of admin who generated
+  version         Int      @default(1)
+  isPublished     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([city])
+  @@map("landing_pages")
+}
+
+// ============ Marketing Materials ============
+
+enum MaterialType {
+  IMAGE
+  TEXT
+  VIDEO
+  TEMPLATE
+}
+
+model MarketingMaterial {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  materialType MaterialType
+  imageUrl     String?
+  adCopy       String?      @db.Text
+  templateHtml String?      @db.Text
+  tags         String[]
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([isActive])
+  @@index([materialType])
+  @@map("marketing_materials")
+}
+
+// ============ Notifications ============
+
+enum NotificationType {
+  TRIP_REWARD
+  CONTEST_WIN
+  MILESTONE
+  GENERAL
+  PAYMENT_RECEIVED
+  RETURN_STATUS
+  NEW_MESSAGE
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  profileId   String
+  profile     Profile          @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String           @db.Text
+  actionUrl   String?
+  actionLabel String?
+  isRead      Boolean          @default(false)
+  isActioned  Boolean          @default(false)
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  readAt      DateTime?
+  actionedAt  DateTime?
+
+  @@index([profileId])
+  @@index([isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+// ============ Tax Preparation ============
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PreparerApplication {
+  id              String            @id @default(cuid())
+  firstName       String
+  middleName      String?
+  lastName        String
+  email           String            // Removed @unique to allow multiple applications
+  phone           String
+  languages       String
+  smsConsent      Boolean           @default(false)
+  experienceLevel String? // "NEW" | "INTERMEDIATE" | "SEASONED"
+  taxSoftware     String[]          @default([]) // Array of tax software used
+  status          ApplicationStatus @default(PENDING)
+  interviewDate   DateTime?
+  notes           String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@map("preparer_applications")
+}
+
+enum ReferrerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model ReferrerApplication {
+  id           String         @id @default(cuid())
+  firstName    String
+  lastName     String
+  email        String         @unique
+  phone        String
+  referralCode String         @unique
+  status       ReferrerStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([email])
+  @@index([referralCode])
+  @@index([status])
+  @@map("referrer_applications")
+}
+
+model ClientPreparer {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Profile  @relation("ClientPreparers", references: [id], fields: [clientId], onDelete: Cascade)
+  preparerId String
+  preparer   Profile  @relation("PreparerClients", references: [id], fields: [preparerId], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+  isActive   Boolean  @default(true)
+
+  @@unique([clientId, preparerId])
+  @@index([clientId])
+  @@index([preparerId])
+  @@map("client_preparers")
+}
+
+// ============ Affiliate Bonding System (NEW - Epic 6) ============
+
+model AffiliateBonding {
+  id          String   @id @default(cuid())
+  affiliateId String
+  affiliate   Profile  @relation("AffiliateBondings", references: [id], fields: [affiliateId], onDelete: Cascade)
+  preparerId  String
+  preparer    Profile  @relation("PreparerBondings", references: [id], fields: [preparerId], onDelete: Cascade)
+  bondedAt    DateTime @default(now())
+  isActive    Boolean  @default(true)
+
+  // Tax preparer's custom commission structure for this affiliate
+  commissionStructure Json? // Example: {"tier1": {"count": 5, "rate": 50}, "tier2": {"count": 10, "rate": 75}}
+
+  @@unique([affiliateId, preparerId])
+  @@index([affiliateId, isActive])
+  @@index([preparerId, isActive])
+  @@map("affiliate_bondings")
+}
+
+enum TaxReturnStatus {
+  DRAFT
+  IN_REVIEW
+  FILED
+  ACCEPTED
+  REJECTED
+  AMENDED
+}
+
+model TaxReturn {
+  id           String          @id @default(cuid())
+  profileId    String
+  profile      Profile         @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  taxYear      Int
+  status       TaxReturnStatus @default(DRAFT)
+  filedDate    DateTime?
+  acceptedDate DateTime?
+  refundAmount Decimal?
+  oweAmount    Decimal?
+  formData     Json            @db.JsonB // Encrypted tax form data
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Relations
+  documents      Document[]
+  payments       Payment[]
+  sourceLead     TaxIntakeLead[] // If created from intake lead
+
+  @@unique([profileId, taxYear])
+  @@index([profileId])
+  @@index([status])
+  @@map("tax_returns")
+}
+
+// ============ Store & Marketing ============
+
+model Product {
+  id           String   @id @default(cuid())
+  type         String   // "LANDING_PAGE", "MARKETING_MATERIAL", "EMAIL_ADDRESS", "DIGITAL_ASSET", "PRINT_PRODUCT"
+  name         String
+  description  String?  @db.Text
+  category     String?  // Product category for organization
+
+  // Pricing
+  price        Decimal  @db.Decimal(10, 2)
+  recurring    Boolean  @default(false)
+  interval     String?  // "MONTHLY", "6_MONTHS", "12_MONTHS"
+
+  // Access control
+  availableFor String[] // ["TAX_PREPARER", "AFFILIATE"]
+
+  // Images (NEW - supports multiple images with client uploads)
+  imageUrl     String?  // Legacy single image
+  images       Json?    @default("[]") // Array of {url, altText, isPrimary, isClientUpload}
+
+  // Product attributes (NEW)
+  printable        Boolean? @default(false) // Can customer upload custom image for printing?
+  digitalDownload  Boolean? @default(false) // Is this a digital download?
+  stock            Int?     // Inventory count (null = unlimited)
+  sku              String?  @unique // Product SKU
+
+  // Square/CashApp Integration (NEW)
+  squareItemId String? @unique // Square Catalog Item ID
+  metadata     Json?   @default("{}") // Additional product metadata
+
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@index([type])
+  @@index([isActive])
+  @@index([category])
+  @@index([squareItemId])
+  @@map("products")
+}
+
+model Subscription {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(references: [id], fields: [productId], onDelete: Cascade)
+
+  status      String   // "ACTIVE", "CANCELLED", "EXPIRED"
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+
+  stripeSubId String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model MarketingCampaign {
+  id            String   @id @default(cuid())
+  creatorId     String
+  creator       Profile  @relation(references: [id], fields: [creatorId], onDelete: Cascade)
+
+  name          String
+  type          String   // "QR_CODE", "SOCIAL_POST", "EMAIL", "LANDING_PAGE", "BUSINESS_CARD", "FLYER"
+
+  // Customization (for tax preparers)
+  isCustomized  Boolean  @default(false)
+  customName    String?
+  customPhoto   String?
+  customPhone   String?
+  customLicense String?
+
+  // Tracking
+  trackingCode  String   @unique
+  landingUrl    String?
+  qrCodeUrl     String?
+
+  // Analytics
+  views         Int      @default(0)
+  clicks        Int      @default(0)
+  signups       Int      @default(0)
+  conversions   Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([creatorId])
+  @@index([trackingCode])
+  @@map("marketing_campaigns")
+}
+
+// ============ Documents ============
+
+enum DocumentType {
+  W2
+  FORM_1099
+  RECEIPT
+  TAX_RETURN
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING        // Uploaded, waiting for review
+  REVIEWED       // Reviewed by preparer
+  APPROVED       // Approved for filing
+  REJECTED       // Rejected, needs reupload
+  PROCESSING     // Being processed
+}
+
+model Document {
+  id          String          @id @default(cuid())
+  profileId   String
+  profile     Profile         @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  taxReturnId String?
+  taxReturn   TaxReturn?      @relation(references: [id], fields: [taxReturnId], onDelete: Cascade)
+  type        DocumentType
+  fileName    String
+  fileUrl     String          // R2 storage URL
+  fileSize    Int
+  mimeType    String
+  isEncrypted Boolean         @default(true)
+  metadata    Json?
+
+  // Tax year and status tracking
+  taxYear     Int             // Tax year this document belongs to (2024, 2023, etc.)
+  status      DocumentStatus  @default(PENDING)
+
+  // Review information (for tax preparers)
+  reviewedBy  String?         // Profile ID of preparer who reviewed
+  reviewedAt  DateTime?       // When document was reviewed
+  reviewNotes String?         @db.Text // Review notes from preparer
+
+  // File Manager enhancements
+  folderId    String?         // Folder this document belongs to
+  folder      Folder?         @relation(references: [id], fields: [folderId], onDelete: SetNull)
+  sharedWith  String[]        // Array of profile IDs who have access
+  tags        String[]        // Tags for organization
+  version     Int             @default(1) // Version number for versioning
+  isDeleted   Boolean         @default(false) // Soft delete flag
+  deletedAt   DateTime?       // When document was deleted
+  deletedBy   String?         // Who deleted it
+
+  // Upload Link tracking (NEW - for shareable folder upload links)
+  uploadLinkId  String?               // If uploaded via shareable link
+  uploadLink    FolderUploadLink?     @relation("UploadedViaLink", fields: [uploadLinkId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([profileId])
+  @@index([taxReturnId])
+  @@index([taxYear])
+  @@index([status])
+  @@index([reviewedBy])
+  @@index([folderId])
+  @@index([uploadLinkId])
+  @@index([isDeleted])
+  @@map("documents")
+}
+
+// Folder model for hierarchical file organization
+model Folder {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+
+  // Hierarchical structure
+  parentId    String?
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[] @relation("FolderHierarchy")
+
+  // Ownership
+  ownerId     String   // Profile ID of owner (client)
+  owner       Profile  @relation("OwnedFolders", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Path for quick lookups (e.g., "/2024/receipts")
+  path        String
+  level       Int      @default(0) // Depth in hierarchy (0 = root)
+
+  // Permissions (JSON structure for flexible permissions)
+  // Example: { "tax_preparer": ["read", "write"], "client": ["read"] }
+  permissions Json?
+
+  // Documents in this folder
+  documents   Document[]
+
+  // Upload Links (NEW - shareable links for client uploads)
+  uploadLinks FolderUploadLink[]
+
+  // Soft delete
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+  deletedBy   String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([parentId])
+  @@index([path])
+  @@index([isDeleted])
+  @@map("folders")
+}
+
+// Shareable Upload Links (NEW - Epic: Calendar + CRM + File Sharing)
+// Tax preparers can create time-limited upload links for clients to upload documents
+model FolderUploadLink {
+  id            String   @id @default(cuid())
+  token         String   @unique @default(uuid())
+
+  // Relationships
+  folderId      String
+  folder        Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  clientId      String   // Client who can upload via this link
+  client        Profile  @relation("ClientUploadLinks", fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdBy     String   // Tax preparer who created the link
+  creator       Profile  @relation("CreatedUploadLinks", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  // Link configuration
+  expiresAt     DateTime // 24 hours from creation (configurable)
+  isActive      Boolean  @default(true)
+  maxUploads    Int?     // Optional limit on number of uploads
+  uploadCount   Int      @default(0)
+
+  // Tracking
+  lastUsedAt    DateTime?
+  metadata      Json?    // Share method, IP addresses, etc.
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  uploads       Document[] @relation("UploadedViaLink")
+
+  @@index([token])
+  @@index([folderId])
+  @@index([clientId])
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@index([isActive])
+  @@map("folder_upload_links")
+}
+
+// Marketing Assets (Photos, Logos, etc.) for Tax Preparers
+model MarketingAsset {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation("MarketingAssets", fields: [profileId], references: [id], onDelete: Cascade)
+
+  category    String   // profile_photo, logo, office, custom
+  fileName    String
+  fileUrl     String
+  fileSize    Int
+  mimeType    String
+  isPrimary   Boolean  @default(false) // For profile_photo category
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([category])
+  @@index([isPrimary])
+  @@map("marketing_assets")
+}
+
+// File operation audit trail
+enum FileOperationType {
+  UPLOAD
+  DOWNLOAD
+  DELETE
+  RENAME
+  MOVE
+  COPY
+  SHARE
+  FOLDER_CREATE
+  FOLDER_DELETE
+  FOLDER_RENAME
+  PERMISSION_CHANGE
+}
+
+model FileOperation {
+  id            String            @id @default(cuid())
+  operation     FileOperationType
+
+  // Who performed the operation
+  performedBy   String            // Profile ID
+  performer     Profile           @relation(fields: [performedBy], references: [id], onDelete: Cascade)
+
+  // Target of operation
+  documentId    String?           // If operation was on a document
+  folderId      String?           // If operation was on a folder
+
+  // Operation details (JSON)
+  // Examples:
+  // - MOVE: { "from": "/2024", "to": "/2023" }
+  // - RENAME: { "oldName": "doc.pdf", "newName": "document.pdf" }
+  // - SHARE: { "sharedWith": ["profile_id_1", "profile_id_2"] }
+  details       Json?
+
+  // IP address for security
+  ipAddress     String?
+  userAgent     String?
+
+  timestamp     DateTime          @default(now())
+
+  @@index([performedBy])
+  @@index([documentId])
+  @@index([folderId])
+  @@index([operation])
+  @@index([timestamp])
+  @@map("file_operations")
+}
+
+// ============ Payments & Commissions ============
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  TAX_PREP_FEE
+  COMMISSION
+  REFUND
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  profileId       String
+  profile         Profile       @relation(references: [id], fields: [profileId], onDelete: Cascade)
+  taxReturnId     String?
+  taxReturn       TaxReturn?    @relation(references: [id], fields: [taxReturnId], onDelete: SetNull)
+  amount          Decimal
+  type            PaymentType
+  status          PaymentStatus @default(PENDING)
+  squarePaymentId String?       @unique
+  squareOrderId   String?
+  metadata        Json?
+  processedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([profileId])
+  @@index([status])
+  @@index([squarePaymentId])
+  @@map("payments")
+}
+
+model Commission {
+  id         String        @id @default(cuid())
+  referrerId String
+  referrer   Profile       @relation(references: [id], fields: [referrerId], onDelete: Cascade)
+  referralId String
+  referral   Referral      @relation(references: [id], fields: [referralId], onDelete: Cascade)
+  amount     Decimal
+
+  // Rate Locking (NEW - Epic 6)
+  rateAtCreation   Decimal?  @db.Decimal(5, 2) // Commission rate when lead was created
+  calculatedAmount Decimal?  @db.Decimal(10, 2) // Auto-calculated commission
+
+  status     PaymentStatus @default(PENDING)
+  paidAt     DateTime?
+  paymentRef String? // Reference to payment transaction
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([referrerId])
+  @@index([referralId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("commissions")
+}
+
+// Payout Request Model (Epic 5 - Story 5.2)
+model PayoutRequest {
+  id            String   @id @default(cuid())
+  referrerId    String
+  referrer      Profile  @relation("PayoutRequests", fields: [referrerId], references: [id], onDelete: Cascade)
+  amount        Decimal  @db.Decimal(10, 2)
+  commissionIds String[] // Array of commission IDs included in this payout
+  status        String   @default("PENDING") // PENDING, APPROVED, PAID, REJECTED
+  paymentMethod String   @default("BANK_TRANSFER") // BANK_TRANSFER, PAYPAL, SQUARE_CASH, etc.
+  notes         String?  @db.Text
+  requestedAt   DateTime @default(now())
+  processedAt   DateTime?
+  paymentRef    String? // Reference to payment transaction
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([referrerId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("payout_requests")
+}
+
+// ============ Chat/Messages ============
+
+model ChatRoom {
+  id        String   @id @default(cuid())
+  name      String?
+  isGroup   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@map("chat_rooms")
+}
+
+model ChatParticipant {
+  id         String   @id @default(cuid())
+  roomId     String
+  room       ChatRoom @relation(references: [id], fields: [roomId], onDelete: Cascade)
+  profileId  String
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
+
+  @@unique([roomId, profileId])
+  @@index([roomId])
+  @@index([profileId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id        String    @id @default(cuid())
+  roomId    String
+  room      ChatRoom  @relation(references: [id], fields: [roomId], onDelete: Cascade)
+  senderId  String
+  content   String    @db.Text
+  metadata  Json? // For attachments, etc.
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  @@index([roomId])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+// ============ Support Ticket System ============
+
+enum TicketStatus {
+  OPEN               // Newly created ticket
+  IN_PROGRESS        // Preparer is working on it
+  WAITING_CLIENT     // Waiting for client response
+  WAITING_PREPARER   // Waiting for preparer response
+  RESOLVED           // Issue resolved, awaiting confirmation
+  CLOSED             // Ticket closed
+  ARCHIVED           // Archived for historical reference
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id             String         @id @default(cuid())
+  ticketNumber   String         @unique // Auto-generated: TGP-TICKET-12345
+  title          String
+  description    String         @db.Text
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(NORMAL)
+
+  // Relationships
+  creatorId      String // Client who created the ticket
+  creator        Profile        @relation("TicketCreator", references: [id], fields: [creatorId], onDelete: Cascade)
+
+  assignedToId   String? // Tax preparer assigned (auto-assigned via ClientPreparer)
+  assignedTo     Profile?       @relation("TicketAssignee", references: [id], fields: [assignedToId], onDelete: SetNull)
+
+  // Metadata
+  tags           String[] // Categories: tax-deduction, filing-status, deadline, etc.
+  customFields   Json? // Flexible additional data
+
+  // Tracking
+  firstResponseAt   DateTime? // When preparer first responded
+  resolvedAt        DateTime? // When ticket was resolved
+  closedAt          DateTime? // When ticket was closed
+  lastActivityAt    DateTime  @default(now()) // Last message or update
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  messages       TicketMessage[]
+  timeEntries    TicketTimeEntry[]
+  workflowLogs   TicketWorkflowLog[]
+
+  @@index([creatorId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([ticketNumber])
+  @@index([lastActivityAt])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id              String        @id @default(cuid())
+  ticketId        String
+  ticket          SupportTicket @relation(references: [id], fields: [ticketId], onDelete: Cascade)
+
+  senderId        String // Who sent this message
+  senderProfile   Profile       @relation("TicketMessageSender", references: [id], fields: [senderId], onDelete: Cascade)
+
+  content         String        @db.Text
+  isInternal      Boolean       @default(false) // Internal notes (preparer-only)
+  isAIGenerated   Boolean       @default(false) // AI-suggested response
+
+  // Attachments
+  attachments     Json? // Array of file URLs and metadata
+
+  // Metadata
+  metadata        Json? // Additional data (email headers, etc.)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  editedAt        DateTime?
+  deletedAt       DateTime?
+
+  @@index([ticketId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("ticket_messages")
+}
+
+model SavedReply {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @db.Text // Supports variables: {{client_name}}, {{ticket_number}}, etc.
+  category    String? // tax-deduction, filing-status, deadline, general
+
+  // Ownership
+  createdById String
+  createdBy   Profile  @relation("SavedReplyCreator", references: [id], fields: [createdById], onDelete: Cascade)
+
+  isGlobal    Boolean  @default(false) // Available to all preparers or just creator
+
+  // Usage tracking
+  usageCount  Int      @default(0)
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([category])
+  @@index([isGlobal])
+  @@map("saved_replies")
+}
+
+enum WorkflowTrigger {
+  TICKET_CREATED           // When a new ticket is created
+  TICKET_UPDATED           // When ticket status/priority changes
+  TICKET_IDLE              // When no activity for X hours
+  CLIENT_RESPONSE          // When client sends a message
+  PREPARER_RESPONSE        // When preparer responds
+  TICKET_ASSIGNED          // When ticket is assigned
+  TICKET_UNASSIGNED        // When ticket is unassigned
+}
+
+enum WorkflowActionType {
+  ASSIGN_PREPARER          // Auto-assign to preparer
+  SEND_NOTIFICATION        // Send email/slack/sms
+  ADD_TAG                  // Add tag to ticket
+  CHANGE_STATUS            // Update ticket status
+  CHANGE_PRIORITY          // Update ticket priority
+  SEND_SAVED_REPLY         // Send pre-written response
+  AUTO_CLOSE               // Close the ticket
+  CREATE_TASK              // Create follow-up task
+}
+
+model TicketWorkflow {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?         @db.Text
+
+  trigger        WorkflowTrigger
+  isActive       Boolean         @default(true)
+  priority       Int             @default(0) // Execution order
+
+  // Conditions (JSON)
+  conditions     Json? // { status: "OPEN", priority: "HIGH", tags: ["urgent"] }
+
+  // Actions (JSON array)
+  actions        Json // [{ type: "SEND_NOTIFICATION", config: {...} }]
+
+  // Tracking
+  lastTriggeredAt DateTime?
+  triggerCount    Int            @default(0)
+
+  createdById    String
+  createdBy      Profile        @relation("WorkflowCreator", references: [id], fields: [createdById], onDelete: Cascade)
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  logs           TicketWorkflowLog[]
+
+  @@index([trigger])
+  @@index([isActive])
+  @@index([priority])
+  @@map("ticket_workflows")
+}
+
+model TicketWorkflowLog {
+  id            String        @id @default(cuid())
+  workflowId    String
+  workflow      TicketWorkflow @relation(references: [id], fields: [workflowId], onDelete: Cascade)
+
+  ticketId      String
+  ticket        SupportTicket @relation(references: [id], fields: [ticketId], onDelete: Cascade)
+
+  action        String // Action type executed
+  result        String // success, failed, skipped
+  details       Json? // Execution details
+
+  executedAt    DateTime      @default(now())
+
+  @@index([workflowId])
+  @@index([ticketId])
+  @@index([executedAt])
+  @@map("ticket_workflow_logs")
+}
+
+model TicketTimeEntry {
+  id              String        @id @default(cuid())
+  ticketId        String
+  ticket          SupportTicket @relation(references: [id], fields: [ticketId], onDelete: Cascade)
+
+  preparerId      String // Tax preparer tracking time
+  preparer        Profile       @relation("TimeEntryPreparer", references: [id], fields: [preparerId], onDelete: Cascade)
+
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMinutes Int           @default(0) // Calculated duration
+
+  isBillable      Boolean       @default(true)
+  billableMinutes Int           @default(0)
+
+  notes           String?       @db.Text
+  isManual        Boolean       @default(false) // Manual entry vs timer
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([ticketId])
+  @@index([preparerId])
+  @@index([startedAt])
+  @@map("ticket_time_entries")
+}
+
+model SystemSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g., "support_system_enabled", "ai_enabled"
+  value     String   @db.Text // JSON-encoded value
+  category  String // support, notifications, integrations, security
+
+  description String? @db.Text
+
+  updatedById String?
+  updatedBy   Profile? @relation("SettingsUpdater", references: [id], fields: [updatedById], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([category])
+  @@map("system_settings")
+}
+
+// ============ Lead Generation ============
+
+enum LeadType {
+  CUSTOMER
+  TAX_PREPARER
+  AFFILIATE
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  DISQUALIFIED
+}
+
+model Lead {
+  id        String     @id @default(cuid())
+  type      LeadType
+  status    LeadStatus @default(NEW)
+
+  // Basic contact info (all types)
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+
+  // Customer-specific fields
+  taxSituation    String? @db.Text
+  estimatedIncome String?
+
+  // Tax Preparer-specific fields
+  ptin          String?
+  certification String?
+  experience    String?
+
+  // Affiliate-specific fields
+  marketingExperience String?
+  audience            String?
+
+  // Common optional fields
+  message String? @db.Text
+
+  // Metadata
+  source        String? // URL/page where lead was captured
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  ipAddress     String?
+  userAgent     String?
+
+  // Attribution & Commission Locking (NEW - Epic 6)
+  referrerUsername         String? // Username of referrer who brought this lead
+  referrerType             String? // TAX_PREPARER, AFFILIATE, CLIENT, ADMIN
+  commissionRate           Decimal?  @db.Decimal(5, 2) // Locked rate at lead creation
+  commissionRateLockedAt   DateTime? // When rate was locked
+  attributionMethod        String? // "cookie", "email_match", "phone_match", "direct"
+  attributionCookieId      String? // Cookie ID used for attribution
+  attributionConfidence    Int      @default(100) // 0-100 confidence score
+
+  // Assignment & Follow-up tracking
+  assignedPreparerId String? // Which preparer is handling this lead
+  contactRequested   Boolean  @default(false) // Did they request a call/appointment?
+  contactMethod      String? // "CALL", "APPOINTMENT", "EMAIL"
+  lastContactedAt    DateTime? // When preparer last reached out
+  contactNotes       String?  @db.Text // Notes from contact attempts
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+  @@index([assignedPreparerId])
+  @@index([contactRequested])
+  @@index([referrerUsername])
+  @@index([commissionRateLockedAt])
+  @@index([attributionMethod])
+  @@map("leads")
+}
+
+// ============ E-commerce / Store ============
+// (Product model moved to Store & Marketing section above)
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  userId            String
+  profile           Profile     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  paymentSessionId  String      @unique // Stripe or Square session ID
+  paymentMethod     String      @default("STRIPE") // "STRIPE", "SQUARE", "CASHAPP"
+  squareOrderId     String?     @unique // Square Order ID
+  items             Json // Array of { productId, name, quantity, price, customerImageUrl? }
+  total             Decimal     @db.Decimal(10, 2)
+  status            OrderStatus @default(PENDING)
+  email             String
+  shippingAddress   Json? // {name, street, city, state, zip, country}
+  shippingMethod    String? // "STANDARD", "EXPRESS", "DIGITAL"
+  trackingNumber    String? // Shipment tracking
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ============ Tax Intake Form Leads ============
+
+model TaxIntakeLead {
+  id            String   @id @default(cuid())
+
+  // Personal Information
+  first_name    String
+  middle_name   String?
+  last_name     String
+  email         String   @unique
+  phone         String
+  country_code  String   @default("+1")
+
+  // Address
+  address_line_1 String?
+  address_line_2 String?
+  city           String?
+  state          String?
+  zip_code       String?
+
+  // Full form data (JSON for remaining fields)
+  full_form_data Json?    @db.JsonB
+
+  // Tracking
+  completed      Boolean  @default(false)
+
+  // Attribution (NEW - Epic 6)
+  referrerUsername  String? // Username who referred this intake
+  referrerType      String? // TAX_PREPARER, AFFILIATE, CLIENT, ADMIN
+  attributionMethod String? // "cookie", "email_match", "phone_match", "direct"
+
+  // Assignment & Follow-up tracking
+  assignedPreparerId String? // Which preparer is handling this intake
+  contactRequested   Boolean  @default(false) // Did they request a call/appointment?
+  contactMethod      String? // "CALL", "APPOINTMENT", "EMAIL"
+  lastContactedAt    DateTime? // When preparer last reached out
+  contactNotes       String?  @db.Text // Notes from contact attempts
+
+  // Lead-to-Client Conversion (NEW - Auto-conversion)
+  profileId         String?   // Link to Profile when user signs up
+  profile           Profile?  @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  convertedToClient Boolean   @default(false) // Has this lead been converted to a client?
+  taxReturnId       String?   // Track created TaxReturn
+  taxReturn         TaxReturn? @relation(fields: [taxReturnId], references: [id], onDelete: SetNull)
+  convertedAt       DateTime? // When conversion happened
+
+  // Lead Scoring & Urgency (CRM Enhancement)
+  leadScore         Int?      @default(0) // 0-100 calculated score
+  leadScoreUpdatedAt DateTime? // Last score calculation
+  urgency           LeadUrgency @default(NORMAL) // LOW, NORMAL, HIGH, URGENT
+
+  // Engagement Tracking
+  lastViewedAt      DateTime? // Last time details were viewed
+  emailOpens        Int       @default(0) // Email open count
+  emailClicks       Int       @default(0) // Email click count
+
+  // Relations
+  activities        LeadActivity[] // Activity timeline
+  tasks             LeadTask[]     // Task management
+
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([email])
+  @@index([completed])
+  @@index([created_at])
+  @@index([assignedPreparerId])
+  @@index([contactRequested])
+  @@index([referrerUsername])
+  @@index([attributionMethod])
+  @@index([profileId])
+  @@index([convertedToClient])
+  @@index([taxReturnId])
+  @@index([leadScore])
+  @@index([urgency])
+  @@index([lastViewedAt])
+  @@map("tax_intake_leads")
+}
+
+// Lead Activity Types for Timeline
+enum ActivityType {
+  CONTACT_ATTEMPTED  // Preparer tried to reach lead
+  CONTACT_MADE       // Successful contact
+  EMAIL_SENT         // Email sent to lead
+  EMAIL_OPENED       // Lead opened email
+  EMAIL_CLICKED      // Lead clicked link in email
+  NOTE_ADDED         // Manual note added
+  STATUS_CHANGED     // Lead status/stage changed
+  TASK_CREATED       // Task created for lead
+  TASK_COMPLETED     // Task marked complete
+  FORM_VIEWED        // Lead viewed tax form/details
+  DOCUMENT_UPLOADED  // Lead uploaded document
+  MEETING_SCHEDULED  // Meeting/call scheduled
+  MEETING_COMPLETED  // Meeting/call completed
+  CONVERTED          // Lead converted to client
+  ASSIGNED           // Lead assigned to preparer
+}
+
+// Lead Urgency Levels
+enum LeadUrgency {
+  LOW      // Cold lead, low priority
+  NORMAL   // Standard lead
+  HIGH     // Hot lead, needs attention
+  URGENT   // Immediate action required
+}
+
+// Lead Activity Log (Timeline)
+model LeadActivity {
+  id            String       @id @default(cuid())
+  leadId        String
+  activityType  ActivityType
+
+  // Activity Details
+  title         String       // Brief description
+  description   String?      @db.Text // Full details
+  metadata      Json?        @db.JsonB // Additional data (email ID, task ID, etc.)
+
+  // Attribution
+  createdBy     String?      // Profile ID of who performed action
+  createdByName String?      // Name for display
+  automated     Boolean      @default(false) // Was this automated?
+
+  // Timestamps
+  createdAt     DateTime     @default(now())
+
+  // Relations
+  lead          TaxIntakeLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([activityType])
+  @@index([createdBy])
+  @@map("lead_activities")
+}
+
+// ============ CRM Task Management ============
+
+model LeadTask {
+  id            String       @id @default(cuid())
+  leadId        String
+
+  // Task Details
+  title         String       // Brief task description
+  description   String?      @db.Text // Full task details
+  status        TaskStatus   @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+
+  // Assignment
+  assignedTo    String?      // Profile ID
+  assignedToName String?     // Name for display
+  createdBy     String?      // Profile ID of creator
+  createdByName String?      // Name for display
+
+  // Dates
+  dueDate       DateTime?    // When task is due
+  completedAt   DateTime?    // When task was completed
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  lead          TaxIntakeLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, status])
+  @@index([assignedTo, status])
+  @@index([dueDate])
+  @@index([status])
+  @@map("lead_tasks")
+}
+
+// ============ CRM Workflow Automation ============
+
+enum CRMWorkflowTrigger {
+  LEAD_CREATED         // When a new lead is created
+  LEAD_UPDATED         // When lead data changes
+  STATUS_CHANGED       // When lead status/stage changes
+  ASSIGNED             // When lead is assigned to preparer
+  EMAIL_OPENED         // When lead opens an email
+  EMAIL_CLICKED        // When lead clicks link in email
+  FORM_SUBMITTED       // When lead submits a form
+  TASK_COMPLETED       // When a task is marked complete
+  TIME_BASED           // Based on time conditions (e.g., 3 days after creation)
+  MANUAL               // Manually triggered
+}
+
+enum CRMWorkflowActionType {
+  SEND_EMAIL           // Send an email
+  CREATE_TASK          // Create a task
+  ASSIGN_TO_PREPARER   // Assign lead to preparer
+  UPDATE_STATUS        // Change lead status
+  ADD_TAG              // Add a tag to lead
+  UPDATE_FIELD         // Update a lead field
+  SEND_NOTIFICATION    // Send notification to user
+  WAIT                 // Wait for X time before next action
+}
+
+model CRMWorkflow {
+  id            String              @id @default(cuid())
+  name          String              // "Welcome New Leads", "Follow-up Reminder"
+  description   String?             @db.Text
+
+  // Trigger configuration
+  trigger       CRMWorkflowTrigger
+  triggerConditions Json?           @db.JsonB // Additional conditions for trigger
+
+  // Workflow settings
+  isActive      Boolean             @default(false)
+  priority      Int                 @default(0) // Higher priority workflows run first
+
+  // Actions to perform
+  actions       CRMWorkflowAction[]
+
+  // Statistics
+  executionCount Int                @default(0)
+  successCount  Int                 @default(0)
+  failureCount  Int                 @default(0)
+  lastExecutedAt DateTime?
+
+  // Creator & timestamps
+  createdBy     String?             // Profile ID
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([trigger, isActive])
+  @@index([isActive])
+  @@map("crm_workflows")
+}
+
+model CRMWorkflowAction {
+  id            String                 @id @default(cuid())
+  workflowId    String
+
+  // Action details
+  actionType    CRMWorkflowActionType
+  actionConfig  Json                   @db.JsonB // Configuration specific to action type
+  order         Int                    @default(0) // Execution order
+
+  // Conditional execution
+  conditions    Json?                  @db.JsonB // Conditions that must be met
+
+  // Delay before execution
+  delayMinutes  Int                    @default(0)
+
+  // Relations
+  workflow      CRMWorkflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, order])
+  @@map("crm_workflow_actions")
+}
+
+model CRMWorkflowExecution {
+  id            String    @id @default(cuid())
+  workflowId    String
+  leadId        String
+
+  // Execution details
+  status        String    // "pending", "running", "completed", "failed"
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  // Results
+  actionsExecuted Int     @default(0)
+  actionsSucceeded Int    @default(0)
+  actionsFailed   Int     @default(0)
+
+  // Error tracking
+  errorMessage  String?   @db.Text
+  executionLog  Json?     @db.JsonB // Detailed log of execution
+
+  @@index([workflowId])
+  @@index([leadId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("crm_workflow_executions")
+}
+
+// ============ Page Analytics & Performance Tracking ============
+
+model PageAnalytics {
+  id             String   @id @default(cuid())
+  path           String   // "/start-filing", "/services", etc
+  views          Int      @default(0)
+  uniqueVisitors Int      @default(0)
+  bounceRate     Float?   // Percentage (0-100)
+  avgTimeOnPage  Int?     // seconds
+  conversions    Int      @default(0) // leads/signups from this page
+  source         String?  // "organic", "direct", "referral", "social", "paid"
+  referrer       String?  // Full referrer URL
+  date           DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([path, date])
+  @@index([date])
+  @@index([source])
+  @@map("page_analytics")
+}
+
+model ContentPerformance {
+  id              String   @id @default(cuid())
+  landingPageId   String?  // FK to LandingPage
+  contentType     String   // "ai_generated", "manual", "template"
+  title           String?  // Page/content title for identification
+  views           Int      @default(0)
+  clicks          Int      @default(0)
+  conversions     Int      @default(0)
+  ctr             Float?   // click-through rate (percentage)
+  conversionRate  Float?   // conversion rate (percentage)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([landingPageId])
+  @@index([contentType])
+  @@index([createdAt])
+  @@map("content_performance")
+}
+
+// ============ Client Intake Tracking ============
+
+model ClientIntake {
+  id        String   @id @default(cuid())
+
+  // Client information
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+
+  // Assignment
+  assignedPreparerId String? // Which preparer received this intake
+  referredBy         String? // Referrer ID if came from referral link
+  sourceLink         String? // Marketing link that brought them here
+
+  // Form data
+  formData  Json     @db.JsonB // Complete intake form data
+
+  // Status tracking
+  status    String   @default("SUBMITTED") // SUBMITTED, CONTACTED, IN_PROGRESS, COMPLETED
+
+  // Conversion tracking
+  convertedToClient Boolean  @default(false)
+  convertedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assignedPreparerId])
+  @@index([referredBy])
+  @@index([status])
+  @@index([createdAt])
+  @@map("client_intakes")
+}
+
+// ============ Marketing Link Tracking ============
+
+enum LinkType {
+  REFERRAL
+  LANDING_PAGE
+  QR_CODE        // Keep for backward compatibility
+  SOCIAL_MEDIA
+  EMAIL_CAMPAIGN
+  BUSINESS_CARD
+  FLYER
+  CUSTOM
+
+  // NEW: Specific QR types (Epic 6 - Story 6.2)
+  QR_POSTER
+  QR_FLYER
+  QR_BUSINESS_CARD
+  QR_TABLE_TENT
+  QR_BANNER
+  DIGITAL_AD
+  SMS_LINK
+  WEBSITE_REFERRAL
+}
+
+model MarketingLink {
+  id          String   @id @default(cuid())
+
+  // Link ownership
+  creatorId   String // Profile ID of preparer/referrer who created link
+  creatorType String // "TAX_PREPARER", "REFERRER", "AFFILIATE", "ADMIN"
+
+  // Link details
+  linkType    LinkType
+  code        String   @unique // Unique tracking code (e.g., "atlanta-taxes-john")
+  url         String   // Full URL with tracking
+  shortUrl    String?  // Shortened URL if applicable
+
+  // Metadata
+  title       String?  // Human-readable title ("John's Atlanta Flyer")
+  description String?  @db.Text
+  campaign    String?  // Campaign name for grouping
+
+  // Destination
+  targetPage  String   // Where the link goes ("/start-filing", "/services", etc)
+
+  // Analytics (cached counts for performance)
+  clicks      Int      @default(0)
+  uniqueClicks Int     @default(0)
+  conversions Int      @default(0) // Intake forms submitted
+  signups     Int      @default(0) // Account creations
+  returns     Int      @default(0) // Returns filed
+
+  // NEW: Journey stage counters (Epic 6)
+  intakeStarts    Int @default(0)
+  intakeCompletes Int @default(0)
+  returnsFiled    Int @default(0)
+
+  // Performance metrics (calculated)
+  conversionRate Float? // (conversions / clicks) * 100
+  signupRate     Float? // (signups / clicks) * 100
+
+  // NEW: Conversion rate caching (Epic 6)
+  intakeConversionRate   Float? // (intakeStarts / clicks) * 100
+  completeConversionRate Float? // (intakeCompletes / clicks) * 100
+  filedConversionRate    Float? // (returnsFiled / clicks) * 100
+
+  // NEW: Material-specific fields (Epic 6 - Story 6.2)
+  location       String?  // Where material is placed/distributed
+  notes          String?  @db.Text // Distribution notes, renewal dates
+  qrCodeImageUrl String?  // Base64 data URL or storage URL of generated QR code
+  qrCodeFormat   String?  @default("PNG") // PNG, SVG, PDF
+
+  // NEW: Material lifecycle (Epic 6 - Story 6.2)
+  dateActivated  DateTime? // When material was first distributed
+  dateExpired    DateTime? // If material has expiration date
+  printCount     Int @default(0) // How many times QR was downloaded
+
+  // Status
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  linkClicks  LinkClick[]
+
+  @@index([creatorId])
+  @@index([code])
+  @@index([linkType])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([creatorId, isActive])
+  @@index([linkType, isActive])
+  // NEW: Performance indexes for Top 15 queries (Epic 6 - Story 6.3)
+  @@index([creatorType, isActive, returnsFiled(sort: Desc)])
+  @@index([isActive, returnsFiled(sort: Desc)])
+  @@index([createdAt, isActive])
+  @@map("marketing_links")
+}
+
+model LinkClick {
+  id        String   @id @default(cuid())
+
+  linkId    String
+  link      MarketingLink @relation(references: [id], fields: [linkId], onDelete: Cascade)
+
+  // Click metadata
+  ipAddress String?
+  userAgent String?
+  referrer  String?  // Where they came from before clicking
+
+  // Location (if tracked)
+  city      String?
+  state     String?
+  country   String?
+
+  // Conversion tracking
+  converted Boolean  @default(false) // Did they submit intake form?
+  signedUp  Boolean  @default(false) // Did they create account?
+  clientId  String? // Profile ID if they converted
+
+  clickedAt DateTime @default(now())
+
+  // NEW: Journey stage timestamps (Epic 6)
+  intakeStartedAt      DateTime?
+  intakeCompletedAt    DateTime?
+  taxReturnCompletedAt DateTime?
+
+  // NEW: Enhanced UTM tracking (Epic 6)
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+
+  // NEW: Cross-device attribution (Epic 6)
+  userEmail              String? // Email entered in form (for device-agnostic attribution)
+  userPhone              String? // Phone entered in form (for device-agnostic attribution)
+  attributionConfidence  Int     @default(100) // 0-100 confidence score
+
+  @@index([linkId])
+  @@index([clickedAt])
+  @@index([converted])
+  @@index([intakeStartedAt])
+  @@index([intakeCompletedAt])
+  @@index([taxReturnCompletedAt])
+  @@index([userEmail])
+  @@index([userPhone])
+  // NEW: Performance indexes for Top 15 Locations query (Epic 6 - Story 6.3)
+  @@index([city, state, clickedAt])
+  @@index([clickedAt, city, state])
+  @@map("link_clicks")
+}
+
+// ============ Appointment Management ============
+
+enum AppointmentStatus {
+  REQUESTED      // Client requested appointment
+  PENDING_APPROVAL // Waiting for preparer to approve
+  SCHEDULED      // Preparer scheduled it
+  CONFIRMED      // Client confirmed
+  COMPLETED      // Appointment happened
+  CANCELLED      // Cancelled by either party
+  NO_SHOW        // Client didn't show up
+  RESCHEDULED    // Moved to different time
+}
+
+enum AppointmentType {
+  PHONE_CALL
+  VIDEO_CALL
+  IN_PERSON
+  CONSULTATION
+  FOLLOW_UP
+}
+
+// Service offerings for bookings
+model BookingService {
+  id          String   @id @default(cuid())
+  preparerId  String?  // Null = available for all preparers
+
+  name        String   // "Initial Consultation", "Document Review", etc
+  slug        String   @unique // URL-friendly identifier
+  description String?  @db.Text
+  duration    Int      // Duration in minutes
+  price       Decimal? @db.Decimal(10, 2) // Price in dollars
+
+  // Settings
+  requiresDeposit Boolean @default(false)
+  depositAmount   Decimal? @db.Decimal(10, 2)
+  requiresApproval Boolean @default(false) // Manual confirmation required
+  bufferAfter     Int     @default(15) // Minutes buffer after appointment
+
+  // Availability
+  isActive    Boolean  @default(true)
+  seasonalOnly Boolean @default(false) // Only available during tax season
+  availableFrom DateTime?
+  availableUntil DateTime?
+
+  // Display
+  color       String?  // Hex color for calendar display
+  icon        String?  // Icon identifier
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([preparerId])
+  @@index([isActive])
+  @@map("booking_services")
+}
+
+// Preparer availability schedule
+model PreparerAvailability {
+  id         String   @id @default(cuid())
+  preparerId String
+
+  // Weekly recurring schedule
+  dayOfWeek  Int      // 0 = Sunday, 1 = Monday, etc
+  startTime  String   // "09:00" in 24-hour format
+  endTime    String   // "17:00" in 24-hour format
+
+  // Service restrictions
+  serviceIds String[] // Empty = all services allowed
+
+  // Override periods (vacations, tax season crunch, etc)
+  isOverride Boolean  @default(false)
+  overrideFrom DateTime?
+  overrideUntil DateTime?
+  overrideLabel String? // "Vacation", "Tax Season Hours", etc
+
+  // Settings
+  isActive   Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([preparerId, dayOfWeek])
+  @@index([isOverride, overrideFrom, overrideUntil])
+  @@map("preparer_availability")
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+
+  // Who
+  clientId    String // Profile ID or Lead ID
+  clientName  String // For quick display
+  clientEmail String
+  clientPhone String
+
+  preparerId  String // Profile ID of assigned preparer
+
+  // Service details
+  serviceId   String? // Reference to BookingService
+  type        AppointmentType
+  status      AppointmentStatus @default(REQUESTED)
+
+  // When
+  requestedAt DateTime          @default(now()) // When client requested
+  scheduledFor DateTime?        // When it's scheduled
+  scheduledEnd DateTime?        // End time (calculated from duration)
+  duration    Int?              // Minutes
+  timezone    String?           // Client timezone
+
+  // Details
+  subject     String?           // "Initial Consultation", "Tax Review", etc
+  notes       String?           @db.Text // Preparer notes
+  clientNotes String?           @db.Text // What client said in request
+  intakeData  Json?             // Structured intake form responses
+
+  // Meeting details
+  meetingLink String?           // Zoom/Google Meet link
+  meetingPassword String?       // Meeting password if applicable
+  location    String?           // Physical address if in-person
+
+  // Payment
+  paymentRequired Boolean       @default(false)
+  paymentAmount   Decimal?      @db.Decimal(10, 2)
+  paymentStatus   String?       // "pending", "paid", "refunded"
+  stripePaymentId String?
+
+  // Reminders sent
+  reminder48hSent Boolean       @default(false)
+  reminder24hSent Boolean       @default(false)
+  reminder1hSent  Boolean       @default(false)
+  reminderSentAt  DateTime?
+
+  // SMS notifications
+  smsReminderSent Boolean       @default(false)
+  smsConfirmationSent Boolean   @default(false)
+
+  // Completion
+  completedAt DateTime?
+  outcomeNotes String?          @db.Text // What happened in meeting
+
+  // Cancellation
+  cancelledAt DateTime?
+  cancelledBy String? // "client" or "preparer"
+  cancellationReason String?
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([preparerId])
+  @@index([clientId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([createdAt])
+  @@map("appointments")
+}
+
+// ============ Follow-Up Log ============
+
+enum FollowUpMethod {
+  PHONE_CALL
+  EMAIL
+  TEXT_MESSAGE
+  IN_PERSON
+  VIDEO_CALL
+}
+
+enum FollowUpOutcome {
+  CONNECTED     // Reached them
+  NO_ANSWER     // No answer, left voicemail
+  LEFT_MESSAGE  // Left voicemail/message
+  EMAIL_SENT    // Email sent
+  SCHEDULED     // Scheduled appointment
+  CONVERTED     // They became a client
+  NOT_INTERESTED // They declined
+  UNREACHABLE   // Can't reach them
+}
+
+model FollowUpLog {
+  id        String          @id @default(cuid())
+
+  // Who
+  clientId  String // Lead ID or Profile ID
+  preparerId String // Who made the contact attempt
+
+  // What happened
+  method    FollowUpMethod
+  outcome   FollowUpOutcome
+
+  // Details
+  notes     String?         @db.Text // What was discussed
+  duration  Int?            // Minutes (for calls/meetings)
+
+  // Next action
+  nextFollowUp DateTime?    // When to follow up again
+  nextAction   String?      // What to do next
+
+  contactedAt DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId])
+  @@index([preparerId])
+  @@index([contactedAt])
+  @@index([nextFollowUp])
+  @@map("follow_up_logs")
+}
+
+// ============ CRM System (Epic 7) ============
+
+enum ContactType {
+  CLIENT
+  LEAD
+  AFFILIATE
+  PREPARER
+}
+
+enum PipelineStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DOCUMENTS
+  FILED
+  CLOSED
+  LOST
+}
+
+enum InteractionType {
+  EMAIL
+  PHONE_CALL
+  MEETING
+  NOTE
+  OTHER
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  PAUSED
+  CANCELLED
+}
+
+enum EmailActivityStatus {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+}
+
+// CRM Contact (extends existing User/Client/Preparer/Affiliate)
+model CRMContact {
+  id                String    @id @default(cuid())
+  userId            String?   @unique  // FK to User table (legacy Lucia) - nullable for leads without users
+  clerkUserId       String?   @unique  // FK to Clerk user (current)
+  contactType       ContactType        // CLIENT | LEAD | AFFILIATE | PREPARER
+
+  // Contact metadata
+  firstName         String
+  lastName          String
+  email             String    @unique
+  phone             String?
+  company           String?
+
+  // Tax-specific fields
+  filingStatus      String?   // Single, Married, etc.
+  dependents        Int?
+  previousYearAGI   Float?
+  taxYear           Int?
+
+  // CRM lifecycle
+  stage             PipelineStage @default(NEW)
+  stageEnteredAt    DateTime  @default(now())
+  source            String?   // utm_source, referral code, etc.
+
+  // Assignment
+  assignedPreparerId String?
+  assignedAt        DateTime?
+
+  // Lead Attribution (Epic 6 integration)
+  referrerUsername         String? // Username of referrer who brought this lead
+  referrerType             String? // TAX_PREPARER, AFFILIATE, CLIENT, ADMIN
+  commissionRate           Decimal?  @db.Decimal(5, 2) // Locked rate at lead creation
+  commissionRateLockedAt   DateTime? // When rate was locked
+  attributionMethod        String? // "cookie", "email_match", "phone_match", "direct"
+  attributionConfidence    Int      @default(100) // 0-100 confidence score
+
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastContactedAt   DateTime?
+
+  // Lead scoring
+  leadScore         Int       @default(0) // 0-100 lead score (auto-calculated)
+  lastScoredAt      DateTime?
+
+  // Relations
+  user              User?     @relation(fields: [userId], references: [id])
+  interactions      CRMInteraction[]
+  stageHistory      CRMStageHistory[]
+  tags              CRMContactTag[]
+  tasks             CRMTask[]
+  emailActivities   CRMEmailActivity[]
+  leadScores        CRMLeadScore[]
+
+  @@index([email])
+  @@index([userId])
+  @@index([assignedPreparerId])
+  @@index([stage])
+  @@index([contactType])
+  @@index([lastContactedAt])
+  @@index([referrerUsername])
+  @@index([leadScore])
+  @@map("crm_contacts")
+}
+
+// CRM Interaction (phone, email, meeting, note)
+model CRMInteraction {
+  id                String    @id @default(cuid())
+  contactId         String
+  userId            String?   // Who logged this interaction (legacy Lucia)
+  clerkUserId       String?   // Who logged this interaction (current Clerk)
+
+  // Interaction details
+  type              InteractionType
+  direction         Direction @default(OUTBOUND) // INBOUND | OUTBOUND
+  subject           String?
+  body              String?   @db.Text
+  duration          Int?      // minutes (for calls/meetings)
+
+  // Email-specific (for Resend sync)
+  emailId           String?   @unique // Resend email ID
+  emailThreadId     String?   // For Gmail-style threading
+  emailTo           String[]
+  emailCc           String[]
+  emailBcc          String[]
+
+  // Metadata
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  occurredAt        DateTime  @default(now()) // When interaction happened
+
+  // Attachments
+  attachments       Json?     // Array of MinIO file keys
+
+  // Relations
+  contact           CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  user              User?     @relation(fields: [userId], references: [id])
+
+  @@index([contactId, occurredAt(sort: Desc)])
+  @@index([emailThreadId])
+  @@index([type])
+  @@index([userId])
+  @@map("crm_interactions")
+}
+
+// Stage history tracking (for reporting)
+model CRMStageHistory {
+  id                String    @id @default(cuid())
+  contactId         String
+  fromStage         PipelineStage?
+  toStage           PipelineStage
+  changedBy         String?   // userId (legacy Lucia)
+  changedByClerk    String?   // clerkUserId (current)
+  reason            String?   @db.Text
+  createdAt         DateTime  @default(now())
+
+  contact           CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt(sort: Desc)])
+  @@index([changedByClerk])
+  @@map("crm_stage_history")
+}
+
+// CRM Tags (for contact segmentation)
+model CRMTag {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "High Priority", "VIP", "Needs Follow-up"
+  slug        String   @unique // e.g., "high-priority"
+  color       String?  // Hex color for UI badges
+  description String?  @db.Text
+  createdBy   String?  // clerkUserId who created this tag
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contacts    CRMContactTag[]
+
+  @@map("crm_tags")
+}
+
+// CRM Contact Tags (many-to-many relationship)
+model CRMContactTag {
+  id         String   @id @default(cuid())
+  contactId  String
+  tagId      String
+  addedBy    String?  // clerkUserId who added this tag
+  addedAt    DateTime @default(now())
+
+  // Relations
+  contact    CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag        CRMTag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId])
+  @@index([contactId])
+  @@index([tagId])
+  @@map("crm_contact_tags")
+}
+
+// CRM Tasks (todo items per contact)
+model CRMTask {
+  id          String      @id @default(cuid())
+  contactId   String
+  title       String
+  description String?     @db.Text
+  dueDate     DateTime?
+  priority    TaskPriority @default(MEDIUM) // LOW, MEDIUM, HIGH, URGENT
+  status      TaskStatus   @default(TODO)   // TODO, IN_PROGRESS, DONE, CANCELLED
+
+  // Assignment
+  assignedTo  String?     // clerkUserId assigned to this task
+  createdBy   String?     // clerkUserId who created this task
+  completedBy String?     // clerkUserId who completed this task
+  completedAt DateTime?
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contact     CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([assignedTo])
+  @@index([dueDate])
+  @@index([status])
+  @@map("crm_tasks")
+}
+
+// CRM Email Campaigns
+model CRMEmailCampaign {
+  id            String         @id @default(cuid())
+  name          String
+  subject       String
+  fromName      String?
+  fromEmail     String?
+  replyTo       String?
+
+  // Campaign content
+  htmlBody      String         @db.Text
+  plainTextBody String?        @db.Text
+  templateId    String?        // Reference to email template if using one
+
+  // Campaign settings
+  status        CampaignStatus @default(DRAFT) // DRAFT, SCHEDULED, SENDING, SENT, PAUSED
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+
+  // Targeting
+  segmentRules  Json?          // JSON rules for who receives this (e.g., stage, tags, etc.)
+  recipientCount Int           @default(0)
+
+  // Performance metrics
+  sentCount     Int            @default(0)
+  openedCount   Int            @default(0)
+  clickedCount  Int            @default(0)
+  bouncedCount  Int            @default(0)
+
+  // Creator
+  createdBy     String?        // clerkUserId
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  activities    CRMEmailActivity[]
+  sequences     CRMEmailSequence[]
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdBy])
+  @@map("crm_email_campaigns")
+}
+
+// CRM Email Sequence (automated drip campaigns)
+model CRMEmailSequence {
+  id            String    @id @default(cuid())
+  campaignId    String?   // Optional: part of a larger campaign
+  name          String
+  description   String?   @db.Text
+
+  // Sequence settings
+  isActive      Boolean   @default(false)
+  triggerEvent  String    // "contact_created", "stage_changed", "tag_added", etc.
+  triggerDelay  Int       @default(0) // Minutes to wait before first email
+
+  // Email steps (stored as JSON array)
+  steps         Json      // [{ subject, body, delayMinutes }, ...]
+
+  // Performance
+  enrolledCount Int       @default(0)
+  completedCount Int      @default(0)
+
+  // Creator
+  createdBy     String?   // clerkUserId
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  campaign      CRMEmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@index([triggerEvent])
+  @@map("crm_email_sequences")
+}
+
+// CRM Email Activity (track individual email interactions)
+model CRMEmailActivity {
+  id          String    @id @default(cuid())
+  contactId   String
+  campaignId  String?
+
+  // Email details
+  subject     String
+  emailId     String?   @unique // Resend email ID
+  messageId   String?   // SMTP message ID
+
+  // Status
+  status      EmailActivityStatus @default(SENT) // SENT, DELIVERED, OPENED, CLICKED, BOUNCED, FAILED
+
+  // Tracking
+  sentAt      DateTime  @default(now())
+  deliveredAt DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  bouncedAt   DateTime?
+
+  // Click tracking
+  clickedUrls Json?     // Array of clicked URLs with timestamps
+
+  // Error handling
+  errorMessage String?  @db.Text
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  contact     CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  campaign    CRMEmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([contactId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([sentAt])
+  @@map("crm_email_activities")
+}
+
+// CRM Lead Score (historical tracking of lead scores)
+model CRMLeadScore {
+  id          String   @id @default(cuid())
+  contactId   String
+  score       Int      // 0-100 score
+
+  // Score breakdown (JSON with component scores)
+  breakdown   Json?    // { email_engagement: 20, interactions: 30, stage: 25, recency: 15, ... }
+
+  // Reason for score change
+  reason      String?  @db.Text
+  changedBy   String?  // "system" or clerkUserId if manually adjusted
+
+  // Metadata
+  createdAt   DateTime @default(now())
+
+  // Relations
+  contact     CRMContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt(sort: Desc)])
+  @@index([score])
+  @@map("crm_lead_scores")
+}
+
+// ============ Content Restrictions (Role-Based Access Control) ============
+
+// Page/Route level restrictions
+model PageRestriction {
+  id                    String   @id @default(cuid())
+  routePath             String   @unique // e.g., '/admin/users', '/dashboard/client/*'
+
+  // Role-based access
+  allowedRoles          String[] // Roles that CAN access (empty = all)
+  blockedRoles          String[] // Roles that CANNOT access (takes priority)
+
+  // Username-based access (highest priority)
+  allowedUsernames      String[] // Usernames that always have access
+  blockedUsernames      String[] // Usernames that are always blocked
+
+  // Behavior settings
+  allowNonLoggedIn      Boolean  @default(false) // Allow unauthenticated users
+  redirectUrl           String?  // Custom redirect URL on block
+  hideFromNav           Boolean  @default(false) // Hide from navigation menus
+  showInNavOverride     Boolean  @default(false) // Force show in nav even if restricted
+
+  // Custom blocking content
+  customHtmlOnBlock     String?  @db.Text // Custom HTML/React to show when blocked
+
+  // Priority and Status (NEW - for pattern matching & rule ordering)
+  priority              Int      @default(0) // Higher = checked first (for wildcard patterns)
+  isActive              Boolean  @default(true) // Enable/disable rule without deleting
+
+  // Metadata
+  description           String?  @db.Text // Admin note about this restriction
+  createdBy             String?  // Clerk user ID who created this
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([routePath])
+  @@index([isActive])
+  @@index([priority])
+  @@map("page_restrictions")
+}
+
+// Content/Component level restrictions (for sections within pages)
+model ContentRestriction {
+  id                    String   @id @default(cuid())
+  contentType           String   // 'section', 'component', 'widget', 'feature'
+  contentIdentifier     String   // Unique ID for the content piece
+
+  // Role-based access
+  allowedRoles          String[]
+  blockedRoles          String[]
+
+  // Username-based access (highest priority)
+  allowedUsernames      String[]
+  blockedUsernames      String[]
+
+  // Visibility controls
+  hideFromFrontend      Boolean  @default(false) // Hide but keep in API/data
+  hideConditions        Json?    // Complex conditional hiding rules
+
+  // Metadata
+  description           String?  @db.Text
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([contentType, contentIdentifier])
+  @@index([contentType])
+  @@index([contentIdentifier])
+  @@map("content_restrictions")
+}
+
+// Dynamic route configuration (database-driven route protection)
+model RouteConfig {
+  id                    String   @id @default(cuid())
+  routePattern          String   @unique // Pattern matching: '/admin/*', '/dashboard/:role/*'
+
+  // Access control
+  requiresAuth          Boolean  @default(true)
+  allowedRoles          String[] // Empty = all authenticated users
+
+  // Behavior
+  redirectOnUnauth      String?  // Redirect unauthenticated users
+  redirectOnForbidden   String?  // Redirect unauthorized (wrong role) users
+  priority              Int      @default(0) // Higher priority patterns checked first
+
+  // Settings
+  enabled               Boolean  @default(true)
+  description           String?  @db.Text
+
+  // Metadata
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([routePattern])
+  @@index([priority])
+  @@map("route_configs")
+}
+
+// Audit log for unauthorized access attempts
+model AccessAttemptLog {
+  id                    String   @id @default(cuid())
+
+  // User info
+  clerkUserId           String?  // Null if unauthenticated
+  userEmail             String?
+  userRole              String?
+  username              String?
+
+  // Attempt details
+  attemptedRoute        String
+  attemptedAction       String?  // 'view', 'edit', 'delete', etc.
+  restrictionType       String   // 'page', 'content', 'route'
+  restrictionId         String?  // ID of the restriction that blocked
+
+  // Result
+  wasBlocked            Boolean  @default(true)
+  blockReason           String?  // 'role', 'username', 'not_authenticated'
+  redirectedTo          String?
+
+  // Request metadata
+  ipAddress             String?
+  userAgent             String?  @db.Text
+  timestamp             DateTime @default(now())
+
+  @@index([attemptedRoute])
+  @@index([timestamp])
+  @@index([wasBlocked])
+  @@map("access_attempt_logs")
+}
+
+// ============ Role Permission Templates ============
+
+// Stores default permissions for each user role
+// Allows super_admin to customize what each role gets by default
+model RolePermissionTemplate {
+  id          String   @id @default(cuid())
+  role        String   @unique // 'super_admin', 'admin', 'tax_preparer', 'affiliate', 'lead', 'client'
+  permissions Json     // JSON object of Permission -> boolean mapping
+
+  // Audit trail
+  updatedBy   String?  // Clerk user ID of super_admin who last updated
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([role])
+  @@map("role_permission_templates")
+}
+
+// ============ Tax Assistant (OpenAI Integration) ============
+
+// Stores OpenAI conversation threads for tax form assistance
+model TaxAssistantThread {
+  id                String   @id @default(cuid())
+
+  // User identification
+  clerkUserId       String   // Clerk user ID of tax preparer
+
+  // OpenAI thread information
+  openaiThreadId    String   @unique // OpenAI thread ID
+  openaiAssistantId String   // OpenAI assistant ID used
+
+  // Thread metadata
+  title             String?  // Optional user-provided title
+  lastMessage       String?  @db.Text // Preview of last message
+  messageCount      Int      @default(0) // Number of messages in thread
+
+  // Status
+  isActive          Boolean  @default(true) // Is thread still active
+
+  // Usage tracking
+  tokensUsed        Int      @default(0) // Total tokens used in this thread
+  costInCents       Int      @default(0) // Total cost in cents
+
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastMessageAt     DateTime @default(now()) // Last activity
+
+  // Relations
+  messages          TaxAssistantMessage[]
+
+  @@index([openaiThreadId])
+  @@index([lastMessageAt])
+  @@index([isActive])
+  @@map("tax_assistant_threads")
+}
+
+// Stores individual messages within threads for history/analytics
+model TaxAssistantMessage {
+  id                String   @id @default(cuid())
+
+  // Thread relationship
+  threadId          String
+  thread            TaxAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  // OpenAI message information
+  openaiMessageId   String   @unique // OpenAI message ID
+
+  // Message content
+  role              String   // 'user' or 'assistant'
+  content           String   @db.Text // Message content
+
+  // Form references (extracted from assistant responses)
+  formReferences    String[] // Array of form numbers mentioned (e.g., ["1040", "Schedule C"])
+
+  // Usage tracking
+  tokensUsed        Int      @default(0) // Tokens used for this message
+
+  // Timestamps
+  createdAt         DateTime @default(now())
+
+  @@index([threadId, createdAt])
+  @@index([openaiMessageId])
+  @@map("tax_assistant_messages")
+}
+
+// ============ Mobile Hub Link Tracking ============
+
+// Tracks clicks on shared links from mobile hub
+model MobileHubLinkClick {
+  id          String   @id @default(cuid())
+
+  // User who shared the link
+  clerkUserId String   // Clerk user ID of person who shared
+  userRole    String   // Role at time of share (tax_preparer, affiliate, etc)
+
+  // Link information
+  linkType    String   // "intake", "lead", "referral", "tracking"
+  linkUrl     String   @db.Text // Full URL that was shared
+  trackingId  String   // Unique tracking identifier
+
+  // Click information
+  clickedAt   DateTime @default(now())
+  ipAddress   String?  // IP of clicker (optional, for fraud detection)
+  userAgent   String?  @db.Text // Browser/device info
+  referrer    String?  @db.Text // Where they came from
+
+  // Conversion tracking
+  converted   Boolean  @default(false) // Did they complete the form/action?
+  convertedAt DateTime? // When conversion happened
+
+  @@index([clerkUserId, clickedAt])
+  @@index([trackingId])
+  @@index([linkType, clickedAt])
+  @@map("mobile_hub_link_clicks")
+}
+
+// Tracks when users share links (not clicks, but share actions)
+model MobileHubShare {
+  id          String   @id @default(cuid())
+
+  // User who shared
+  clerkUserId String   // Clerk user ID
+  userRole    String   // Role at time of share
+
+  // Share information
+  linkType    String   // "intake", "lead", "referral", "tracking"
+  linkUrl     String   @db.Text
+  trackingId  String   // Unique tracking identifier
+  shareMethod String   // "native_share", "copy", "sms", "email", "whatsapp"
+
+  // Metadata
+  sharedAt    DateTime @default(now())
+
+  @@index([clerkUserId, sharedAt])
+  @@index([trackingId])
+  @@map("mobile_hub_shares")
+}
+
+// Aggregated stats for quick dashboard display (updated via cron/triggers)
+model MobileHubStats {
+  id              String   @id @default(cuid())
+
+  // User identification
+  clerkUserId     String   @unique // Clerk user ID
+  userRole        String   // Current role
+
+  // Link tracking stats
+  linkShares      Int      @default(0) // How many times they shared
+  linkViews       Int      @default(0) // How many times links were viewed (estimate)
+  linkClicks      Int      @default(0) // How many clicks on their links
+
+  // Conversion stats
+  formsStarted    Int      @default(0) // Forms opened from their links
+  formsCompleted  Int      @default(0) // Forms completed from their links
+
+  // Affiliate specific
+  referrals       Int      @default(0) // Total referrals
+  conversions     Int      @default(0) // Conversions (paid)
+  earningsCents   Int      @default(0) // Total earnings in cents
+
+  // Timestamps
+  lastCalculated  DateTime @default(now()) // Last time stats were recalculated
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("mobile_hub_stats")
+}
+
+// ============================================================================
+// SEO LLM SYSTEM - AI-Powered Landing Page & Content Generation
+// ============================================================================
+
+// City data for location-based landing pages (200 US cities)
+model City {
+  id         String @id @default(cuid())
+  name       String // "New York"
+  state      String // "New York"
+  stateCode  String // "NY"
+  population Int
+  rank       Int // 1-200 (by population)
+  slug       String @unique // "new-york-ny"
+
+  // Geographic data
+  latitude  Float?
+  longitude Float?
+  timezone  String? // "America/New_York"
+
+  // Status and priority
+  isActive Boolean @default(true)
+  priority Int     @default(0) // Higher = more important for SEO
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  seoLandingPages   SeoLandingPage[]
+
+  @@unique([name, state])
+  @@index([rank])
+  @@index([isActive])
+  @@index([priority])
+  @@index([slug])
+  @@map("cities")
+}
+
+// AI-generated SEO landing pages for city + service combinations
+model SeoLandingPage {
+  id String @id @default(cuid())
+
+  // Service & Location
+  cityId      String
+  serviceType String // "personal-tax", "business-tax", "irs-resolution", "tax-planning"
+  slug        String @unique // "personal-tax-new-york-ny"
+
+  // SEO Content
+  title       String // "Personal Tax Filing in New York, NY | TaxGeniusPro"
+  metaDesc    String
+  h1          String
+  keywords    String[] // SEO keywords
+
+  // AI-Generated Content (500+ words unique per city)
+  aiIntro     String  @db.Text // AI-generated introduction (200-300 words)
+  aiBenefits  String? @db.Text // AI-generated benefits section
+  aiCaseStudy String? @db.Text // Optional case study
+
+  // Structured Content
+  faqSchema    Json // FAQ structured data: [{question, answer}]
+  schemaMarkup Json // Complete schema.org markup (LocalBusiness, Service, FAQ)
+
+  // Manual Override Protection
+  isManuallyEdited Boolean @default(false)
+  manualEdits      Json? // Track manual changes
+
+  // Status
+  status      String    @default("draft") // draft, published, needs_review
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  approved    Boolean   @default(false)
+  approvedBy  String? // clerkUserId
+  approvedAt  DateTime?
+
+  // SEO Performance Tracking
+  views         Int      @default(0)
+  clicks        Int      @default(0)
+  conversions   Int      @default(0)
+  revenue       Float    @default(0)
+  conversionRate Float?
+  bounceRate    Float?
+  avgTimeOnPage Int? // seconds
+
+  // Google Search Console Metrics
+  googleRanking Int?
+  organicViews  Int       @default(0)
+  impressions   Int       @default(0)
+  avgPosition   Float?
+  lastCrawled   DateTime?
+
+  // AI Generation Metadata
+  generatedBy     String? // clerkUserId
+  generationModel String? // "qwen2.5:32b"
+  generatedAt     DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  city City @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@index([cityId])
+  @@index([serviceType])
+  @@index([published])
+  @@index([slug])
+  @@index([status])
+  @@map("seo_landing_pages")
+}
+
+// Cached AI-generated SEO content (reduce LLM API calls)
+model ProductSEOContent {
+  id        String @id @default(cuid())
+  productId String? // Optional: for tax service products
+  city      String?
+  state     String?
+  serviceType String // "personal-tax", "business-tax", etc.
+
+  // Generated Content
+  content   String @db.Text
+  wordCount Int
+
+  // Metadata
+  generatedAt     DateTime @default(now())
+  generationModel String // "qwen2.5:32b"
+  approved        Boolean  @default(false)
+  publishedAt     DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serviceType])
+  @@index([approved])
+  @@index([city, state])
+  @@map("product_seo_content")
+}
+
+// Campaign queue for generating 200-city landing pages
+model ProductCampaignQueue {
+  id String @id @default(cuid())
+
+  // Campaign Details
+  campaignName String
+  serviceType  String // "personal-tax", "business-tax", etc.
+  productSpec  Json // {price, description, features, etc.}
+
+  // Status
+  status                 String    @default("PENDING") // PENDING, GENERATING, OPTIMIZING, COMPLETE, FAILED
+  priority               Int       @default(5) // 1-10, higher = higher priority
+  citiesGenerated        Int       @default(0)
+  citiesIndexed          Int       @default(0)
+  generationStartedAt    DateTime?
+  generationCompletedAt  DateTime?
+
+  // Creator
+  createdBy String? // clerkUserId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([createdBy])
+  @@map("product_campaign_queue")
+}
+
+// Multi-language translations for landing pages
+model Translation {
+  id        String @id @default(cuid())
+  key       String
+  namespace String @default("common")
+  locale    String // "en", "es", "fr", "de", etc.
+  value     String @db.Text
+
+  // Translation Metadata
+  context          String? // Context for translators
+  isApproved       Boolean           @default(false)
+  source           TranslationSource @default(MANUAL)
+  autoTranslated   Boolean           @default(false)
+  translationModel String? // "gpt-4o-mini"
+  confidence       Float? // 0-1 confidence score
+  translatedBy     String? // clerkUserId
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, namespace, locale])
+  @@index([locale])
+  @@index([namespace])
+  @@index([isApproved])
+  @@index([source])
+  @@map("translations")
+}
+
+enum TranslationSource {
+  MANUAL
+  AUTO
+  IMPORTED
+  SYSTEM
+}
+
+// Content snapshot for A/B testing
+model ContentSnapshot {
+  id              String @id @default(cuid())
+  seoLandingPageId String?
+  landingPageId    String?
+
+  // Snapshot Details
+  version         Int
+  contentType     String // "headline", "body", "cta", "full_page"
+  content         Json // Snapshot of content at this version
+
+  // A/B Test Metrics
+  views         Int      @default(0)
+  conversions   Int      @default(0)
+  conversionRate Float?
+  isWinner      Boolean  @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+
+  @@index([seoLandingPageId])
+  @@index([landingPageId])
+  @@index([isWinner])
+  @@map("content_snapshots")
+}
+
+// ============ Tax Forms Library ============
+
+enum TaxFormCategory {
+  MAIN_FORMS      // 1040-SR, W-2
+  SCHEDULES_1040  // Schedule 1, 2, 3, A, B, C, D, E, SE
+  FORMS_1099      // 1099-B, 1099-DIV, 1099-INT, etc.
+  TAX_CREDITS     // 2441, 5695, 8812, 8863, 8962
+  BUSINESS_FORMS  // 4562, 8995
+  OTHER_FORMS     // 8889, 8949, etc.
+  INSTRUCTIONS    // Instructions and guides
+}
+
+model TaxForm {
+  id             String            @id @default(cuid())
+  formNumber     String            @unique  // "1040-SR", "W-2", "Schedule A"
+  title          String                     // "U.S. Income Tax Return for Seniors"
+  description    String?           @db.Text
+  category       TaxFormCategory
+  taxYear        Int                        // 2024
+  fileUrl        String                     // Public URL to PDF
+  fileName       String                     // "Form_1040-SR.pdf"
+  fileSize       Int
+  downloadCount  Int               @default(0)
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  // Relations
+  shares         TaxFormShare[]
+  clientForms    ClientTaxForm[]   // Forms assigned to clients
+  fieldDefinitions FormFieldDefinition[] // Dynamic field definitions
+
+  @@index([category])
+  @@index([taxYear])
+  @@index([isActive])
+  @@index([formNumber])
+  @@map("tax_forms")
+}
+
+model TaxFormShare {
+  id           String    @id @default(cuid())
+  taxFormId    String
+  taxForm      TaxForm   @relation(fields: [taxFormId], references: [id], onDelete: Cascade)
+  sharedBy     String    // Profile ID of tax preparer
+  sharedWith   String    // Profile ID of client or email address
+  shareToken   String    @unique
+  expiresAt    DateTime?
+  accessCount  Int       @default(0)
+  createdAt    DateTime  @default(now())
+  lastAccessAt DateTime?
+
+  @@index([shareToken])
+  @@index([sharedBy])
+  @@index([sharedWith])
+  @@index([taxFormId])
+  @@map("tax_form_shares")
+}
+
+// Tax Form Assignment Status
+enum ClientTaxFormStatus {
+  ASSIGNED      // Preparer assigned, client hasn't started
+  IN_PROGRESS   // Client is filling out the form
+  COMPLETED     // Client marked as complete
+  REVIEWED      // Preparer reviewed and approved
+}
+
+// Client Tax Form Assignment & Data
+model ClientTaxForm {
+  id             String               @id @default(cuid())
+
+  // Relationships
+  clientId       String
+  client         Profile              @relation("ClientTaxForms", fields: [clientId], references: [id], onDelete: Cascade)
+
+  taxFormId      String
+  taxForm        TaxForm              @relation(fields: [taxFormId], references: [id], onDelete: Cascade)
+
+  assignedBy     String               // Tax preparer who assigned
+  assignedByProfile Profile           @relation("AssignedForms", fields: [assignedBy], references: [id], onDelete: Cascade)
+
+  // Status & Workflow
+  status         ClientTaxFormStatus  @default(ASSIGNED)
+
+  // Form Data (filled field values)
+  formData       Json?                @db.JsonB // {fieldName: value, fieldName2: value2}
+
+  // Notes & Instructions
+  notes          String?              @db.Text // Preparer notes for client (e.g., "Please complete Section 1 only")
+
+  // Tracking
+  assignedAt     DateTime             @default(now())
+  startedAt      DateTime?            // When client first opened form
+  completedAt    DateTime?            // When client marked complete
+  reviewedBy     String?              // Profile ID of reviewer
+  reviewedAt     DateTime?            // When reviewed
+
+  // Metadata
+  progress       Int                  @default(0) // Percentage 0-100
+  lastEditedBy   String?              // Last person to edit
+  lastEditedAt   DateTime?            // Last edit timestamp
+  taxYear        Int                  // Tax year this form is for (e.g., 2024)
+
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  // Relations
+  edits          TaxFormEdit[]        // Edit history
+  signatures     FormSignature[]      // E-signatures on this form
+
+  @@index([clientId])
+  @@index([taxFormId])
+  @@index([assignedBy])
+  @@index([status])
+  @@index([assignedAt])
+  @@index([taxYear])
+  @@unique([clientId, taxFormId, taxYear])  // Each client can have one instance per form per year
+  @@map("client_tax_forms")
+}
+
+// Tax Form Edit History (Audit Trail & Version Control)
+model TaxFormEdit {
+  id                 String          @id @default(cuid())
+
+  clientTaxFormId    String
+  clientTaxForm      ClientTaxForm   @relation(fields: [clientTaxFormId], references: [id], onDelete: Cascade)
+
+  // Who made the edit
+  editedBy           String
+  editedByProfile    Profile         @relation("FormEdits", fields: [editedBy], references: [id], onDelete: Cascade)
+  editedByRole       UserRole        // CLIENT or TAX_PREPARER
+
+  // What changed
+  fieldChanges       Json            @db.JsonB // {fieldName: {old: oldValue, new: newValue}}
+  formDataSnapshot   Json            @db.JsonB // Complete form state after this edit
+
+  // Optional note explaining the change
+  editNote           String?         @db.Text
+
+  editedAt           DateTime        @default(now())
+
+  @@index([clientTaxFormId])
+  @@index([editedBy])
+  @@index([editedAt])
+  @@map("tax_form_edits")
+}
+
+// E-Signatures for Tax Forms
+model FormSignature {
+  id                 String          @id @default(cuid())
+
+  clientTaxFormId    String
+  clientTaxForm      ClientTaxForm   @relation(fields: [clientTaxFormId], references: [id], onDelete: Cascade)
+
+  // Who signed
+  signedBy           String
+  signedByProfile    Profile         @relation("FormSignatures", fields: [signedBy], references: [id], onDelete: Cascade)
+  signedByRole       UserRole        // CLIENT or TAX_PREPARER
+
+  // Signature data
+  signatureData      String          @db.Text // Base64 encoded signature image
+  signatureType      String          // "drawn", "typed", "uploaded"
+
+  // Security
+  ipAddress          String?
+  userAgent          String?         @db.Text
+
+  // Consent
+  consentText        String          @db.Text // What they agreed to when signing
+
+  signedAt           DateTime        @default(now())
+
+  @@index([clientTaxFormId])
+  @@index([signedBy])
+  @@index([signedAt])
+  @@map("form_signatures")
+}
+
+// Dynamic Field Definitions for Tax Forms
+model FormFieldDefinition {
+  id                 String          @id @default(cuid())
+
+  taxFormId          String
+  taxForm            TaxForm         @relation(fields: [taxFormId], references: [id], onDelete: Cascade)
+
+  // Field Identity
+  fieldName          String          // "ssn", "firstName", "line1_wages"
+  fieldLabel         String          // "Social Security Number"
+  fieldType          String          // "text", "number", "currency", "date", "ssn", "ein", "select", "checkbox"
+
+  // Positioning & Organization
+  section            String?         // "Part I", "Section A"
+  order              Int             @default(0)
+
+  // Validation
+  isRequired         Boolean         @default(false)
+  validationRules    Json?           @db.JsonB // {min: 0, max: 999999, pattern: "###-##-####"}
+  placeholder        String?
+  helpText           String?         @db.Text
+
+  // Options for select/radio fields
+  options            Json?           @db.JsonB // [{value: "single", label: "Single"}, ...]
+
+  // Conditional rendering
+  dependsOn          String?         // Field name that must be filled first
+  showWhen           Json?           @db.JsonB // {fieldName: "value"}
+
+  // IRS-specific
+  irsLineNumber      String?         // "1a", "2", "Schedule A Line 5"
+
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([taxFormId, fieldName])
+  @@index([taxFormId])
+  @@index([fieldName])
+  @@map("form_field_definitions")
+}
+
+// ============ Gamification System ============
+
+// Achievement Rarity Levels
+enum AchievementRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+// Achievement Categories
+enum AchievementCategory {
+  MILESTONE      // First time events (first client, first referral)
+  PERFORMANCE    // Speed, quality metrics
+  ENGAGEMENT     // Activity, logins, streaks
+  STREAK         // Consecutive action tracking
+  VOLUME         // Total counts (100 clients, 500 docs)
+  QUALITY        // High ratings, satisfaction
+  COMMUNITY      // Contests, leaderboards
+  SPECIAL        // Limited time, seasonal
+}
+
+// Achievement unlockable badges and rewards
+model Achievement {
+  id          String              @id @default(cuid())
+  slug        String              @unique // "first_client", "speed_demon", "early_bird"
+  title       String              // "First Client Filed"
+  description String              @db.Text // "File your first client's tax return"
+  category    AchievementCategory
+  icon        String              // Icon name from lucide-react
+  rarity      AchievementRarity   @default(COMMON)
+  points      Int                 @default(0) // XP points awarded
+  targetRoles String[]            // ["TAX_PREPARER", "AFFILIATE", "REFERRER", "CLIENT"]
+
+  // Unlock criteria (JSON)
+  // Examples:
+  // { "type": "client_count", "threshold": 1 }
+  // { "type": "filing_speed", "maxHours": 2 }
+  // { "type": "login_streak", "days": 7 }
+  // { "type": "referral_count", "threshold": 10 }
+  criteria    Json                @db.JsonB
+
+  // Rewards & Display
+  badgeColor  String              @default("#3B82F6") // Hex color for badge
+  badgeImage  String?             // Optional custom badge image URL
+  isActive    Boolean             @default(true) // Can be disabled
+  sortOrder   Int                 @default(0) // Display order
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  // Relations
+  userAchievements UserAchievement[]
+
+  @@index([category])
+  @@index([rarity])
+  @@index([isActive])
+  @@map("achievements")
+}
+
+// User's achievement progress and unlocks
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  profile       Profile     @relation("UserAchievements", fields: [userId], references: [userId], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  // Progress tracking
+  progress      Int         @default(0) // Current progress toward achievement (0-100 or actual count)
+  isUnlocked    Boolean     @default(false)
+  unlockedAt    DateTime?   // When achievement was unlocked
+  viewedAt      DateTime?   // When user saw the unlock notification (for new badge indicator)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([isUnlocked])
+  @@index([unlockedAt])
+  @@map("user_achievements")
+}
+
+// User stats and XP tracking
+model UserStats {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  profile             Profile  @relation("UserStats", fields: [userId], references: [userId], onDelete: Cascade)
+
+  // Overall Gamification Stats
+  totalXP             Int      @default(0) // Total XP earned
+  level               Int      @default(1) // Current level
+  currentLevelXP      Int      @default(0) // XP in current level
+  nextLevelXP         Int      @default(100) // XP needed to reach next level
+
+  // Streaks
+  loginStreak         Int      @default(0) // Consecutive days logged in
+  longestLoginStreak  Int      @default(0) // Best streak record
+  lastLoginDate       DateTime? // Last login date for streak calculation
+
+  // Tax Preparer Specific Stats
+  clientsFiledTotal   Int      @default(0) // Total returns filed
+  clientsFiledMonth   Int      @default(0) // Returns filed this month
+  avgFilingTimeHours  Float?   // Average time to file (hours)
+  fastestFilingHours  Float?   // Fastest filing time (hours)
+  clientSatisfaction  Float?   // Average client rating (1-5)
+  documentsProcessed  Int      @default(0) // Total documents processed
+
+  // Affiliate/Referrer Specific Stats
+  referralsTotal      Int      @default(0) // Total referrals
+  referralsMonth      Int      @default(0) // Referrals this month
+  conversionRate      Float?   // Referral to client conversion %
+  topMaterialUsed     String?  // Most successful marketing material
+  linksCreated        Int      @default(0) // Tracking links created
+
+  // Engagement Stats
+  documentsUploaded   Int      @default(0) // Documents uploaded
+  messagesReceived    Int      @default(0) // Messages received
+  messagesSent        Int      @default(0) // Messages sent
+  ticketsCreated      Int      @default(0) // Support tickets created
+  ticketsResolved     Int      @default(0) // Support tickets resolved (preparers)
+
+  // Monthly reset fields (reset on 1st of month)
+  lastMonthlyReset    DateTime? // When monthly stats were last reset
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([totalXP])
+  @@index([level])
+  @@index([loginStreak])
+  @@map("user_stats")
+}
+
+// Daily challenges for users
+model DailyChallenge {
+  id          String   @id @default(cuid())
+  date        DateTime @unique @db.Date // The date this challenge is active
+  targetRoles String[] // ["TAX_PREPARER", "AFFILIATE", "REFERRER"]
+
+  // Challenge details
+  title       String   // "File 3 Returns Today"
+  description String   @db.Text // "Complete 3 client tax returns before midnight"
+  icon        String   @default("Trophy") // Lucide icon name
+
+  // Criteria for completion (JSON)
+  // { "type": "file_returns", "count": 3 }
+  // { "type": "upload_documents", "count": 5 }
+  // { "type": "send_messages", "count": 10 }
+  criteria    Json     @db.JsonB
+
+  // Rewards
+  reward      String   // "50 XP + Speed Demon Progress"
+  xpReward    Int      @default(50) // XP awarded on completion
+
+  // Status
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  completions DailyChallengeCompletion[]
+
+  @@index([date])
+  @@index([isActive])
+  @@map("daily_challenges")
+}
+
+// Track daily challenge completions
+model DailyChallengeCompletion {
+  id          String         @id @default(cuid())
+  userId      String
+  profile     Profile        @relation("DailyChallengeCompletions", fields: [userId], references: [userId], onDelete: Cascade)
+  challengeId String
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  // Completion tracking
+  completedAt DateTime       @default(now())
+  xpAwarded   Int            // XP awarded for this completion
+
+  @@unique([userId, challengeId])
+  @@index([userId])
+  @@index([completedAt])
+  @@map("daily_challenge_completions")
+}
+
+// ============ Professional Email System ============
+
+// Professional email aliases (e.g., ira@taxgeniuspro.tax)
+// Supports email forwarding + send-as configuration
+model ProfessionalEmailAlias {
+  id                    String    @id @default(cuid())
+  profileId             String    // Allow multiple aliases per user
+  profile               Profile   @relation("ProfessionalEmailAliases", fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Email Identity
+  emailAddress          String    @unique // "ira@taxgeniuspro.tax"
+  forwardToEmail        String              // "ira.johnson@gmail.com"
+  displayName           String?             // "Ira Johnson"
+  isPrimary             Boolean   @default(false) // Default sending alias
+
+  // Status
+  status                String    @default("PENDING_PAYMENT") // PENDING_PAYMENT, PROVISIONING, ACTIVE, SUSPENDED, CANCELLED
+
+  // Auto Send-As Configuration (Gmail API)
+  gmailSendAsConfigured Boolean   @default(false)
+  gmailSendAsId         String?   // Gmail API send-as ID
+  verificationCode      String?   // Gmail verification code
+
+  // SMTP Credentials (for non-Gmail sending via Resend)
+  smtpEnabled           Boolean   @default(true)
+  encryptedSmtpPassword String?   @db.Text // For custom SMTP if needed
+
+  // Forwarding Configuration (Cloudflare)
+  dnsConfigured         Boolean   @default(false)
+  forwardingActive      Boolean   @default(false)
+  cloudflareRuleId      String?   // Cloudflare email routing rule ID
+
+  // Billing
+  annualPrice           Float     @default(36.00)
+  nextBillingDate       DateTime?
+  subscriptionStartDate DateTime?
+  stripeSubscriptionId  String?   // Stripe subscription ID
+  stripePriceId         String?   // Stripe price ID
+
+  // Provisioning metadata
+  provisionedAt         DateTime?
+  lastTestedAt          DateTime? // Last time forwarding was tested
+  testEmailSent         Boolean   @default(false)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([profileId])
+  @@index([status])
+  @@index([emailAddress])
+  @@index([forwardingActive])
+  @@map("professional_email_aliases")
+}
+
+// Email templates for quick responses
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  profileId   String?  // null = shared template (admin-created)
+  profile     Profile? @relation("EmailTemplates", fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Template Details
+  name        String   // "First Contact", "Follow-up", "Documents Request"
+  subject     String   // Email subject line with variable support
+  body        String   @db.Text // Email body with variable support
+
+  // Organization
+  category    String   @default("GENERAL") // "LEAD", "CLIENT", "GENERAL"
+  isShared    Boolean  @default(false)    // Admin-created shared templates
+  isDefault   Boolean  @default(false)    // System default templates
+
+  // Usage tracking
+  usageCount  Int      @default(0) // How many times this template was used
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([category])
+  @@index([isShared])
+  @@map("email_templates")
+}
+
+// ============ AI Image Generation Center ============
+
+// Track AI-generated images for website use
+model GeneratedImage {
+  id               String    @id @default(cuid())
+
+  // Generation details
+  prompt           String    @db.Text // User's prompt
+  negativePrompt   String?   @db.Text // What to avoid (optional)
+  provider         String    // 'openai' or 'replicate'
+  modelUsed        String?   // Specific model name
+
+  // Status tracking
+  status           String    @default("generating") // generating, ready, accepted, rejected
+
+  // Image details
+  imageUrl         String    @db.Text // Full image URL
+  thumbnailUrl     String?   @db.Text // Thumbnail URL for faster loading
+  width            Int?      // Image width in pixels
+  height           Int?      // Image height in pixels
+  fileSize         Int?      // File size in bytes
+
+  // Organization
+  tags             String[]  // Tags for categorization
+  category         String?   // Category (e.g., 'hero', 'icon', 'background')
+  metadata         Json?     // Additional generation parameters
+
+  // Grouping variations
+  generationId     String    // Groups images generated together
+
+  // User tracking
+  createdBy        String    // User ID who created this
+  createdByProfile Profile   @relation("GeneratedImages", fields: [createdBy], references: [id], onDelete: Cascade)
+  acceptedBy       String?   // User ID who accepted (if applicable)
+  acceptedByProfile Profile? @relation("AcceptedImages", fields: [acceptedBy], references: [id], onDelete: SetNull)
+  acceptedAt       DateTime? // When it was accepted
+
+  // Timestamps
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([createdBy])
+  @@index([acceptedBy])
+  @@index([status])
+  @@index([generationId])
+  @@index([provider])
+  @@index([category])
+  @@index([createdAt])
+  @@map("generated_images")
+}

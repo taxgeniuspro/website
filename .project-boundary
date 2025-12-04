@@ -1,0 +1,38 @@
+{
+  "projectName": "taxgeniuspro",
+  "projectRoot": "/Users/irawatkins/.claude-worktrees/taxgeniuspro/nifty-ramanujan",
+  "allowedPaths": [
+    "/Users/irawatkins/.claude-worktrees/taxgeniuspro/nifty-ramanujan",
+    "/Users/irawatkins/taxgeniuspro",
+    "__tests__"
+  ],
+  "prohibitedPaths": [],
+  "allowedPatterns": [
+    "screencapture-taxgeniuspro*"
+  ],
+  "sharedInfrastructure": {
+    "n8n": {
+      "url": "http://localhost:5678",
+      "access": "read-only"
+    },
+    "chatwoot": {
+      "url": "http://localhost:3006",
+      "access": "read-only"
+    }
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "taxgeniuspro",
+    "warning": "ONLY access taxgeniuspro - NEVER touch other databases"
+  },
+  "gitRepo": {
+    "remote": "https://github.com/taxgeniuspro/website.git",
+    "expectedBranch": "main"
+  },
+  "port": 3005,
+  "isolationRules": [
+    "NEVER git commit to repositories other than taxgeniuspro",
+    "NEVER access databases other than taxgeniuspro"
+  ]
+}

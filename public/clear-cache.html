@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache - Tax Genius Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            color: #1976d2;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            color: #2e7d32;
+        }
+
+        .status.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress {
+            list-style: none;
+            margin-top: 20px;
+        }
+
+        .progress li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+        }
+
+        .progress li:last-child {
+            border-bottom: none;
+        }
+
+        .check {
+            color: #4CAF50;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        .cross {
+            color: #f44336;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        .link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        .warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #e65100;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Clear Cache</h1>
+        <p class="subtitle">Fix chunk loading errors and update to the latest version</p>
+
+        <div id="status" class="status info">
+            <strong>Ready to clear cache</strong><br>
+            This will clear Service Workers and local storage for Tax Genius Pro.
+        </div>
+
+        <button id="clearBtn" onclick="clearAllCaches()">Clear All Caches</button>
+        <button onclick="window.location.reload(true)">Hard Reload Page</button>
+
+        <ul id="progress" class="progress"></ul>
+
+        <div class="warning">
+            <strong>⚠️ Note:</strong> You may need to log in again after clearing caches. This is normal and ensures you get the latest version.
+        </div>
+
+        <a href="/" class="link">← Back to Home</a>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const progressList = document.getElementById('progress');
+        const clearBtn = document.getElementById('clearBtn');
+
+        function addProgress(text, success = true) {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="${success ? 'check' : 'cross'}">${success ? '✓' : '✗'}</span>${text}`;
+            progressList.appendChild(li);
+        }
+
+        function setStatus(message, type = 'info') {
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+
+        async function clearAllCaches() {
+            clearBtn.disabled = true;
+            progressList.innerHTML = '';
+            setStatus('<strong>Clearing caches...</strong><br>Please wait...', 'info');
+
+            let successCount = 0;
+            let totalSteps = 0;
+
+            // Step 1: Unregister Service Workers
+            totalSteps++;
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    if (registrations.length > 0) {
+                        for (const registration of registrations) {
+                            await registration.unregister();
+                        }
+                        addProgress(`Unregistered ${registrations.length} service worker(s)`, true);
+                        successCount++;
+                    } else {
+                        addProgress('No service workers found', true);
+                        successCount++;
+                    }
+                } else {
+                    addProgress('Service workers not supported', false);
+                }
+            } catch (error) {
+                addProgress('Failed to unregister service workers: ' + error.message, false);
+            }
+
+            // Step 2: Clear Cache Storage
+            totalSteps++;
+            try {
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    if (cacheNames.length > 0) {
+                        await Promise.all(cacheNames.map(name => caches.delete(name)));
+                        addProgress(`Deleted ${cacheNames.length} cache(s)`, true);
+                        successCount++;
+                    } else {
+                        addProgress('No caches found', true);
+                        successCount++;
+                    }
+                } else {
+                    addProgress('Cache API not supported', false);
+                }
+            } catch (error) {
+                addProgress('Failed to clear cache storage: ' + error.message, false);
+            }
+
+            // Step 3: Clear Local Storage
+            totalSteps++;
+            try {
+                const itemCount = localStorage.length;
+                localStorage.clear();
+                addProgress(`Cleared local storage (${itemCount} items)`, true);
+                successCount++;
+            } catch (error) {
+                addProgress('Failed to clear local storage: ' + error.message, false);
+            }
+
+            // Step 4: Clear Session Storage
+            totalSteps++;
+            try {
+                const itemCount = sessionStorage.length;
+                sessionStorage.clear();
+                addProgress(`Cleared session storage (${itemCount} items)`, true);
+                successCount++;
+            } catch (error) {
+                addProgress('Failed to clear session storage: ' + error.message, false);
+            }
+
+            // Step 5: Clear IndexedDB
+            totalSteps++;
+            try {
+                if ('indexedDB' in window) {
+                    const databases = await indexedDB.databases();
+                    if (databases && databases.length > 0) {
+                        for (const db of databases) {
+                            if (db.name) {
+                                indexedDB.deleteDatabase(db.name);
+                            }
+                        }
+                        addProgress(`Cleared IndexedDB (${databases.length} databases)`, true);
+                        successCount++;
+                    } else {
+                        addProgress('No IndexedDB databases found', true);
+                        successCount++;
+                    }
+                } else {
+                    addProgress('IndexedDB not supported', false);
+                }
+            } catch (error) {
+                addProgress('Failed to clear IndexedDB: ' + error.message, false);
+            }
+
+            // Show results
+            clearBtn.disabled = false;
+
+            if (successCount === totalSteps) {
+                setStatus(
+                    `<strong>✅ Success!</strong><br>
+                    All caches cleared. Click "Hard Reload Page" below or press Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac) to complete the process.`,
+                    'success'
+                );
+            } else {
+                setStatus(
+                    `<strong>⚠️ Partially Complete</strong><br>
+                    ${successCount} of ${totalSteps} steps completed. You may need to clear browser cache manually.`,
+                    'error'
+                );
+            }
+        }
+
+        // Check for service workers on load
+        window.addEventListener('load', async () => {
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                if (registrations.length > 0) {
+                    setStatus(
+                        `<strong>Service Workers Detected</strong><br>
+                        Found ${registrations.length} service worker(s). Click "Clear All Caches" to remove them.`,
+                        'info'
+                    );
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "welcome": "Welcome to Tax Genius",
+  "dashboard": "Dashboard",
+  "login": "Login",
+  "logout": "Logout",
+  "client": "Client",
+  "referrer": "Referrer", 
+  "preparer": "Preparer",
+  "nav": {
+    "dashboard": "Dashboard",
+    "profile": "Profile",
+    "settings": "Settings"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "forgotPassword": "Forgot Password?",
+    "signInWithGoogle": "Sign in with Google",
+    "magicLink": "Send Magic Link",
+    "dontHaveAccount": "Don't have an account? Sign up",
+    "alreadyHaveAccount": "Already have an account? Sign in",
+    "passwordMismatch": "Passwords do not match",
+    "checkEmail": "Check your email to confirm your account",
+    "magicLinkSent": "Magic link sent to your email!"
+  },
+  "roles": {
+    "selectRole": "Select Your Role",
+    "client": "Client",
+    "referrer": "Referrer",
+    "preparer": "Preparer",
+    "clientDescription": "File your taxes with our expert preparers",
+    "referrerDescription": "Earn rewards by referring clients",
+    "preparerDescription": "Prepare taxes and build your business"
+  }
+}

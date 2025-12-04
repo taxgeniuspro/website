@@ -1,0 +1,38 @@
+{
+  "welcome": "Bienvenido a Tax Genius",
+  "dashboard": "Panel de Control",
+  "login": "Iniciar Sesión",
+  "logout": "Cerrar Sesión",
+  "client": "Cliente",
+  "referrer": "Referente",
+  "preparer": "Preparador",
+  "nav": {
+    "dashboard": "Panel de Control",
+    "profile": "Perfil",
+    "settings": "Configuración"
+  },
+  "auth": {
+    "login": "Iniciar Sesión",
+    "register": "Registrarse",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar Contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "signInWithGoogle": "Iniciar sesión con Google",
+    "magicLink": "Enviar Enlace Mágico",
+    "dontHaveAccount": "¿No tienes una cuenta? Regístrate",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta? Inicia sesión",
+    "passwordMismatch": "Las contraseñas no coinciden",
+    "checkEmail": "Revisa tu correo electrónico para confirmar tu cuenta",
+    "magicLinkSent": "¡Enlace mágico enviado a tu correo electrónico!"
+  },
+  "roles": {
+    "selectRole": "Selecciona Tu Rol",
+    "client": "Cliente",
+    "referrer": "Referente",
+    "preparer": "Preparador",
+    "clientDescription": "Declara tus impuestos con nuestros preparadores expertos",
+    "referrerDescription": "Gana recompensas refiriendo clientes",
+    "preparerDescription": "Prepara impuestos y construye tu negocio"
+  }
+}

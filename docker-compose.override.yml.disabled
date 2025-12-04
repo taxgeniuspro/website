@@ -1,0 +1,58 @@
+# Docker Compose Override for TaxGeniusPro.tax - DEVELOPMENT
+# This file is automatically loaded with docker-compose.yml
+# Usage: docker compose up -d
+
+services:
+  # =============================================================================
+  # NGINX - Development Config (no SSL)
+  # =============================================================================
+  nginx:
+    volumes:
+      - ./docker/nginx/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - '127.0.0.1:80:80'
+    # No 443 port in development
+
+  # =============================================================================
+  # DATABASE - PostgreSQL with debug logging
+  # =============================================================================
+  postgres:
+    environment:
+      POSTGRES_LOG_STATEMENT: all  # Log all queries for debugging
+    ports:
+      - '127.0.0.1:5438:5432'  # Expose for local tools like pgAdmin
+
+  # =============================================================================
+  # CACHE - Redis with debug mode
+  # =============================================================================
+  redis:
+    ports:
+      - '127.0.0.1:6305:6379'  # Expose for Redis tools
+
+  # =============================================================================
+  # OBJECT STORAGE - MinIO Console accessible
+  # =============================================================================
+  minio:
+    environment:
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9105
+    ports:
+      - '127.0.0.1:9005:9000'  # API
+      - '127.0.0.1:9105:9001'  # Console
+
+  # =============================================================================
+  # APPLICATION - Development mode
+  # =============================================================================
+  app:
+    # Expose directly for debugging (optional)
+    ports:
+      - '127.0.0.1:3005:3005'
+    environment:
+      NODE_ENV: development
+      # Enable more verbose logging
+      DEBUG: '*'
+    # Hot reload - mount source code
+    # Uncomment for live development (requires dev dependencies)
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+    #   - /app/.next

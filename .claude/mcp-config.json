@@ -1,0 +1,88 @@
+{
+  "name": "Tax Genius Pro MCP Configuration",
+  "version": "1.0.0",
+  "description": "MCP tools configuration for Tax Genius Pro tax preparation platform",
+  "servers": {
+    "shadcn-ui": {
+      "enabled": true,
+      "description": "UI component management",
+      "primaryAgents": ["ui-designer"],
+      "config": {
+        "framework": "react",
+        "githubApiKey": "env:GITHUB_API_KEY"
+      }
+    },
+    "puppeteer": {
+      "enabled": true,
+      "description": "Browser automation and testing",
+      "primaryAgents": ["tester", "ui-designer"],
+      "config": {
+        "headless": true,
+        "defaultViewport": {
+          "width": 1920,
+          "height": 1080
+        }
+      }
+    },
+    "firecrawl": {
+      "enabled": true,
+      "description": "Web scraping and research",
+      "primaryAgents": ["researcher"],
+      "config": {
+        "apiKey": "env:FIRECRAWL_API_KEY",
+        "rateLimit": 10
+      }
+    },
+    "filesystem": {
+      "enabled": true,
+      "description": "File system operations",
+      "primaryAgents": ["developer", "all"],
+      "config": {
+        "rootPath": "/root/websites/taxgeniuspro",
+        "allowedPaths": [
+          "src",
+          "docs",
+          "tests",
+          "research",
+          ".claude"
+        ]
+      }
+    }
+  },
+  "workflows": {
+    "component-development": {
+      "description": "Create new UI components",
+      "mcps": ["shadcn-ui", "filesystem", "puppeteer"],
+      "steps": [
+        "Add component with shadcn-ui",
+        "Customize with filesystem",
+        "Test with puppeteer"
+      ]
+    },
+    "tax-law-research": {
+      "description": "Research tax law updates",
+      "mcps": ["firecrawl", "filesystem"],
+      "steps": [
+        "Crawl IRS and state sites",
+        "Extract relevant data",
+        "Store in research directory"
+      ]
+    },
+    "e2e-testing": {
+      "description": "End-to-end testing workflow",
+      "mcps": ["puppeteer", "filesystem"],
+      "steps": [
+        "Launch test browser",
+        "Execute test scenarios",
+        "Capture screenshots",
+        "Generate reports"
+      ]
+    }
+  },
+  "environment": {
+    "projectPort": 3005,
+    "testPort": 3006,
+    "apiUrl": "http://localhost:3005/api",
+    "database": "postgresql"
+  }
+}

@@ -1,0 +1,3208 @@
+{
+  "navigation": {
+    "home": "Home",
+    "services": "Services",
+    "resources": "Resources",
+    "joinUs": "Join Us",
+    "about": "About",
+    "contact": "Contact",
+    "blog": "Blog",
+    "testimonials": "Testimonials",
+    "taxCalculator": "Tax Calculator",
+    "taxGuide": "Tax Guide",
+    "findRefund": "Find a Refund",
+    "refundAdvance": "Refund Advance",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "signOut": "Sign Out",
+    "dashboard": "Dashboard",
+    "cart": "Cart",
+    "getStarted": "Get Started",
+    "login": "Login",
+    "bookAppointment": "Book Appointment",
+    "becomeAffiliate": "Become an Affiliate",
+    "joinAsPreparer": "Join as Tax Preparer",
+    "servicesMenu": {
+      "personalTaxFiling": "Personal Tax Filing",
+      "businessTaxServices": "Business Tax Services",
+      "taxPlanningAdvisory": "Tax Planning & Advisory",
+      "auditProtection": "Audit Protection",
+      "irsResolutionServices": "IRS Resolution Services",
+      "viewAllServices": "View All Services"
+    },
+    "resourcesMenu": {
+      "taxGuide2024": "2024 Tax Guide",
+      "taxBlogTips": "Tax Blog & Tips",
+      "helpCenter": "Help Center",
+      "taxCalculator": "Tax Calculator",
+      "findMyRefund": "Find My Refund"
+    },
+    "joinUsMenu": {
+      "becomeTaxPreparer": "Become a Tax Preparer",
+      "joinAsAffiliate": "Join as Affiliate",
+      "referralProgram": "Referral Program"
+    },
+    "mobileMenu": {
+      "languageIdioma": "Language / Idioma"
+    }
+  },
+  "footer": {
+    "productsTitle": "Products",
+    "servicesTitle": "Services",
+    "companyTitle": "Company",
+    "supportTitle": "Support",
+    "professionalEmail": "Professional Email",
+    "refundAdvance": "Refund Advance",
+    "taxForms": "Tax Forms",
+    "personalTax": "Personal Tax Filing",
+    "businessTax": "Business Tax Services",
+    "taxPlanning": "Tax Planning",
+    "auditProtection": "Audit Protection",
+    "irsResolution": "IRS Resolution",
+    "aboutUs": "About Us",
+    "careers": "Careers",
+    "affiliateProgram": "Affiliate Program",
+    "blog": "Blog",
+    "helpCenter": "Help Center",
+    "contactUs": "Contact Us",
+    "liveChat": "Live Chat",
+    "termsOfService": "Terms of Service",
+    "privacyPolicy": "Privacy Policy",
+    "securityInfo": "Security Information",
+    "accessibility": "Accessibility",
+    "copyright": "© {year} Tax Genius Pro. All rights reserved.",
+    "tagline": "Professional Tax Services You Can Trust"
+  },
+  "common": {
+    "loading": "Loading...",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "finish": "Finish",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "actions": "Actions",
+    "status": "Status",
+    "date": "Date",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "state": "State",
+    "zip": "ZIP Code",
+    "country": "Country",
+    "yes": "Yes",
+    "no": "No",
+    "required": "Required",
+    "optional": "Optional",
+    "selectOption": "Select an option",
+    "noResults": "No results found",
+    "errorOccurred": "An error occurred",
+    "successMessage": "Success!",
+    "uploadFile": "Upload File",
+    "downloadFile": "Download File",
+    "viewDetails": "View Details",
+    "learnMore": "Learn More",
+    "readMore": "Read More",
+    "showMore": "Show More",
+    "showLess": "Show Less",
+    "all": "All",
+    "none": "None",
+    "other": "Other"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalidEmail": "Invalid email address",
+    "invalidPhone": "Invalid phone number",
+    "invalidZip": "Invalid ZIP code",
+    "invalidSSN": "Invalid Social Security Number",
+    "invalidDate": "Invalid date",
+    "invalidUrl": "Invalid URL",
+    "minLength": "Must be at least {min} characters",
+    "maxLength": "Must be at most {max} characters",
+    "minValue": "Must be at least {min}",
+    "maxValue": "Must be at most {max}",
+    "mustMatch": "Fields must match",
+    "passwordTooWeak": "Password is too weak",
+    "mustAcceptTerms": "You must accept the terms and conditions",
+    "invalidFormat": "Invalid format",
+    "fileTooBig": "File is too large (max {max}MB)",
+    "invalidFileType": "Invalid file type"
+  },
+  "roles": {
+    "admin": "Administrator",
+    "super_admin": "Super Administrator",
+    "tax_preparer": "Tax Preparer",
+    "client": "Client",
+    "affiliate": "Affiliate",
+    "lead": "Lead"
+  },
+  "status": {
+    "pending": "Pending",
+    "active": "Active",
+    "inactive": "Inactive",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "completed": "Completed",
+    "inProgress": "In Progress",
+    "cancelled": "Cancelled",
+    "scheduled": "Scheduled",
+    "confirmed": "Confirmed",
+    "requested": "Requested"
+  },
+  "forms": {
+    "taxIntake": {
+      "title": "Tax Intake Form",
+      "progressStep": "Step {current} of {total}",
+      "page1": {
+        "title": "Welcome",
+        "subtitle": "Let's get started with your tax filing",
+        "description": "We'll guide you through a simple process to gather the information we need to prepare your taxes accurately and maximize your refund.",
+        "startButton": "Start Your Tax Filing"
+      },
+      "page2": {
+        "title": "Personal Information",
+        "subtitle": "Tell us about yourself",
+        "firstName": "First Name",
+        "middleName": "Middle Name",
+        "lastName": "Last Name",
+        "email": "Email Address",
+        "phone": "Phone Number",
+        "countryCode": "Country Code",
+        "firstNamePlaceholder": "John",
+        "middleNamePlaceholder": "M.",
+        "lastNamePlaceholder": "Doe",
+        "emailPlaceholder": "john.doe@example.com",
+        "phonePlaceholder": "(555) 123-4567"
+      },
+      "page3": {
+        "title": "Address",
+        "subtitle": "Where do you live?",
+        "addressLine1": "Street Address",
+        "addressLine2": "Apartment, Suite, etc.",
+        "city": "City",
+        "state": "State",
+        "zipCode": "ZIP Code",
+        "addressLine1Placeholder": "123 Main Street",
+        "addressLine2Placeholder": "Apt 4B",
+        "cityPlaceholder": "New York",
+        "statePlaceholder": "Select your state",
+        "zipCodePlaceholder": "10001"
+      },
+      "page4": {
+        "title": "Identity Information",
+        "subtitle": "We need this to file your taxes",
+        "dateOfBirth": "Date of Birth",
+        "ssn": "Social Security Number",
+        "dateOfBirthPlaceholder": "MM/DD/YYYY",
+        "ssnPlaceholder": "XXX-XX-XXXX",
+        "ssnHint": "Your SSN is kept secure and encrypted"
+      },
+      "page5": {
+        "title": "Dependent Status",
+        "subtitle": "Can anyone claim you as a dependent?",
+        "claimedAsDependent": "Can anyone claim you as a dependent on their tax return?",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "page6": {
+        "title": "Employment & Filing Status",
+        "subtitle": "Tell us about your work and filing status",
+        "filingStatus": "Filing Status",
+        "filingStatusPlaceholder": "Select your filing status",
+        "filingStatusSingle": "Single",
+        "filingStatusMarriedJoint": "Married Filing Jointly",
+        "filingStatusMarriedSeparate": "Married Filing Separately",
+        "filingStatusHOH": "Head of Household",
+        "filingStatusQualifyingWidow": "Qualifying Widow(er)",
+        "employmentType": "Employment Type",
+        "employmentW2": "W-2 Employee",
+        "employment1099": "1099 Contractor",
+        "employmentBoth": "Both W-2 and 1099",
+        "occupation": "Occupation",
+        "occupationPlaceholder": "e.g., Software Engineer"
+      },
+      "page7": {
+        "title": "Education",
+        "subtitle": "Are you currently in college?",
+        "inCollege": "Are you currently enrolled in college?",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "page8": {
+        "title": "Dependents",
+        "subtitle": "Do you have any dependents?",
+        "hasDependents": "Do you have any dependents?",
+        "none": "No dependents",
+        "yes": "Yes, I have dependents",
+        "numberOfDependents": "Number of Dependents",
+        "numberOfDependentsPlaceholder": "e.g., 2",
+        "under24StudentOrDisabled": "Any dependents under 24 who are students or disabled?",
+        "dependentsInCollege": "Any dependents in college?",
+        "childCareProvider": "Did you pay for child care?",
+        "yesOption": "Yes",
+        "noOption": "No"
+      },
+      "page9": {
+        "title": "Property",
+        "subtitle": "Do you own a home?",
+        "hasMortgage": "Do you have a mortgage or pay property taxes?",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "page10": {
+        "title": "Tax Credits",
+        "subtitle": "Important information about tax credits",
+        "deniedEITC": "Have you been denied Earned Income Tax Credit (EITC) in the past?",
+        "yes": "Yes",
+        "no": "No",
+        "eitcInfo": "EITC is a benefit for working people with low to moderate income"
+      },
+      "page11": {
+        "title": "IRS PIN",
+        "subtitle": "Do you have an IRS Identity Protection PIN?",
+        "hasIRSPin": "Do you have an IRS IP PIN?",
+        "no": "No",
+        "yes": "Yes, I have it",
+        "yesLocate": "Yes, but I need to locate it",
+        "irsPinNumber": "IRS IP PIN",
+        "irsPinPlaceholder": "Enter your 6-digit PIN",
+        "irsPinInfo": "An IP PIN is a 6-digit number that prevents someone else from filing a tax return using your SSN"
+      },
+      "page12": {
+        "title": "Refund Advance",
+        "subtitle": "Would you like to receive your refund faster?",
+        "wantsRefundAdvance": "Are you interested in a refund advance?",
+        "yes": "Yes",
+        "no": "No",
+        "refundAdvanceInfo": "Get your refund in as little as 24 hours (fees may apply)"
+      },
+      "page13": {
+        "title": "Identification Documents",
+        "subtitle": "Upload your driver's license or state ID",
+        "driversLicense": "Driver's License / State ID Number",
+        "driversLicensePlaceholder": "e.g., D1234567",
+        "licenseExpiration": "Expiration Date",
+        "licenseExpirationPlaceholder": "MM/DD/YYYY",
+        "uploadLicense": "Upload Photo of License",
+        "uploadInstructions": "Please upload a clear photo of the front of your driver's license or state ID",
+        "fileFormatInfo": "Accepted formats: JPG, PNG, PDF (max 5MB)",
+        "chooseFile": "Choose File",
+        "noFileChosen": "No file chosen"
+      },
+      "thankYou": {
+        "title": "Thank You!",
+        "subtitle": "Your tax intake form has been submitted successfully",
+        "message": "We've received your information and will be in touch shortly.",
+        "preparerAssigned": "Your assigned tax preparer:",
+        "nextSteps": "Next Steps:",
+        "step1": "Review your information",
+        "step2": "Gather required documents",
+        "step3": "Schedule a consultation",
+        "backToDashboard": "Back to Dashboard",
+        "scheduleConsultation": "Schedule Consultation"
+      },
+      "errors": {
+        "submissionFailed": "Failed to submit form. Please try again.",
+        "uploadFailed": "Failed to upload file. Please try again.",
+        "invalidFile": "Invalid file type. Please upload a JPG, PNG, or PDF.",
+        "fileTooLarge": "File is too large. Maximum size is 5MB."
+      }
+    },
+    "preparerApplication": {
+      "badge": "Tax Preparer Application",
+      "title": "Join Tax Genius as a Preparer",
+      "subtitle": "Fill out the form below to apply. After submission, you'll schedule your interview.",
+      "firstName": "First Name",
+      "middleName": "Middle Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "phone": "Phone/Mobile (USA)",
+      "languages": "What Languages can you speak?",
+      "languagesPlaceholder": "- Select -",
+      "languageEnglish": "English",
+      "languageSpanish": "Spanish",
+      "languageBoth": "Both",
+      "experienceLevel": "Tax Preparation Experience",
+      "experienceLevelPlaceholder": "- Select -",
+      "experienceNew": "New to Tax Preparation - Need Training",
+      "experienceIntermediate": "1-3 Years of Experience",
+      "experienceSeasoned": "Seasoned Tax Professional (3+ years)",
+      "taxSoftwareTitle": "Tax Software Experience",
+      "taxSoftwareDescription": "Select all tax software programs you have used (check all that apply)",
+      "smsConsentLabel": "By selecting Yes below, I consent to receive text messages from Tax Genius or its service providers, regarding employment opportunities at the phone number above. I understand my consent is not a condition of employment.",
+      "smsConsentPlaceholder": "Select an option",
+      "smsConsentYes": "Yes",
+      "smsConsentNo": "No",
+      "privacyNotice": "By submitting this form, you acknowledge that Tax Genius may process the data you provide to contact you with information related to your request/submission as described in our Privacy Statement.",
+      "submitButton": "Submit Application",
+      "submitting": "Submitting Application...",
+      "formComplete": "✓ Ready to submit",
+      "formIncomplete": "Complete all required fields",
+      "successTitle": "Application Received!",
+      "successSubtitle": "We'll contact you soon about next steps",
+      "confirmationMessage": "✓ We've received your application:",
+      "scheduleInterviewTitle": "📅 Schedule Your Interview (Optional)",
+      "scheduleInterviewDescription": "You can schedule your interview appointment now, or we'll contact you via email or phone to set one up.",
+      "confirmationEmailSent": "📧 A confirmation email has been sent to {email}",
+      "confirmationSmsSent": "📱 We'll text you at {phone} with interview details",
+      "closePageMessage": "You can close this page. We'll be in touch soon!",
+      "firstNamePlaceholder": "John",
+      "middleNamePlaceholder": "Michael",
+      "lastNamePlaceholder": "Smith",
+      "emailPlaceholder": "john.smith@example.com",
+      "phonePlaceholder": "(555) 123-4567"
+    },
+    "affiliateApplication": {
+      "pageTitle": "Become an Affiliate Partner",
+      "pageSubtitle": "Join our network and earn commissions for every referral",
+      "bondingBanner": "Bonding with Tax Preparer",
+      "bondingDescription": "You're applying to work with {username}. This creates a partnership where you earn custom commission rates set by this preparer.",
+      "personalInfoTitle": "Personal Information",
+      "personalInfoSubtitle": "Tell us about yourself",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email Address",
+      "phone": "Phone Number",
+      "marketingExpTitle": "Marketing Experience",
+      "marketingExpSubtitle": "Tell us about your audience and platforms",
+      "experience": "Marketing Experience",
+      "experiencePlaceholder": "Describe your experience in marketing, affiliate programs, or relevant fields...",
+      "audience": "Target Audience",
+      "audiencePlaceholder": "Who is your audience? (e.g., small business owners, freelancers, families)",
+      "platformsLabel": "Platforms (Select all that apply)",
+      "onlinePresenceTitle": "Online Presence",
+      "onlinePresenceSubtitle": "Share your website and social media profiles",
+      "website": "Website/Blog (Optional)",
+      "websitePlaceholder": "https://yourblog.com",
+      "facebook": "Facebook Profile/Page",
+      "facebookPlaceholder": "facebook.com/yourpage",
+      "instagram": "Instagram Handle",
+      "instagramPlaceholder": "@yourusername",
+      "twitter": "Twitter/X Handle",
+      "twitterPlaceholder": "@yourusername",
+      "youtube": "YouTube Channel",
+      "youtubePlaceholder": "youtube.com/@yourchannel",
+      "additionalInfoTitle": "Additional Information",
+      "whyAffiliate": "Why do you want to become an affiliate?",
+      "whyAffiliatePlaceholder": "Tell us why you're interested in our affiliate program...",
+      "agreeToTerms": "I agree to the {termsLink} and {privacyLink}. I understand that my application will be reviewed and I'll receive login credentials once approved.",
+      "termsAndConditions": "Terms and Conditions",
+      "privacyPolicy": "Privacy Policy",
+      "submitButton": "Submit Application",
+      "submitting": "Submitting...",
+      "successTitle": "Application Submitted!",
+      "successSubtitleDefault": "We'll review your application and get back to you within 24-48 hours.",
+      "successSubtitleBonded": "Your bonding request has been sent to the tax preparer for review.",
+      "whatHappensNext": "What happens next?",
+      "nextStep1": "Check your email for a confirmation message",
+      "nextStep2": "Our team will review your application",
+      "nextStep3Bonded": "The tax preparer will review your bonding request",
+      "nextStep4": "You'll receive login credentials once approved",
+      "nextStep5": "Access to marketing materials and your custom links",
+      "backToHome": "Back to Home",
+      "loadingForm": "Loading application form..."
+    },
+    "contact": {
+      "badge": "Get In Touch",
+      "pageTitle": "Let's Talk About Your",
+      "pageTitleHighlight": "Tax Needs",
+      "pageSubtitle": "Ready to maximize your refund? Our tax experts are here to help. Contact us for a free consultation and see how we can save you money.",
+      "formTitle": "Get Your Free Consultation",
+      "formSubtitle": "Fill out the form below and we'll get back to you within 24 hours",
+      "name": "Full Name",
+      "email": "Email",
+      "phone": "Phone Number",
+      "phonePlaceholder": "123-456-7890",
+      "service": "Service Needed",
+      "serviceSelect": "Select a service",
+      "serviceIndividual": "Individual Tax Return",
+      "serviceBusiness": "Business Tax Return",
+      "serviceRealEstate": "Real Estate Professional",
+      "serviceAuditDefense": "Audit Defense",
+      "serviceTaxPlanning": "Tax Planning",
+      "serviceOther": "Other",
+      "message": "Message",
+      "messagePlaceholder": "Tell us about your specific tax situation or questions... (minimum 10 characters)",
+      "messageCounter": "{count}/1000 characters",
+      "sendMessage": "Send Message",
+      "sending": "Sending...",
+      "successTitle": "Message Sent Successfully!",
+      "successMessage": "Thank you for contacting us. We've received your message and will get back to you within 24 hours.",
+      "sendAnother": "Send Another Message",
+      "contactInfoTitle": "Contact Information",
+      "contactPhone": "Phone",
+      "contactEmail": "Email",
+      "contactLocation": "Location",
+      "contactHours": "Business Hours",
+      "monday": "Monday: 9:00 AM - 7:00 PM",
+      "tuesday": "Tuesday: 9:00 AM - 7:00 PM",
+      "wednesday": "Wednesday: 9:00 AM - 7:00 PM",
+      "thursday": "Thursday: 9:00 AM - 7:00 PM",
+      "friday": "Friday: 9:00 AM - 7:00 PM",
+      "saturday": "Saturday: 10:00 AM - 5:00 PM",
+      "sunday": "Sunday: Closed",
+      "quickActionsTitle": "Quick Actions",
+      "quickActionsSubtitle": "Need immediate assistance? Try these options",
+      "scheduleConsultation": "Schedule Free Consultation",
+      "liveChat": "Live Chat Support",
+      "checkRefund": "Check Refund Status",
+      "guaranteeTitle": "Service Guarantee",
+      "guaranteeMessage": "We guarantee maximum refunds, accurate filing, and full audit protection. Your satisfaction is our commitment.",
+      "faqTitle": "Frequently Asked Questions",
+      "faqSubtitle": "Quick answers to common questions about our services",
+      "faqQ1": "How quickly can you prepare my return?",
+      "faqA1": "Most individual returns are completed within 24-48 hours. Business returns typically take 3-5 business days depending on complexity.",
+      "faqQ2": "Do you offer audit protection?",
+      "faqA2": "Yes! Full audit defense is included with every tax return we prepare. We'll represent you before the IRS at no additional cost.",
+      "faqQ3": "Can I file from anywhere in the US?",
+      "faqA3": "Absolutely! We serve clients in all 50 states and offer both virtual consultations and in-person meetings where available.",
+      "faqQ4": "What if I'm not satisfied with your service?",
+      "faqA4": "We offer a 100% satisfaction guarantee. If you're not completely satisfied, we'll make it right or provide a full refund."
+    }
+  },
+  "home": {
+    "hero": {
+      "irsAuthorized": "IRS Authorized",
+      "bbbRated": "BBB A+ Rated",
+      "yearsExperience": "25+ Years",
+      "title": "Professional Tax Preparation",
+      "titleHighlight": "You Can Trust",
+      "subtitle": "Expert CPAs. Maximum Refunds. Peace of Mind. Get professional tax services from licensed professionals who know how to save you money.",
+      "ctaFile": "File Your Taxes Online",
+      "ctaSchedule": "Schedule Consultation",
+      "helpText": "Start your return online or speak with a licensed CPA. Call",
+      "happyClients": "Happy Clients",
+      "imageAlt": "Professional tax advisor helping client"
+    },
+    "services": {
+      "sectionTitle": "Our Tax Services",
+      "sectionSubtitle": "Professional tax solutions tailored to your needs",
+      "personal": {
+        "title": "Personal Tax Filing",
+        "description": "Professional preparation for individuals and families. We handle W-2s, deductions, and credits.",
+        "badge": "Most Popular"
+      },
+      "business": {
+        "title": "Business Tax Services",
+        "description": "Comprehensive tax preparation and planning for small businesses, LLCs, and S-Corps.",
+        "badge": "For Businesses"
+      },
+      "planning": {
+        "title": "Tax Planning & Advisory",
+        "description": "Year-round strategic tax planning to minimize liability and maximize savings.",
+        "badge": "Expert Advice"
+      },
+      "learnMore": "Learn More",
+      "supportNote": "All services include free audit protection and year-round support",
+      "ctaFileOnline": "Start Filing Online",
+      "ctaViewAll": "View All Services"
+    },
+    "trustBadges": {
+      "irsEfile": "IRS Authorized E-File Provider",
+      "bbbAccredited": "Better Business Bureau A+ Rating",
+      "cpaBoardCertified": "State Licensed CPAs",
+      "natpMember": "Professional Tax Association"
+    },
+    "howItWorks": {
+      "sectionTitle": "How It Works",
+      "sectionSubtitle": "Four simple steps to professional tax preparation",
+      "step1": {
+        "title": "Book Consultation",
+        "description": "Schedule a free 30-minute consultation with a licensed CPA"
+      },
+      "step2": {
+        "title": "Upload Documents",
+        "description": "Securely upload W-2s, 1099s, and receipts through our portal"
+      },
+      "step3": {
+        "title": "Expert Review",
+        "description": "CPA finds all eligible deductions and prepares your return"
+      },
+      "step4": {
+        "title": "File & Relax",
+        "description": "We handle IRS submission and track your refund status"
+      },
+      "ctaGetStarted": "Get Started Today"
+    },
+    "whyChooseUs": {
+      "sectionTitle": "Why 50,000+ Americans Trust Us",
+      "sectionSubtitle": "Professional tax preparation with the personal touch you deserve",
+      "benefit1": {
+        "title": "Licensed CPAs with 25+ Years Experience",
+        "description": "Our team of certified professionals stays current with tax law changes to maximize your refund."
+      },
+      "benefit2": {
+        "title": "Maximum Refund Guaranteed in Writing",
+        "description": "We guarantee you'll get the largest refund possible, or we'll pay you the difference."
+      },
+      "benefit3": {
+        "title": "Year-Round Support (Not Just Tax Season)",
+        "description": "Get answers to your tax questions anytime. We're here for you all year, not just in April."
+      },
+      "benefit4": {
+        "title": "Bank-Level Security & Encryption",
+        "description": "Your sensitive information is protected with military-grade 256-bit encryption."
+      },
+      "imageAlt": "Professional tax team collaborating",
+      "ctaFile": "File Your Taxes",
+      "ctaLearnMore": "Learn More About Us",
+      "badgeTitle": "BBB A+",
+      "badgeSubtitle": "Rated"
+    },
+    "credentials": {
+      "sectionTitle": "Trusted & Certified",
+      "sectionSubtitle": "Licensed professionals with verified credentials",
+      "credential1": {
+        "title": "IRS E-File Provider",
+        "subtitle": "Authorized"
+      },
+      "credential2": {
+        "title": "BBB Accredited",
+        "subtitle": "A+ Rating"
+      },
+      "credential3": {
+        "title": "State Licensed",
+        "subtitle": "CPA Board Certified"
+      },
+      "credential4": {
+        "title": "256-Bit SSL",
+        "subtitle": "Bank-Level Security"
+      },
+      "bottomNote": "All our preparers are licensed, bonded, and insured for your protection"
+    },
+    "testimonials": {
+      "rating": "4.9 out of 5",
+      "sectionTitle": "What Our Clients Say",
+      "sectionSubtitle": "Based on 50,000+ verified reviews",
+      "testimonial1": {
+        "name": "Sarah Johnson",
+        "role": "Small Business Owner",
+        "location": "Austin, TX",
+        "content": "The CPA team was incredibly knowledgeable and helped me find deductions I didn't even know existed. Professional service from start to finish."
+      },
+      "testimonial2": {
+        "name": "Michael Chen",
+        "role": "Software Engineer",
+        "location": "San Francisco, CA",
+        "content": "Fast, efficient, and professional. The entire process was seamless and my CPA answered all my questions promptly."
+      },
+      "testimonial3": {
+        "name": "Maria Garcia",
+        "role": "Teacher",
+        "location": "Miami, FL",
+        "content": "Best tax service I've used. They made everything easy to understand and were always available when I had questions."
+      },
+      "verifiedClient": "Verified Client",
+      "ctaReadMore": "Read More Reviews"
+    },
+    "faq": {
+      "sectionTitle": "Frequently Asked Questions",
+      "faq1": {
+        "question": "How quickly can I get my refund?",
+        "answer": "With direct deposit, you can receive your federal refund in as little as 24 hours after IRS acceptance. Paper checks typically take 2-3 weeks."
+      },
+      "faq2": {
+        "question": "What documents do I need to file?",
+        "answer": "You'll need your W-2s, 1099s, receipts for deductions, last year's tax return, and any other income or deduction documents. Our platform will guide you through everything you need."
+      },
+      "faq3": {
+        "question": "Is my information secure?",
+        "answer": "Yes! We use bank-level 256-bit encryption and are IRS-authorized. Your data is protected with the same security standards used by major financial institutions."
+      },
+      "faq4": {
+        "question": "What if I need help during filing?",
+        "answer": "Our CPAs are available via chat, phone, or video call. Premium plans include unlimited CPA support throughout the filing process."
+      },
+      "faq5": {
+        "question": "Do you offer audit protection?",
+        "answer": "Yes! All our plans include free audit protection. If you're audited, we'll represent you and handle all IRS communications at no extra cost."
+      }
+    },
+    "finalCTA": {
+      "imageAlt": "Happy family planning their finances",
+      "satisfactionBadge": "98%",
+      "satisfactionLabel": "Satisfaction",
+      "sectionTitle": "Ready to Get Started?",
+      "sectionDescription": "File your taxes online in minutes, or schedule a free consultation with a licensed CPA.",
+      "ctaFile": "File Your Tax Return Online",
+      "ctaSchedule": "Schedule Free Consultation",
+      "trustIndicator1": "Licensed CPAs",
+      "trustIndicator2": "100% Secure",
+      "trustIndicator3": "BBB A+ Rated",
+      "helpText": "Have questions? Call us at",
+      "helpTextOr": "or",
+      "contactLink": "contact us online"
+    },
+    "opportunities": {
+      "sectionTitle": "Join Our Team",
+      "sectionSubtitle": "Looking for career opportunities or want to earn extra income?",
+      "preparer": {
+        "alt": "Professional working on laptop",
+        "badge": "$45-75 per return",
+        "categoryBadge": "Career Opportunity",
+        "title": "Become a Tax Preparer",
+        "description": "Join our network of professional tax preparers. Earn $45-75 per return with flexible hours and remote work.",
+        "benefit1": "Flexible schedule - work when you want",
+        "benefit2": "100% remote - work from anywhere",
+        "benefit3": "Professional E&O insurance included",
+        "buttonText": "Apply Now"
+      },
+      "affiliate": {
+        "alt": "People celebrating success",
+        "badge": "Up to $50 per referral",
+        "categoryBadge": "Earn Extra Cash",
+        "title": "Affiliate Program",
+        "description": "Earn commissions for each client you refer. Perfect for marketers and influencers with unlimited earning potential.",
+        "benefit1": "Earn commission per successful referral",
+        "benefit2": "Marketing materials provided",
+        "benefit3": "Real-time tracking dashboard",
+        "buttonText": "Join Now"
+      }
+    }
+  },
+  "services": {
+    "overview": {
+      "badge": "Professional Tax Services",
+      "title": "Complete Tax",
+      "titleHighlight": "Solutions",
+      "subtitle": "From individual returns to complex business filings, our certified professionals handle all your tax needs with precision and care.",
+      "individual": {
+        "title": "Individual Tax Returns",
+        "description": "Personal tax preparation for individuals and families",
+        "feature1": "Standard & Itemized Deductions",
+        "feature2": "Multiple Income Sources",
+        "feature3": "Investment & Retirement Planning",
+        "feature4": "Education Credits & Deductions",
+        "price": "Starting at $149",
+        "cta": "Start Filing"
+      },
+      "business": {
+        "title": "Business Tax Returns",
+        "description": "Comprehensive business tax services for all entity types",
+        "feature1": "LLC, Corp, Partnership Returns",
+        "feature2": "Self-Employment Tax",
+        "feature3": "Quarterly Estimated Payments",
+        "feature4": "Business Deduction Optimization",
+        "price": "Starting at $299",
+        "cta": "Start Filing"
+      },
+      "realEstate": {
+        "title": "Real Estate Professional",
+        "description": "Specialized services for real estate agents and investors",
+        "feature1": "Real Estate Professional Status",
+        "feature2": "Rental Property Optimization",
+        "feature3": "1031 Exchange Planning",
+        "feature4": "Depreciation Strategies",
+        "price": "Starting at $399",
+        "cta": "Start Filing"
+      },
+      "additionalServices": {
+        "title": "Additional Services",
+        "subtitle": "Comprehensive tax solutions to meet all your needs",
+        "taxAdvance": {
+          "title": "Tax Advance Loans",
+          "description": "Get your refund faster with our advance loan program"
+        },
+        "auditProtection": {
+          "title": "Audit Protection",
+          "description": "Full audit defense and IRS representation services"
+        },
+        "taxPlanning": {
+          "title": "Tax Planning",
+          "description": "Year-round tax planning and strategy sessions"
+        },
+        "priorYear": {
+          "title": "Prior Year Returns",
+          "description": "Amended returns and back-filing services"
+        }
+      },
+      "process": {
+        "title": "How It Works",
+        "subtitle": "Our streamlined process makes tax preparation simple and stress-free",
+        "step1": {
+          "title": "Upload Documents",
+          "description": "Securely upload your tax documents through our encrypted portal"
+        },
+        "step2": {
+          "title": "Expert Review",
+          "description": "Our certified professionals review and prepare your return"
+        },
+        "step3": {
+          "title": "Quality Check",
+          "description": "Multiple quality checks ensure accuracy and maximum refund"
+        },
+        "step4": {
+          "title": "E-File & Track",
+          "description": "E-file your return and track your refund status in real-time"
+        }
+      },
+      "whyChoose": {
+        "title": "Why Choose Tax Genius Pro?",
+        "benefit1": {
+          "title": "Certified Professionals",
+          "description": "Our team includes CPAs, EAs, and tax experts with decades of experience"
+        },
+        "benefit2": {
+          "title": "Maximum Refund Guarantee",
+          "description": "We find every deduction and credit you're entitled to"
+        },
+        "benefit3": {
+          "title": "Fast & Accurate",
+          "description": "Quick turnaround times with 99.9% accuracy rate"
+        },
+        "benefit4": {
+          "title": "Audit Protection",
+          "description": "Full audit defense included with every return we prepare"
+        },
+        "imageAlt": "Tax professional"
+      },
+      "finalCTA": {
+        "title": "Ready to Maximize Your Refund?",
+        "subtitle": "Join thousands who trust Tax Genius Pro for their tax needs",
+        "ctaStart": "Start Your Return",
+        "ctaQuote": "Get Free Quote"
+      }
+    }
+  },
+  "about": {
+    "hero": {
+      "badge": "Established 1990s",
+      "title": "Over 30 Years of",
+      "titleHighlight": "Tax Excellence",
+      "subtitle": "From a small family operation in Atlanta and Chicago to a trusted national partner, our journey has been guided by one simple commitment: helping every client feel supported, informed, and confident in their financial decisions."
+    },
+    "stats": {
+      "years": "30+",
+      "yearsLabel": "Years of Service",
+      "clients": "100K+",
+      "clientsLabel": "Happy Clients",
+      "refunds": "$5B+",
+      "refundsLabel": "Refunds Processed",
+      "rating": "4.9/5",
+      "ratingLabel": "Client Satisfaction"
+    },
+    "beginnings": {
+      "title": "Our Humble Beginnings",
+      "imageBadge": "Est. 1990s • Atlanta & Chicago",
+      "imageAlt": "Small family business serving local community",
+      "paragraph1": "Over 30 years ago, Tax Genius was born out of a small, family-run operation serving the local communities of Atlanta and Chicago. Back then, we worked side-by-side with neighbors, small business owners, and hardworking families who needed guidance through the complexities of the tax code.",
+      "paragraph2": "In those early days, our commitment was simple: help every client feel supported, informed, and confident in their financial decisions."
+    },
+    "trust": {
+      "title": "Building Trust & Expertise",
+      "imageAlt": "Tax professionals consulting with clients",
+      "paragraph1": "With each passing year, our team grew in knowledge and capability. We listened closely to the concerns of our clients, learned from their experiences, and honed our craft.",
+      "paragraph2": "By offering transparent advice, personalized tax solutions, and hands-on support, we became more than just another tax preparation service—we became trusted partners who cared deeply about improving our clients' financial well-being.",
+      "card1Title": "Transparent",
+      "card1Subtitle": "Honest Advice",
+      "card2Title": "Personalized",
+      "card2Subtitle": "Custom Solutions"
+    },
+    "community": {
+      "title": "Investing in People & Communities",
+      "imageAlt": "Community workshop and financial literacy training",
+      "badgeTitle": "Community Programs",
+      "badgeSubtitle": "Financial literacy workshops",
+      "paragraph1": "Our commitment to community has always been at the heart of Tax Genius. We've created jobs, supported local training initiatives, and invested in charitable programs that give back to the neighborhoods we've served from the start.",
+      "paragraph2": "By offering financial literacy workshops, sponsoring educational endeavors, and empowering our team members to volunteer, we aim to uplift the communities that have been instrumental to our success.",
+      "item1Title": "Job Creation",
+      "item1Description": "Supporting local employment and career growth",
+      "item2Title": "Training Programs",
+      "item2Description": "Investing in professional development and education",
+      "item3Title": "Charitable Giving",
+      "item3Description": "Supporting community causes and volunteer initiatives"
+    },
+    "innovation": {
+      "title": "Embracing Technology & Innovation",
+      "imageAlt": "Modern tax preparation software and digital innovation",
+      "paragraph1": "As the world of finance evolved, so did we. We expanded beyond traditional in-office services to develop intuitive online tax preparation software.",
+      "paragraph2": "Today, our innovative digital platform combines decades of tax expertise with user-friendly tools. This ensures that anyone, from first-time filers to seasoned business owners, can navigate their taxes with ease and peace of mind.",
+      "cardTitle": "Digital First, Human Always",
+      "cardDescription": "Our platform combines cutting-edge technology with access to real CPAs whenever you need personalized guidance."
+    },
+    "vision": {
+      "title": "Our Vision Forward",
+      "paragraph1": "Today, Tax Genius stands as a modern, forward-looking company rooted in the values that shaped our early days. As we continue to grow and adapt, our mission remains constant: to provide expert guidance, accessible tools, and unwavering support to everyone who trusts us with their tax needs.",
+      "paragraph2": "It's our honor to help you find clarity, confidence, and comfort in your financial journey—now, and for many years to come.",
+      "teamImageAlt": "Diverse team collaboration at Tax Genius",
+      "teamCaption": "Our team is ready to serve you"
+    },
+    "cta": {
+      "title": "Ready to Experience the Tax Genius Difference?",
+      "subtitle": "Join over 100,000 satisfied clients who trust us with their tax needs. Let's write the next chapter of your financial success together.",
+      "ctaStart": "Get Started Today",
+      "ctaContact": "Contact Us"
+    }
+  },
+  "testimonials": {
+    "hero": {
+      "badge": "Trusted by Thousands",
+      "title": "What Our Clients Say",
+      "description": "Don't just take our word for it. Here's what real clients have to say about their experience with TaxGeniusPro."
+    },
+    "stats": {
+      "clients": "10,000+",
+      "clientsLabel": "Happy Clients",
+      "rating": "4.9/5",
+      "ratingLabel": "Average Rating",
+      "experience": "25+ Years",
+      "experienceLabel": "Combined Experience",
+      "retention": "98%",
+      "retentionLabel": "Client Retention"
+    },
+    "trust": {
+      "title": "Why Clients Trust TaxGeniusPro",
+      "card1Title": "IRS Authorized",
+      "card1Description": "Licensed and certified tax professionals",
+      "card2Title": "BBB A+ Rated",
+      "card2Description": "Recognized for excellence and integrity",
+      "card3Title": "Satisfaction Guaranteed",
+      "card3Description": "We stand behind our work 100%"
+    },
+    "cta": {
+      "title": "Ready to Experience the TaxGeniusPro Difference?",
+      "description": "Join thousands of satisfied clients who trust us with their taxes. Get started today!",
+      "ctaStart": "Start Your Return",
+      "ctaContact": "Contact Us"
+    }
+  },
+  "startFiling": {
+    "hero": {
+      "badge": "File in 15 Minutes",
+      "title": "Get Every Dollar You",
+      "titleHighlight": "Deserve",
+      "titleEnd": "This Tax Season",
+      "subtitle": "Expert CPAs find all the deductions and credits you qualify for. Fast, easy, and you keep more money.",
+      "ctaButton": "Start Your Return Now",
+      "noSignup": "No signup required to start",
+      "stat1": "15min",
+      "stat1Label": "Average filing time",
+      "stat2": "$3,200",
+      "stat2Label": "Average refund",
+      "stat3": "4.9★",
+      "stat3Label": "Client rating",
+      "imageAlt": "Happy person celebrating tax refund on laptop",
+      "floatingCardStat": "50,000+",
+      "floatingCardLabel": "Refunds Processed"
+    },
+    "whyChoose": {
+      "title": "Why People Choose Tax Genius Pro",
+      "subtitle": "We focus on what matters most: your time and your money",
+      "speed": {
+        "title": "Lightning Fast Filing",
+        "description": "Most clients complete their return in under 15 minutes. Our smart form asks only what's needed for YOUR situation.",
+        "feature1": "Simple questions, no tax jargon",
+        "feature2": "Save & resume anytime",
+        "feature3": "Returns filed within 48 hours"
+      },
+      "refund": {
+        "title": "Maximum Refund Promise",
+        "description": "Our CPAs find every deduction and credit you qualify for. See what you're entitled to - most clients get $3,200+.",
+        "feature1": "Expert review of your return",
+        "feature2": "Find hidden deductions",
+        "feature3": "100% accuracy guarantee"
+      },
+      "ctaButton": "See What You Qualify For"
+    },
+    "testimonials": {
+      "title": "Real People, Real Results",
+      "subtitle": "See what clients say about their refunds and experience",
+      "joinText": "Join 50,000+ satisfied clients"
+    },
+    "howItWorks": {
+      "title": "Get Your Refund in 3 Simple Steps",
+      "subtitle": "Fast, easy, and designed for real people",
+      "step1Title": "Answer Quick Questions",
+      "step1Description": "Takes 15 minutes or less. Simple questions about your income, family, and deductions.",
+      "step2Title": "Expert CPA Review",
+      "step2Description": "Licensed tax professionals review your return and find every deduction you qualify for.",
+      "step3Title": "Get Your Maximum Refund",
+      "step3Description": "We file your return and you get every dollar you deserve. Fast, secure, guaranteed."
+    },
+    "finalCta": {
+      "title": "Ready to See What You Qualify For?",
+      "subtitle": "Start your return now. No signup required. Most people finish in under 15 minutes.",
+      "feature1": "Find all deductions and credits",
+      "feature2": "Expert CPA reviews your return",
+      "feature3": "100% accuracy guaranteed",
+      "ctaButton": "Start Your Tax Return Now",
+      "subtext": "Average refund: $3,200 • File in 15 minutes",
+      "imageAlt": "Person excited about tax refund"
+    },
+    "trust": {
+      "badge1": "IRS Authorized E-File Provider",
+      "badge2": "256-Bit Bank-Level Encryption",
+      "badge3": "BBB A+ Rated"
+    }
+  },
+  "taxPlanning": {
+    "hero": {
+      "badge": "Strategic Tax Planning",
+      "title": "Proactive Tax Planning &",
+      "titleHighlight": "Advisory Services",
+      "subtitle": "Don't wait until April. Year-round strategic planning to minimize your tax burden and maximize wealth preservation.",
+      "ctaButton": "Schedule Strategy Session",
+      "ctaPhone": "(404) 627-1015",
+      "feature1": "Year-Round Support",
+      "feature2": "Save 20-40% on Taxes",
+      "feature3": "CPA Tax Strategists",
+      "imageAlt": "Financial planning consultation",
+      "statNumber": "35%",
+      "statLabel": "Avg. Tax Savings"
+    },
+    "whyPlan": {
+      "title": "Why Year-Round Planning Matters",
+      "subtitle": "Tax planning isn't just for April. Strategic decisions throughout the year can save you thousands.",
+      "card1Title": "Quarterly Reviews",
+      "card1Description": "Regular check-ins to optimize tax position throughout the year",
+      "card2Title": "Strategic Decisions",
+      "card2Description": "Make informed choices about investments, business expenses, retirement",
+      "card3Title": "Maximize Deductions",
+      "card3Description": "Identify opportunities before year-end to reduce taxable income",
+      "card4Title": "Risk Management",
+      "card4Description": "Avoid penalties, estimated tax issues, and surprise tax bills"
+    },
+    "process": {
+      "title": "Our Planning Process",
+      "subtitle": "A systematic approach to minimizing your tax liability",
+      "step1": "1",
+      "step1Title": "Initial Discovery",
+      "step1Description": "Deep dive into your financial situation, goals, and current tax position",
+      "step2": "2",
+      "step2Title": "Strategy Development",
+      "step2Description": "Create customized tax plan with specific action items and timelines",
+      "step3": "3",
+      "step3Title": "Implementation",
+      "step3Description": "Execute strategies with guidance on timing, documentation, and compliance",
+      "step4": "4",
+      "step4Title": "Ongoing Monitoring",
+      "step4Description": "Quarterly reviews and adjustments based on life changes and tax law updates"
+    },
+    "services": {
+      "title": "Planning Services We Offer",
+      "subtitle": "Comprehensive advisory covering all aspects of tax optimization",
+      "service1Title": "Retirement Planning",
+      "service1Description": "IRA, 401(k), SEP, Solo 401(k) strategies to reduce current taxes",
+      "service2Title": "Real Estate Strategies",
+      "service2Description": "1031 exchanges, rental property optimization, vacation home rules",
+      "service3Title": "Investment Tax Planning",
+      "service3Description": "Capital gains harvesting, qualified dividend strategies, wash sales",
+      "service4Title": "Estate & Gift Planning",
+      "service4Description": "Minimize estate taxes, optimize gifting, trust structures",
+      "service5Title": "Business Entity Selection",
+      "service5Description": "LLC vs S-Corp vs C-Corp analysis for optimal tax treatment",
+      "service6Title": "Multi-State Planning",
+      "service6Description": "Domicile strategy, state tax minimization for high earners",
+      "imageAlt": "Strategic planning session"
+    },
+    "pricing": {
+      "title": "Planning Packages",
+      "subtitle": "Choose the level of support that fits your needs",
+      "essentials": {
+        "name": "Essentials",
+        "price": "$500",
+        "period": "/quarter",
+        "feature1": "Quarterly tax planning calls",
+        "feature2": "Estimated tax calculations",
+        "feature3": "Basic strategy recommendations",
+        "feature4": "Email support",
+        "cta": "Get Started"
+      },
+      "professional": {
+        "name": "Professional",
+        "price": "$1,200",
+        "period": "/quarter",
+        "feature1": "Monthly strategy sessions",
+        "feature2": "Comprehensive tax modeling",
+        "feature3": "Business & personal planning",
+        "feature4": "Priority phone/email support",
+        "feature5": "Year-end planning session",
+        "badge": "Most Popular",
+        "cta": "Most Popular"
+      },
+      "executive": {
+        "name": "Executive",
+        "price": "$2,500",
+        "period": "/quarter",
+        "feature1": "Unlimited CPA access",
+        "feature2": "Multi-entity planning",
+        "feature3": "Estate & succession planning",
+        "feature4": "Investment strategy review",
+        "feature5": "Dedicated tax strategist",
+        "feature6": "Same-day response",
+        "cta": "Premium Support"
+      },
+      "footnote": "All packages include tax return preparation at no additional cost"
+    },
+    "cta": {
+      "title": "Stop Overpaying on Taxes",
+      "subtitle": "Schedule your free tax strategy consultation today and discover how much you could be saving",
+      "ctaButton": "Schedule Free Consultation",
+      "ctaPhone": "(404) 627-1015"
+    }
+  },
+  "personalTaxFiling": {
+    "hero": {
+      "badge": "Professional Tax Preparation",
+      "title": "Personal Tax",
+      "titleHighlight": "Filing Made Simple",
+      "subtitle": "Expert CPAs handle your personal tax return from start to finish. Maximum refund guaranteed.",
+      "ctaStart": "Start Filing Online",
+      "ctaSchedule": "Schedule Consultation"
+    },
+    "whatsIncluded": {
+      "title": "What's Included",
+      "service1Title": "Simple Returns",
+      "service1Description": "W-2 income, standard deduction",
+      "service2Title": "Homeowners",
+      "service2Description": "Mortgage interest, property taxes",
+      "service3Title": "Families",
+      "service3Description": "Child tax credit, dependent care",
+      "service4Title": "Investments",
+      "service4Description": "Stocks, bonds, dividends",
+      "service5Title": "Retirement",
+      "service5Description": "IRA, 401(k), Social Security",
+      "service6Title": "Audit Protection",
+      "service6Description": "Full IRS audit defense included"
+    },
+    "pricing": {
+      "title": "Transparent Pricing",
+      "basicLabel": "Basic",
+      "basicPrice": "$149",
+      "basicDescription": "Simple W-2 returns",
+      "standardLabel": "Standard",
+      "standardPrice": "$249",
+      "standardDescription": "Itemized deductions, credits",
+      "standardBadge": "Most Popular",
+      "complexLabel": "Complex",
+      "complexPrice": "$399+",
+      "complexDescription": "Investments, rental property"
+    },
+    "cta": {
+      "title": "Ready to File Your Taxes?",
+      "subtitle": "Join 100,000+ satisfied clients. File with confidence.",
+      "ctaButton": "Start Your Return"
+    }
+  },
+  "irsResolution": {
+    "hero": {
+      "badge": "Urgent IRS Issues?",
+      "title": "IRS Problem?",
+      "titleHighlight": "We Fix It.",
+      "subtitle": "Liens, levies, back taxes, unfiled returns. Our tax resolution specialists negotiate with the IRS to resolve your tax debt and stop collections.",
+      "ctaImmediate": "Get Immediate Help",
+      "ctaPhone": "Call Now - Urgent",
+      "imageAlt": "Tax professional working on resolution",
+      "urgentBadge": "Don't Wait",
+      "urgentMessage": "Act now to stop collections",
+      "features": {
+        "response": "24-Hour Response",
+        "licensed": "Licensed Tax Pros",
+        "stopCollections": "Stop Collections",
+        "successRate": "95% Success Rate"
+      }
+    },
+    "problemsWeResolve": {
+      "title": "IRS Problems We Resolve",
+      "subtitle": "Expert representation for the most serious tax issues",
+      "taxLiens": {
+        "title": "Tax Liens",
+        "description": "Remove IRS liens from your property and credit report",
+        "badge": "Urgent"
+      },
+      "bankLevies": {
+        "title": "Bank Levies",
+        "description": "Stop wage garnishment and bank account seizures"
+      },
+      "unfiledReturns": {
+        "title": "Unfiled Returns",
+        "description": "Catch up on years of unfiled tax returns"
+      },
+      "backTaxes": {
+        "title": "Back Taxes",
+        "description": "Negotiate payment plans and settlements for tax debt"
+      },
+      "offerInCompromise": {
+        "title": "Offer in Compromise",
+        "description": "Settle tax debt for less than you owe"
+      },
+      "penaltyAbatement": {
+        "title": "Penalty Abatement",
+        "description": "Reduce or eliminate IRS penalties and interest"
+      },
+      "weCanHelp": "We Can Help"
+    },
+    "resolutionProcess": {
+      "title": "Our Resolution Process",
+      "subtitle": "Step-by-step path to IRS resolution",
+      "step1": {
+        "step": "1",
+        "title": "Emergency Assessment",
+        "description": "Free consultation to assess urgency and options"
+      },
+      "step2": {
+        "step": "2",
+        "title": "Immediate Protection",
+        "description": "File power of attorney, stop IRS collections"
+      },
+      "step3": {
+        "step": "3",
+        "title": "Investigation",
+        "description": "Review tax transcripts, identify issues"
+      },
+      "step4": {
+        "step": "4",
+        "title": "Strategy & Negotiation",
+        "description": "Develop resolution plan, negotiate with IRS"
+      },
+      "step5": {
+        "step": "5",
+        "title": "Resolution",
+        "description": "Achieve settlement, establish compliance"
+      },
+      "stepLabel": "Step"
+    },
+    "successStories": {
+      "title": "Real Results for Real People",
+      "subtitle": "Client success stories (names changed for privacy)",
+      "story1": {
+        "name": "James R.",
+        "situation": "$180,000 Back Taxes",
+        "result": "Settled for $25,000 via Offer in Compromise",
+        "savings": "86%",
+        "timeline": "8 months"
+      },
+      "story2": {
+        "name": "Linda M.",
+        "situation": "Wage Garnishment",
+        "result": "Released levy, payment plan at $400/mo",
+        "savings": "Restored income",
+        "timeline": "3 weeks"
+      },
+      "story3": {
+        "name": "David K.",
+        "situation": "5 Years Unfiled Returns",
+        "result": "All returns filed, $45K penalties abated",
+        "savings": "$45K saved",
+        "timeline": "4 months"
+      },
+      "resolved": "Resolved",
+      "savingsLabel": "Savings",
+      "timelineLabel": "Timeline"
+    },
+    "urgencyCTA": {
+      "badge": "Time is critical when dealing with the IRS",
+      "title": "Don't Face the IRS Alone",
+      "subtitle": "Every day you wait, interest and penalties add up. Let our tax resolution experts handle it.",
+      "ctaEmergency": "Get Emergency Help Now",
+      "ctaCall": "Call (404) 627-1015",
+      "features": {
+        "response": "24-Hour Response",
+        "stopCollections": "Stop Collections Fast",
+        "licensedPros": "Licensed Tax Pros",
+        "freeConsultation": "Free Consultation"
+      }
+    },
+    "whyChooseUs": {
+      "title": "Why Choose Us for IRS Resolution",
+      "imageAlt": "Professional tax resolution team",
+      "reason1": {
+        "title": "Licensed Enrolled Agents & CPAs",
+        "description": "Authorized to represent you before the IRS"
+      },
+      "reason2": {
+        "title": "95% Success Rate",
+        "description": "Proven track record of favorable outcomes"
+      },
+      "reason3": {
+        "title": "Fast Action",
+        "description": "24-hour response time for urgent cases"
+      },
+      "reason4": {
+        "title": "Affordable Payment Plans",
+        "description": "Flexible financing for resolution services"
+      }
+    }
+  },
+  "businessTax": {
+    "hero": {
+      "badge": "Business Tax Services",
+      "title": "Expert Tax Solutions for",
+      "titleHighlight": "Your Business",
+      "subtitle": "Comprehensive tax preparation and planning for small businesses, startups, and growing companies. Maximize deductions, minimize liability.",
+      "ctaConsultation": "Schedule Business Consultation",
+      "ctaPhone": "(404) 627-1015",
+      "stat1": "500+ Businesses Served",
+      "stat2": "IRS Authorized",
+      "stat3": "Audit Protection Included",
+      "imageAlt": "Business professionals in modern office",
+      "savingsAmount": "$25K+",
+      "savingsLabel": "Avg. Tax Savings"
+    },
+    "businessTypes": {
+      "title": "We Serve All Business Types",
+      "subtitle": "Expert tax preparation for every business structure",
+      "soleProprietor": {
+        "title": "Sole Proprietor",
+        "description": "Schedule C filing, self-employment tax optimization"
+      },
+      "llc": {
+        "title": "LLC",
+        "description": "Single & multi-member LLC returns, entity election strategy"
+      },
+      "sCorp": {
+        "title": "S-Corporation",
+        "description": "Form 1120-S, reasonable compensation, K-1 distributions"
+      },
+      "cCorp": {
+        "title": "C-Corporation",
+        "description": "Form 1120, corporate tax planning, profit optimization"
+      }
+    },
+    "servicesIncluded": {
+      "title": "What's Included",
+      "subtitle": "Comprehensive tax services tailored to your business needs",
+      "imageAlt": "Tax professional analyzing business documents",
+      "service1Title": "Federal & State Tax Returns",
+      "service1Description": "Complete preparation and e-filing for all entities",
+      "service2Title": "Tax Planning & Strategy",
+      "service2Description": "Year-round guidance to minimize tax liability",
+      "service3Title": "Quarterly Estimated Taxes",
+      "service3Description": "Calculate and file quarterly payments to avoid penalties",
+      "service4Title": "Audit Protection",
+      "service4Description": "Full representation if IRS selects your return",
+      "service5Title": "Deduction Maximization",
+      "service5Description": "Identify all eligible business write-offs",
+      "service6Title": "Year-Round Support",
+      "service6Description": "Ongoing access to your CPA team"
+    },
+    "industryExpertise": {
+      "title": "Industry Expertise",
+      "subtitle": "We understand the unique tax challenges of your industry",
+      "ecommerce": "E-Commerce & Online Retail",
+      "professionalServices": "Professional Services",
+      "realEstate": "Real Estate",
+      "healthcare": "Healthcare",
+      "construction": "Construction & Contractors",
+      "hospitality": "Restaurants & Hospitality"
+    },
+    "pricing": {
+      "title": "Business Tax Pricing",
+      "subtitle": "Transparent pricing with no hidden fees",
+      "soleProprietor": {
+        "name": "Sole Proprietor",
+        "price": "$299",
+        "startingPrice": "Starting price",
+        "feature1": "Schedule C filing",
+        "feature2": "Self-employment tax",
+        "feature3": "Basic deductions",
+        "feature4": "E-file included"
+      },
+      "llcSCorp": {
+        "name": "LLC / S-Corp",
+        "price": "$799",
+        "popularBadge": "Most Popular",
+        "startingPrice": "Starting price",
+        "feature1": "Form 1065/1120-S",
+        "feature2": "K-1 preparation",
+        "feature3": "Payroll tax review",
+        "feature4": "Quarterly estimates",
+        "feature5": "Audit protection"
+      },
+      "cCorp": {
+        "name": "C-Corporation",
+        "price": "$1,299",
+        "startingPrice": "Starting price",
+        "feature1": "Form 1120",
+        "feature2": "Corporate tax planning",
+        "feature3": "Multi-state filing",
+        "feature4": "Tax strategy consulting",
+        "feature5": "Priority support"
+      },
+      "ctaGetStarted": "Get Started"
+    },
+    "cta": {
+      "title": "Ready to Optimize Your Business Taxes?",
+      "subtitle": "Schedule a free consultation with a business tax specialist today",
+      "ctaConsultation": "Schedule Consultation",
+      "ctaCall": "Call Now"
+    }
+  },
+  "auditProtection": {
+    "hero": {
+      "badge": "Complete Audit Protection",
+      "title": "IRS Audit Protection &",
+      "titleHighlight": "Defense Services",
+      "subtitle": "Comprehensive audit representation included with every tax return. If the IRS calls, we handle everything.",
+      "ctaProtect": "Get Protected Today",
+      "ctaPhone": "(404) 627-1015",
+      "feature1": "100% Coverage",
+      "feature2": "CPA Representation",
+      "feature3": "98% Success Rate",
+      "imageAlt": "Professional reviewing documents"
+    },
+    "stats": {
+      "auditsResolved": "Audits Resolved Favorably",
+      "clientsProtected": "Clients Protected",
+      "avgResponseTime": "Avg. Response Time",
+      "outOfPocketCosts": "Out-of-Pocket Costs",
+      "days": " Days"
+    },
+    "coverage": {
+      "title": "What We Cover",
+      "subtitle": "Complete protection for all types of IRS examinations",
+      "correspondence": {
+        "title": "Correspondence Audits",
+        "description": "IRS letters requesting documentation or clarification"
+      },
+      "office": {
+        "title": "Office Audits",
+        "description": "In-person meetings at IRS office with full representation"
+      },
+      "field": {
+        "title": "Field Audits",
+        "description": "IRS visits to your business with CPA present"
+      },
+      "cp2000": {
+        "title": "CP2000 Notices",
+        "description": "Income discrepancy notices and automated adjustments"
+      },
+      "amended": {
+        "title": "Amended Returns",
+        "description": "Defense of amended returns and prior year adjustments"
+      },
+      "appeals": {
+        "title": "Appeals Process",
+        "description": "Representation through IRS appeals if needed"
+      },
+      "fullyCovered": "Fully Covered"
+    },
+    "process": {
+      "title": "How We Protect You",
+      "subtitle": "Our step-by-step audit defense process",
+      "step1": {
+        "title": "Immediate Notification",
+        "description": "You forward the IRS notice to us. We acknowledge receipt within 24 hours."
+      },
+      "step2": {
+        "title": "Case Assessment",
+        "description": "CPA reviews your return and IRS inquiry to develop defense strategy."
+      },
+      "step3": {
+        "title": "Document Gathering",
+        "description": "We request and organize all supporting documentation needed."
+      },
+      "step4": {
+        "title": "IRS Response",
+        "description": "CPA handles all communication with IRS on your behalf."
+      },
+      "step5": {
+        "title": "Resolution",
+        "description": "We negotiate the best outcome and close the audit."
+      }
+    },
+    "peaceOfMind": {
+      "title": "Complete Peace of Mind",
+      "subtitle": "With audit protection, you'll never face the IRS alone",
+      "benefit1": {
+        "title": "No Out-of-Pocket Costs",
+        "description": "Audit defense included with your tax return - no extra fees if audited"
+      },
+      "benefit2": {
+        "title": "Expert CPA Representation",
+        "description": "Licensed professionals with years of IRS audit experience handle your case"
+      },
+      "benefit3": {
+        "title": "We Handle Everything",
+        "description": "You don't talk to the IRS. We manage all correspondence and meetings."
+      },
+      "benefit4": {
+        "title": "98% Success Rate",
+        "description": "Proven track record of favorable outcomes for our clients"
+      },
+      "ctaProtect": "Get Protected Now",
+      "imageAlt": "Happy family feeling secure"
+    },
+    "finalCta": {
+      "title": "File Your Taxes with Confidence",
+      "subtitle": "Get complete audit protection included with your tax return at no extra cost",
+      "ctaStart": "Get Started Today",
+      "ctaPhone": "(404) 627-1015"
+    }
+  },
+  "auth": {
+    "login": {
+      "redirecting": "Redirecting to sign in...",
+      "loading": "Loading..."
+    },
+    "selectRole": {
+      "loading": {
+        "title": "Loading...",
+        "subtitle": "Checking your account status"
+      },
+      "header": {
+        "title": "Select Your Role",
+        "subtitle": "Choose the option that best describes how you'll use Tax Genius Pro"
+      },
+      "roles": {
+        "client": {
+          "label": "Tax Client",
+          "description": "I need tax preparation services"
+        },
+        "taxPreparer": {
+          "label": "Tax Preparer",
+          "description": "I prepare taxes and want customized marketing materials"
+        },
+        "affiliate": {
+          "label": "Affiliate Marketer",
+          "description": "I want to market tax services and earn referral commissions"
+        }
+      },
+      "buttons": {
+        "continue": "Continue",
+        "settingUp": "Setting up your account..."
+      },
+      "error": "Failed to update role. Please try again."
+    },
+    "error": {
+      "loading": "Loading...",
+      "errors": {
+        "Configuration": {
+          "title": "Server Configuration Error",
+          "description": "There is a problem with the server configuration. Please contact support if this persists."
+        },
+        "AccessDenied": {
+          "title": "Access Denied",
+          "description": "You do not have permission to sign in. Please contact an administrator."
+        },
+        "Verification": {
+          "title": "Verification Failed",
+          "description": "The verification token has expired or has already been used."
+        },
+        "OAuthSignin": {
+          "title": "OAuth Sign In Error",
+          "description": "Error occurred while trying to sign in with OAuth provider."
+        },
+        "OAuthCallback": {
+          "title": "OAuth Callback Error",
+          "description": "Error occurred during OAuth callback."
+        },
+        "OAuthCreateAccount": {
+          "title": "OAuth Account Creation Error",
+          "description": "Could not create OAuth provider account."
+        },
+        "EmailCreateAccount": {
+          "title": "Email Account Creation Error",
+          "description": "Could not create email account."
+        },
+        "Callback": {
+          "title": "Callback Error",
+          "description": "Error occurred during authentication callback."
+        },
+        "OAuthAccountNotLinked": {
+          "title": "Account Not Linked",
+          "description": "This email is already associated with another account. Please sign in with your original method."
+        },
+        "EmailSignin": {
+          "title": "Email Sign In Error",
+          "description": "Error occurred while sending verification email."
+        },
+        "CredentialsSignin": {
+          "title": "Sign In Failed",
+          "description": "Invalid email or password. Please check your credentials and try again."
+        },
+        "SessionRequired": {
+          "title": "Session Required",
+          "description": "You must be signed in to access this page."
+        },
+        "Default": {
+          "title": "Authentication Error",
+          "description": "An error occurred during authentication. Please try again."
+        }
+      },
+      "technicalDetails": "Technical Details:",
+      "contactSupport": "Please contact support@taxgeniuspro.tax",
+      "tip": "Tip:",
+      "correctCredentials": "Make sure you're using the correct email and password. Passwords are case-sensitive.",
+      "tryAgain": "Try Again",
+      "goHome": "Go Home",
+      "needHelp": "Need help?",
+      "contactSupportLink": "Contact Support"
+    },
+    "signin": {
+      "logoAlt": "Tax Genius Pro",
+      "client": {
+        "badge": "Welcome Back",
+        "heading": "Continue Your Tax Filing",
+        "subheading": "Sign in to access your tax documents, track your refund, and manage your account",
+        "benefit1": "Pick up where you left off",
+        "benefit2": "Track your refund status",
+        "benefit3": "Secure & encrypted",
+        "ctaText": "Sign In to Your Account",
+        "imageSuggestion": "Professional reviewing documents confidently",
+        "welcomeBack": "Welcome back! Let's get your taxes done.",
+        "formSubheading": "Continue your tax filing journey"
+      },
+      "preparer": {
+        "badge": "Preparer Portal",
+        "heading": "Welcome Back, Professional",
+        "subheading": "Access your client dashboard, manage tax returns, and track your earnings",
+        "benefit1": "Manage your clients",
+        "benefit2": "Track your earnings",
+        "benefit3": "Access your tools",
+        "ctaText": "Sign In to Dashboard",
+        "imageSuggestion": "Tax professional at work",
+        "welcomeBack": "Ready to help more clients today?",
+        "formSubheading": "Access your professional dashboard"
+      },
+      "affiliate": {
+        "badge": "💰 Affiliate Portal",
+        "heading": "Welcome Back!",
+        "subheading": "Check your earnings, share your link, and see how much money you've made!",
+        "benefit1": "See your earnings instantly",
+        "benefit2": "Track active referrals",
+        "benefit3": "Request payouts",
+        "ctaText": "Sign In & Start Earning",
+        "imageSuggestion": "Person checking earnings on phone happily",
+        "welcomeBack": "Let's see how much you've earned! 🤑",
+        "formSubheading": "Sign in to check your earnings and share your link"
+      },
+      "form": {
+        "email": "Email",
+        "emailPlaceholder": "you@example.com",
+        "password": "Password",
+        "passwordPlaceholder": "Enter your password",
+        "rememberMe": "Remember me",
+        "forgotPassword": "Forgot password?",
+        "signInButton": "Sign In",
+        "signingInButton": "Signing in...",
+        "showPassword": "Show password",
+        "hidePassword": "Hide password",
+        "dontHaveAccount": "Don't have an account?",
+        "signUp": "Sign up",
+        "orContinueWith": "Or continue with",
+        "signInWithGoogle": "Sign in with Google",
+        "emailForMagicLink": "Enter email for magic link",
+        "signInWithMagicLink": "Sign in with Magic Link",
+        "sendingMagicLink": "Sending link...",
+        "magicLinkSent": "Magic link sent!",
+        "orUseEmailPassword": "Or use email & password",
+        "showEmailPasswordOptions": "Show email/password options",
+        "hideEmailPasswordOptions": "Hide email/password options"
+      },
+      "errors": {
+        "invalidCredentials": "Invalid email or password. Please try again.",
+        "unexpectedError": "An unexpected error occurred. Please try again."
+      },
+      "imagePlaceholder": {
+        "replaceWith": "[Replace with image]",
+        "recommended": "Recommended: 800x450px"
+      }
+    },
+    "signup": {
+      "logoAlt": "Tax Genius Pro",
+      "client": {
+        "badge": "Professional Tax Services",
+        "heading": "Get Your Taxes Done by Professionals",
+        "subheading": "Join 50,000+ satisfied customers who trust us for accurate, stress-free tax filing",
+        "benefit1": "Maximum refund guaranteed",
+        "benefit2": "IRS-certified CPAs",
+        "benefit3": "Average refund: $3,259",
+        "ctaText": "Start Your Free Tax Filing",
+        "imageSuggestion": "Happy family receiving tax refund",
+        "trustIndicator": "Trusted by 50,000+ satisfied customers",
+        "accountSubtext": "Create your account to begin filing"
+      },
+      "preparer": {
+        "badge": "Career Opportunity",
+        "heading": "Build Your Tax Preparation Career",
+        "subheading": "Join our network of professional tax preparers. Flexible hours, remote work, earn $45-75 per return",
+        "benefit1": "Earn up to $5,000/month",
+        "benefit2": "100% remote - work from anywhere",
+        "benefit3": "E&O insurance included",
+        "ctaText": "Start Your Application",
+        "imageSuggestion": "Professional tax preparer working confidently",
+        "trustIndicator": "Trusted by 500+ professional tax preparers",
+        "accountSubtext": "Create your professional account to get started"
+      },
+      "affiliate": {
+        "badge": "Start Earning Today",
+        "heading": "Start Making Money Now!",
+        "subheading": "Earn up to $50 for each friend you refer. Easy money, unlimited potential. Join thousands earning extra cash!",
+        "benefit1": "Up to $50 per referral - No limits!",
+        "benefit2": "Get paid within 7 days",
+        "benefit3": "Super easy - just share your link",
+        "ctaText": "Get Your Referral Link Now",
+        "imageSuggestion": "Excited people celebrating money earnings",
+        "trustIndicator": "Join 10,000+ people already earning extra cash",
+        "accountSubtext": "Create your account and start earning in minutes"
+      },
+      "form": {
+        "fullName": "Full Name",
+        "email": "Email",
+        "password": "Password",
+        "confirmPassword": "Confirm Password",
+        "namePlaceholder": "John M Doe (include middle name for tax preparers)",
+        "emailPlaceholder": "you@example.com",
+        "passwordPlaceholder": "At least 8 characters",
+        "confirmPasswordPlaceholder": "Re-enter your password",
+        "preparerNameHint": "Include your middle name/initial for a personalized tracking code (e.g., \"jmd\")",
+        "createAccountButton": "Create Account",
+        "creatingAccountButton": "Creating account...",
+        "termsText": "By creating an account, you agree to our",
+        "termsLink": "Terms of Service",
+        "termsAnd": "and",
+        "privacyLink": "Privacy Policy",
+        "alreadyHaveAccount": "Already have an account?",
+        "signInLink": "Sign in"
+      },
+      "errors": {
+        "passwordsDoNotMatch": "Passwords do not match",
+        "passwordTooShort": "Password must be at least 8 characters long",
+        "failedToCreateAccount": "Failed to create account",
+        "unexpectedError": "An unexpected error occurred. Please try again."
+      },
+      "imagePlaceholder": {
+        "replaceWith": "[Replace with image]",
+        "recommended": "Recommended: 800x450px"
+      }
+    },
+    "signout": {
+      "signingOut": "Signing out...",
+      "pleaseWait": "Please wait while we sign you out"
+    },
+    "verify": {
+      "title": "Email Verification",
+      "description": "Email verification is now handled automatically by our authentication provider",
+      "alertMessage": "When you sign up, you'll receive a verification email automatically. Click the link in that email to verify your account.",
+      "signUpButton": "Sign Up",
+      "signInButton": "Already have an account? Sign In"
+    },
+    "setupPassword": {
+      "validating": "Validating your invitation...",
+      "invalidLinkTitle": "Invalid Link",
+      "invalidLinkDescription": "This invitation link is invalid or has expired.",
+      "invalidLinkMessage": "Invitation links expire after 24 hours. Please contact your administrator for a new invitation.",
+      "goToLoginButton": "Go to Login",
+      "setPasswordTitle": "Set Your Password",
+      "setPasswordDescription": "Welcome to Tax Genius Pro! Set your password to get started.",
+      "nameLabel": "Name",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "passwordHint": "Must be at least 8 characters",
+      "confirmPasswordLabel": "Confirm Password",
+      "confirmPasswordPlaceholder": "Confirm your password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "setPasswordButton": "Set Password & Continue",
+      "settingPasswordButton": "Setting Password...",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "passwordsDoNotMatch": "Passwords do not match",
+      "passwordSetSuccess": "Password set successfully! Logging you in...",
+      "loginFailed": "Login failed. Please try logging in manually.",
+      "setPasswordFailed": "Failed to set password",
+      "invalidMagicLink": "Invalid or expired magic link"
+    }
+  },
+  "booking": {
+    "header": {
+      "title": "Book Your Appointment",
+      "subtitle": "Schedule a free consultation with a licensed tax professional"
+    },
+    "preparer": {
+      "yourTaxProfessional": "Your Tax Professional",
+      "licensedTaxProfessional": "Licensed Tax Professional",
+      "expertTaxProfessionals": "Expert Tax Professionals",
+      "scheduleWithCPAs": "Schedule with our licensed CPAs"
+    },
+    "features": {
+      "title": "What to Expect",
+      "subtitle": "Professional tax assistance tailored to your needs",
+      "consultation": {
+        "title": "Free 30-Minute Consultation",
+        "description": "Video call or phone - your choice"
+      },
+      "cpaReview": {
+        "title": "Licensed CPA Review",
+        "description": "Expert analysis of your tax situation"
+      },
+      "strategy": {
+        "title": "Personalized Tax Strategy",
+        "description": "Custom recommendations for your needs"
+      }
+    },
+    "imageAlt": "Tax Genius Pro - Oliver the Owl"
+  },
+  "store": {
+    "metadata": {
+      "title": "Marketing Store - Tax Genius Pro",
+      "description": "Purchase marketing materials, landing pages, and subscriptions to grow your business"
+    },
+    "header": {
+      "title": "Marketing Store",
+      "subtitle": "Professional marketing materials and tools to grow your tax business"
+    },
+    "subscriptions": {
+      "title": "Landing Page Subscriptions",
+      "free": {
+        "name": "Free",
+        "badge": "Basic",
+        "description": "Get started with lead generation",
+        "price": "$0",
+        "priceUnit": "/month",
+        "feature1": "1 Landing Page",
+        "feature2": "Basic Analytics",
+        "feature3": "Generic Branding"
+      },
+      "monthly": {
+        "name": "Monthly",
+        "badge": "Most Popular",
+        "badgeProfessional": "Professional",
+        "description": "Perfect for active marketers",
+        "price": "$49",
+        "priceUnit": "/month",
+        "feature1": "5 Landing Pages",
+        "feature2": "Advanced Analytics",
+        "feature3": "Custom Branding (Tax Preparers)",
+        "feature4": "A/B Testing"
+      },
+      "annual": {
+        "name": "Annual",
+        "badge": "Best Value",
+        "description": "Save 41% with annual billing",
+        "price": "$29",
+        "priceUnit": "/month",
+        "priceBilledAnnually": "Billed annually at $348",
+        "feature1": "Unlimited Landing Pages",
+        "feature2": "Premium Analytics",
+        "feature3": "Priority Support",
+        "feature4": "All Professional Features"
+      }
+    },
+    "tabs": {
+      "all": "All Products",
+      "materials": "Marketing Materials",
+      "digital": "Digital Assets",
+      "qr": "QR Codes",
+      "email": "Email Addresses"
+    },
+    "empty": {
+      "noProducts": "No products available at the moment. Check back soon!",
+      "noMaterials": "No marketing materials available",
+      "noDigitalAssets": "No digital assets available",
+      "qrCodesInfo": "QR codes are generated automatically with your campaigns",
+      "emailAddressesComingSoon": "Professional email addresses coming soon"
+    }
+  },
+  "referral": {
+    "header": {
+      "backToHome": "Back to Home",
+      "joinNow": "Join Now"
+    },
+    "hero": {
+      "badge": "Earn Extra Money During Tax Season",
+      "title": "Get a Cash Bonus up to",
+      "titleAmount": "$50",
+      "subtitle": "For Each Friend You Refer*",
+      "description": "Earn up to $50 for each friend who completes their tax return with us. It's easy money during tax season!",
+      "ctaStartReferring": "Start Referring Now",
+      "ctaHowItWorks": "How It Works",
+      "imageReplaceText": "[Replace with referral hero image]",
+      "imageRecommendation": "Recommended: 1200x675px (16:9)",
+      "imageSuggestion": "Suggestion: Happy people receiving money, friends celebrating, or mobile app screenshot",
+      "termsApply": "*Terms and conditions apply"
+    },
+    "earnings": {
+      "title": "How Much Can You Earn?",
+      "subtitle": "The more you refer, the more you earn",
+      "tier1": {
+        "referrals": "5 Referrals",
+        "amount": "$250",
+        "description": "Part-time income"
+      },
+      "tier2": {
+        "referrals": "10 Referrals",
+        "amount": "$500",
+        "description": "Nice bonus",
+        "badge": "Most Popular"
+      },
+      "tier3": {
+        "referrals": "20+ Referrals",
+        "amount": "$1,000+",
+        "description": "Serious earnings"
+      }
+    },
+    "howItWorks": {
+      "title": "How It Works - Simple as 1, 2, 3",
+      "step1": {
+        "step": "1",
+        "title": "Share Your Link",
+        "description": "Get your unique referral link and share it with friends, family, and on social media"
+      },
+      "step2": {
+        "step": "2",
+        "title": "They File Their Taxes",
+        "description": "Your friends use your link to sign up and complete their tax return with us"
+      },
+      "step3": {
+        "step": "3",
+        "title": "You Get Paid",
+        "description": "Earn up to $50 per referral, paid directly to your account. No limits!"
+      }
+    },
+    "benefits": {
+      "title": "Why Join Our Referral Program?",
+      "highPayouts": {
+        "title": "High Payouts",
+        "description": "Earn up to $50 per successful referral"
+      },
+      "noLimits": {
+        "title": "No Limits",
+        "description": "Refer as many people as you want - unlimited earning potential"
+      },
+      "quickPayments": {
+        "title": "Quick Payments",
+        "description": "Get paid within 7 days of successful referral"
+      },
+      "trackEverything": {
+        "title": "Track Everything",
+        "description": "Real-time dashboard to track all your referrals and earnings"
+      },
+      "easySharing": {
+        "title": "Easy Sharing",
+        "description": "Share via text, email, social media, or messaging apps"
+      },
+      "bonusRewards": {
+        "title": "Bonus Rewards",
+        "description": "Extra bonuses for top referrers each month"
+      },
+      "passiveIncome": {
+        "title": "Passive Income",
+        "description": "Earn money without any ongoing work"
+      },
+      "friendsSave": {
+        "title": "Friends Save Too",
+        "description": "Your friends get special discounts when they use your link"
+      }
+    },
+    "sharing": {
+      "title": "Easy Ways to Share",
+      "socialMedia": {
+        "title": "Social Media",
+        "description": "Post your link on Facebook, Instagram, Twitter, TikTok"
+      },
+      "emailText": {
+        "title": "Email & Text",
+        "description": "Send to your contacts via email or SMS"
+      },
+      "wordOfMouth": {
+        "title": "Word of Mouth",
+        "description": "Tell friends, family, coworkers about the benefits"
+      }
+    },
+    "faq": {
+      "title": "Common Questions",
+      "q1": {
+        "question": "How much can I earn per referral?",
+        "answer": "You can earn up to $50 per successful referral. The exact amount depends on the tax package your referral purchases."
+      },
+      "q2": {
+        "question": "Is there a limit to how many people I can refer?",
+        "answer": "No! There's no limit. Refer as many people as you want and earn unlimited income."
+      },
+      "q3": {
+        "question": "When do I get paid?",
+        "answer": "You'll receive payment within 7 days after your referral successfully completes their tax return and payment."
+      },
+      "q4": {
+        "question": "How do I track my referrals?",
+        "answer": "You'll have access to a real-time dashboard showing all your referrals, their status, and your earnings."
+      },
+      "q5": {
+        "question": "Can I refer my own family members?",
+        "answer": "Yes! You can refer anyone - friends, family, coworkers, or anyone who needs tax help."
+      }
+    },
+    "finalCTA": {
+      "title": "Ready to Start Earning?",
+      "subtitle": "Join thousands of people earning extra money by referring friends to Tax Genius Pro",
+      "ctaButton": "Get Your Referral Link",
+      "badge1": "Up to $50 per referral",
+      "badge2": "No limits",
+      "badge3": "Quick payouts"
+    },
+    "footer": {
+      "copyright": "© 2024 Tax Genius Pro. All rights reserved.",
+      "disclaimer": "*Referral bonuses are paid when referred customers complete their tax return and payment. Bonus amounts vary by package selected. See full terms and conditions."
+    }
+  },
+  "blog": {
+    "hero": {
+      "badge": "Tax Blog & Resources",
+      "title": "Tax Tips &",
+      "titleHighlight": "Expert Insights",
+      "subtitle": "Stay informed with the latest tax news, strategies, and advice from our team of licensed CPAs.",
+      "searchPlaceholder": "Search tax topics..."
+    },
+    "categories": {
+      "allPosts": "All Posts",
+      "businessTax": "Business Tax",
+      "deductions": "Deductions",
+      "investments": "Investments",
+      "credits": "Credits"
+    },
+    "featuredSection": {
+      "title": "Featured Articles"
+    },
+    "latestSection": {
+      "title": "Latest Articles",
+      "subtitle": "Expert tax advice and strategies"
+    },
+    "loadMore": "Load More Articles",
+    "newsletter": {
+      "title": "Get Tax Tips in Your Inbox",
+      "subtitle": "Join 10,000+ subscribers getting weekly tax tips, strategies, and updates.",
+      "placeholder": "Your email address",
+      "button": "Subscribe Free",
+      "disclaimer": "No spam. Unsubscribe anytime.",
+      "imageAlt": "Newsletter signup"
+    },
+    "cta": {
+      "title": "Need Professional Tax Help?",
+      "subtitle": "Reading is great, but nothing beats working with a licensed CPA who knows your situation.",
+      "buttonCPA": "Work with a CPA",
+      "buttonContact": "Contact Us"
+    },
+    "posts": {
+      "post1": {
+        "title": "10 Tax Deductions You Might Be Missing in 2024",
+        "excerpt": "Discover often-overlooked deductions that could save you thousands on your tax return this year.",
+        "category": "Deductions",
+        "author": "Sarah Johnson, CPA",
+        "date": "Jan 15, 2025",
+        "readTime": "8 min read"
+      },
+      "post2": {
+        "title": "Self-Employment Tax Guide: What You Need to Know",
+        "excerpt": "Complete guide to understanding and managing self-employment taxes, including quarterly estimates.",
+        "category": "Business Tax",
+        "author": "Michael Chen, EA",
+        "date": "Jan 12, 2025",
+        "readTime": "10 min read"
+      },
+      "post3": {
+        "title": "Home Office Deduction: Complete 2024 Guide",
+        "excerpt": "How to calculate and claim the home office deduction for remote workers and business owners.",
+        "category": "Deductions",
+        "author": "Lisa Martinez, CPA",
+        "date": "Jan 10, 2025",
+        "readTime": "7 min read"
+      },
+      "post4": {
+        "title": "Crypto Tax Reporting: Everything You Need to Know",
+        "excerpt": "Navigate cryptocurrency tax reporting requirements and avoid common mistakes.",
+        "category": "Investments",
+        "author": "David Kim, CPA",
+        "date": "Jan 8, 2025",
+        "readTime": "12 min read"
+      },
+      "post5": {
+        "title": "Maximize Your Retirement Contributions for Tax Savings",
+        "excerpt": "Strategic guide to 401(k), IRA, and other retirement account contributions.",
+        "category": "Retirement",
+        "author": "Sarah Johnson, CPA",
+        "date": "Jan 5, 2025",
+        "readTime": "9 min read"
+      },
+      "post6": {
+        "title": "Small Business Tax Deadlines: 2024 Calendar",
+        "excerpt": "Never miss a deadline with our comprehensive small business tax calendar.",
+        "category": "Business Tax",
+        "author": "Michael Chen, EA",
+        "date": "Jan 3, 2025",
+        "readTime": "6 min read"
+      },
+      "post7": {
+        "title": "Real Estate Investment Tax Strategies",
+        "excerpt": "Learn how to minimize taxes on rental properties, flips, and real estate investments.",
+        "category": "Investments",
+        "author": "Lisa Martinez, CPA",
+        "date": "Dec 28, 2024",
+        "readTime": "11 min read"
+      },
+      "post8": {
+        "title": "Child Tax Credit Changes for 2024",
+        "excerpt": "What parents need to know about claiming the Child Tax Credit this year.",
+        "category": "Credits",
+        "author": "David Kim, CPA",
+        "date": "Dec 22, 2024",
+        "readTime": "5 min read"
+      },
+      "post9": {
+        "title": "Electric Vehicle Tax Credits Explained",
+        "excerpt": "Guide to federal and state tax credits for electric and hybrid vehicle purchases.",
+        "category": "Credits",
+        "author": "Sarah Johnson, CPA",
+        "date": "Dec 18, 2024",
+        "readTime": "8 min read"
+      }
+    }
+  },
+  "apply": {
+    "header": {
+      "badge": "Tax Preparer Job Application",
+      "title": "Tax Preparer Job Application",
+      "subtitle": "Start your journey to financial freedom. Fill out the form below to apply."
+    },
+    "form": {
+      "title": "Application Form",
+      "description": "All fields are required unless marked as optional. We'll contact you within 2-3 business days.",
+      "firstName": "First Name",
+      "middleName": "Middle Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "phone": "Phone/Mobile",
+      "languages": "Languages",
+      "languagesPlaceholder": "Select language(s)",
+      "languageEnglish": "English",
+      "languageSpanish": "Spanish",
+      "languageBoth": "English & Spanish",
+      "languageFrench": "French",
+      "languageMandarin": "Mandarin",
+      "languageOther": "Other",
+      "smsConsent": "SMS Consent",
+      "smsConsentQuestion": "Do you consent to receive text messages from Tax Genius Pro regarding your application and training?",
+      "smsConsentYes": "Yes, I consent to receive SMS messages",
+      "smsConsentNo": "No, I do not consent",
+      "firstNamePlaceholder": "John",
+      "middleNamePlaceholder": "Robert",
+      "lastNamePlaceholder": "Doe",
+      "emailPlaceholder": "john.doe@example.com",
+      "phonePlaceholder": "(555) 123-4567",
+      "submitButton": "Submit Application",
+      "submitting": "Submitting Application...",
+      "privacyText": "By submitting this form, you agree to our",
+      "termsLink": "Terms of Service",
+      "privacyLink": "Privacy Policy",
+      "and": "and"
+    },
+    "success": {
+      "title": "Application Submitted!",
+      "message": "Thank you for your interest in joining Tax Genius Pro. We've received your application and will review it shortly.",
+      "contactMessage": "A member of our team will contact you within 2-3 business days to discuss the next steps.",
+      "backToLanding": "Back to Landing Page",
+      "viewTraining": "View Training Course"
+    },
+    "footer": {
+      "question": "Questions about the application process?",
+      "contactTeam": "Contact our recruitment team"
+    }
+  },
+  "help": {
+    "hero": {
+      "badge": "Help Center",
+      "title": "How Can We",
+      "titleHighlight": "Help You?",
+      "subtitle": "Search our knowledge base or contact our support team",
+      "searchPlaceholder": "Search for answers... (e.g., 'How do I upload documents?')",
+      "searchButton": "Search"
+    },
+    "stats": {
+      "articles": "150+ Articles",
+      "videos": "50+ Videos",
+      "support": "24/7 Support"
+    },
+    "contact": {
+      "title": "Contact Options",
+      "phone": {
+        "title": "Phone Support",
+        "description": "Mon-Fri: 9AM-7PM ET",
+        "action": "(404) 627-1015"
+      },
+      "chat": {
+        "title": "Live Chat",
+        "description": "Average wait: < 2 min",
+        "action": "Start Chat"
+      },
+      "email": {
+        "title": "Email Support",
+        "description": "Response within 24 hours",
+        "action": "Send Email"
+      },
+      "video": {
+        "title": "Video Call",
+        "description": "Schedule with your CPA",
+        "action": "Book Call"
+      }
+    },
+    "categories": {
+      "title": "Browse by Category",
+      "subtitle": "Find answers organized by topic",
+      "filing": {
+        "title": "Filing Your Return",
+        "description": "Getting started, uploading documents, filing status",
+        "articles": "12 articles"
+      },
+      "payments": {
+        "title": "Payments & Pricing",
+        "description": "Payment methods, refunds, pricing questions",
+        "articles": "8 articles"
+      },
+      "security": {
+        "title": "Security & Privacy",
+        "description": "Data protection, account security, privacy policy",
+        "articles": "6 articles"
+      },
+      "cpas": {
+        "title": "Working with CPAs",
+        "description": "Communication, document requests, consultation",
+        "articles": "10 articles"
+      },
+      "deductions": {
+        "title": "Deductions & Credits",
+        "description": "What you can claim, documentation needed",
+        "articles": "15 articles"
+      },
+      "irs": {
+        "title": "IRS Issues",
+        "description": "Notices, audits, payment plans, resolution",
+        "articles": "9 articles"
+      },
+      "viewArticles": "View Articles"
+    },
+    "popular": {
+      "title": "Popular Articles",
+      "subtitle": "Most viewed this month",
+      "article1": {
+        "title": "How do I upload my tax documents?",
+        "views": "12.5K views"
+      },
+      "article2": {
+        "title": "When will I receive my refund?",
+        "views": "10.2K views"
+      },
+      "article3": {
+        "title": "What documents do I need to file?",
+        "views": "9.8K views"
+      },
+      "article4": {
+        "title": "How do I contact my assigned CPA?",
+        "views": "8.4K views"
+      },
+      "article5": {
+        "title": "Can I amend my tax return after filing?",
+        "views": "7.9K views"
+      },
+      "article6": {
+        "title": "What payment methods do you accept?",
+        "views": "6.5K views"
+      }
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Quick answers to common questions",
+      "gettingStarted": {
+        "category": "Getting Started",
+        "q1": {
+          "question": "How long does it take to file my taxes?",
+          "answer": "Most returns are completed within 3-5 business days after you submit all required documents. Complex returns (business, investments, rental property) may take 5-7 days. Rush service is available for urgent situations."
+        },
+        "q2": {
+          "question": "What documents do I need to file?",
+          "answer": "You'll need W-2s from employers, 1099 forms for other income, receipts for deductions, last year's tax return, and any relevant tax documents like 1098 (mortgage interest), 1095-A (health insurance), etc. Your CPA will provide a personalized checklist."
+        },
+        "q3": {
+          "question": "Can I file taxes from any state?",
+          "answer": "Yes! We prepare federal and state returns for all 50 states. Our CPAs are licensed and experienced with multi-state filings, including part-year resident returns."
+        }
+      },
+      "paymentsRefunds": {
+        "category": "Payments & Refunds",
+        "q1": {
+          "question": "When do I pay for tax preparation?",
+          "answer": "You pay after your return is completed and you've reviewed and approved it. We don't charge until you're 100% satisfied. Payment is due before we file with the IRS."
+        },
+        "q2": {
+          "question": "How quickly will I get my refund?",
+          "answer": "With direct deposit, federal refunds typically arrive in 7-21 days after IRS acceptance. Paper check refunds take 2-4 weeks longer. We track your refund status and notify you of updates."
+        },
+        "q3": {
+          "question": "Do you offer refund advances?",
+          "answer": "Yes! Eligible clients can receive their refund in 24 hours with our instant refund advance program. Approval and loan amount depend on your expected refund and credit check."
+        }
+      },
+      "cpaServices": {
+        "category": "CPA Services",
+        "q1": {
+          "question": "Will I work with the same CPA?",
+          "answer": "Yes. You're assigned a dedicated CPA who handles your return from start to finish. They're available year-round for questions and become familiar with your tax situation."
+        },
+        "q2": {
+          "question": "How do I communicate with my CPA?",
+          "answer": "You can message your CPA directly through our secure portal, schedule video calls, or call their direct line. Most CPAs respond within 24 hours on business days."
+        },
+        "q3": {
+          "question": "Are your tax preparers licensed?",
+          "answer": "All our preparers are licensed CPAs (Certified Public Accountants) or Enrolled Agents (EAs) authorized to represent clients before the IRS. All hold active licenses and complete continuing education."
+        }
+      },
+      "securityPrivacy": {
+        "category": "Security & Privacy",
+        "q1": {
+          "question": "Is my information secure?",
+          "answer": "Absolutely. We use bank-level 256-bit encryption, secure servers, and strict access controls. We're SOC 2 Type II certified and comply with IRS security requirements for tax preparers."
+        },
+        "q2": {
+          "question": "Who has access to my tax information?",
+          "answer": "Only your assigned CPA and authorized support staff. We never sell your data. All employees sign confidentiality agreements and undergo background checks."
+        },
+        "q3": {
+          "question": "What happens to my documents after filing?",
+          "answer": "Documents are securely stored for 7 years (IRS requirement) then permanently deleted. You can download your return and documents anytime from your secure portal."
+        }
+      }
+    },
+    "cta": {
+      "title": "Still Need Help?",
+      "subtitle": "Our support team is standing by to assist you with any questions.",
+      "callButton": "Call (404) 627-1015",
+      "chatButton": "Start Live Chat",
+      "available": "Available 24/7",
+      "responseTime": "Avg. 2min response",
+      "imageAlt": "Support team"
+    }
+  },
+  "privacy": {
+    "metadata": {
+      "title": "Privacy Policy | Tax Genius Pro",
+      "description": "Tax Genius Pro Privacy Policy - How we collect, use, and protect your information"
+    },
+    "title": "Privacy Policy",
+    "lastUpdated": "Last Updated:",
+    "lastUpdatedDate": "October 10, 2025",
+    "sections": {
+      "informationWeCollect": {
+        "title": "Information We Collect",
+        "personalInfo": {
+          "title": "Personal Information",
+          "description": "We collect information that you provide directly to us, including:",
+          "items": {
+            "item1": "Name, email address, phone number",
+            "item2": "Tax identification information (SSN, EIN)",
+            "item3": "Financial information (income, deductions, expenses)",
+            "item4": "Payment information (processed securely through Square)",
+            "item5": "Tax documents (W2, 1099, receipts, etc.)"
+          }
+        },
+        "automaticInfo": {
+          "title": "Automatically Collected Information",
+          "description": "When you use our service, we automatically collect:",
+          "items": {
+            "item1": "IP address and device information",
+            "item2": "Browser type and version",
+            "item3": "Pages visited and time spent",
+            "item4": "Referral source"
+          }
+        }
+      },
+      "howWeUseInfo": {
+        "title": "How We Use Your Information",
+        "description": "We use your information to:",
+        "items": {
+          "item1": "Prepare and file your tax returns",
+          "item2": "Process payments and commissions",
+          "item3": "Communicate with you about your tax filing status",
+          "item4": "Improve our services and user experience",
+          "item5": "Comply with legal and regulatory requirements",
+          "item6": "Prevent fraud and ensure platform security"
+        }
+      },
+      "informationSharing": {
+        "title": "Information Sharing",
+        "description": "We do not sell or rent your personal information. We may share your information with:",
+        "items": {
+          "item1": {
+            "title": "Assigned Tax Preparers:",
+            "description": "To complete your tax return"
+          },
+          "item2": {
+            "title": "Payment Processors:",
+            "description": "Square for payment processing"
+          },
+          "item3": {
+            "title": "Email Service:",
+            "description": "Resend for transactional emails"
+          },
+          "item4": {
+            "title": "Authentication Provider:",
+            "description": "Clerk for secure login"
+          },
+          "item5": {
+            "title": "Legal Authorities:",
+            "description": "When required by law or to protect our rights"
+          }
+        }
+      },
+      "dataSecurity": {
+        "title": "Data Security",
+        "description": "We implement industry-standard security measures to protect your information:",
+        "items": {
+          "item1": "SSL/TLS encryption for data in transit",
+          "item2": "Secure authentication via Clerk",
+          "item3": "Role-based access control",
+          "item4": "Time-limited document access (signed URLs expire in 15 minutes)",
+          "item5": "Rate limiting to prevent abuse",
+          "item6": "Regular security audits"
+        }
+      },
+      "dataRetention": {
+        "title": "Data Retention",
+        "description": "We retain your information for as long as necessary to:",
+        "items": {
+          "item1": "Provide our services",
+          "item2": "Comply with IRS record-keeping requirements (minimum 7 years)",
+          "item3": "Resolve disputes and enforce agreements",
+          "item4": "Comply with legal obligations"
+        }
+      },
+      "yourRights": {
+        "title": "Your Rights",
+        "description": "You have the right to:",
+        "items": {
+          "item1": "Access your personal information",
+          "item2": "Correct inaccurate information",
+          "item3": "Request deletion of your information (subject to legal retention requirements)",
+          "item4": "Opt out of marketing communications",
+          "item5": "Export your data"
+        },
+        "contact": "To exercise these rights, contact us at",
+        "email": "privacy@taxgeniuspro.tax"
+      },
+      "cookiesTracking": {
+        "title": "Cookies and Tracking",
+        "description": "We use cookies and similar technologies to:",
+        "items": {
+          "item1": "Maintain your session",
+          "item2": "Remember your preferences",
+          "item3": "Track referral sources",
+          "item4": "Analyze platform usage"
+        },
+        "browserControl": "You can control cookies through your browser settings."
+      },
+      "thirdPartyServices": {
+        "title": "Third-Party Services",
+        "description": "Our service integrates with:",
+        "items": {
+          "clerk": {
+            "name": "Clerk:",
+            "description": "Authentication",
+            "linkText": "Privacy Policy"
+          },
+          "square": {
+            "name": "Square:",
+            "description": "Payment processing",
+            "linkText": "Privacy Policy"
+          },
+          "resend": {
+            "name": "Resend:",
+            "description": "Email delivery",
+            "linkText": "Privacy Policy"
+          }
+        }
+      },
+      "childrensPrivacy": {
+        "title": "Children's Privacy",
+        "description": "Our service is not intended for individuals under 18 years of age. We do not knowingly collect information from children."
+      },
+      "policyChanges": {
+        "title": "Changes to This Policy",
+        "description": "We may update this Privacy Policy from time to time. We will notify you of significant changes by email or through our platform."
+      },
+      "contactUs": {
+        "title": "Contact Us",
+        "description": "If you have questions about this Privacy Policy, please contact us:",
+        "email": {
+          "label": "Email:",
+          "value": "privacy@taxgeniuspro.tax"
+        },
+        "support": {
+          "label": "Support:",
+          "value": "taxgenius.tax@gmail.com"
+        },
+        "address": {
+          "label": "Address:",
+          "value": "[Company Address - To be added]"
+        }
+      }
+    },
+    "disclaimer": {
+      "note": "Note:",
+      "text": "This privacy policy is effective as of October 10, 2025. By using Tax Genius Pro, you agree to this Privacy Policy."
+    }
+  },
+  "terms": {
+    "metadata": {
+      "title": "Terms of Service | Tax Genius Pro",
+      "description": "Tax Genius Pro Terms of Service - Legal agreement for using our platform"
+    },
+    "title": "Terms of Service",
+    "lastUpdated": "Last Updated:",
+    "lastUpdatedDate": "October 10, 2025",
+    "sections": {
+      "acceptance": {
+        "title": "Acceptance of Terms",
+        "description": "By accessing or using Tax Genius Pro (\"Service\"), you agree to be bound by these Terms of Service (\"Terms\"). If you do not agree to these Terms, you may not use the Service."
+      },
+      "serviceDescription": {
+        "title": "Service Description",
+        "description": "Tax Genius Pro provides:",
+        "items": {
+          "item1": "Tax preparation and filing services",
+          "item2": "Connection to qualified tax preparers",
+          "item3": "Referral program for earning commissions",
+          "item4": "E-commerce store for tax-related products",
+          "item5": "Tax preparer training and certification"
+        }
+      },
+      "userAccounts": {
+        "title": "User Accounts",
+        "registration": {
+          "title": "Registration",
+          "description": "You must create an account to use our Service. You agree to:",
+          "items": {
+            "item1": "Provide accurate, current information",
+            "item2": "Maintain the security of your account credentials",
+            "item3": "Notify us immediately of unauthorized access",
+            "item4": "Be responsible for all activities under your account"
+          }
+        },
+        "accountTypes": {
+          "title": "Account Types",
+          "items": {
+            "client": {
+              "label": "Client:",
+              "description": "File tax returns"
+            },
+            "referrer": {
+              "label": "Referrer:",
+              "description": "Earn commissions by referring clients"
+            },
+            "taxPreparer": {
+              "label": "Tax Preparer:",
+              "description": "Prepare and file tax returns (requires certification)"
+            },
+            "admin": {
+              "label": "Admin:",
+              "description": "Platform management (invitation only)"
+            }
+          }
+        }
+      },
+      "taxFilingServices": {
+        "title": "Tax Filing Services",
+        "accuracyGuarantee": {
+          "title": "Accuracy Guarantee",
+          "description": "We guarantee 100% accuracy on tax calculations. If the IRS determines errors were made, we will:",
+          "items": {
+            "item1": "File an amended return at no charge",
+            "item2": "Pay any penalties resulting from our errors",
+            "item3": "Provide additional support to resolve the issue"
+          },
+          "disclaimer": "This guarantee does not cover penalties from incorrect information you provide."
+        },
+        "maxRefundGuarantee": {
+          "title": "Maximum Refund Guarantee",
+          "description": "We guarantee you receive the maximum refund you're entitled to under current tax law."
+        },
+        "yourResponsibilities": {
+          "title": "Your Responsibilities",
+          "description": "You are responsible for:",
+          "items": {
+            "item1": "Providing complete and accurate information",
+            "item2": "Uploading all required documents",
+            "item3": "Reviewing your return before filing",
+            "item4": "Responding to preparer questions promptly"
+          }
+        }
+      },
+      "referralProgram": {
+        "title": "Referral Program",
+        "eligibility": {
+          "title": "Eligibility",
+          "description": "To participate in the referral program, you must:",
+          "items": {
+            "item1": "Be 18 years or older",
+            "item2": "Maintain an active account in good standing",
+            "item3": "Comply with all program terms"
+          }
+        },
+        "commissionStructure": {
+          "title": "Commission Structure",
+          "items": {
+            "basic": "Basic Package: $25 per completed return",
+            "standard": "Standard Package: $35 per completed return",
+            "premium": "Premium Package: $50 per completed return",
+            "deluxe": "Deluxe Package: $75 per completed return"
+          }
+        },
+        "commissionPayment": {
+          "title": "Commission Payment",
+          "description": "Commissions are:",
+          "items": {
+            "item1": "Created automatically when a referred client's return is filed",
+            "item2": "Paid out when you request payment (minimum $50)",
+            "item3": "Processed within 5-7 business days of approval",
+            "item4": "Paid via bank transfer, PayPal, Square Cash, or Venmo"
+          }
+        },
+        "prohibitedActivities": {
+          "title": "Prohibited Activities",
+          "description": "You may not:",
+          "items": {
+            "item1": "Use misleading or deceptive marketing",
+            "item2": "Spam or send unsolicited emails",
+            "item3": "Create fake accounts or referrals",
+            "item4": "Violate any laws or regulations",
+            "item5": "Impersonate Tax Genius Pro or its employees"
+          },
+          "violation": "Violation may result in account termination and forfeiture of unpaid commissions."
+        }
+      },
+      "taxPreparerTerms": {
+        "title": "Tax Preparer Terms",
+        "certification": {
+          "title": "Certification",
+          "description": "Tax preparers must:",
+          "items": {
+            "item1": "Complete required training",
+            "item2": "Pass certification exam",
+            "item3": "Maintain active credentials (CPA, EA, or equivalent)",
+            "item4": "Complete annual continuing education"
+          }
+        },
+        "professionalStandards": {
+          "title": "Professional Standards",
+          "description": "Preparers agree to:",
+          "items": {
+            "item1": "Follow IRS circular 230 guidelines",
+            "item2": "Maintain client confidentiality",
+            "item3": "Provide accurate, timely service",
+            "item4": "Communicate professionally with clients"
+          }
+        }
+      },
+      "paymentsRefunds": {
+        "title": "Payments and Refunds",
+        "paymentProcessing": {
+          "title": "Payment Processing",
+          "description": "All payments are processed securely through Square. We do not store credit card information."
+        },
+        "pricing": {
+          "title": "Pricing",
+          "description": "Prices for tax filing services are based on complexity and package selected. All prices are clearly displayed before purchase."
+        },
+        "refundPolicy": {
+          "title": "Refund Policy",
+          "description": "Refunds are available:",
+          "items": {
+            "item1": "Before your return is filed: Full refund",
+            "item2": "After filing, due to our error: Full refund",
+            "item3": "After filing, for other reasons: Case-by-case basis"
+          },
+          "storePolicy": "Store purchases (products) are non-refundable unless defective."
+        }
+      },
+      "intellectualProperty": {
+        "title": "Intellectual Property",
+        "description": "All content on the Service, including text, graphics, logos, and software, is the property of Tax Genius Pro and protected by copyright, trademark, and other intellectual property laws.",
+        "disclaimer": "You may not copy, modify, distribute, or create derivative works without our written permission."
+      },
+      "limitationOfLiability": {
+        "title": "Limitation of Liability",
+        "description": "To the maximum extent permitted by law:",
+        "items": {
+          "item1": "Tax Genius Pro is provided \"as is\" without warranties",
+          "item2": "We are not liable for indirect, incidental, or consequential damages",
+          "item3": "Our total liability is limited to the amount you paid us in the past 12 months",
+          "item4": "We are not liable for IRS penalties resulting from information you provide"
+        }
+      },
+      "indemnification": {
+        "title": "Indemnification",
+        "description": "You agree to indemnify and hold harmless Tax Genius Pro from any claims, damages, losses, or expenses arising from:",
+        "items": {
+          "item1": "Your use of the Service",
+          "item2": "Your violation of these Terms",
+          "item3": "Your violation of any third-party rights",
+          "item4": "Information you provide to us"
+        }
+      },
+      "termination": {
+        "title": "Termination",
+        "description": "We may terminate or suspend your account at any time for:",
+        "items": {
+          "item1": "Violation of these Terms",
+          "item2": "Fraudulent activity",
+          "item3": "Non-payment",
+          "item4": "Any reason at our discretion"
+        },
+        "userTermination": "You may terminate your account at any time by contacting us."
+      },
+      "governingLaw": {
+        "title": "Governing Law",
+        "description": "These Terms are governed by the laws of [State], without regard to conflict of law principles. Any disputes will be resolved in the courts of [County, State]."
+      },
+      "changesToTerms": {
+        "title": "Changes to Terms",
+        "description": "We may modify these Terms at any time. We will notify you of significant changes by email or through the Service. Continued use after changes constitutes acceptance."
+      },
+      "contactUs": {
+        "title": "Contact Us",
+        "description": "Questions about these Terms? Contact us:",
+        "email": {
+          "label": "Email:",
+          "value": "legal@taxgeniuspro.tax"
+        },
+        "support": {
+          "label": "Support:",
+          "value": "taxgenius.tax@gmail.com"
+        },
+        "address": {
+          "label": "Address:",
+          "value": "[Company Address - To be added]"
+        }
+      }
+    },
+    "disclaimer": {
+      "note": "Note:",
+      "text": "By using Tax Genius Pro, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service."
+    }
+  },
+  "taxPreparerCities": {
+    "shared": {
+      "branding": {
+        "joinTheTeam": "Join the Team",
+        "owlAlt": "Tax Genius Pro Owl Mascot"
+      },
+      "meta": {
+        "titleTemplate": "Tax Preparer Jobs in {city}, {stateCode} - Earn ${income}+ Annually",
+        "descriptionTemplate": "Join Tax Genius Pro in {city}, {state}. No experience needed. Work from home. Free training. Earn ${income}+ annually as a certified tax preparer.",
+        "keywordsTemplate": "tax preparer jobs {city}, tax preparer jobs {city} {stateCode}, remote tax preparer {city}, free tax preparer training {city}, work from home tax preparer {city}"
+      },
+      "hero": {
+        "badge": "{city}, {state}",
+        "titlePart1": "Tax Preparer Jobs in {city}, {stateCode} - Earn",
+        "titleIncome": "${income}+",
+        "titlePart2": "Annually",
+        "subtitle": "No Experience Needed! Work from home in {neighborhoods} or anywhere in {city}",
+        "highlights": "Free training • Flexible hours • Remote work • Year-round income",
+        "cta": {
+          "primary": "Apply Now - Start Earning",
+          "secondary": "Learn More - $75,000+ Income"
+        },
+        "contact": {
+          "phone": "+1 (404) 627-1015",
+          "text": "+1 (404) 627-1015 - Text for Info"
+        }
+      },
+      "keyBenefits": {
+        "title": "Key Benefits",
+        "benefit1": {
+          "title": "$75,000-$150,000",
+          "description": "Annual income potential with top earners making $150k+. Even part-time preparers earn $75k+",
+          "imageAlt": "Earn $75,000-$150,000 as a tax preparer in {city} {state}"
+        },
+        "benefit2": {
+          "title": "Work From Home",
+          "description": "Work from anywhere in {city} - {neighborhoods} or your own home",
+          "imageAlt": "Work from home as a tax preparer in {city} {state}"
+        },
+        "benefit3": {
+          "title": "Flexible Hours",
+          "description": "Set your own schedule. Perfect for parents, retirees, or anyone seeking work-life balance",
+          "imageAlt": "Flexible schedule tax preparer jobs in {city} {state}"
+        }
+      },
+      "breakFreeSection": {
+        "title": "Break Free From Dead-End Jobs in {city}",
+        "paragraph1": "The growing tax season demand in {city} is creating a golden opportunity for career changers, retirees, and part-timers ready to break free from dead-end jobs, congested traffic, and inflexible hours. With {companyLink}, you can earn {strongIncome1} annually—or even the {strongIncome2} of top earners—from the comfort of your home, while serving high-demand neighborhoods like {strongNeighborhoods}.",
+        "companyLinkText": "Tax Genius Pro",
+        "calloutBox": {
+          "title": "Why Now is the Perfect Time",
+          "intro": "Say goodbye to low wages and rigid 9-5 schedules. As a Tax Genius Pro, you'll enjoy:",
+          "items": {
+            "item1": {
+              "strong": "Flexible hours",
+              "text": "that fit YOUR schedule"
+            },
+            "item2": {
+              "strong": "Remote work",
+              "text": "- no commute, no office politics"
+            },
+            "item3": {
+              "strong": "Be your own boss",
+              "text": "- perfect for stay-at-home parents and retirees"
+            },
+            "item4": {
+              "strong": "FREE 4-6 week training",
+              "text": "(self-paced, zero cost)"
+            },
+            "item5": {
+              "strong": "No-cost certification",
+              "text": "included"
+            }
+          }
+        }
+      },
+      "marketSection": {
+        "title": "Thriving Market in {city}",
+        "description": "{city}'s population of {strongPopulation} means a thriving market for tax preparers, especially with {strongSeasonalPeaks} and {strongYearRound}. Whether you're bilingual or just starting out, this is your chance to thrive in a city where opportunity meets demand.",
+        "opportunityCard": {
+          "title": "The {city} Opportunity",
+          "metrics": {
+            "population": {
+              "value": "{population}+",
+              "label": "Population"
+            },
+            "yearRound": {
+              "value": "Year-Round",
+              "label": "Income Potential"
+            },
+            "bilingual": {
+              "value": "Bilingual",
+              "label": "Bonus Opportunity"
+            },
+            "remote": {
+              "value": "Remote",
+              "label": "Work Setup"
+            }
+          }
+        }
+      },
+      "urgencySection": {
+        "title": "Act Now - Limited Spots Available",
+        "paragraph1": "The {strongSpots} are limited, and tax season is approaching fast. Don't let another year pass while you're stuck in a job that doesn't pay you what you're worth.",
+        "paragraph2": "{strongJoin} today and transform your life—{applyLink} before opportunities run out!",
+        "strongSpots": "training spots",
+        "strongJoin": "Join Tax Genius Pro in {city}",
+        "applyLinkText": "click to apply"
+      },
+      "howToBecome": {
+        "title": "How to Become a Tax Preparer in {city}",
+        "intro": "Breaking into the tax preparation industry in {city} is easier than you think. Unlike many careers that require years of expensive education, you can become a {strongCertified} in just 4-6 weeks with Tax Genius Pro's free training program. Here's your step-by-step roadmap:",
+        "strongCertified": "certified tax preparer",
+        "steps": {
+          "step1": {
+            "number": "1",
+            "title": "Apply to Tax Genius Pro",
+            "description": "Begin your journey by {submitLink}. No prior experience required—we welcome beginners, career changers, retirees, and stay-at-home parents.",
+            "submitLinkText": "submitting your application"
+          },
+          "step2": {
+            "number": "2",
+            "title": "Complete FREE Training (4-6 Weeks)",
+            "description": "Access our comprehensive {trainingLink} covering federal tax law, IRS regulations, tax software, and {city}-specific tax scenarios. Study at your own pace from home.",
+            "trainingLinkText": "self-paced training program"
+          },
+          "step3": {
+            "number": "3",
+            "title": "Get Your PTIN & Certification",
+            "description": "We guide you through obtaining your IRS Preparer Tax Identification Number (PTIN) and completing the Annual Filing Season Program (AFSP) or becoming an IRS Registered Tax Return Preparer (RTRP)."
+          },
+          "step4": {
+            "number": "4",
+            "title": "Start Preparing Returns & Earning",
+            "description": "Begin accepting clients immediately through our platform or build your own client base in {city}. Most preparers complete their first return within days of certification."
+          }
+        }
+      },
+      "salaryBreakdown": {
+        "title": "Tax Preparer Salary in {city}: What You'll Really Earn",
+        "intro": "{city} tax preparers with Tax Genius Pro earn significantly more than traditional H&R Block or Liberty Tax employees. Here's a realistic breakdown of earning potential in the {city} market:",
+        "cards": {
+          "partTime": {
+            "amount": "$75,000",
+            "title": "Part-Time Average",
+            "description": "Working 20-25 hours/week during tax season (Jan-Apr) + 10 hours/week off-season"
+          },
+          "fullTime": {
+            "amount": "$115,000",
+            "title": "Full-Time Average",
+            "description": "Working 40 hours/week year-round with diversified tax services and business clients"
+          },
+          "topEarners": {
+            "amount": "$150,000+",
+            "title": "Top Earners",
+            "description": "Building a loyal client base, offering bookkeeping, and serving {city}'s bilingual market"
+          }
+        },
+        "pricingInfo": "Per-return pricing in {city}: Simple returns (W-2 only) average {strongSimple}, while business returns and complex filings earn {strongComplex}. With {city}'s population of {population}+ and high demand for bilingual preparers, building a 200-300 client base is achievable within 2-3 years.",
+        "strongSimple": "$150-$250",
+        "strongComplex": "$500-$2,000+"
+      },
+      "requirements": {
+        "title": "Requirements & Qualifications for Tax Preparers in {city}",
+        "intro": "The barriers to entry are lower than you think. Here's everything you need to become a successful tax preparer in {city}:",
+        "whatYouNeed": {
+          "title": "✅ What You DO Need",
+          "items": {
+            "item1": "High school diploma or GED",
+            "item2": "Valid Social Security Number",
+            "item3": "Basic computer skills",
+            "item4": "18+ years old",
+            "item5": "IRS PTIN (we help you get it)"
+          }
+        },
+        "whatYouDontNeed": {
+          "title": "❌ What You DON'T Need",
+          "items": {
+            "item1": "College degree",
+            "item2": "Prior tax experience",
+            "item3": "Expensive training (ours is FREE)",
+            "item4": "CPA or EA certification",
+            "item5": "Physical office space"
+          }
+        },
+        "bonus": "{city} Advantage: Being bilingual (English/Spanish) significantly increases your earning potential in {city}'s diverse market, but it's not required to get started."
+      },
+      "dayInLife": {
+        "title": "A Day in the Life of a Tax Preparer in {city}",
+        "intro": "Wondering what your daily routine will look like? Here's a realistic snapshot of a successful tax preparer in {city} during peak season (January-April):",
+        "schedule": {
+          "time1": {
+            "time": "9:00 AM - Morning Coffee & Email Check",
+            "description": "Review client emails from your {localArea}. Respond to document requests and schedule virtual appointments. No commute—you're already at work in your pajamas if you want!"
+          },
+          "time2": {
+            "time": "10:00 AM - Client Consultations (Virtual)",
+            "description": "Meet with 2-3 clients via Zoom. Review their W-2s, 1099s, and discuss deductions. Most meetings last 30-45 minutes and can earn you $150-$500 per return."
+          },
+          "time3": {
+            "time": "12:00 PM - Lunch Break (Your Schedule!)",
+            "description": "Take a real lunch break—{localActivity}. You control your time."
+          },
+          "time4": {
+            "time": "1:00 PM - Tax Return Preparation",
+            "description": "Use Tax Genius Pro software to prepare 3-5 returns. Simple W-2 returns take 30-45 minutes. More complex returns with Schedule C or rental properties take 1-2 hours."
+          },
+          "time5": {
+            "time": "4:00 PM - E-Filing & Client Follow-Up",
+            "description": "Submit completed returns to the IRS electronically. Follow up with clients on refund timelines and answer any questions."
+          },
+          "time6": {
+            "time": "5:00 PM - Done for the Day!",
+            "description": "Close your laptop knowing you earned $800-$1,500 today. Spend your evening however you want—no boss, no office, no problem. Check out the {servicesLink} you can offer to maximize income.",
+            "servicesLinkText": "full range of {city} services"
+          }
+        },
+        "offSeason": "During off-season (May-December), you can work 10-15 hours per week serving business clients with bookkeeping, quarterly taxes, and planning services—keeping income steady year-round. Learn more about {joinLink} and building your tax practice in {city}.",
+        "joinLinkText": "joining our team"
+      },
+      "testimonials": {
+        "title": "Real Success Stories from Tax Preparers in {city}",
+        "subtitle": "Join hundreds of successful tax preparers earning $75k-$150k annually",
+        "people": {
+          "angela": {
+            "name": "Angela Richards",
+            "location": "{neighborhood1}, {city} {stateCode}",
+            "income": "$92,000",
+            "quote": "The free training changed my life. I now work from home and earn more than my corporate job!"
+          },
+          "chelsea": {
+            "name": "Chelsea Michelle Lowe",
+            "location": "{neighborhood2}, {city} {stateCode}",
+            "income": "$115,000",
+            "quote": "Best career decision I've ever made. Flexible hours, great income, and I help families."
+          },
+          "gelsia": {
+            "name": "Gelsia White",
+            "location": "{neighborhood3}, {city} {stateCode}",
+            "income": "$87,500",
+            "quote": "No experience needed is real! The training was excellent and the support is amazing."
+          },
+          "yaumar": {
+            "name": "Yaumar Williams",
+            "location": "{neighborhood4}, {city} {stateCode}",
+            "income": "$105,000",
+            "quote": "The work-life balance is incredible. I choose my hours and earn more than ever."
+          }
+        },
+        "yearSuffix": "/year"
+      },
+      "finalCta": {
+        "title": "Your Future As a Tax Professional Starts Now",
+        "subtitle": "Free training • No experience needed • Work from home • $75,000-$150,000/year",
+        "buttons": {
+          "primary": "Apply Now - Become a Tax Preparer",
+          "secondary": "Learn More - $75,000+ Income"
+        }
+      },
+      "serviceAreas": {
+        "title": "Serving All {city} Neighborhoods",
+        "neighborhoodsLabel": "Neighborhoods"
+      },
+      "faq": {
+        "sectionTitle": "Frequently Asked Questions",
+        "questions": {
+          "q1": {
+            "question": "How much do tax preparers make in {city}?",
+            "answer": "Tax preparers in {city} with Tax Genius Pro earn between $75,000 and $150,000+ annually. Part-time preparers average $75,000, while full-time professionals with an established client base earn $115,000-$150,000. Top earners serving {city}'s bilingual market and offering additional services like bookkeeping exceed $150,000."
+          },
+          "q2": {
+            "question": "Do I need prior experience to become a tax preparer in {city}?",
+            "answer": "No, prior experience is not required. Tax Genius Pro provides free 4-6 week training covering everything you need to know. We welcome beginners, career changers, retirees, and stay-at-home parents. You only need a high school diploma, basic computer skills, and willingness to learn."
+          },
+          "q3": {
+            "question": "How long does it take to become a certified tax preparer?",
+            "answer": "You can become a certified tax preparer in just 4-6 weeks with our free self-paced training program. After completing training, we guide you through obtaining your IRS PTIN and certification. Most new preparers are ready to start accepting clients within 6-8 weeks from start."
+          },
+          "q4": {
+            "question": "Can I work from home as a tax preparer in {city}?",
+            "answer": "Absolutely! All of our tax preparers in {city} work remotely. You don't need a physical office—you can work from anywhere in {city}, whether that's {neighborhood1}, {neighborhood2}, or any neighborhood. All you need is a computer, reliable internet, and a quiet workspace."
+          },
+          "q5": {
+            "question": "How much does Tax Genius Pro training cost?",
+            "answer": "Our training is completely FREE. Zero cost to access our comprehensive training program, study materials, and mentor support. We also help you obtain your PTIN certification at no additional cost. There are no hidden fees or upfront expenses."
+          },
+          "q6": {
+            "question": "What hours will I work as a tax preparer?",
+            "answer": "You set your own hours. During peak tax season (January-April), most preparers work 20-40 hours per week depending on income goals. Off-season, you can work 10-15 hours per week serving business clients. The flexibility is perfect for parents, students, retirees, or anyone seeking work-life balance."
+          },
+          "q7": {
+            "question": "Does being bilingual help in the {city} market?",
+            "answer": "Yes, being bilingual (English/Spanish) is a major advantage in {city}'s diverse market. Bilingual preparers can serve a wider client base and often command premium rates. However, it's not required—many successful preparers are English-only."
+          },
+          "q8": {
+            "question": "How do I get clients in {city}?",
+            "answer": "Tax Genius Pro provides clients through our platform, especially when you're starting out. You can also build your own client base through local marketing, referrals, and social media presence. Many preparers combine both approaches to maximize income. We provide all the marketing training and tools you need."
+          },
+          "q9": {
+            "question": "Can I earn money outside of tax season?",
+            "answer": "Definitely! While January-April is peak season, you can offer year-round services like: quarterly business taxes, bookkeeping, tax planning, amended returns, and extensions. Many preparers maintain steady income year-round by serving business clients."
+          },
+          "q10": {
+            "question": "What makes Tax Genius Pro different from H&R Block or Liberty Tax?",
+            "answer": "Unlike H&R Block or Liberty Tax where you work as an employee with a fixed salary, Tax Genius Pro allows you to be your own boss. You set your rates, choose your clients, work from home, and keep a much larger portion of your earnings. Plus, our training is FREE while other companies charge $500-$2,000 for training."
+          }
+        },
+        "sectionSubtitle": "Get answers to common questions about becoming a tax preparer",
+        "ctaTitle": "Ready to Start Your Tax Preparer Career?",
+        "ctaSubtitle": "Join hundreds of successful tax preparers earning $75,000-$150,000 annually",
+        "ctaButton": "Apply Now - Start Earning",
+        "ctaPhone": "Call: +1 (404) 627-1015"
+      }
+    },
+    "miami": {
+      "meta": {
+        "title": "Tax Preparer Jobs in Miami, FL - Earn $150,000+ Annually",
+        "description": "Join Tax Genius Pro in Miami, Florida. No experience needed. Work from home. Free training. Earn $75,000-$150,000+ annually as a certified tax preparer.",
+        "keywords": "tax preparer jobs Miami, tax preparer jobs Miami FL, remote tax preparer Miami, free tax preparer training Miami, work from home tax preparer Miami, bilingual tax preparer Miami"
+      },
+      "city": "Miami",
+      "state": "Florida",
+      "stateCode": "FL",
+      "population": "467,963",
+      "targetIncome": "150000",
+      "neighborhoods": {
+        "hero": "South Beach, Brickell, Wynwood",
+        "main": "South Beach, Downtown Miami, Coral Gables, Wynwood, and Brickell",
+        "list": [
+          "South Beach",
+          "Downtown Miami",
+          "Coral Gables",
+          "Wynwood",
+          "Brickell",
+          "Little Havana",
+          "Coconut Grove",
+          "Miami Beach"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "seasonal tax season peaks",
+        "marketHighlight2": "year-round income potential",
+        "localActivity": "walk Miami Beach, grab Cuban food in Little Havana, or meal prep at home",
+        "localArea": "South Beach condo",
+        "neighborhoodReferences": {
+          "neighborhood1": "South Beach",
+          "neighborhood2": "Brickell",
+          "neighborhood3": "Coral Gables",
+          "neighborhood4": "Wynwood"
+        }
+      }
+    },
+    "losAngeles": {
+      "city": "Los Angeles",
+      "state": "California",
+      "stateCode": "CA",
+      "population": "3,979,576",
+      "targetIncome": "150000",
+      "neighborhoods": {
+        "hero": "Hollywood, Santa Monica, Downtown LA",
+        "list": [
+          "Hollywood",
+          "Santa Monica",
+          "Downtown LA",
+          "Beverly Hills",
+          "Venice Beach",
+          "Pasadena"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "tax season peaks",
+        "marketHighlight2": "year-round opportunities",
+        "localActivity": "explore Santa Monica beaches, visit Hollywood, or enjoy Downtown's art scene",
+        "localArea": "Santa Monica apartment",
+        "neighborhoodReferences": {
+          "neighborhood1": "Hollywood",
+          "neighborhood2": "Santa Monica",
+          "neighborhood3": "Downtown LA",
+          "neighborhood4": "Venice Beach"
+        }
+      }
+    },
+    "atlanta": {
+      "city": "Atlanta",
+      "state": "Georgia",
+      "stateCode": "GA",
+      "population": "498,715",
+      "targetIncome": "120000",
+      "neighborhoods": {
+        "hero": "Buckhead, Midtown, Downtown",
+        "list": [
+          "Buckhead",
+          "Midtown",
+          "Downtown Atlanta",
+          "Virginia Highland",
+          "Decatur",
+          "East Atlanta"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "tax season peaks",
+        "marketHighlight2": "consistent year-round demand",
+        "localActivity": "explore Piedmont Park, visit the Georgia Aquarium, or enjoy Midtown's culinary scene",
+        "localArea": "Buckhead home",
+        "neighborhoodReferences": {
+          "neighborhood1": "Buckhead",
+          "neighborhood2": "Midtown",
+          "neighborhood3": "Downtown Atlanta",
+          "neighborhood4": "Virginia Highland"
+        }
+      }
+    },
+    "houston": {
+      "city": "Houston",
+      "state": "Texas",
+      "stateCode": "TX",
+      "population": "2,304,580",
+      "targetIncome": "130000",
+      "neighborhoods": {
+        "hero": "The Woodlands, Galleria, Downtown",
+        "list": [
+          "The Woodlands",
+          "Galleria",
+          "Downtown Houston",
+          "Heights",
+          "Montrose",
+          "Sugar Land"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "high tax season",
+        "marketHighlight2": "ongoing opportunities",
+        "localActivity": "visit Space Center, explore the Museum District, or enjoy Heights' food scene",
+        "localArea": "The Woodlands home",
+        "neighborhoodReferences": {
+          "neighborhood1": "The Woodlands",
+          "neighborhood2": "Galleria",
+          "neighborhood3": "Downtown Houston",
+          "neighborhood4": "Heights"
+        }
+      }
+    },
+    "newYork": {
+      "city": "New York",
+      "state": "New York",
+      "stateCode": "NY",
+      "population": "8,336,817",
+      "targetIncome": "160000",
+      "neighborhoods": {
+        "hero": "Manhattan, Brooklyn, Queens",
+        "list": [
+          "Manhattan",
+          "Brooklyn",
+          "Queens",
+          "Bronx",
+          "Staten Island",
+          "Long Island"
+        ]
+      },
+      "localContent": {
+        "marketHighlight": "high tax season",
+        "marketHighlight2": "year-round demand",
+        "localActivity": "explore Central Park, visit world-class museums, or enjoy Brooklyn's cultural scene",
+        "localArea": "Manhattan apartment",
+        "neighborhoodReferences": {
+          "neighborhood1": "Manhattan",
+          "neighborhood2": "Brooklyn",
+          "neighborhood3": "Queens",
+          "neighborhood4": "Bronx"
+        }
+      }
+    }
+  },
+  "preparerStart": {
+    "meta": {
+      "title": "Tax Genius New Preparer Form | Start Your Application",
+      "description": "You are on your way to becoming a tax preparer! Fill out your information and schedule your appointment."
+    },
+    "header": {
+      "title": "Tax Genius New Preparer Form",
+      "description": "Thanks for showing interest in our Tax Genius Tax preparation program. Fill out the information below, Setup an appointment and someone will call you to discuss your next steps."
+    },
+    "benefits": {
+      "title": "WORK FROM HOME AS A REMOTE WORKERS!!!",
+      "subtitle": "Want a job that works around you for a change? Enjoy a flexible schedule, earning extra income, perfecting a life skill that helps millions every year, and more as a TAX GENIUS PRO.",
+      "cards": {
+        "income": {
+          "icon": "💰",
+          "title": "High Income Potential",
+          "description": "Unlock High Earning Potential. Explore opportunities for additional income that can boost your financial goals year-round."
+        },
+        "flexibility": {
+          "icon": "⏰",
+          "title": "Flexible Hours",
+          "description": "Work from the comfort of your home or any chosen location, set your own hours, and take charge of your schedule."
+        },
+        "stability": {
+          "icon": "📊",
+          "title": "Career Stability",
+          "description": "A career in the tax business offers stability due to the constant need for tax services, regardless of economic conditions."
+        },
+        "more": {
+          "icon": "✨",
+          "title": "AND MUCH, MUCH, MORE",
+          "description": "Free training, marketing materials, 24/7 support, and a community of successful tax preparers."
+        }
+      }
+    },
+    "footer": {
+      "title": "Still Have Questions?",
+      "description": "Questions? Call us at",
+      "or": "or email"
+    }
+  }
+}

@@ -1,0 +1,3045 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String   @id
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  User              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model AddOn {
+  id                       String           @id
+  name                     String           @unique
+  description              String?
+  tooltipText              String?
+  pricingModel             PricingModel
+  configuration            Json
+  additionalTurnaroundDays Int              @default(0)
+  sortOrder                Int              @default(0)
+  isActive                 Boolean          @default(true)
+  adminNotes               String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime @updatedAt
+  AddOnSetItem             AddOnSetItem[]
+  AddOnSubOption           AddOnSubOption[]
+  OrderItemAddOn           OrderItemAddOn[]
+  ProductAddOn             ProductAddOn[]
+}
+
+model AddOnSet {
+  id              String            @id
+  name            String            @unique
+  description     String?
+  sortOrder       Int               @default(0)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime @updatedAt
+  AddOnSetItem    AddOnSetItem[]
+  ProductAddOnSet ProductAddOnSet[]
+  LandingPageSet  LandingPageSet[] // Landing page sets using this addon set
+}
+
+model AddOnSetItem {
+  id              String          @id
+  addOnSetId      String
+  addOnId         String
+  displayPosition DisplayPosition @default(IN_DROPDOWN)
+  isDefault       Boolean         @default(false)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime @updatedAt
+  AddOn           AddOn           @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  AddOnSet        AddOnSet        @relation(fields: [addOnSetId], references: [id], onDelete: Cascade)
+
+  @@unique([addOnSetId, addOnId])
+  @@index([addOnId])
+  @@index([addOnSetId])
+}
+
+model AddOnSubOption {
+  id             String   @id
+  addOnId        String
+  name           String
+  optionType     String
+  options        Json?
+  defaultValue   String?
+  isRequired     Boolean  @default(false)
+  affectsPricing Boolean  @default(false)
+  tooltipText    String?
+  displayOrder   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  AddOn          AddOn    @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+}
+
+model Address {
+  id                    String                 @id
+  userId                String
+  label                 String?
+  name                  String
+  company               String?
+  street                String
+  street2               String?
+  city                  String
+  state                 String
+  zipCode               String
+  country               String                 @default("United States")
+  phone                 String?
+  isDefault             Boolean                @default(false)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime @updatedAt
+  User                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  SavedPaymentMethod    SavedPaymentMethod[]   @relation("BillingAddress")
+
+  @@index([userId])
+  @@index([userId, isDefault])
+}
+
+model SavedPaymentMethod {
+  id               String   @id
+  userId           String
+  squareCustomerId String   // Square customer profile reference
+  squareCardId     String   // Square tokenized card reference
+  nickname         String?  // "Personal Visa", "Business Card"
+  maskedNumber     String   // "****-****-****-1234"
+  cardBrand        String   // "VISA", "MASTERCARD", etc.
+  expiryMonth      Int
+  expiryYear       Int
+  isDefault        Boolean  @default(false)
+  billingAddressId String?  // Link to Address table
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  BillingAddress  Address? @relation("BillingAddress", fields: [billingAddressId], references: [id])
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@unique([userId, squareCardId])
+}
+
+model Airport {
+  id        String   @id
+  code      String   @unique
+  name      String
+  carrier   String
+  operator  String?
+  address   String
+  city      String
+  state     String
+  zip       String
+  hours     Json
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  latitude  Float? // For distance calculations
+  longitude Float? // For distance calculations
+
+  Order              Order[]
+  GeographicLocation GeographicLocation[] // Linked cities for pickup
+
+  @@index([code])
+  @@index([isActive])
+  @@index([state])
+  @@index([operator])
+}
+
+model CampaignABTest {
+  id                String            @id
+  campaignId        String
+  name              String
+  description       String?
+  testType          ABTestType
+  variants          Json
+  trafficSplit      Json
+  winnerCriteria    String
+  confidence        Float             @default(95.0)
+  isActive          Boolean           @default(true)
+  winnerId          String?
+  results           Json?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime @updatedAt
+  MarketingCampaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([isActive])
+}
+
+model CampaignAnalytics {
+  id                String            @id
+  campaignId        String
+  date              DateTime          @default(now())
+  sent              Int               @default(0)
+  delivered         Int               @default(0)
+  opened            Int               @default(0)
+  clicked           Int               @default(0)
+  bounced           Int               @default(0)
+  unsubscribed      Int               @default(0)
+  revenue           Float             @default(0)
+  orders            Int               @default(0)
+  uniqueOpens       Int               @default(0)
+  uniqueClicks      Int               @default(0)
+  MarketingCampaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([campaignId])
+  @@index([date])
+}
+
+model CampaignSend {
+  id                String            @id
+  campaignId        String
+  recipientEmail    String
+  recipientName     String?
+  userId            String?
+  status            SendStatus        @default(PENDING)
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  bouncedAt         DateTime?
+  unsubscribedAt    DateTime?
+  bounceReason      String?
+  errorMessage      String?
+  trackingData      Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime @updatedAt
+  MarketingCampaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  User              User?             @relation(fields: [userId], references: [id])
+
+  @@index([campaignId])
+  @@index([recipientEmail])
+  @@index([sentAt])
+  @@index([status])
+}
+
+model CarrierSettings {
+  id               String   @id
+  carrier          Carrier  @unique
+  enabled          Boolean  @default(true)
+  testMode         Boolean  @default(false)
+  markupPercentage Decimal  @default(0) @db.Decimal(5, 2)
+  apiCredentials   Json?
+  serviceArea      Json?
+  packagingWeight  Decimal  @default(0.5) @db.Decimal(5, 2)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([carrier])
+  @@index([enabled])
+}
+
+model CoatingOption {
+  id                String              @id
+  name              String              @unique
+  description       String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  PaperStockCoating PaperStockCoating[]
+}
+
+model Currency {
+  id                 String   @id
+  code               String   @unique
+  name               String
+  symbol             String
+  exchangeRate       Float    @default(1.0)
+  lastUpdated        DateTime @default(now())
+  decimalPlaces      Int      @default(2)
+  thousandsSeparator String   @default(",")
+  decimalSeparator   String   @default(".")
+  symbolPosition     String   @default("before")
+  countries          String[]
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model CustomTheme {
+  id                String   @id
+  name              String
+  description       String?
+  cssVariables      Json
+  darkModeVariables Json?
+  customCSS         String?
+  isActive          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model CustomerJourney {
+  id                 String               @id
+  userId             String               @unique
+  stage              CustomerStage        @default(LEAD)
+  score              Int                  @default(0)
+  lastActivity       DateTime             @default(now())
+  totalSpent         Float                @default(0)
+  orderCount         Int                  @default(0)
+  avgOrderValue      Float                @default(0)
+  daysSinceFirst     Int                  @default(0)
+  daysSinceLast      Int                  @default(0)
+  engagement         Json?
+  preferences        Json?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime @updatedAt
+  User               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  CustomerTouchpoint CustomerTouchpoint[]
+
+  @@index([lastActivity])
+  @@index([score])
+  @@index([stage])
+}
+
+model CustomerSegment {
+  id                String              @id
+  name              String
+  description       String?
+  criteria          Json
+  isActive          Boolean             @default(true)
+  isDynamic         Boolean             @default(true)
+  customerIds       String[]
+  count             Int                 @default(0)
+  lastUpdated       DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  MarketingCampaign MarketingCampaign[]
+  MarketingWorkflow MarketingWorkflow[]
+  SMSCampaign       SMSCampaign[]
+
+  @@index([isActive])
+  @@index([isDynamic])
+}
+
+model CustomerTouchpoint {
+  id              String          @id
+  journeyId       String
+  type            TouchpointType
+  channel         String
+  action          String
+  details         Json?
+  timestamp       DateTime        @default(now())
+  CustomerJourney CustomerJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId])
+  @@index([timestamp])
+  @@index([type])
+}
+
+model EmailTemplate {
+  id          String   @id
+  name        String
+  category    String
+  subject     String
+  content     Json
+  previewText String?
+  thumbnail   String?
+  isPublic    Boolean  @default(false)
+  tags        String[]
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // ORDER STATUS MANAGER: Email automation integration
+  CustomOrderStatus CustomOrderStatus[]
+
+  @@index([category])
+  @@index([isPublic])
+}
+
+model ExchangeRate {
+  id           String    @id
+  fromCurrency String
+  toCurrency   String
+  rate         Float
+  source       String    @default("api")
+  validFrom    DateTime  @default(now())
+  validTo      DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([fromCurrency, toCurrency, validFrom])
+  @@index([fromCurrency])
+  @@index([toCurrency])
+  @@index([validFrom])
+}
+
+// ============================================================================
+// ORDER FILE MANAGEMENT & APPROVAL SYSTEM
+// WooCommerce-inspired proof approval workflow
+// ============================================================================
+
+model OrderFile {
+  id          String  @id @default(cuid())
+  orderId     String
+  orderItemId String? // Optional: Link to specific order item
+
+  // File metadata
+  filename     String
+  fileUrl      String
+  fileSize     Int?
+  mimeType     String?
+  thumbnailUrl String? // Thumbnail for quick preview
+
+  // File purpose/type
+  fileType OrderFileType @default(CUSTOMER_ARTWORK)
+  label    String? // Display name/label for file
+
+  // Approval workflow
+  approvalStatus ApprovalStatus @default(WAITING)
+  approvedBy     String? // User ID who approved/rejected
+  approvedAt     DateTime?
+
+  // Upload tracking
+  uploadedBy     String? // User ID or "system"
+  uploadedByRole UploadedBy @default(CUSTOMER)
+
+  // Settings & configuration
+  settings Json? // Custom settings per file
+  metadata Json? // Additional metadata
+
+  // Visibility & notifications
+  isVisible      Boolean @default(true)
+  notifyCustomer Boolean @default(true)
+  notifyAdmin    Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  Order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  FileMessage FileMessage[]
+
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([approvalStatus])
+  @@index([fileType])
+  @@index([uploadedBy])
+}
+
+// Messages/comments on order files (for approval workflow)
+model FileMessage {
+  id          String @id @default(cuid())
+  orderFileId String
+
+  // Message content
+  message    String  @db.Text
+  isInternal Boolean @default(false) // Internal note vs customer-facing
+
+  // Author tracking
+  authorId   String? // User ID
+  authorRole String // "customer" or "admin"
+  authorName String? // Display name
+
+  // Attachments to messages
+  attachments Json? // Array of file URLs attached to this message
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  OrderFile OrderFile @relation(fields: [orderFileId], references: [id], onDelete: Cascade)
+
+  @@index([orderFileId])
+  @@index([createdAt])
+}
+
+// Legacy File model - keeping for backward compatibility
+model File {
+  id         String   @id
+  orderId    String
+  filename   String
+  fileUrl    String?
+  fileSize   Int?
+  mimeType   String?
+  uploadedBy String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  Order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Image {
+  id           String         @id
+  name         String         @unique
+  description  String?
+  url          String
+  thumbnailUrl String?
+  largeUrl     String?
+  mediumUrl    String?
+  webpUrl      String?
+  avifUrl      String?
+  blurDataUrl  String?
+  alt          String?
+  width        Int?
+  height       Int?
+  fileSize     Int?
+  mimeType     String?
+  category     String         @default("general")
+  tags         String[]       @default([])
+  metadata     Json?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime @updatedAt
+  ProductImage ProductImage[]
+
+  @@index([category])
+  @@index([createdAt])
+}
+
+model Locale {
+  id             String   @id
+  code           String   @unique
+  name           String
+  nativeName     String
+  direction      String   @default("ltr")
+  dateFormat     String   @default("MM/dd/yyyy")
+  timeFormat     String   @default("h:mm a")
+  numberFormat   Json
+  currencyFormat Json
+  flag           String?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model MarketingAsset {
+  id         String    @id
+  name       String
+  type       AssetType
+  url        String
+  fileSize   Int?
+  dimensions Json?
+  alt        String?
+  tags       String[]
+  folder     String?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([folder])
+  @@index([type])
+}
+
+model MarketingCampaign {
+  id                String              @id
+  name              String
+  type              CampaignType
+  status            CampaignStatus      @default(DRAFT)
+  subject           String?
+  previewText       String?
+  content           Json
+  senderName        String              @default("GangRun Printing")
+  senderEmail       String              @default("noreply@gangrunprinting.com")
+  replyToEmail      String?
+  segmentId         String?
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  completedAt       DateTime?
+  isTemplate        Boolean             @default(false)
+  templateName      String?
+  tags              String[]
+  settings          Json?
+  trackingPixelUrl  String?
+  utmCampaign       String?
+  utmSource         String              @default("email")
+  utmMedium         String              @default("email")
+  createdBy         String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  CampaignABTest    CampaignABTest[]
+  CampaignAnalytics CampaignAnalytics[]
+  CampaignSend      CampaignSend[]
+  CustomerSegment   CustomerSegment?    @relation(fields: [segmentId], references: [id])
+
+  @@index([createdAt])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([type])
+}
+
+model MarketingWorkflow {
+  id                String              @id
+  name              String
+  description       String?
+  trigger           Json
+  steps             Json
+  isActive          Boolean             @default(false)
+  segmentId         String?
+  settings          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  CustomerSegment   CustomerSegment?    @relation(fields: [segmentId], references: [id])
+  WorkflowExecution WorkflowExecution[]
+
+  @@index([isActive])
+}
+
+model N8NWebhook {
+  id            String          @id
+  name          String
+  url           String          @unique
+  trigger       String
+  isActive      Boolean         @default(true)
+  description   String?
+  payload       Json?
+  lastTriggered DateTime?
+  triggerCount  Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime @updatedAt
+  N8NWebhookLog N8NWebhookLog[]
+
+  @@index([isActive])
+  @@index([trigger])
+}
+
+model N8NWebhookLog {
+  id         String     @id
+  webhookId  String
+  payload    Json
+  response   Json?
+  status     Int        @default(200)
+  executedAt DateTime   @default(now())
+  N8NWebhook N8NWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([executedAt])
+  @@index([webhookId])
+}
+
+model CartSession {
+  id             String   @id
+  sessionId      String   @unique
+  userId         String?
+  email          String?
+  phone          String?
+  items          Json // Array of cart items with product info
+  subtotal       Float
+  tax            Float    @default(0)
+  shipping       Float    @default(0)
+  total          Float
+  shippingMethod String?
+  lastActivity   DateTime @default(now())
+  abandoned      Boolean  @default(false)
+  abandonedAt    DateTime?
+  recovered      Boolean  @default(false)
+  recoveredAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  User           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([email])
+  @@index([abandoned])
+  @@index([lastActivity])
+  @@index([createdAt])
+}
+
+model Coupon {
+  id          String    @id
+  code        String    @unique
+  type        String // "PERCENTAGE" | "FIXED_AMOUNT"
+  value       Float // Percentage (0-100) or dollar amount in cents
+  description String?
+  minPurchase Float? // Minimum cart value to use coupon (in cents)
+  maxDiscount Float? // Maximum discount amount (in cents) for percentage coupons
+  usageLimit  Int       @default(1) // How many times this coupon can be used
+  usageCount  Int       @default(0) // How many times it's been used
+  userId      String? // If tied to specific customer
+  expiresAt   DateTime? // 7-day expiration from creation
+  isActive    Boolean   @default(true)
+  metadata    Json? // Store campaign info (e.g., "winback", "abandoned_cart")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime @updatedAt
+  User        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([code])
+  @@index([userId])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String           @id
+  orderId   String
+  type      NotificationType
+  sent      Boolean          @default(false)
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime         @default(now())
+  Order     Order            @relation(fields: [orderId], references: [id])
+}
+
+model OptionValue {
+  id             String        @id
+  optionId       String
+  value          String
+  displayName    String?
+  additionalCost Float         @default(0)
+  isDefault      Boolean       @default(false)
+  sortOrder      Int           @default(0)
+  width          Float?
+  height         Float?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime @updatedAt
+  ProductOption  ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([optionId])
+}
+
+model Order {
+  id                  String    @id
+  orderNumber         String    @unique
+  referenceNumber     String?   @unique
+  userId              String?
+  vendorId            String?
+  funnelId            String? // FUNNELKIT: Track which funnel generated this order
+  funnelStepId        String? // FUNNELKIT: Track which step converted
+  sourceLandingPageId String? // LANDING PAGES: Track which city landing page generated this order
+  subtotal            Float
+  tax                 Float
+  shipping            Float
+  total               Float
+  shippingMethod      String?
+  trackingNumber      String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime @updatedAt
+  adminNotes          String?
+  carrier             Carrier?
+  deleteAt            DateTime  @default(dbgenerated("(now() + '1 year'::interval)"))
+  email               String
+  paidAt              DateTime?
+  phone               String?
+  refundAmount        Float?
+  refundedAt          DateTime?
+  squareCustomerId    String?
+  squareOrderId       String?
+  squarePaymentId     String?
+  status              String    @default("PENDING_PAYMENT") // ORDER STATUS MANAGER: Changed from enum to allow dynamic statuses
+  shippingAddress     Json
+  billingAddress      Json?
+  packageDimensions   Json?
+  selectedAirportId   String?
+  shippingLabelUrl    String?
+  shippingServiceCode String?
+  totalWeight         Float?
+  filesApprovedAt     DateTime?
+  filesApprovedBy     String?
+  vendorNotifiedAt    DateTime?
+  internalNotes       String?
+  customerNotes       String?
+  rushOrder           Boolean   @default(false)
+  priorityLevel       Int       @default(3)
+  tags                String[]  @default([])
+  productionDeadline  DateTime?
+  estimatedCompletion DateTime?
+  estimatedDelivery   DateTime?
+  pickedUpAt          DateTime?
+  pickedUpBy          String?
+  deliveredAt         DateTime?
+  reprintReason       String?
+  originalOrderId     String?
+  holdReason          String?
+  pickupLocation      String?
+  pickupInstructions  String?
+  paymentMethod       String?
+
+  // INVOICE SYSTEM: Admin order creation tracking
+  createdByAdminId  String? // Admin user who created this order
+  invoiceNumber     String?           @unique // e.g., "INV-2025-001234"
+  invoiceId         String?           @unique // Public UUID for customer payment link
+  invoiceSentAt     DateTime? // When invoice email was sent
+  invoiceViewedAt   DateTime? // When customer opened invoice
+  paymentDueDate    DateTime? // Payment due date (default: 7 days from creation)
+  paymentMethodType PaymentMethodType @default(SQUARE_CHECKOUT)
+  paymentIntentId   String? // Square payment intent ID for tracking
+
+  File            File[]
+  OrderFile       OrderFile[]
+  Notification    Notification[]
+  Airport         Airport?         @relation(fields: [selectedAirportId], references: [id])
+  User            User?            @relation("OrderCustomer", fields: [userId], references: [id])
+  CreatedByAdmin  User?            @relation("OrderCreatedBy", fields: [createdByAdminId], references: [id])
+  Vendor          Vendor?          @relation(fields: [vendorId], references: [id])
+  Funnel          Funnel?          @relation(fields: [funnelId], references: [id])
+  CityLandingPage CityLandingPage? @relation(fields: [sourceLandingPageId], references: [id])
+  OrderItem       OrderItem[]
+  ShippingRate    ShippingRate[]
+  StatusHistory   StatusHistory[]
+
+  @@index([funnelId])
+  @@index([funnelStepId])
+  @@index([sourceLandingPageId])
+  @@index([createdByAdminId])
+  @@index([invoiceNumber])
+  @@index([invoiceId])
+  @@index([paymentDueDate])
+  @@index([paymentMethodType])
+  @@index([status]) // ORDER STATUS MANAGER: Index for efficient status lookups
+  @@index([userId, createdAt]) // MARKETING AUTOMATION: Efficient anniversary queries
+  @@index([createdAt, status]) // MARKETING AUTOMATION: Efficient win-back queries
+}
+
+model OrderItem {
+  id               String           @id
+  orderId          String
+  quantity         Int
+  createdAt        DateTime         @default(now())
+  options          Json?
+  price            Float
+  productName      String
+  productSku       String
+  calculatedWeight Float?
+  dimensions       Json?
+  paperStockId     String?
+  categoryId       String?          // For analytics - product category ID
+  categoryName     String?          // For analytics - product category name
+  Order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  PaperStock       PaperStock?      @relation(fields: [paperStockId], references: [id])
+  OrderItemAddOn   OrderItemAddOn[]
+}
+
+model OrderItemAddOn {
+  id              String    @id
+  orderItemId     String
+  addOnId         String
+  configuration   Json
+  calculatedPrice Float
+  createdAt       DateTime  @default(now())
+  AddOn           AddOn     @relation(fields: [addOnId], references: [id])
+  OrderItem       OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([orderItemId, addOnId])
+}
+
+model PaperException {
+  id                    String     @id
+  paperStockId          String     @unique
+  exceptionType         String
+  doubleSidedMultiplier Float      @default(1.75)
+  description           String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime @updatedAt
+  PaperStock            PaperStock @relation(fields: [paperStockId], references: [id], onDelete: Cascade)
+
+  @@index([exceptionType])
+}
+
+model PaperStock {
+  id             String   @id
+  name           String   @unique
+  pricePerSqInch Float    @default(0.001) // CALCULATED: Final price used in pricing (vendor price + markup)
+  tooltipText    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  weight         Float    @default(0.0015)
+
+  // VENDOR PRICING & MARKUP SYSTEM
+  vendorPricePerSqInch Float? // Vendor's base price per square inch
+  markupType           PaperStockMarkupType? @default(PERCENTAGE)
+  markupValue          Float?                @default(0) // Percentage (e.g., 100) or dollar amount (e.g., 1.00)
+  profitMargin         Float? // Auto-calculated: pricePerSqInch - vendorPricePerSqInch
+
+  OrderItem         OrderItem[]
+  PaperException    PaperException?
+  PaperStockCoating PaperStockCoating[]
+  PaperStockSetItem PaperStockSetItem[]
+  PaperStockSides   PaperStockSides[]
+  ProductPaperStock ProductPaperStock[]
+  VendorPaperStock  VendorPaperStock[]
+}
+
+model PaperStockCoating {
+  paperStockId  String
+  coatingId     String
+  isDefault     Boolean       @default(false)
+  CoatingOption CoatingOption @relation(fields: [coatingId], references: [id], onDelete: Cascade)
+  PaperStock    PaperStock    @relation(fields: [paperStockId], references: [id], onDelete: Cascade)
+
+  @@id([paperStockId, coatingId])
+  @@index([coatingId])
+  @@index([paperStockId])
+}
+
+model PaperStockSet {
+  id                   String                 @id
+  name                 String                 @unique
+  description          String?
+  sortOrder            Int                    @default(0)
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime @updatedAt
+  PaperStockSetItem    PaperStockSetItem[]
+  ProductPaperStockSet ProductPaperStockSet[]
+  LandingPageSet       LandingPageSet[] // Landing page sets using this paper stock
+}
+
+model PaperStockSetItem {
+  id              String        @id
+  paperStockSetId String
+  paperStockId    String
+  isDefault       Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime @updatedAt
+  PaperStock      PaperStock    @relation(fields: [paperStockId], references: [id], onDelete: Cascade)
+  PaperStockSet   PaperStockSet @relation(fields: [paperStockSetId], references: [id], onDelete: Cascade)
+
+  @@unique([paperStockSetId, paperStockId])
+  @@index([paperStockId])
+  @@index([paperStockSetId])
+}
+
+model PaperStockSides {
+  paperStockId    String
+  sidesOptionId   String
+  priceMultiplier Float       @default(1.0)
+  isEnabled       Boolean     @default(true)
+  isDefault       Boolean     @default(false)
+  PaperStock      PaperStock  @relation(fields: [paperStockId], references: [id], onDelete: Cascade)
+  SidesOption     SidesOption @relation(fields: [sidesOptionId], references: [id], onDelete: Cascade)
+
+  @@id([paperStockId, sidesOptionId])
+  @@index([paperStockId])
+  @@index([sidesOptionId])
+}
+
+model PricingTier {
+  id          String   @id
+  productId   String
+  minQuantity Int
+  maxQuantity Int?
+  unitPrice   Float
+  setupFee    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  Product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, minQuantity])
+  @@index([productId])
+}
+
+model Product {
+  id               String   @id
+  name             String
+  slug             String   @unique
+  description      String?
+  categoryId       String
+  basePrice        Float
+  isActive         Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  metadata         Json?
+  productionTime   Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  gangRunEligible  Boolean  @default(false)
+  maxGangQuantity  Int?
+  minGangQuantity  Int?
+  rushAvailable    Boolean  @default(false)
+  rushDays         Int?
+  rushFee          Float?
+  setupFee         Float    @default(0)
+  shortDescription String?
+  sku              String   @unique
+
+  // SEO City Products (Epic 8)
+  parentProductId String? // If this is a city-specific product
+  cityId          String? // Associated city for city-specific products
+  seoFaqs         Json? // FAQ for SEO/LLM optimization - array of {question, answer}
+
+  // SEO Enhancement Fields
+  seoKeywords        String[] @default([]) // Target keywords for SEO (e.g., ["postcard printing", "custom postcards"])
+  seoMetaTitle       String? // Custom SEO title (max 60 chars) - overrides default
+  seoMetaDescription String? // Custom meta description (max 160 chars)
+  seoImageAltText    String? // Template for image alt text
+  seoMetrics         Json? // SEO performance tracking (rankings, traffic, conversions)
+
+  // Landing Page System Integration (NEW)
+  isLandingPageProduct Boolean @default(false) // Hidden product for landing page sets
+  landingPageSetId     String? // Link to LandingPageSet if this is a landing page product
+
+  // AI-Generated Content Tracking (Landing Page AI System)
+  imageGenerationMethod String?   @default("manual") // 'ai-generated', 'manual'
+  imagePromptsUsed      String[]  @default([]) // Array of prompt names used for AI images
+  seoScore              Float? // Overall SEO quality score 0-100
+  lastOptimizedAt       DateTime? // Last time AI optimization was applied
+
+  // Relations for parent-child products
+  ParentProduct            Product?                   @relation("ProductHierarchy", fields: [parentProductId], references: [id])
+  ChildProducts            Product[]                  @relation("ProductHierarchy")
+  City                     City?                      @relation(fields: [cityId], references: [id])
+  LandingPageSet           LandingPageSet?            @relation(fields: [landingPageSetId], references: [id])
+  PricingTier              PricingTier[]
+  ProductCategory          ProductCategory            @relation(fields: [categoryId], references: [id])
+  ProductAddOn             ProductAddOn[]
+  ProductAddOnSet          ProductAddOnSet[]
+  ProductImage             ProductImage[]
+  ProductOption            ProductOption[]
+  ProductPaperStock        ProductPaperStock[]
+  ProductPaperStockSet     ProductPaperStockSet[]
+  ProductPricingConfig     ProductPricingConfig?
+  ProductQuantity          ProductQuantity[]
+  ProductQuantityGroup     ProductQuantityGroup[]
+  ProductSize              ProductSize[]
+  ProductSizeGroup         ProductSizeGroup[]
+  ProductTurnaroundTimeSet ProductTurnaroundTimeSet[]
+  VendorProduct            VendorProduct[]
+  FunnelStepProduct        FunnelStepProduct[]
+  OrderBump                OrderBump[]
+  Upsell                   Upsell[]
+  Downsell                 Downsell[]
+  CityLandingPage          CityLandingPage[]
+  ProductDesignSet         ProductDesignSet[]
+  ProductSEOContent        ProductSEOContent[]
+  ProductPerformance       ProductPerformance[] // AI System performance tracking
+  FeaturedProductSelection FeaturedProductSelection[] // Menu system featured products
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([isLandingPageProduct])
+  @@index([landingPageSetId])
+}
+
+model ProductSEOContent {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  city        String?
+  state       String?
+  content     String   @db.Text
+  wordCount   Int
+  generatedAt DateTime @default(now())
+  model       String   // "qwen2.5:32b"
+  approved    Boolean  @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+  @@index([approved])
+  @@index([city, state])
+}
+
+model ProductAddOn {
+  id            String   @id
+  productId     String
+  addOnId       String
+  priceOverride Float?
+  isMandatory   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  AddOn         AddOn    @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  Product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, addOnId])
+}
+
+model ProductAddOnSet {
+  id         String   @id
+  productId  String
+  addOnSetId String
+  isDefault  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  AddOnSet   AddOnSet @relation(fields: [addOnSetId], references: [id], onDelete: Cascade)
+  Product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, addOnSetId])
+  @@index([addOnSetId])
+  @@index([productId])
+}
+
+model ProductCategory {
+  id               String            @id
+  name             String            @unique
+  slug             String            @unique
+  description      String?
+  sortOrder        Int               @default(0)
+  isActive         Boolean           @default(true)
+  isHidden         Boolean           @default(false) // Hidden from navigation but products still searchable/SEO-friendly
+  parentCategoryId String?
+  vendorId         String? // VENDOR SYSTEM: Default vendor for products in this category (determines shipping options)
+  brokerDiscount   Int               @default(0) // Default broker discount percentage (0-100) for products in this category
+
+  // CATEGORY IMAGES & SEO (Shopify-style enhancement)
+  imageUrl         String? // Category banner/hero image URL
+  thumbnailUrl     String? // Category thumbnail for grid display
+  metaTitle        String? // SEO meta title (max 60 chars recommended)
+  metaDescription  String? // SEO meta description (max 160 chars recommended)
+  seoKeywords      String[]          @default([]) // SEO keywords array
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime @updatedAt
+  Product          Product[]
+  ParentCategory   ProductCategory?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: SetNull)
+  Subcategories    ProductCategory[] @relation("CategoryHierarchy")
+  Vendor           Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@index([parentCategoryId])
+  @@index([vendorId])
+}
+
+model ProductImage {
+  id        String   @id
+  productId String
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  imageId   String
+  Image     Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  Product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, imageId])
+  @@index([imageId])
+  @@index([isPrimary])
+  @@index([productId])
+}
+
+model ProductOption {
+  id          String        @id
+  productId   String
+  name        String
+  type        OptionType
+  required    Boolean       @default(false)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime @updatedAt
+  OptionValue OptionValue[]
+  Product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductPaperStock {
+  productId      String
+  paperStockId   String
+  isDefault      Boolean    @default(false)
+  additionalCost Float      @default(0)
+  id             String     @id
+  PaperStock     PaperStock @relation(fields: [paperStockId], references: [id])
+  Product        Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, paperStockId])
+  @@index([paperStockId])
+  @@index([productId])
+}
+
+model ProductPaperStockSet {
+  id              String        @id
+  productId       String
+  paperStockSetId String
+  isDefault       Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime @updatedAt
+  PaperStockSet   PaperStockSet @relation(fields: [paperStockSetId], references: [id], onDelete: Cascade)
+  Product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, paperStockSetId])
+  @@index([paperStockSetId])
+  @@index([productId])
+}
+
+model ProductPricingConfig {
+  id                  String   @id
+  productId           String   @unique
+  allowCustomSize     Boolean  @default(false)
+  allowCustomQuantity Boolean  @default(false)
+  minCustomWidth      Float?
+  maxCustomWidth      Float?
+  minCustomHeight     Float?
+  maxCustomHeight     Float?
+  minCustomQuantity   Int?
+  maxCustomQuantity   Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  Product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ProductQuantity {
+  id                 String           @id
+  productId          String
+  standardQuantityId String
+  isDefault          Boolean          @default(false)
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime @updatedAt
+  Product            Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  StandardQuantity   StandardQuantity @relation(fields: [standardQuantityId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, standardQuantityId])
+  @@index([productId])
+  @@index([standardQuantityId])
+}
+
+model ProductQuantityGroup {
+  id              String        @id
+  productId       String
+  quantityGroupId String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime @updatedAt
+  Product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  QuantityGroup   QuantityGroup @relation(fields: [quantityGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, quantityGroupId])
+  @@index([productId])
+  @@index([quantityGroupId])
+}
+
+model ProductSize {
+  id             String       @id
+  productId      String
+  standardSizeId String
+  isDefault      Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime @updatedAt
+  Product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  StandardSize   StandardSize @relation(fields: [standardSizeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, standardSizeId])
+  @@index([productId])
+  @@index([standardSizeId])
+}
+
+model ProductSizeGroup {
+  id          String    @id
+  productId   String
+  sizeGroupId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime @updatedAt
+  Product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  SizeGroup   SizeGroup @relation(fields: [sizeGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, sizeGroupId])
+  @@index([productId])
+  @@index([sizeGroupId])
+}
+
+model ProductTurnaroundTimeSet {
+  id                  String            @id
+  productId           String
+  turnaroundTimeSetId String
+  isDefault           Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime @updatedAt
+  Product             Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  TurnaroundTimeSet   TurnaroundTimeSet @relation(fields: [turnaroundTimeSetId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, turnaroundTimeSetId])
+  @@index([productId])
+  @@index([turnaroundTimeSetId])
+}
+
+model PushNotification {
+  id     String    @id
+  userId String
+  type   String
+  title  String
+  body   String
+  data   Json?
+  read   Boolean   @default(false)
+  sentAt DateTime  @default(now())
+  readAt DateTime?
+  User   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt])
+  @@index([userId, read])
+}
+
+model PushSubscription {
+  id           String   @id
+  userId       String?
+  endpoint     String   @unique
+  subscription Json
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  User         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([active])
+  @@index([userId])
+}
+
+model QuantityGroup {
+  id                   String                 @id
+  name                 String                 @unique
+  description          String?
+  values               String
+  defaultValue         String
+  customMin            Int?
+  customMax            Int?
+  sortOrder            Int                    @default(0)
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime @updatedAt
+  ProductQuantityGroup ProductQuantityGroup[]
+  LandingPageSet       LandingPageSet[] // Landing page sets using this quantity group
+}
+
+model Quote {
+  id                 String      @id
+  quoteNumber        String      @unique
+  userId             String?
+  customerEmail      String
+  customerName       String?
+  customerPhone      String?
+  productDetails     Json
+  pricing            Json
+  validUntil         DateTime
+  status             QuoteStatus @default(DRAFT)
+  notes              String?
+  createdBy          String?
+  convertedToOrderId String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime @updatedAt
+  User               User?       @relation(fields: [userId], references: [id])
+}
+
+model SMSCampaign {
+  id              String           @id
+  name            String
+  message         String
+  segmentId       String?
+  status          CampaignStatus   @default(DRAFT)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  createdBy       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime @updatedAt
+  CustomerSegment CustomerSegment? @relation(fields: [segmentId], references: [id])
+  SMSSend         SMSSend[]
+
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model SMSSend {
+  id           String      @id
+  campaignId   String
+  phoneNumber  String
+  userId       String?
+  status       SendStatus  @default(PENDING)
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  errorMessage String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime @updatedAt
+  SMSCampaign  SMSCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  User         User?       @relation(fields: [userId], references: [id])
+
+  @@index([campaignId])
+  @@index([phoneNumber])
+  @@index([status])
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ShippingRate {
+  id            String   @id
+  orderId       String
+  carrier       Carrier
+  serviceName   String
+  serviceCode   String
+  estimatedDays Int
+  rateAmount    Float
+  isSelected    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  Order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([orderId])
+}
+
+model SidesOption {
+  id              String            @id
+  name            String            @unique
+  code            String            @unique
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime @updatedAt
+  PaperStockSides PaperStockSides[]
+}
+
+model SizeGroup {
+  id               String             @id
+  name             String             @unique
+  description      String?
+  values           String
+  defaultValue     String
+  customMinWidth   Float?
+  customMaxWidth   Float?
+  customMinHeight  Float?
+  customMaxHeight  Float?
+  sortOrder        Int                @default(0)
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime @updatedAt
+  ProductSizeGroup ProductSizeGroup[]
+  LandingPageSet   LandingPageSet[] // Landing page sets using this size group
+}
+
+model StandardQuantity {
+  id               String            @id
+  displayValue     Int               @unique
+  calculationValue Int
+  adjustmentValue  Int?
+  sortOrder        Int               @default(0)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime @updatedAt
+  ProductQuantity  ProductQuantity[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model StandardSize {
+  id                 String        @id
+  name               String        @unique
+  displayName        String
+  width              Float
+  height             Float
+  preCalculatedValue Float
+  sortOrder          Int           @default(0)
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime @updatedAt
+  ProductSize        ProductSize[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model StatusHistory {
+  id         String   @id
+  orderId    String
+  fromStatus String? // ORDER STATUS MANAGER: Changed from enum to allow dynamic statuses
+  toStatus   String // ORDER STATUS MANAGER: Changed from enum to allow dynamic statuses
+  notes      String?
+  changedBy  String?
+  createdAt  DateTime @default(now())
+  Order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([toStatus])
+}
+
+model Tenant {
+  id                 String               @id
+  name               String
+  slug               String               @unique
+  domain             String?              @unique
+  subdomain          String               @unique
+  isActive           Boolean              @default(true)
+  plan               TenantPlan           @default(BASIC)
+  settings           Json?
+  branding           Json?
+  locales            String[]             @default(["en"])
+  defaultLocale      String               @default("en")
+  timezone           String               @default("America/Chicago")
+  currency           String               @default("USD")
+  contactEmail       String
+  contactName        String?
+  contactPhone       String?
+  billingEmail       String?
+  features           Json?
+  trialEndsAt        DateTime?
+  suspendedAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime @updatedAt
+  TenantBrand        TenantBrand[]
+  TenantDomain       TenantDomain[]
+  TenantUser         TenantUser[]
+  Translation        Translation[]
+  TranslationRequest TranslationRequest[]
+
+  @@index([domain])
+  @@index([isActive])
+  @@index([slug])
+  @@index([subdomain])
+}
+
+model TenantBrand {
+  id              String   @id
+  tenantId        String
+  name            String
+  isDefault       Boolean  @default(false)
+  logoUrl         String?
+  logoText        String?
+  faviconUrl      String?
+  primaryColor    String   @default("#3b82f6")
+  secondaryColor  String   @default("#64748b")
+  accentColor     String   @default("#f59e0b")
+  backgroundColor String   @default("#ffffff")
+  textColor       String   @default("#1f2937")
+  primaryFont     String   @default("Inter")
+  secondaryFont   String   @default("Inter")
+  fontSize        String   @default("16px")
+  borderRadius    String   @default("8px")
+  spacing         String   @default("16px")
+  customCss       String?
+  customJs        String?
+  emailHeaderLogo String?
+  emailFooterText String?
+  emailColors     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  Tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([isDefault])
+  @@index([tenantId])
+}
+
+model TenantDomain {
+  id                 String    @id
+  tenantId           String
+  domain             String    @unique
+  isVerified         Boolean   @default(false)
+  isPrimary          Boolean   @default(false)
+  sslEnabled         Boolean   @default(false)
+  verificationToken  String?
+  verificationMethod String?
+  verificationStatus String?
+  sslCertificateId   String?
+  sslExpiresAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime @updatedAt
+  Tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([domain])
+  @@index([isVerified])
+  @@index([tenantId])
+}
+
+model TenantUser {
+  id       String         @id
+  tenantId String
+  userId   String
+  role     TenantUserRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+  Tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  User     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model ThemeTemplate {
+  id          String   @id
+  name        String   @unique
+  description String?
+  category    String   @default("business")
+  thumbnail   String?
+  previewUrl  String?
+  colors      Json
+  typography  Json
+  layout      Json
+  components  Json
+  isPremium   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  tags        String[] @default([])
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@index([isPremium])
+}
+
+model Translation {
+  id               String            @id
+  tenantId         String?
+  key              String
+  namespace        String            @default("common")
+  locale           String
+  value            String
+  context          String?
+  pluralization    Json?
+  interpolation    String[]          @default([])
+  isApproved       Boolean           @default(false)
+  confidence       Float?
+  source           TranslationSource @default(MANUAL)
+  translatedBy     String?
+  autoTranslated   Boolean           @default(false)
+  originalText     String?
+  translationModel String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime @updatedAt
+  Tenant           Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, namespace, locale])
+  @@index([isApproved])
+  @@index([key])
+  @@index([locale])
+  @@index([namespace])
+  @@index([source])
+  @@index([tenantId])
+}
+
+model TranslationRequest {
+  id             String              @id
+  tenantId       String?
+  key            String
+  namespace      String              @default("common")
+  sourceLocale   String              @default("en")
+  targetLocale   String
+  sourceText     String
+  translatedText String?
+  status         TranslationStatus   @default(PENDING)
+  priority       TranslationPriority @default(NORMAL)
+  context        String?
+  notes          String?
+  assignedTo     String?
+  assignedAt     DateTime?
+  completedAt    DateTime?
+  autoAttempted  Boolean             @default(false)
+  autoResult     String?
+  autoConfidence Float?
+  requestedBy    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime @updatedAt
+  Tenant         Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([assignedTo])
+  @@index([status])
+  @@index([targetLocale])
+  @@index([tenantId])
+}
+
+model TurnaroundTime {
+  id                    String                  @id
+  name                  String
+  displayName           String
+  description           String?
+  daysMin               Int
+  daysMax               Int?
+  pricingModel          PricingModel            @default(FLAT)
+  basePrice             Float                   @default(0)
+  priceMultiplier       Float                   @default(1.0)
+  isActive              Boolean                 @default(true)
+  sortOrder             Int                     @default(0)
+  requiresNoCoating     Boolean                 @default(false)
+  restrictedCoatings    String[]                @default([])
+  restrictedOptions     Json?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime @updatedAt
+  TurnaroundTimeSetItem TurnaroundTimeSetItem[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model TurnaroundTimeSet {
+  id                       String                     @id
+  name                     String                     @unique
+  description              String?
+  isActive                 Boolean                    @default(true)
+  sortOrder                Int                        @default(0)
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime @updatedAt
+  ProductTurnaroundTimeSet ProductTurnaroundTimeSet[]
+  TurnaroundTimeSetItem    TurnaroundTimeSetItem[]
+  LandingPageSet           LandingPageSet[] // Landing page sets using this turnaround time set
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model TurnaroundTimeSetItem {
+  id                  String            @id
+  turnaroundTimeSetId String
+  turnaroundTimeId    String
+  isDefault           Boolean           @default(false)
+  sortOrder           Int               @default(0)
+  priceOverride       Float?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime @updatedAt
+  TurnaroundTime      TurnaroundTime    @relation(fields: [turnaroundTimeId], references: [id], onDelete: Cascade)
+  TurnaroundTimeSet   TurnaroundTimeSet @relation(fields: [turnaroundTimeSetId], references: [id], onDelete: Cascade)
+
+  @@unique([turnaroundTimeSetId, turnaroundTimeId])
+  @@index([turnaroundTimeId])
+  @@index([turnaroundTimeSetId])
+}
+
+model User {
+  id                String              @id
+  email             String              @unique
+  emailVerified     Boolean             @default(false)
+  image             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  name              String?
+  role              UserRole            @default(CUSTOMER)
+  isBroker          Boolean             @default(false)
+  brokerDiscounts   Json?
+  marketingOptIn    Boolean             @default(true)
+  phoneNumber       String?
+  smsOptIn          Boolean             @default(false)
+  Account           Account[]
+  Address           Address[]
+  CampaignSend      CampaignSend[]
+  CustomerJourney   CustomerJourney?
+  Order             Order[]             @relation("OrderCustomer")
+  OrdersCreated     Order[]             @relation("OrderCreatedBy")
+  PushNotification  PushNotification[]
+  PushSubscription  PushSubscription[]
+  Quote             Quote[]
+  SavedPaymentMethod SavedPaymentMethod[]
+  SMSSend           SMSSend[]
+  session           Session[]
+  TenantUser        TenantUser[]
+  WorkflowExecution WorkflowExecution[]
+  Funnel            Funnel[]
+  FunnelVisit       FunnelVisit[]
+  PageTemplate      PageTemplate[]
+  CartSession       CartSession[]
+  Coupon            Coupon[]
+}
+
+model Vendor {
+  id                  String             @id
+  name                String             @unique
+  contactEmail        String
+  orderEmail          String?
+  phone               String?
+  website             String?
+  address             Json?
+  supportedCarriers   String[] // VENDOR SYSTEM: Determines which shipping carriers available at checkout (e.g., ["FedEx", "Southwest Cargo"])
+  isActive            Boolean            @default(true)
+  notes               String?
+  turnaroundDays      Int                @default(3)
+  minimumOrderAmount  Float?
+  shippingCostFormula String?
+  n8nWebhookUrl       String?
+  apiCredentials      Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime @updatedAt
+  Order               Order[]
+  VendorPaperStock    VendorPaperStock[]
+  VendorProduct       VendorProduct[]
+  ProductCategory     ProductCategory[] // VENDOR SYSTEM: Categories using this vendor (determines shipping options)
+}
+
+model VendorPaperStock {
+  id           String     @id
+  vendorId     String
+  paperStockId String
+  vendorSku    String?
+  vendorPrice  Float?
+  leadTime     Int?
+  minQuantity  Int?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime @updatedAt
+  PaperStock   PaperStock @relation(fields: [paperStockId], references: [id], onDelete: Cascade)
+  Vendor       Vendor     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, paperStockId])
+}
+
+model VendorProduct {
+  id          String   @id
+  vendorId    String
+  productId   String
+  vendorSku   String?
+  vendorPrice Float?
+  isPreferred Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  Product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  Vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, productId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now())
+  id         String   @id
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, token])
+}
+
+model WorkflowExecution {
+  id                String            @id
+  workflowId        String
+  userId            String?
+  triggerData       Json
+  currentStep       Int               @default(0)
+  status            ExecutionStatus   @default(RUNNING)
+  completedAt       DateTime?
+  errorMessage      String?
+  stepResults       Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime @updatedAt
+  User              User?             @relation(fields: [userId], references: [id])
+  MarketingWorkflow MarketingWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId])
+  @@index([workflowId])
+}
+
+enum ABTestType {
+  SUBJECT_LINE
+  CONTENT
+  SEND_TIME
+  SENDER_NAME
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  TEMPLATE
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  PAUSED
+  CANCELLED
+}
+
+enum CampaignType {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum Carrier {
+  FEDEX
+  UPS
+  SOUTHWEST_CARGO
+}
+
+enum CustomerStage {
+  LEAD
+  PROSPECT
+  FIRST_TIME
+  REPEAT
+  VIP
+  CHURNED
+  REACTIVATED
+}
+
+enum DisplayPosition {
+  ABOVE_DROPDOWN
+  IN_DROPDOWN
+  BELOW_DROPDOWN
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum NotificationType {
+  ORDER_CONFIRMED
+  PAYMENT_RECEIVED
+  ORDER_PROCESSING
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_REFUNDED
+}
+
+enum OptionType {
+  SELECT
+  RADIO
+  CHECKBOX
+  TEXT
+  NUMBER
+  FILE
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_DECLINED
+  PAYMENT_FAILED
+  PAID
+  CONFIRMATION
+  ON_HOLD
+  PROCESSING
+  PRINTING
+  PRODUCTION
+  SHIPPED
+  READY_FOR_PICKUP
+  ON_THE_WAY
+  PICKED_UP
+  DELIVERED
+  REPRINT
+  CANCELLED
+  REFUNDED
+}
+
+enum PricingModel {
+  FLAT
+  PERCENTAGE
+  PER_UNIT
+  CUSTOM
+}
+
+enum PaperStockMarkupType {
+  PERCENTAGE
+  FLAT
+}
+
+enum DesignPricingType {
+  FREE
+  FLAT
+  SIDE_BASED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum SendStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  UNSUBSCRIBED
+  FAILED
+}
+
+enum TenantPlan {
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum TenantUserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+enum TouchpointType {
+  EMAIL_OPEN
+  EMAIL_CLICK
+  WEBSITE_VISIT
+  ORDER_PLACED
+  SUPPORT_CONTACT
+  SMS_RECEIVED
+  PUSH_RECEIVED
+  LOGIN
+  LOGOUT
+}
+
+enum TranslationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TranslationSource {
+  MANUAL
+  AUTO_OPENAI
+  AUTO_GOOGLE
+  IMPORT
+  API
+}
+
+enum TranslationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum PaymentMethodType {
+  SQUARE_CHECKOUT // Normal customer checkout
+  SQUARE_INVOICE // Invoice sent to customer via Square
+  SQUARE_TERMINAL // Admin swiped card in person
+  SQUARE_VIRTUAL // Admin entered card info (phone order)
+  PAY_LATER // Trusted customer, bill later
+  CHECK // Check payment
+  WIRE_TRANSFER // Bank transfer
+  CASH // Cash payment
+}
+
+// ============================================================================
+// ORDER FILE SYSTEM ENUMS
+// ============================================================================
+
+enum OrderFileType {
+  CUSTOMER_ARTWORK // Customer's design files
+  ADMIN_PROOF // Admin-uploaded proof for approval
+  PRODUCTION_FILE // Final production-ready file
+  REFERENCE // Reference/inspiration file
+  ATTACHMENT // General attachment
+}
+
+enum ApprovalStatus {
+  WAITING // Awaiting customer response (0 in WordPress)
+  APPROVED // Customer approved (1 in WordPress)
+  REJECTED // Customer rejected (2 in WordPress)
+  NOT_REQUIRED // No approval needed
+}
+
+enum UploadedBy {
+  CUSTOMER // Uploaded by customer
+  ADMIN // Uploaded by admin user
+  VENDOR // Uploaded by vendor
+  SYSTEM // System-generated
+}
+
+// ============================================
+// FUNNELKIT INTEGRATION MODELS
+// ============================================
+
+// Main funnel container - integrates with User (owner) and Product (offerings)
+model Funnel {
+  id               String       @id
+  userId           String // FK to User - funnel owner
+  name             String
+  slug             String       @unique // URL-friendly identifier
+  description      String?
+  status           FunnelStatus @default(DRAFT)
+  currency         String       @default("USD")
+  timezone         String       @default("America/Chicago")
+  utmTracking      Json? // {source, medium, campaign, term, content}
+  seoTitle         String?
+  seoDescription   String?
+  ogImage          String? // Social sharing image URL
+  customDomain     String?
+  pixelIds         Json? // {facebook, google, tiktok}
+  totalViews       Int          @default(0)
+  totalConversions Int          @default(0)
+  totalRevenue     Float        @default(0)
+  settings         Json? // Global funnel settings
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime @updatedAt
+
+  User            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  FunnelStep      FunnelStep[]
+  FunnelAnalytics FunnelAnalytics[]
+  FunnelVisit     FunnelVisit[]
+  Order           Order[] // Orders generated through this funnel
+
+  @@index([userId])
+  @@index([slug])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Individual pages within a funnel
+model FunnelStep {
+  id             String         @id
+  funnelId       String
+  name           String
+  slug           String // URL segment (e.g., "checkout", "upsell-1")
+  type           FunnelStepType
+  position       Int // Order in funnel sequence
+  config         Json // Step-specific configuration (template, layout, content)
+  design         Json? // Style overrides (colors, fonts, spacing)
+  seoTitle       String?
+  seoDescription String?
+  isActive       Boolean        @default(true)
+  views          Int            @default(0)
+  conversions    Int            @default(0)
+  revenue        Float          @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime @updatedAt
+
+  Funnel            Funnel              @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  FunnelStepProduct FunnelStepProduct[]
+  OrderBump         OrderBump[]
+  Upsell            Upsell[]
+  Downsell          Downsell[]
+  FunnelAnalytics   FunnelAnalytics[]
+  PageVersion       PageVersion[]
+
+  @@unique([funnelId, position])
+  @@unique([funnelId, slug])
+  @@index([funnelId])
+  @@index([type])
+  @@index([isActive])
+}
+
+// Products offered at each funnel step
+model FunnelStepProduct {
+  id            String        @id
+  funnelStepId  String
+  productId     String // FK to existing Product model
+  quantity      Int           @default(1)
+  priceOverride Float? // Optional custom pricing for this funnel
+  discountType  DiscountType?
+  discountValue Float?
+  isDefault     Boolean       @default(false)
+  sortOrder     Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime @updatedAt
+
+  FunnelStep FunnelStep @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+  Product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([funnelStepId, productId])
+  @@index([funnelStepId])
+  @@index([productId])
+}
+
+// Order bumps - additional offers at checkout
+model OrderBump {
+  id            String        @id
+  funnelStepId  String
+  productId     String // FK to Product
+  headline      String
+  description   String?
+  discountType  DiscountType?
+  discountValue Float?
+  position      BumpPosition  @default(ABOVE_PAYMENT)
+  displayRules  Json? // {minCartValue, categories, etc}
+  design        Json?
+  views         Int           @default(0)
+  accepts       Int           @default(0)
+  revenue       Float         @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime @updatedAt
+
+  FunnelStep FunnelStep @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+  Product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([funnelStepId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// One-click upsells (post-purchase)
+model Upsell {
+  id            String        @id
+  funnelStepId  String
+  productId     String
+  headline      String
+  description   String?
+  discountType  DiscountType?
+  discountValue Float?
+  downsellId    String? // Optional associated downsell
+  design        Json?
+  views         Int           @default(0)
+  accepts       Int           @default(0)
+  rejects       Int           @default(0)
+  revenue       Float         @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime @updatedAt
+
+  FunnelStep FunnelStep @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+  Product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([funnelStepId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// Downsells (alternative offer when upsell rejected)
+model Downsell {
+  id            String        @id
+  funnelStepId  String
+  productId     String
+  headline      String
+  description   String?
+  discountType  DiscountType?
+  discountValue Float?
+  design        Json?
+  views         Int           @default(0)
+  accepts       Int           @default(0)
+  revenue       Float         @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime @updatedAt
+
+  FunnelStep FunnelStep @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+  Product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([funnelStepId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// Time-series analytics for funnels
+model FunnelAnalytics {
+  id             String   @id
+  funnelId       String
+  funnelStepId   String? // Null = funnel-level, Set = step-level
+  date           DateTime @default(now())
+  views          Int      @default(0)
+  uniqueVisitors Int      @default(0)
+  conversions    Int      @default(0)
+  revenue        Float    @default(0)
+  avgTimeOnPage  Int? // Seconds
+  bounceRate     Float? // Percentage
+  exitRate       Float? // Percentage
+  sourceData     Json? // UTM tracking, referrers
+  deviceData     Json? // {desktop, mobile, tablet}
+
+  Funnel     Funnel      @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  FunnelStep FunnelStep? @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+
+  @@unique([funnelId, funnelStepId, date])
+  @@index([funnelId])
+  @@index([funnelStepId])
+  @@index([date])
+}
+
+// Session tracking for funnel visitors
+model FunnelVisit {
+  id            String    @id
+  funnelId      String
+  sessionId     String // Browser session identifier
+  userId        String? // Null if anonymous
+  currentStepId String?
+  entryStepId   String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmTerm       String?
+  utmContent    String?
+  referrer      String?
+  device        String? // desktop, mobile, tablet
+  browser       String?
+  os            String?
+  country       String?
+  region        String?
+  city          String?
+  ipAddress     String?
+  convertedAt   DateTime?
+  orderId       String? // FK to Order if converted
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime @updatedAt
+
+  Funnel Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  User   User?  @relation(fields: [userId], references: [id])
+
+  @@index([funnelId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([convertedAt])
+  @@index([createdAt])
+}
+
+// Enums for FunnelKit models
+enum FunnelStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum FunnelStepType {
+  LANDING
+  CHECKOUT
+  UPSELL
+  DOWNSELL
+  THANKYOU
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum BumpPosition {
+  ABOVE_PAYMENT
+  BELOW_PAYMENT
+  SIDEBAR
+}
+
+// ===== PAGE BUILDER MODELS (Week 4) =====
+
+// Page templates for landing pages
+model PageTemplate {
+  id          String   @id
+  userId      String // FK to User - template creator
+  name        String
+  description String?
+  thumbnail   String? // Preview image URL
+  category    String? // "Business Cards", "Flyers", "General"
+  isPublic    Boolean  @default(false) // Public templates available to all users
+  sortOrder   Int      @default(0)
+  useCount    Int      @default(0) // How many times this template has been used
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  User        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  PageElement PageElement[]
+  PageVersion PageVersion[]
+
+  @@index([userId])
+  @@index([category])
+  @@index([isPublic])
+}
+
+// Individual elements on a page (heading, image, button, form, etc.)
+model PageElement {
+  id             String      @id
+  pageTemplateId String? // FK to PageTemplate (null if orphaned)
+  pageVersionId  String? // FK to PageVersion (for step-specific pages)
+  type           ElementType
+  content        Json // Element-specific content (text, image URL, button text, etc.)
+  styles         Json // CSS properties (color, fontSize, padding, etc.)
+  position       Json // {x, y, width, height} for drag-and-drop positioning
+  parentId       String? // FK to PageElement for nested elements (e.g., button inside container)
+  sortOrder      Int         @default(0)
+  isVisible      Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime @updatedAt
+
+  PageTemplate PageTemplate? @relation(fields: [pageTemplateId], references: [id], onDelete: Cascade)
+  PageVersion  PageVersion?  @relation(fields: [pageVersionId], references: [id], onDelete: Cascade)
+  Parent       PageElement?  @relation("ElementNesting", fields: [parentId], references: [id], onDelete: Cascade)
+  Children     PageElement[] @relation("ElementNesting")
+
+  @@index([pageTemplateId])
+  @@index([pageVersionId])
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+// Version control for funnel step pages (allows A/B testing and rollback)
+model PageVersion {
+  id           String   @id
+  funnelStepId String // FK to FunnelStep
+  versionName  String // "Original", "Variant A", "Variant B"
+  templateId   String? // FK to PageTemplate (if based on template)
+  isActive     Boolean  @default(false) // Only one version active per step
+  trafficSplit Int      @default(100) // Percentage of traffic (for A/B testing)
+  views        Int      @default(0)
+  conversions  Int      @default(0)
+  revenue      Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  FunnelStep   FunnelStep    @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+  PageTemplate PageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  PageElement  PageElement[]
+
+  @@unique([funnelStepId, versionName])
+  @@index([funnelStepId])
+  @@index([templateId])
+  @@index([isActive])
+}
+
+enum ElementType {
+  HEADING
+  TEXT
+  IMAGE
+  BUTTON
+  FORM
+  VIDEO
+  COUNTDOWN
+  TESTIMONIAL
+  FEATURE_LIST
+  PRICING_TABLE
+  SPACER
+  DIVIDER
+  HTML
+  CONTAINER
+  COLUMN
+}
+
+// ============================================================================
+// SEO AI AGENT DASHBOARD MODELS (Epic 8 - October 2025)
+// ============================================================================
+
+// Top 200 US Cities for SEO targeting
+model City {
+  id         String @id @default(cuid())
+  name       String // "New York"
+  state      String // "New York"
+  stateCode  String // "NY"
+  population Int
+  rank       Int // 1-200 (by population)
+
+  // Geographic data
+  latitude  Float?
+  longitude Float?
+  timezone  String? // "America/New_York"
+
+  // Status and priority
+  isActive Boolean @default(true)
+  priority Int     @default(0) // Higher = more important for SEO
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  CityLandingPage     CityLandingPage[]
+  Product             Product[] // City-specific products
+  GeographicLocation  GeographicLocation[] // Airport pickup locations
+
+  @@unique([name, state])
+  @@index([rank])
+  @@index([isActive])
+  @@index([priority])
+}
+
+// ============================================================================
+// LANDING PAGE SYSTEM - Template-based 200 city SEO pages
+// ============================================================================
+
+// Master template for landing page sets - create once, generate 200 cities
+model LandingPageSet {
+  id     String @id @default(cuid())
+  name   String // "Postcards 4x6 Landing Pages"
+  slug   String @unique
+  status String @default("draft") // draft, generating, published, archived
+
+  // EXISTING product configuration (foreign keys to shared infrastructure)
+  paperStockSetId     String
+  quantityGroupId     String
+  sizeGroupId         String
+  addOnSetId          String?
+  turnaroundTimeSetId String?
+
+  // Content templates (with city variables like [CITY], [STATE])
+  titleTemplate    String
+  metaDescTemplate String
+  h1Template       String
+  contentTemplate  String @db.Text
+
+  // AI Generation Settings
+  aiGenerationPrompt String? @db.Text // Custom prompt for content generation
+  generateIntro      Boolean @default(true)
+  generateBenefits   Boolean @default(true)
+  generateFAQs       Boolean @default(true)
+  generateCaseStudy  Boolean @default(false)
+
+  // SEO Settings
+  robotsIndex  Boolean @default(true)
+  robotsFollow Boolean @default(true)
+  canonicalUrl String?
+
+  // Conversion Optimization
+  urgencyEnabled    Boolean @default(true)
+  discountEnabled   Boolean @default(false)
+  discountPercent   Int?
+  chatWidgetEnabled Boolean @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  CityLandingPage CityLandingPage[]
+  Product         Product[] // Hidden products created for landing page sets
+
+  // Relations to EXISTING shared product configuration
+  PaperStockSet     PaperStockSet      @relation(fields: [paperStockSetId], references: [id])
+  QuantityGroup     QuantityGroup      @relation(fields: [quantityGroupId], references: [id])
+  SizeGroup         SizeGroup          @relation(fields: [sizeGroupId], references: [id])
+  AddOnSet          AddOnSet?          @relation(fields: [addOnSetId], references: [id])
+  TurnaroundTimeSet TurnaroundTimeSet? @relation(fields: [turnaroundTimeSetId], references: [id])
+
+  @@index([status])
+  @@index([slug])
+}
+
+// City-specific landing pages - 200 unique pages generated from LandingPageSet template
+model CityLandingPage {
+  id String @id @default(cuid())
+
+  // Link to parent template (CRITICAL)
+  landingPageSetId String? // Optional for backward compatibility with old pages
+
+  // Legacy fields (keep for old pages)
+  productId String
+  cityId    String
+  slug      String @unique // e.g., "postcards-4x6-new-york-ny"
+
+  // SEO Content (AI-generated with TRUE uniqueness per city)
+  title    String // "4x6 Postcards in New York, NY | GangRun Printing"
+  metaDesc String
+  h1       String
+
+  // Multi-layer unique content (NEW)
+  aiIntro     String? @db.Text // AI-generated introduction (200 words, unique per city)
+  aiBenefits  String? @db.Text // AI-generated benefits section
+  aiCaseStudy String? @db.Text // Optional case study
+
+  content         String @db.Text // Full page content (legacy)
+  contentSections Json? // Array of {title, content} sections
+  faqSchema       Json // City-specific FAQ structured data
+  schemaMarkup    Json? // All 7 schema types combined (LocalBusiness, Product, FAQ, etc.)
+
+  // Manual edit protection
+  isManuallyEdited Boolean @default(false)
+  manualEdits      Json? // Track what was manually changed
+
+  // Status
+  status      String    @default("draft") // draft, published, needs_review
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+
+  // SEO Performance Tracking
+  googleRanking Int?
+  organicViews  Int       @default(0)
+  impressions   Int       @default(0)
+  avgPosition   Float?
+  lastCrawled   DateTime?
+
+  // Engagement Metrics
+  views         Int    @default(0)
+  bounceRate    Float?
+  avgTimeOnPage Int? // seconds
+  scrollDepth   Float? // percentage
+
+  // Conversion Metrics
+  clicks         Int    @default(0)
+  quoteRequests  Int    @default(0)
+  addToCart      Int    @default(0)
+  orders         Int    @default(0)
+  revenue        Float  @default(0)
+  conversionRate Float?
+  conversions    Int    @default(0) // Legacy
+
+  // AI-Generated Pickup Locations (Landing Page AI System)
+  aiGeneratedPickupCopy String? @db.Text // Subtle pickup location copy
+  pickupLocations       Json? // Array of { airportId, code, displayName, distance }
+  seoScore              Float? // Page SEO quality score 0-100
+  contentVersion        Int       @default(1) // Track content revisions
+  lastOptimizedAt       DateTime? // Last AI optimization
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  LandingPageSet     LandingPageSet?      @relation(fields: [landingPageSetId], references: [id], onDelete: Cascade)
+  Product            Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  City               City                 @relation(fields: [cityId], references: [id])
+  Order              Order[] // Orders attributed to this landing page
+  ProductPerformance ProductPerformance[] // AI System performance tracking
+
+  @@unique([productId, cityId])
+  @@index([landingPageSetId])
+  @@index([slug])
+  @@index([status])
+  @@index([published])
+  @@index([googleRanking])
+  @@index([conversionRate])
+}
+
+// ============================================================================
+// SYSTEM SETTINGS - Integration configuration
+// ============================================================================
+
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique // "google_analytics_id", "resend_api_key", etc.
+  value       String? // Encrypted sensitive values
+  category    String // "integrations", "email", "analytics", "webhooks"
+  description String?
+  isEncrypted Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+// ============================================================================
+// DESIGN SYSTEM - Following PaperStock/PaperStockSet Architecture
+// ============================================================================
+
+// Individual design options (like PaperStock)
+model DesignOption {
+  id                    String            @id
+  name                  String            @unique // "Upload Your Own Artwork"
+  code                  String            @unique // "upload_own"
+  description           String?
+  tooltipText           String?
+  pricingType           DesignPricingType @default(FLAT)
+  requiresSideSelection Boolean           @default(false)
+  sideOnePrice          Float? // For Standard/Rush one side
+  sideTwoPrice          Float? // For Standard/Rush two sides
+  basePrice             Float             @default(0) // For Minor/Major or upload_own (0)
+  sortOrder             Int               @default(0)
+  isActive              Boolean           @default(true)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime @updatedAt
+  DesignSetItem         DesignSetItem[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+// Groups of design options (like PaperStockSet)
+model DesignSet {
+  id               String             @id
+  name             String             @unique
+  description      String?
+  sortOrder        Int                @default(0)
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime @updatedAt
+  DesignSetItem    DesignSetItem[]
+  ProductDesignSet ProductDesignSet[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+// Junction table: DesignSet ↔ DesignOption (like PaperStockSetItem)
+model DesignSetItem {
+  id             String       @id
+  designSetId    String
+  designOptionId String
+  isDefault      Boolean      @default(false)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime @updatedAt
+  DesignOption   DesignOption @relation(fields: [designOptionId], references: [id], onDelete: Cascade)
+  DesignSet      DesignSet    @relation(fields: [designSetId], references: [id], onDelete: Cascade)
+
+  @@unique([designSetId, designOptionId])
+  @@index([designOptionId])
+  @@index([designSetId])
+}
+
+// Junction table: Product ↔ DesignSet (like ProductPaperStockSet)
+model ProductDesignSet {
+  id          String    @id
+  productId   String
+  designSetId String
+  isDefault   Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime @updatedAt
+  DesignSet   DesignSet @relation(fields: [designSetId], references: [id], onDelete: Cascade)
+  Product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, designSetId])
+  @@index([designSetId])
+  @@index([productId])
+}
+
+// ============================================================================
+// ORDER STATUS MANAGER - WooCommerce-inspired dynamic status system
+// ============================================================================
+
+// Custom order status configuration table
+model CustomOrderStatus {
+  id          String  @id @default(cuid())
+  name        String // "Quality Check"
+  slug        String  @unique // "quality_check"
+  description String?
+
+  // Visual configuration
+  icon       String // Lucide icon name (e.g., "Package", "Truck")
+  color      String // Tailwind color class (e.g., "blue", "purple")
+  badgeColor String // Badge background/text (e.g., "bg-blue-100 text-blue-800")
+
+  // Behavior flags
+  isPaid           Boolean @default(false) // Order considered paid in this status
+  isCore           Boolean @default(false) // Cannot delete core statuses
+  includeInReports Boolean @default(true) // Include in analytics/reports
+  allowDownloads   Boolean @default(false) // Allow file downloads in this status
+
+  // Workflow
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  // Email automation
+  emailTemplateId  String?
+  sendEmailOnEnter Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  EmailTemplate   EmailTemplate?     @relation(fields: [emailTemplateId], references: [id])
+  TransitionsFrom StatusTransition[] @relation("FromStatus")
+  TransitionsTo   StatusTransition[] @relation("ToStatus")
+
+  @@index([slug])
+  @@index([isActive])
+  @@index([sortOrder])
+  @@index([isPaid])
+}
+
+// Valid status transitions
+model StatusTransition {
+  id           String @id @default(cuid())
+  fromStatusId String
+  toStatusId   String
+
+  // Conditional logic
+  requiresPayment Boolean @default(false)
+  requiresAdmin   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  FromStatus CustomOrderStatus @relation("FromStatus", fields: [fromStatusId], references: [id], onDelete: Cascade)
+  ToStatus   CustomOrderStatus @relation("ToStatus", fields: [toStatusId], references: [id], onDelete: Cascade)
+
+  @@unique([fromStatusId, toStatusId])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+}
+
+// ============================================================================
+// LANDING PAGE AI SYSTEM - Multi-Agent SEO Optimization
+// ============================================================================
+
+// Geographic Locations - Links cities to nearby airports for pickup
+model GeographicLocation {
+  id          String   @id @default(cuid())
+  cityId      String
+  airportId   String
+  distance    Float // Miles from city center
+  displayName String // "O'Hare area", "Midway area"
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  City    City    @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  Airport Airport @relation(fields: [airportId], references: [id], onDelete: Cascade)
+
+  @@index([cityId, sortOrder])
+  @@index([cityId, isActive])
+}
+
+// Product Performance Tracking - Time-series data for ML
+model ProductPerformance {
+  id                 String   @id @default(cuid())
+  productId          String?
+  cityLandingPageId  String?
+
+  // Rankings
+  googleRanking Int?
+  keyword       String
+  searchVolume  Int?
+  difficulty    Int? // 0-100
+
+  // Engagement
+  impressions Int   @default(0)
+  clicks      Int   @default(0)
+  ctr         Float?
+
+  // Conversions
+  views          Int     @default(0)
+  addToCarts     Int     @default(0)
+  conversions    Int     @default(0)
+  conversionRate Float?
+  revenue        Decimal @default(0) @db.Decimal(10, 2)
+  avgOrderValue  Decimal? @db.Decimal(10, 2)
+
+  // Metadata
+  recordedAt DateTime @default(now())
+  source     String // 'google-search-console', 'analytics'
+  metadata   Json?
+
+  Product          Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  CityLandingPage  CityLandingPage? @relation(fields: [cityLandingPageId], references: [id], onDelete: Cascade)
+
+  @@index([productId, recordedAt])
+  @@index([cityLandingPageId, recordedAt])
+  @@index([keyword])
+}
+
+// SEO Patterns - Machine-learned patterns from successful content
+model SEOPattern {
+  id          String   @id @default(cuid())
+  patternType String // 'keyword', 'content-structure', 'image-count'
+  description String
+  category    String? // 'business-cards', 'postcards'
+
+  // Evidence
+  successCount    Int   @default(0)
+  failureCount    Int   @default(0)
+  confidenceScore Float @default(0) // 0-100
+
+  // Pattern data
+  data             Json
+  successExamples  String[] @default([])
+  failureExamples  String[] @default([])
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastTestedAt DateTime?
+
+  @@index([patternType, confidenceScore])
+  @@index([category, confidenceScore])
+}
+
+// SEO Suggestions - AI-generated optimization queue
+model SEOSuggestion {
+  id             String   @id @default(cuid())
+  targetType     String // 'Product', 'CityLandingPage'
+  targetId       String
+  suggestionType String // 'add-keyword', 'update-title'
+  title          String
+  description    String
+
+  // Impact estimation
+  expectedImpact  String // 'High', 'Medium', 'Low'
+  estimatedBoost  Json?
+
+  // Status
+  status   String  @default("pending") // 'pending', 'approved', 'rejected', 'implemented'
+  priority Int     @default(5) // 1-10
+
+  // Implementation tracking
+  approvedBy            String?
+  approvedAt            DateTime?
+  implementedAt         DateTime?
+  testingStartedAt      DateTime?
+  testingCompletedAt    DateTime?
+
+  // Results
+  beforeMetrics Json?
+  afterMetrics  Json?
+  actualImpact  Json?
+  roi           Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notes     String?
+
+  @@index([targetType, targetId])
+  @@index([status, priority])
+  @@index([createdAt])
+}
+
+// AI Agent Execution Tracking - Monitor cost & performance
+model AIAgentExecution {
+  id        String   @id @default(cuid())
+  agentType String // 'seo-expert', 'keyword-research', 'image-generation'
+  taskType  String // 'product-creation', 'city-page-generation'
+
+  // Model info
+  modelProvider String // 'claude-code', 'anthropic-api', 'google-imagen'
+  modelName     String
+
+  // Usage metrics
+  inputTokens  Int?
+  outputTokens Int?
+  totalTokens  Int?
+  cost         Decimal @default(0) @db.Decimal(10, 6)
+
+  // Performance
+  qualityScore  Float? // 0-100
+  executionTime Int // milliseconds
+  success       Boolean
+  errorMessage  String?
+
+  // Context
+  targetType String?
+  targetId   String?
+  metadata   Json?
+
+  executedAt DateTime @default(now())
+
+  @@index([agentType, modelProvider])
+  @@index([executedAt])
+  @@index([cost])
+}
+
+// ============================================================================
+// MENU MANAGEMENT SYSTEM
+// ============================================================================
+
+// Main menu container (Header, Footer, Mobile, etc.)
+model Menu {
+  id          String     @id @default(cuid())
+  name        String     @unique // e.g., "Header Menu", "Footer Menu", "Mobile Menu"
+  type        MenuType
+  description String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  items    MenuItem[]
+  sections MenuSection[]
+
+  @@index([type])
+  @@index([isActive])
+}
+
+// Individual menu items (categories, products, pages, links)
+model MenuItem {
+  id         String       @id @default(cuid())
+  menuId     String
+  sectionId  String? // For mega menu - which section this item belongs to
+  parentId   String? // For nested menu items
+  label      String
+  linkType   MenuLinkType
+  linkValue  String // Category slug, product slug, page slug, or full URL
+  iconUrl    String? // Custom icon URL
+  imageUrl   String? // Feature image for mega menu
+  sortOrder  Int          @default(0)
+  isActive   Boolean      @default(true)
+  openInNewTab Boolean    @default(false)
+  customClass String? // Custom CSS class for styling
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  Menu        Menu          @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  Section     MenuSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  Parent      MenuItem?     @relation("MenuItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  Children    MenuItem[]    @relation("MenuItemChildren")
+
+  @@index([menuId])
+  @@index([sectionId])
+  @@index([parentId])
+  @@index([sortOrder])
+  @@index([linkType])
+}
+
+// Custom sections for mega menu (e.g., "Popular", "New", "By Category")
+model MenuSection {
+  id          String     @id @default(cuid())
+  menuId      String
+  title       String // e.g., "Popular Products", "Shop by Category"
+  description String?
+  column      Int        @default(1) // For multi-column layouts (1-4)
+  sortOrder   Int        @default(0)
+  showTitle   Boolean    @default(true)
+  isActive    Boolean    @default(true)
+  iconUrl     String? // Optional icon for section header
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  Menu  Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  items MenuItem[]
+
+  @@index([menuId])
+  @@index([sortOrder])
+}
+
+// Quick links bar (appears below main header)
+model QuickLink {
+  id          String       @id @default(cuid())
+  label       String
+  linkType    MenuLinkType
+  linkValue   String // Category slug, product slug, or URL
+  sortOrder   Int          @default(0)
+  isActive    Boolean      @default(true)
+  iconUrl     String?
+  badgeText   String? // Optional badge (e.g., "New", "Sale")
+  badgeColor  String? // Badge color hex code
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+// Featured product selections (homepage)
+model FeaturedProductSelection {
+  id               String    @id @default(cuid())
+  productId        String
+  sortOrder        Int       @default(0)
+  isActive         Boolean   @default(true)
+  customTitle      String? // Override product title
+  customDescription String? // Override product description
+  customImageUrl   String? // Override product image
+  showBadge        Boolean   @default(false)
+  badgeText        String? // e.g., "Best Seller", "New"
+  badgeColor       String? // Badge color hex code
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  Product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+// Enum types for menu system
+enum MenuType {
+  HEADER
+  FOOTER
+  MOBILE
+  SIDEBAR
+  CUSTOM
+}
+
+enum MenuLinkType {
+  CATEGORY // Links to product category
+  PRODUCT // Links to specific product
+  PAGE // Links to internal page
+  EXTERNAL // External URL
+  CUSTOM // Custom path
+}

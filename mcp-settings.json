@@ -1,0 +1,46 @@
+{
+  "claude.mcp": {
+    "servers": {
+      "shadcn-ui": {
+        "command": "npx",
+        "args": [
+          "@jpisnice/shadcn-ui-mcp-server",
+          "--github-api-key",
+          "${GITHUB_API_KEY}"
+        ],
+        "capabilities": {
+          "tools": true,
+          "prompts": true
+        }
+      },
+      "puppeteer": {
+        "command": "npx",
+        "args": ["puppeteer-mcp-server"],
+        "env": {},
+        "capabilities": {
+          "tools": true,
+          "resources": true
+        }
+      },
+      "firecrawl": {
+        "command": "npx",
+        "args": ["-y", "firecrawl-mcp"],
+        "env": {
+          "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+        },
+        "capabilities": {
+          "tools": true
+        }
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/server-filesystem", "/root/websites/taxgeniuspro"],
+        "env": {},
+        "capabilities": {
+          "tools": true,
+          "resources": true
+        }
+      }
+    }
+  }
+}
