@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { customAlphabet } from 'nanoid';
 import { logger } from '@/lib/logger';
-import { Resend } from 'resend';
+import { getResendClient } from '@/lib/resend';
 import { getEmailRecipients } from '@/config/email-routing';
 
 // Generate unique referral codes
 const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 8);
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // POST /api/referrals/signup - Sign up for referral program
 export async function POST(req: NextRequest) {
@@ -189,7 +187,7 @@ This person has joined the referral program and can now start earning commission
         });
       } else {
         // Send notification to admin team (primary + CC)
-        const { data, error } = await resend.emails.send({
+        const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
           to: [recipients.primary],
           cc: [recipients.cc],

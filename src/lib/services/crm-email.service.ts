@@ -8,9 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { CampaignStatus, EmailActivityStatus, PipelineStage, type Prisma } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from '@/lib/resend';
 
 export interface CreateCampaignInput {
   name: string;
@@ -364,7 +362,7 @@ export class CRMEmailService {
         .replace(/{{firstName}}/g, firstName)
         .replace(/{{lastName}}/g, lastName);
 
-      const result = await resend.emails.send({
+      const result = await getResendClient().emails.send({
         from: `${fromName} <${fromEmail}>`,
         to: email,
         subject: personalizedSubject,

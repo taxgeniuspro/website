@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { Resend } from 'resend';
+import { getResendClient } from '@/lib/resend';
 import { AppointmentConfirmation } from '../../../../../emails/appointment-confirmation';
 import { getAttribution } from '@/lib/services/attribution.service';
 import { trackJourneyStage } from '@/lib/services/journey-tracking.service';
 import { getUTMCookie } from '@/lib/utils/cookie-manager';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { addMinutes } from 'date-fns';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * POST /api/appointments/book - Book an appointment
@@ -339,7 +337,7 @@ export async function POST(req: NextRequest) {
           type: appointmentType,
         });
       } else {
-        const { data, error } = await resend.emails.send({
+        const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
           to: clientEmail,
           subject: 'Appointment Confirmed - TaxGeniusPro',
@@ -360,7 +358,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Also send notification to business
-        await resend.emails.send({
+        await getResendClient().emails.send({
           from: fromEmail,
           to: 'taxgenius.tax@gmail.com',
           subject: `New Appointment Request: ${clientName} - ${appointmentType}`,

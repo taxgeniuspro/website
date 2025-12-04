@@ -346,7 +346,7 @@ export class EmailService {
         emailOptions.text = content.text;
       }
 
-      const { data, error } = await resend.emails.send(emailOptions);
+      const { data, error } = await getResendClient().emails.send(emailOptions);
 
       if (error) {
         logger.error('Error sending email:', error);

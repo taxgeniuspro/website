@@ -22,12 +22,9 @@
  * 4. Replies go to professional email → forwarded to personal email (Cloudflare)
  */
 
-import { Resend } from 'resend';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/db';
-
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from '@/lib/resend';
 
 /**
  * Email sending options
@@ -152,7 +149,7 @@ export class ProfessionalEmailSMTPService {
         : options.from;
 
       // Send email via Resend
-      const { data, error } = await resend.emails.send({
+      const { data, error } = await getResendClient().emails.send({
         from: fromAddress,
         to: Array.isArray(options.to) ? options.to : [options.to],
         cc: options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : undefined,
@@ -323,7 +320,7 @@ export class ProfessionalEmailSMTPService {
       // This would need to be done manually in Resend dashboard
       // We can test by sending a test email
 
-      const testResult = await resend.emails.send({
+      const testResult = await getResendClient().emails.send({
         from: 'test@taxgeniuspro.tax',
         to: 'test@taxgeniuspro.tax',
         subject: 'Domain Verification Test',

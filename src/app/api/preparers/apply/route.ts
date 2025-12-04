@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { Resend } from 'resend';
+import { getResendClient } from '@/lib/resend';
 import { PreparerApplicationConfirmation } from '../../../../../emails/preparer-application-confirmation';
 import { PreparerApplicationNotification } from '../../../../../emails/preparer-application-notification';
 import { getEmailRecipients } from '@/config/email-routing';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // POST /api/preparers/apply - Submit tax preparer application
 export async function POST(req: NextRequest) {
@@ -159,7 +157,7 @@ export async function POST(req: NextRequest) {
         });
       } else {
         // 1. Send confirmation email to applicant
-        const { data: confirmData, error: confirmError } = await resend.emails.send({
+        const { data: confirmData, error: confirmError } = await getResendClient().emails.send({
           from: fromEmail,
           to: email,
           subject: 'Application Received - TaxGeniusPro Tax Preparer Position',
@@ -201,7 +199,7 @@ export async function POST(req: NextRequest) {
             await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay
           }
 
-          const { data: notifyData, error: notifyError } = await resend.emails.send({
+          const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
             from: fromEmail,
             to: hiringEmail,
             subject: `🌐 New Tax Preparer Application: ${firstName} ${lastName}`,
