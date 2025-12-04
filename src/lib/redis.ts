@@ -1,18 +1,24 @@
 import Redis from 'ioredis';
 import { logger } from '@/lib/logger';
 
+// Check if we're in a build environment
+const isBuildTime = process.env.DOCKER_BUILD === 'true' ||
+                    process.env.NEXT_PHASE === 'phase-production-build' ||
+                    process.env.SKIP_REDIS === 'true';
+
 const globalForRedis = global as unknown as {
   redis: Redis | undefined;
 };
 
 // Parse REDIS_URL if provided, otherwise use individual env vars
-function getRedisConfig() {
+function createRedisClient(): Redis {
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl) {
     // Use URL-based connection (Docker-friendly)
     return new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
+      lazyConnect: true, // Don't connect immediately
       retryStrategy(times) {
         const delay = Math.min(times * 50, 2000);
         return delay;
@@ -33,6 +39,7 @@ function getRedisConfig() {
     port: parseInt(process.env.REDIS_PORT || '6379'),
     password: process.env.REDIS_PASSWORD,
     maxRetriesPerRequest: 3,
+    lazyConnect: true, // Don't connect immediately
     retryStrategy(times) {
       const delay = Math.min(times * 50, 2000);
       return delay;
@@ -47,9 +54,39 @@ function getRedisConfig() {
   });
 }
 
-export const redis = globalForRedis.redis ?? getRedisConfig();
+// Lazy-load Redis client - only create when needed, not at module load time
+let _redis: Redis | null = null;
 
-if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis;
+function getRedis(): Redis {
+  if (isBuildTime) {
+    // During build, return a mock that will error on actual use
+    throw new Error('Redis not available during build time');
+  }
+
+  if (!_redis) {
+    _redis = globalForRedis.redis ?? createRedisClient();
+    if (process.env.NODE_ENV !== 'production') {
+      globalForRedis.redis = _redis;
+    }
+  }
+  return _redis;
+}
+
+// Export getter function for lazy access
+export { getRedis };
+
+// For backwards compatibility, export redis as a getter that lazily initializes
+// This will throw if accessed during build time
+export const redis = new Proxy({} as Redis, {
+  get(_target, prop) {
+    const client = getRedis();
+    const value = (client as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
 
 // Helper functions for common operations
 export const cache = {

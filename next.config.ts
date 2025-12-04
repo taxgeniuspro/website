@@ -9,8 +9,8 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 });
 
 const nextConfig: NextConfig = {
-  // Remove 'standalone' for Vercel - it handles this automatically
-  // output: 'standalone', // Only needed for Docker/VPS deployments
+  // Enable standalone for Docker/VPS deployments
+  output: 'standalone',
   typedRoutes: true,
   eslint: {
     ignoreDuringBuilds: true,
