@@ -9,10 +9,20 @@ import OpenAI from 'openai';
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI client to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY environment variable is not set');
+    }
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 // Assistant configuration
 const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || '';
@@ -50,7 +60,7 @@ export async function createThread(params: CreateThreadParams): Promise<ThreadRe
 
   try {
     // Create OpenAI thread
-    const thread = await openai.beta.threads.create();
+    const thread = await getOpenAIClient().beta.threads.create();
 
     // Store thread in database
     const dbThread = await prisma.taxAssistantThread.create({
@@ -107,18 +117,18 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
     }
 
     // Add message to OpenAI thread
-    await openai.beta.threads.messages.create(dbThread.openaiThreadId, {
+    await getOpenAIClient().beta.threads.messages.create(dbThread.openaiThreadId, {
       role: 'user',
       content: message,
     });
 
     // Run the assistant
-    const run = await openai.beta.threads.runs.create(dbThread.openaiThreadId, {
+    const run = await getOpenAIClient().beta.threads.runs.create(dbThread.openaiThreadId, {
       assistant_id: ASSISTANT_ID,
     });
 
     // Wait for completion
-    let runStatus = await openai.beta.threads.runs.retrieve(dbThread.openaiThreadId, run.id);
+    let runStatus = await getOpenAIClient().beta.threads.runs.retrieve(dbThread.openaiThreadId, run.id);
 
     // Poll until complete (with timeout)
     const maxAttempts = 30; // 30 seconds max
@@ -132,7 +142,7 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
         throw new Error(`Assistant run ${runStatus.status}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(dbThread.openaiThreadId, run.id);
+      runStatus = await getOpenAIClient().beta.threads.runs.retrieve(dbThread.openaiThreadId, run.id);
       attempts++;
     }
 
@@ -141,7 +151,7 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
     }
 
     // Get messages from OpenAI
-    const messagesResponse = await openai.beta.threads.messages.list(dbThread.openaiThreadId);
+    const messagesResponse = await getOpenAIClient().beta.threads.messages.list(dbThread.openaiThreadId);
 
     // Get the latest messages (user + assistant response)
     const latestMessages = messagesResponse.data.slice(0, 2).reverse();
