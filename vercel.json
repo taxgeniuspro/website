@@ -10,7 +10,8 @@
     }
   },
   "env": {
-    "SKIP_ENV_VALIDATION": "true"
+    "SKIP_ENV_VALIDATION": "true",
+    "BUILD_TIMESTAMP": "1764889556"
   },
   "crons": []
 }
