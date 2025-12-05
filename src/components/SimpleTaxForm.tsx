@@ -313,19 +313,62 @@ export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFo
     }
   };
 
-  const handleSubmit = async () => {
-    // Save to localStorage
-    localStorage.setItem('taxFormData', JSON.stringify(formData));
+const handleSubmit = async () => {
+    setIsSaving(true);
+    
+    try {
+      // Save to localStorage as backup
+      localStorage.setItem('taxFormData', JSON.stringify(formData));
 
-    // Check if user is authenticated
-    if (user && isLoaded) {
-      // Authenticated user: show thank you page, then auto-redirect to dashboard
-      logger.info('Authenticated user submitted tax form', { userId: user.id });
-      setShowThankYou(true);
-    } else {
-      // Unauthenticated user: redirect to signup, then to referral tab
-      logger.info('Unauthenticated user submitted tax form, redirecting to signup');
-      window.location.href = `/auth/signup?email=${encodeURIComponent(formData.email)}&hint=tax_client&redirect_url=/dashboard/client?tab=referrals`;
+      // Get preparer tracking code from URL or props
+      const urlParams = new URLSearchParams(window.location.search);
+      const preparerCode = urlParams.get('ref') || 'ow'; // Default to Owliver Owl if no ref
+
+      // Create FormData for multipart upload
+      const submitData = new FormData();
+      
+      // Add all form fields
+      Object.keys(formData).forEach(key => {
+        const value = formData[key as keyof TaxFormData];
+        if (value !== null && key !== 'license_file') {
+          submitData.append(key, value.toString());
+        }
+      });
+
+      // Add file if present
+      if (formData.license_file) {
+        submitData.append('license_file', formData.license_file);
+      }
+
+      // Add preparer code
+      submitData.append('preparer_code', preparerCode);
+
+      // Submit to API
+      const response = await fetch('/api/tax-intake/submit', {
+        method: 'POST',
+        body: submitData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit tax form');
+      }
+
+      const result = await response.json();
+      logger.info('Tax form submitted successfully', { emailId: result.emailId, fileUploaded: result.fileUploaded });
+
+      // Check if user is authenticated
+      if (user && isLoaded) {
+        // Authenticated user: show thank you page
+        setShowThankYou(true);
+      } else {
+        // Unauthenticated user: redirect to signup
+        window.location.href = `/auth/signup?email=${encodeURIComponent(formData.email)}&hint=tax_client&redirect_url=/dashboard/client?tab=referrals`;
+      }
+    } catch (error) {
+      logger.error('Error submitting tax form:', error);
+      alert('Failed to submit form. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
