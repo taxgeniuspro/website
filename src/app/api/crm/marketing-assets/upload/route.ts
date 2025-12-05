@@ -97,6 +97,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // If this is a primary profile photo, update the Profile.avatarUrl
+    if (isPrimary && category === 'profile_photo') {
+      await prisma.profile.update({
+        where: { id: profile.id },
+        data: { avatarUrl: fileUrl },
+      });
+      logger.info('Updated profile avatarUrl:', { profileId: profile.id, avatarUrl: fileUrl });
+    }
+
     logger.info('Marketing asset uploaded:', {
       assetId: asset.id,
       profileId: profile.id,
