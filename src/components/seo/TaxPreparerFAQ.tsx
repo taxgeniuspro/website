@@ -3,6 +3,7 @@
 import { CheckCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 interface TaxPreparerFAQProps {
   city: string;
@@ -45,7 +46,7 @@ export default function TaxPreparerFAQ({ city }: TaxPreparerFAQProps) {
       {/* FAQPage structured data for Google rich snippets */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqPageSchema) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(faqPageSchema) }}
       />
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">

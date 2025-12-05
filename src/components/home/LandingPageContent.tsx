@@ -18,6 +18,7 @@ import {
   generateTaxGeniusOrganizationSchema,
   generateTaxGeniusFAQSchema,
 } from '@/lib/seo-llm/1-core-seo/schema/tax-genius-schemas';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 // FAQ data for schema
 const faqData = [
@@ -57,14 +58,14 @@ export function LandingPageContent() {
       {/* Organization Schema for SEO */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(organizationSchema) }}
       />
 
       {/* FAQ Schema for SEO */}
       {faqSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(faqSchema) }}
         />
       )}
 

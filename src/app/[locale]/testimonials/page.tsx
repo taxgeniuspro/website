@@ -7,6 +7,7 @@ import { Star, Quote, CheckCircle, Shield, Award } from 'lucide-react';
 import Link from 'next/link';
 import { generateAggregateRatingSchema } from '@/lib/seo-llm/1-core-seo/schema/tax-genius-schemas';
 import { useTranslations } from 'next-intl';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 const testimonials = [
   {
@@ -147,7 +148,7 @@ export default function TestimonialsPage() {
       {/* AggregateRating Schema for SEO */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(aggregateRatingSchema) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(aggregateRatingSchema) }}
       />
 
       {/* Hero Section */}

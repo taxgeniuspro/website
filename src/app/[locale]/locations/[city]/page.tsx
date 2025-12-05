@@ -5,6 +5,7 @@ import { LandingPageTemplate } from '@/components/landing-page/LandingPageTempla
 import { logger } from '@/lib/logger';
 import { generateTaxGeniusLocalBusinessSchema } from '@/lib/seo-llm/1-core-seo/schema/tax-genius-schemas';
 import { normalizeState } from '@/lib/seo-llm/1-core-seo/utils/state-mapping';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 // ISR: Revalidate every 1 hour (AC8)
 export const revalidate = 3600;
@@ -126,7 +127,7 @@ export default async function CityLandingPage({ params }: PageProps) {
       {/* LocalBusiness Schema for SEO */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessSchema) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(localBusinessSchema) }}
       />
       <LandingPageTemplate data={page} />
     </>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ChevronRight, Home } from 'lucide-react';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 interface BreadcrumbItem {
   label: string;
@@ -47,7 +48,7 @@ export default function TaxPreparerBreadcrumb({
       {/* BreadcrumbList structured data */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(breadcrumbSchema) }}
       />
 
       {/* Visual breadcrumb navigation */}

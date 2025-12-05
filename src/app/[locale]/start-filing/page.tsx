@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 export default function StartFilingPage() {
   const t = useTranslations('startFiling');
@@ -60,7 +61,7 @@ export default function StartFilingPage() {
       {/* JSON-LD Structured Data for SEO */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(jsonLd) }}
       />
 
       {/* Hero Section */}

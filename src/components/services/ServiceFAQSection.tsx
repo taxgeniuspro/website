@@ -10,6 +10,7 @@ import {
   generateTaxGeniusFAQSchema,
   FAQ,
 } from '@/lib/seo-llm/1-core-seo/schema/tax-genius-schemas';
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
 
 interface ServiceFAQSectionProps {
   faqs: FAQ[];
@@ -28,7 +29,7 @@ export function ServiceFAQSection({
       {faqSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(faqSchema) }}
         />
       )}
 

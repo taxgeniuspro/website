@@ -1,3 +1,5 @@
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
+
 interface JobPostingSchemaProps {
   city: string;
   state: string;
@@ -81,7 +83,7 @@ export default function JobPostingSchema({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPosting) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(jobPosting) }}
     />
   );
 }

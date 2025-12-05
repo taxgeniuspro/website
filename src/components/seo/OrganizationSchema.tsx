@@ -1,3 +1,5 @@
+import { safeJsonLdStringify } from '@/lib/utils/json-ld';
+
 /**
  * Organization JSON-LD Schema for SEO and LLM optimization
  * Provides sitewide authority signals to search engines and LLMs
@@ -36,7 +38,7 @@ export default function OrganizationSchema() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLdStringify(organization) }}
     />
   );
 }
