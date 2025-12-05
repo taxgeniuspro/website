@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { Client } from 'ssh2';
 
 /**
  * POST /api/crm/marketing-assets/upload
- * Upload a new marketing asset to VPS
+ * Upload a new marketing asset via HTTP to VPS
  */
 export async function POST(req: NextRequest) {
   try {
@@ -49,75 +48,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    // Generate unique filename
-    const timestamp = Date.now();
-    const ext = file.name.split('.').pop();
-    const fileName = `${category}_${timestamp}.${ext}`;
+    // Prepare upload to VPS
+    const uploadFormData = new FormData();
+    uploadFormData.append('file', file);
+    uploadFormData.append('category', category);
 
-    // VPS upload path
-    const vpsPath = `/var/www/uploads/marketing-assets/${profile.id}`;
-    const vpsFilePath = `${vpsPath}/${fileName}`;
+    const uploadSecret = process.env.UPLOAD_SECRET || 'tax-genius-upload-2025';
 
-    // Public URL for accessing the file
-    const fileUrl = `https://uploads.taxgeniuspro.tax/marketing-assets/${profile.id}/${fileName}`;
-
-    // Get file buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Upload to VPS via SFTP
-    await new Promise<void>((resolve, reject) => {
-      const conn = new Client();
-
-      conn.on('ready', () => {
-        conn.sftp((err, sftp) => {
-          if (err) {
-            conn.end();
-            return reject(err);
-          }
-
-          // Create directory if it doesn't exist
-          sftp.mkdir(vpsPath, { mode: 0o755 }, (mkdirErr) => {
-            // Ignore error if directory already exists
-
-            // Upload file
-            const writeStream = sftp.createWriteStream(vpsFilePath, {
-              mode: 0o644,
-            });
-
-            writeStream.on('error', (writeErr) => {
-              conn.end();
-              reject(writeErr);
-            });
-
-            writeStream.on('close', () => {
-              conn.end();
-              resolve();
-            });
-
-            writeStream.write(buffer);
-            writeStream.end();
-          });
-        });
-      });
-
-      conn.on('error', (connErr) => {
-        reject(connErr);
-      });
-
-      // Connect to VPS
-      conn.connect({
-        host: '72.60.28.175',
-        port: 22,
-        username: 'root',
-        password: process.env.VPS_PASSWORD || 'Bobby321&Gloria321Watkins?',
-      });
+    // Upload to VPS via HTTP
+    const uploadResponse = await fetch('http://upload-api.taxgeniuspro.tax/upload.php', {
+      method: 'POST',
+      headers: {
+        'X-Upload-Secret': uploadSecret,
+        'X-Profile-Id': profile.id,
+      },
+      body: uploadFormData,
     });
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
+      logger.error('VPS upload failed:', errorData);
+      return NextResponse.json({ error: errorData.error || 'Upload failed' }, { status: uploadResponse.status });
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const fileUrl = uploadResult.fileUrl;
 
     logger.info('File uploaded to VPS:', {
       profileId: profile.id,
-      fileName,
-      vpsPath: vpsFilePath,
+      fileName: uploadResult.fileName,
       fileUrl,
     });
 
@@ -185,7 +144,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       asset: {
-        id: asset?.id || `temp_${timestamp}`,
+        id: asset?.id || `temp_${Date.now()}`,
         category: category,
         fileName: file.name,
         fileUrl: fileUrl,
