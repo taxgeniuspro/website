@@ -1,5 +1,5 @@
--- CreateTable: MarketingAsset
-CREATE TABLE "public"."MarketingAsset" (
+-- CreateTable: marketing_assets
+CREATE TABLE "public"."marketing_assets" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "category" TEXT NOT NULL,
@@ -11,12 +11,18 @@ CREATE TABLE "public"."MarketingAsset" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "MarketingAsset_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "marketing_assets_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE INDEX "MarketingAsset_profileId_idx" ON "public"."MarketingAsset"("profileId");
+CREATE INDEX "marketing_assets_profileId_idx" ON "public"."marketing_assets"("profileId");
+
+-- CreateIndex
+CREATE INDEX "marketing_assets_category_idx" ON "public"."marketing_assets"("category");
+
+-- CreateIndex
+CREATE INDEX "marketing_assets_isPrimary_idx" ON "public"."marketing_assets"("isPrimary");
 
 -- AddForeignKey
-ALTER TABLE "public"."MarketingAsset" ADD CONSTRAINT "MarketingAsset_profileId_fkey"
+ALTER TABLE "public"."marketing_assets" ADD CONSTRAINT "marketing_assets_profileId_fkey"
     FOREIGN KEY ("profileId") REFERENCES "public"."profiles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
