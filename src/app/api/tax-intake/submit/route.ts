@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
         <li>Begin tax preparation</li>
         <li>Upload completed return to dashboard</li>
       </ol>
-      <p><a href="https://taxgeniuspro.tax/dashboard/preparer" class="cta-button">View Dashboard →</a></p>
+      <p><a href="https://taxgeniuspro.tax/en/dashboard/tax-preparer" class="cta-button">View Dashboard →</a></p>
     </div>
 
     <div class="footer">
@@ -310,7 +310,7 @@ NEXT STEPS
 4. Begin tax preparation
 5. Upload completed return to dashboard
 
-View Dashboard: https://taxgeniuspro.tax/dashboard/preparer
+View Dashboard: https://taxgeniuspro.tax/en/dashboard/tax-preparer
 
 ---
 Tax Genius Pro
