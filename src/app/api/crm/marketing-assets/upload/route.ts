@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const uploadSecret = process.env.UPLOAD_SECRET || 'tax-genius-upload-2025';
 
     // Upload to VPS via HTTP
-    const uploadResponse = await fetch('https://uploads.taxgeniuspro.tax/api/upload/upload.php', {
+    const uploadResponse = await fetch('https://uploads.taxgeniuspro.tax/upload.php', {
       method: 'POST',
       headers: {
         'X-Upload-Secret': uploadSecret,
