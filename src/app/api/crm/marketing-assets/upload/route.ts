@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { Client } from 'ssh2';
 
 /**
  * POST /api/crm/marketing-assets/upload
- * Upload a new marketing asset
+ * Upload a new marketing asset to VPS
  */
 export async function POST(req: NextRequest) {
   try {
@@ -51,26 +49,79 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    // Create upload directory
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'marketing-assets', profile.id);
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
     // Generate unique filename
     const timestamp = Date.now();
     const ext = file.name.split('.').pop();
     const fileName = `${category}_${timestamp}.${ext}`;
-    const filePath = join(uploadDir, fileName);
 
-    // Write file
+    // VPS upload path
+    const vpsPath = `/var/www/uploads/marketing-assets/${profile.id}`;
+    const vpsFilePath = `${vpsPath}/${fileName}`;
+
+    // Public URL for accessing the file
+    const fileUrl = `https://uploads.taxgeniuspro.tax/marketing-assets/${profile.id}/${fileName}`;
+
+    // Get file buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
 
-    const fileUrl = `/api/uploads/marketing-assets/${profile.id}/${fileName}`;
+    // Upload to VPS via SFTP
+    await new Promise<void>((resolve, reject) => {
+      const conn = new Client();
 
-    // Try to create MarketingAsset record, but if table doesn't exist yet, just update Profile
+      conn.on('ready', () => {
+        conn.sftp((err, sftp) => {
+          if (err) {
+            conn.end();
+            return reject(err);
+          }
+
+          // Create directory if it doesn't exist
+          sftp.mkdir(vpsPath, { mode: 0o755 }, (mkdirErr) => {
+            // Ignore error if directory already exists
+
+            // Upload file
+            const writeStream = sftp.createWriteStream(vpsFilePath, {
+              mode: 0o644,
+            });
+
+            writeStream.on('error', (writeErr) => {
+              conn.end();
+              reject(writeErr);
+            });
+
+            writeStream.on('close', () => {
+              conn.end();
+              resolve();
+            });
+
+            writeStream.write(buffer);
+            writeStream.end();
+          });
+        });
+      });
+
+      conn.on('error', (connErr) => {
+        reject(connErr);
+      });
+
+      // Connect to VPS
+      conn.connect({
+        host: '72.60.28.175',
+        port: 22,
+        username: 'root',
+        password: process.env.VPS_PASSWORD || 'Bobby321&Gloria321Watkins?',
+      });
+    });
+
+    logger.info('File uploaded to VPS:', {
+      profileId: profile.id,
+      fileName,
+      vpsPath: vpsFilePath,
+      fileUrl,
+    });
+
+    // Try to create MarketingAsset record
     let asset = null;
     const isPrimary = category === 'profile_photo';
 
@@ -123,7 +174,7 @@ export async function POST(req: NextRequest) {
       logger.info('Updated profile avatarUrl:', { profileId: profile.id, avatarUrl: fileUrl });
     }
 
-    logger.info('Marketing asset uploaded:', {
+    logger.info('Marketing asset uploaded successfully:', {
       assetId: asset?.id || 'none',
       profileId: profile.id,
       category,
