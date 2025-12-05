@@ -68,26 +68,7 @@ export default function MarketingAssetsPage() {
   // Check if user has marketing assets permission
   const hasMarketingAssetsPermission = permissions?.marketingAssets ?? false;
 
-  // Redirect if no access (client-side redirect, only once)
-  useEffect(() => {
-    if (isLoaded && !hasRedirected.current) {
-      if (!user || !hasMarketingAssetsPermission) {
-        hasRedirected.current = true;
-        router.push('/forbidden');
-      }
-    }
-  }, [isLoaded, user, hasMarketingAssetsPermission, router]);
-
-  // Show loading while checking auth
-  if (!isLoaded || !permissions) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  // Fetch marketing assets
+  // Fetch marketing assets - must be called unconditionally (before any early returns)
   const { data: assets, isLoading } = useQuery({
     queryKey: ['marketing-assets'],
     queryFn: async () => {
@@ -96,9 +77,10 @@ export default function MarketingAssetsPage() {
       const data = await response.json();
       return data.assets as MarketingAsset[];
     },
+    enabled: isLoaded && !!permissions && hasMarketingAssetsPermission,
   });
 
-  // Upload mutation
+  // All mutations must be called unconditionally (before any early returns)
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       setUploadProgress(0);
@@ -130,7 +112,6 @@ export default function MarketingAssetsPage() {
     },
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
       const response = await fetch(`/api/crm/marketing-assets/${assetId}`, {
@@ -150,7 +131,6 @@ export default function MarketingAssetsPage() {
     },
   });
 
-  // Set primary mutation
   const setPrimaryMutation = useMutation({
     mutationFn: async (assetId: string) => {
       const response = await fetch(`/api/crm/marketing-assets/${assetId}/set-primary`, {
@@ -169,6 +149,25 @@ export default function MarketingAssetsPage() {
       toast.error('Failed to set primary');
     },
   });
+
+  // Redirect if no access (client-side redirect, only once)
+  useEffect(() => {
+    if (isLoaded && !hasRedirected.current) {
+      if (!user || !hasMarketingAssetsPermission) {
+        hasRedirected.current = true;
+        router.push('/forbidden');
+      }
+    }
+  }, [isLoaded, user, hasMarketingAssetsPermission, router]);
+
+  // Show loading while checking auth
+  if (!isLoaded || !permissions) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
