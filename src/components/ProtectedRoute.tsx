@@ -56,7 +56,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         case 'affiliate':
           return <Navigate to="/dashboard/affiliate" replace />;
         case 'preparer':
-          return <Navigate to="/dashboard/preparer" replace />;
+          return <Navigate to="/dashboard/tax-preparer" replace />;
         default:
           return <Navigate to="/dashboard" replace />;
       }
