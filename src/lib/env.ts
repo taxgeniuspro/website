@@ -60,6 +60,11 @@ const envSchema = z.object({
   // Google AI
   GOOGLE_AI_API_KEY: z.string().optional(),
 
+  // Cloudinary (Image Upload & CDN)
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+
   // Sentry (Error Tracking)
   NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
   SENTRY_ORG: z.string().optional(),

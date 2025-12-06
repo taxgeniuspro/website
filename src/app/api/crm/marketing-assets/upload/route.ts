@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 /**
  * POST /api/crm/marketing-assets/upload
- * Upload a new marketing asset via HTTP to VPS
+ * Upload a new marketing asset to Cloudinary CDN
  */
 export async function POST(req: NextRequest) {
   try {
@@ -48,36 +56,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    // Prepare upload to VPS
-    const uploadFormData = new FormData();
-    uploadFormData.append('file', file);
-    uploadFormData.append('category', category);
+    // Convert File to Buffer for Cloudinary upload
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-    const uploadSecret = process.env.UPLOAD_SECRET || 'tax-genius-upload-2025';
+    // Upload to Cloudinary
+    const uploadResult = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `marketing-assets/${profile.id}/${category}`,
+          resource_type: 'image',
+          public_id: `${category}_${Date.now()}`,
+          overwrite: false,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
 
-    // Upload to VPS via HTTP on port 8080
-    const uploadResponse = await fetch('http://72.60.28.175:8080/upload.php', {
-      method: 'POST',
-      headers: {
-        'X-Upload-Secret': uploadSecret,
-        'X-Profile-Id': profile.id,
-      },
-      body: uploadFormData,
+      uploadStream.end(buffer);
     });
 
-    if (!uploadResponse.ok) {
-      const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
-      logger.error('VPS upload failed:', errorData);
-      return NextResponse.json({ error: errorData.error || 'Upload failed' }, { status: uploadResponse.status });
-    }
+    const fileUrl = uploadResult.secure_url;
 
-    const uploadResult = await uploadResponse.json();
-    const fileUrl = uploadResult.fileUrl;
-
-    logger.info('File uploaded to VPS:', {
+    logger.info('File uploaded to Cloudinary:', {
       profileId: profile.id,
-      fileName: uploadResult.fileName,
+      fileName: file.name,
       fileUrl,
+      cloudinaryPublicId: uploadResult.public_id,
     });
 
     // Try to create MarketingAsset record
