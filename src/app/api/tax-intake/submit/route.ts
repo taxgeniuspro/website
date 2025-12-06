@@ -6,7 +6,8 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { logger } from '@/lib/logger';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend only when needed to avoid build errors
+const getResend = () => new Resend(process.env.RESEND_API_KEY || 're_placeholder');
 
 export async function POST(request: NextRequest) {
   try {
@@ -331,6 +332,7 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     }
 
     // Send email via Resend
+    const resend = getResend();
     const emailResult = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax',
       to: [preparer.user.email],
