@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,9 +24,29 @@ import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { BookingCallToAction } from '@/components/crm/BookingCallToAction';
 import { logger } from '@/lib/logger';
 
-export default function ContactPage() {
+// Preparer info interface
+interface PreparerInfo {
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  trackingCode: string;
+}
+
+// Default company contact info
+const DEFAULT_CONTACT = {
+  phone: '+1 404-627-1015',
+  email: 'taxgenius.tax@gmail.com',
+};
+
+function ContactPageContent() {
   const t = useTranslations('forms.contact');
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const refCode = searchParams?.get('ref');
+
+  const [preparer, setPreparer] = useState<PreparerInfo | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -36,6 +57,35 @@ export default function ContactPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Fetch preparer info if ref code is present
+  useEffect(() => {
+    if (refCode) {
+      fetchPreparerInfo(refCode);
+    }
+  }, [refCode]);
+
+  const fetchPreparerInfo = async (code: string) => {
+    try {
+      const response = await fetch(`/api/preparer/by-code?code=${encodeURIComponent(code)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.preparer) {
+          setPreparer({
+            ...data.preparer,
+            trackingCode: data.preparer.trackingCode || code,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Error fetching preparer info:', error);
+    }
+  };
+
+  // Get contact info - preparer's if available, otherwise company default
+  const contactPhone = preparer?.phone || DEFAULT_CONTACT.phone;
+  const contactEmail = preparer?.email || DEFAULT_CONTACT.email;
+  const preparerName = preparer ? `${preparer.firstName} ${preparer.lastName}` : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,6 +313,23 @@ export default function ContactPage() {
 
             {/* Contact Information */}
             <div className="space-y-8">
+              {/* Show preparer info banner if preparer is assigned */}
+              {preparer && (
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-center gap-4">
+                  {preparer.avatarUrl && (
+                    <img
+                      src={preparer.avatarUrl}
+                      alt={preparerName || 'Tax Preparer'}
+                      className="w-16 h-16 rounded-full object-cover border-2 border-primary/30"
+                    />
+                  )}
+                  <div>
+                    <p className="text-sm text-muted-foreground">Your Tax Preparer</p>
+                    <p className="font-semibold text-lg">{preparerName}</p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h2 className="text-2xl font-bold text-foreground mb-6">{t('contactInfoTitle')}</h2>
                 <div className="space-y-6">
@@ -270,8 +337,8 @@ export default function ContactPage() {
                     <Phone className="w-6 h-6 text-primary mt-1" />
                     <div>
                       <h3 className="font-semibold mb-1">{t('contactPhone')}</h3>
-                      <a href="tel:+14046271015" className="text-muted-foreground hover:text-primary transition-colors">
-                        +1 404-627-1015
+                      <a href={`tel:${contactPhone.replace(/[^+\d]/g, '')}`} className="text-muted-foreground hover:text-primary transition-colors">
+                        {contactPhone}
                       </a>
                     </div>
                   </div>
@@ -280,8 +347,8 @@ export default function ContactPage() {
                     <Mail className="w-6 h-6 text-primary mt-1" />
                     <div>
                       <h3 className="font-semibold mb-1">{t('contactEmail')}</h3>
-                      <a href="mailto:taxgenius.tax@gmail.com" className="text-muted-foreground hover:text-primary transition-colors">
-                        taxgenius.tax@gmail.com
+                      <a href={`mailto:${contactEmail}`} className="text-muted-foreground hover:text-primary transition-colors">
+                        {contactEmail}
                       </a>
                     </div>
                   </div>
@@ -328,17 +395,35 @@ export default function ContactPage() {
                   <CardDescription>{t('quickActionsSubtitle')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Calendar className="mr-2 w-4 h-4" />
-                    {t('scheduleConsultation')}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <a href={preparer?.trackingCode ? `/go/${preparer.trackingCode}-appt` : `/${locale}/book`}>
+                      <Calendar className="mr-2 w-4 h-4" />
+                      {t('scheduleConsultation')}
+                    </a>
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <MessageCircle className="mr-2 w-4 h-4" />
-                    {t('liveChat')}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <a href={`sms:${contactPhone.replace(/[^+\d]/g, '')}`}>
+                      <MessageCircle className="mr-2 w-4 h-4" />
+                      {t('liveChat')}
+                    </a>
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <CheckCircle className="mr-2 w-4 h-4" />
-                    {t('checkRefund')}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <a href="https://sa.www4.irs.gov/irfof/lang/en/irfofgetstatus.jsp" target="_blank" rel="noopener noreferrer">
+                      <CheckCircle className="mr-2 w-4 h-4" />
+                      {t('checkRefund')}
+                    </a>
                   </Button>
                 </CardContent>
               </Card>
@@ -422,5 +507,14 @@ export default function ContactPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+// Default export with Suspense boundary for useSearchParams
+export default function ContactPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <ContactPageContent />
+    </Suspense>
   );
 }
