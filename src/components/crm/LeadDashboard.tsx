@@ -54,7 +54,9 @@ import {
   FileText,
   TrendingUp,
   Users,
+  ExternalLink,
 } from 'lucide-react';
+import Link from 'next/link';
 import { format } from 'date-fns';
 
 interface TaxIntakeLead {
@@ -80,6 +82,7 @@ interface TaxIntakeLead {
   created_at: string;
   updated_at: string;
   full_form_data?: any;
+  crmContactId?: string | null;
 }
 
 interface LeadStats {
@@ -448,11 +451,26 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
                         {/* Actions */}
                         <div className="flex flex-col gap-2 md:w-48">
-                          {lead.full_form_data && (
+                          {/* View in CRM - Primary action when CRM contact exists */}
+                          {lead.crmContactId && (
                             <Button
                               variant="default"
                               size="sm"
-                              className="w-full bg-primary text-primary-foreground"
+                              className="w-full"
+                              asChild
+                            >
+                              <Link href={`/en/crm/contacts/${lead.crmContactId}`}>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View in CRM
+                              </Link>
+                            </Button>
+                          )}
+
+                          {lead.full_form_data && (
+                            <Button
+                              variant={lead.crmContactId ? 'outline' : 'default'}
+                              size="sm"
+                              className="w-full"
                               onClick={() => {
                                 setTaxDetailsLead(lead);
                                 setTaxDetailsDialogOpen(true);

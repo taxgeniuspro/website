@@ -88,6 +88,23 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Fetch CRM contact IDs for each lead by email
+    const leadEmails = leads.map(l => l.email.toLowerCase());
+    const crmContacts = await prisma.cRMContact.findMany({
+      where: {
+        email: { in: leadEmails },
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+
+    // Create email -> CRM contact ID map
+    const emailToCrmId = new Map(
+      crmContacts.map(c => [c.email.toLowerCase(), c.id])
+    );
+
     // Determine lead status and filter
     const getLeadStatus = (lead: any): string => {
       if (lead.convertedToClient) return 'converted';
@@ -99,6 +116,7 @@ export async function GET(req: NextRequest) {
     const leadsWithStatus = leads.map(lead => ({
       ...lead,
       status: getLeadStatus(lead),
+      crmContactId: emailToCrmId.get(lead.email.toLowerCase()) || null,
     }));
 
     // Filter by status if provided

@@ -32,7 +32,12 @@ import {
   Loader2,
   Activity,
   Zap,
+  ClipboardList,
+  MapPin,
+  ExternalLink,
 } from 'lucide-react';
+import { TaxIntakeDetails } from '@/components/crm/TaxIntakeDetails';
+import { format } from 'date-fns';
 
 /**
  * CRM Contact Detail Page
@@ -46,6 +51,36 @@ import {
  * - Documents
  * - Tags
  */
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string;
+  middle_name?: string | null;
+  last_name: string;
+  email: string;
+  phone: string;
+  country_code: string;
+  address_line_1?: string | null;
+  address_line_2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  full_form_data?: any;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  attributionMethod?: string | null;
+  assignedPreparerId?: string | null;
+  contactRequested: boolean;
+  contactMethod?: string | null;
+  lastContactedAt?: string | null;
+  contactNotes?: string | null;
+  convertedToClient: boolean;
+  leadScore?: number | null;
+  urgency?: string | null;
+}
 
 interface Contact {
   id: string;
@@ -69,6 +104,7 @@ interface Contact {
   tags?: any[];
   emailActivities?: any[];
   stageHistory?: any[];
+  taxIntakeLead?: TaxIntakeLead | null;
 }
 
 export default function ContactDetailPage() {
@@ -317,8 +353,14 @@ export default function ContactDetailPage() {
 
         {/* Right Column - Timeline & Tabs */}
         <div className="md:col-span-2">
-          <Tabs defaultValue="timeline" className="space-y-4">
-            <TabsList>
+          <Tabs defaultValue={contact.taxIntakeLead ? 'tax-details' : 'timeline'} className="space-y-4">
+            <TabsList className="flex-wrap">
+              {contact.taxIntakeLead && (
+                <TabsTrigger value="tax-details">
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Tax Details
+                </TabsTrigger>
+              )}
               <TabsTrigger value="timeline">
                 <Activity className="h-4 w-4 mr-2" />
                 Timeline
@@ -337,6 +379,23 @@ export default function ContactDetailPage() {
               </TabsTrigger>
             </TabsList>
 
+            {/* Tax Details Tab */}
+            {contact.taxIntakeLead && (
+              <TabsContent value="tax-details">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Tax Intake Information</CardTitle>
+                    <CardDescription>
+                      Complete tax intake form data submitted by the client
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TaxIntakeDetails taxIntakeLead={contact.taxIntakeLead} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+
             {/* Timeline Tab */}
             <TabsContent value="timeline">
               <Card>
@@ -348,34 +407,11 @@ export default function ContactDetailPage() {
                   {contact.interactions && contact.interactions.length > 0 ? (
                     <div className="space-y-4">
                       {contact.interactions.map((interaction: any) => (
-                        <div key={interaction.id} className="flex gap-4">
-                          <div className="flex flex-col items-center">
-                            <div className="rounded-full bg-primary p-2">
-                              <MessageCircle className="h-4 w-4 text-primary-foreground" />
-                            </div>
-                            <div className="h-full w-px bg-border mt-2" />
-                          </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="font-medium">{interaction.type}</p>
-                                {interaction.subject && (
-                                  <p className="text-sm text-muted-foreground">
-                                    {interaction.subject}
-                                  </p>
-                                )}
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(interaction.occurredAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            {interaction.body && (
-                              <p className="text-sm mt-2 text-muted-foreground">
-                                {interaction.body}
-                              </p>
-                            )}
-                          </div>
-                        </div>
+                        <InteractionCard
+                          key={interaction.id}
+                          interaction={interaction}
+                          contact={contact}
+                        />
                       ))}
                     </div>
                   ) : (
@@ -439,6 +475,224 @@ export default function ContactDetailPage() {
             </TabsContent>
           </Tabs>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * InteractionCard - User-friendly display of timeline interactions
+ * Parses tax intake form submissions into clean, scannable cards
+ */
+function InteractionCard({
+  interaction,
+  contact,
+}: {
+  interaction: any;
+  contact: Contact;
+}) {
+  // Check if this is a tax intake form submission
+  const isTaxIntakeSubmission =
+    interaction.subject?.includes('Tax Intake Form') ||
+    interaction.body?.includes('Tax Intake Form');
+
+  // Parse the body to extract structured data
+  const parseIntakeBody = (body: string) => {
+    if (!body) return null;
+
+    const data: Record<string, string> = {};
+
+    // Extract name
+    const nameMatch = body.match(/Name:\s*(.+?)(?:\n|$)/);
+    if (nameMatch) data.name = nameMatch[1].trim();
+
+    // Extract email
+    const emailMatch = body.match(/Email:\s*(.+?)(?:\n|$)/);
+    if (emailMatch) data.email = emailMatch[1].trim();
+
+    // Extract phone
+    const phoneMatch = body.match(/Phone:\s*(.+?)(?:\n|$)/);
+    if (phoneMatch) data.phone = phoneMatch[1].trim();
+
+    // Extract address (multi-line)
+    const addressSection = body.match(/\*\*Address:\*\*\n([\s\S]*?)(?:\n\n|\*\*)/);
+    if (addressSection) {
+      data.address = addressSection[1].trim().replace(/\n/g, ', ');
+    }
+
+    // Extract source
+    const sourceMatch = body.match(/Source:\s*(.+?)(?:\n|$)/);
+    if (sourceMatch) data.source = sourceMatch[1].trim();
+
+    // Extract referrer
+    const referrerMatch = body.match(/Referrer:\s*(.+?)(?:\n|$)/);
+    if (referrerMatch) data.referrer = referrerMatch[1].trim();
+
+    // Extract status
+    const statusMatch = body.match(/Status:\s*(.+?)(?:\n|$)/);
+    if (statusMatch) data.status = statusMatch[1].trim();
+
+    // Extract Lead ID
+    const leadIdMatch = body.match(/Lead ID:\s*(.+?)(?:\n|$)/);
+    if (leadIdMatch) data.leadId = leadIdMatch[1].trim();
+
+    return data;
+  };
+
+  // Get icon based on interaction type or subject
+  const getIcon = () => {
+    if (isTaxIntakeSubmission) {
+      return interaction.subject?.includes('Complete')
+        ? CheckCircle
+        : Clock;
+    }
+    switch (interaction.type) {
+      case 'EMAIL':
+        return Mail;
+      case 'PHONE_CALL':
+        return Phone;
+      case 'MEETING':
+        return Calendar;
+      case 'NOTE':
+        return MessageCircle;
+      default:
+        return Activity;
+    }
+  };
+
+  // Get badge color based on type
+  const getBadgeColor = () => {
+    if (interaction.subject?.includes('Complete')) return 'bg-green-500';
+    if (interaction.subject?.includes('Partial')) return 'bg-yellow-500';
+    if (interaction.type === 'EMAIL') return 'bg-blue-500';
+    if (interaction.type === 'PHONE_CALL') return 'bg-purple-500';
+    return 'bg-primary';
+  };
+
+  const Icon = getIcon();
+  const parsedData = isTaxIntakeSubmission ? parseIntakeBody(interaction.body) : null;
+
+  // For tax intake submissions, render a clean card
+  if (isTaxIntakeSubmission && parsedData) {
+    return (
+      <Card className="border-l-4 border-l-primary">
+        <CardContent className="pt-4">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={cn('rounded-full p-2', getBadgeColor())}>
+                <Icon className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold">{interaction.subject}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(interaction.occurredAt), 'MMM d, yyyy h:mm a')}
+                </p>
+              </div>
+            </div>
+            {parsedData.status && (
+              <Badge variant="outline" className="text-xs">
+                {parsedData.status}
+              </Badge>
+            )}
+          </div>
+
+          {/* Contact Info - Clean Grid */}
+          <div className="grid gap-3 md:grid-cols-2 mt-4">
+            {/* Name & Quick Actions */}
+            <div className="space-y-2">
+              {parsedData.name && (
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{parsedData.name}</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                {parsedData.phone && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`tel:${parsedData.phone.replace(/\D/g, '')}`}>
+                      <Phone className="h-3 w-3 mr-1" />
+                      Call
+                    </a>
+                  </Button>
+                )}
+                {parsedData.email && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`mailto:${parsedData.email}`}>
+                      <Mail className="h-3 w-3 mr-1" />
+                      Email
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Address */}
+            {parsedData.address && parsedData.address !== 'Not provided' && (
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-sm">{parsedData.address}</p>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(parsedData.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    View on Map
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Attribution Footer */}
+          {(parsedData.source || parsedData.referrer) && (
+            <div className="mt-3 pt-3 border-t flex items-center gap-4 text-xs text-muted-foreground">
+              {parsedData.source && (
+                <span>
+                  Source: <span className="font-medium">{parsedData.source}</span>
+                </span>
+              )}
+              {parsedData.referrer && (
+                <span>
+                  Referrer: <span className="font-medium">{parsedData.referrer}</span>
+                </span>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Default rendering for non-tax-intake interactions
+  return (
+    <div className="flex gap-4">
+      <div className="flex flex-col items-center">
+        <div className={cn('rounded-full p-2', getBadgeColor())}>
+          <Icon className="h-4 w-4 text-white" />
+        </div>
+        <div className="h-full w-px bg-border mt-2" />
+      </div>
+      <div className="flex-1 pb-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-medium">{interaction.type}</p>
+            {interaction.subject && (
+              <p className="text-sm text-muted-foreground">{interaction.subject}</p>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {format(new Date(interaction.occurredAt), 'MMM d, yyyy h:mm a')}
+          </span>
+        </div>
+        {interaction.body && (
+          <div className="mt-2 text-sm text-muted-foreground bg-muted p-3 rounded-md whitespace-pre-wrap">
+            {interaction.body}
+          </div>
+        )}
       </div>
     </div>
   );
