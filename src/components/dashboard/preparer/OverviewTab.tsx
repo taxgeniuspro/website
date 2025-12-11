@@ -34,28 +34,8 @@ const quickActions = [
   { icon: Archive, label: 'Archive Returns' },
 ];
 
-const recentActivities = [
-  {
-    text: 'John Smith uploaded W2 form',
-    time: '2 hours ago',
-    color: 'bg-green-500',
-  },
-  {
-    text: 'Filed return for Sarah Johnson',
-    time: '5 hours ago',
-    color: 'bg-blue-500',
-  },
-  {
-    text: 'New message from Michael Brown',
-    time: '1 day ago',
-    color: 'bg-yellow-500',
-  },
-  {
-    text: 'Return accepted for Lisa Davis',
-    time: '2 days ago',
-    color: 'bg-green-500',
-  },
-];
+// Real data - empty until actual client activity occurs
+const recentActivities: Array<{ text: string; time: string; color: string }> = [];
 
 export function OverviewTab({ clients, getPriorityColor }: OverviewTabProps) {
   const priorityClients = clients.filter((c) => c.priority === 'HIGH').slice(0, 5);

@@ -50,60 +50,19 @@ export default async function TaxPreparerEarningsPage() {
     redirect('/forbidden');
   }
 
-  // Mock earnings data
-  const earnings = [
-    {
-      id: '1',
-      client: 'John Anderson',
-      service: 'Personal Tax Return',
-      amount: 350,
-      date: '2024-03-15',
-      status: 'Paid',
-      paymentMethod: 'Direct Deposit',
-    },
-    {
-      id: '2',
-      client: 'Maria Garcia',
-      service: 'Business Tax Return',
-      amount: 750,
-      date: '2024-03-14',
-      status: 'Paid',
-      paymentMethod: 'Direct Deposit',
-    },
-    {
-      id: '3',
-      client: 'David Chen',
-      service: 'Tax Planning Consultation',
-      amount: 200,
-      date: '2024-03-13',
-      status: 'Pending',
-      paymentMethod: 'Direct Deposit',
-    },
-    {
-      id: '4',
-      client: 'Sarah Williams',
-      service: 'Personal Tax Return',
-      amount: 350,
-      date: '2024-03-12',
-      status: 'Paid',
-      paymentMethod: 'Direct Deposit',
-    },
-    {
-      id: '5',
-      client: 'Michael Brown',
-      service: 'Amended Return',
-      amount: 250,
-      date: '2024-03-11',
-      status: 'Processing',
-      paymentMethod: 'Direct Deposit',
-    },
-  ];
+  // Real data - empty until actual earnings are recorded
+  const earnings: Array<{
+    id: string;
+    client: string;
+    service: string;
+    amount: number;
+    date: string;
+    status: string;
+    paymentMethod: string;
+  }> = [];
 
-  const monthlyData = [
-    { month: 'Jan', earnings: 3200 },
-    { month: 'Feb', earnings: 4100 },
-    { month: 'Mar', earnings: 1900 },
-  ];
+  // Real data - empty until actual monthly data is available
+  const monthlyData: Array<{ month: string; earnings: number }> = [];
 
   const totalEarnings = earnings.reduce((sum, e) => sum + e.amount, 0);
   const paidEarnings = earnings

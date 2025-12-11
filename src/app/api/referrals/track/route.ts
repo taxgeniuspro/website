@@ -84,26 +84,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Code or username required' }, { status: 400 });
   }
 
-  // Simulate database lookup (in production, query database)
-  const mockReferrer = {
-    id: crypto.randomUUID(),
-    name: 'Sarah Johnson',
-    username: username || 'sarahjohnson',
-    referralCode: code || 'SARAH2024',
-    avatar: '/avatars/sarah.jpg',
-    tier: 'gold',
-    totalReferrals: 47,
-    successfulReferrals: 35,
-    earnings: 5250,
-    joinedDate: '2023-11-15',
-    testimonial: "I've made over $5,000 referring friends! The process is so simple.",
-    isActive: true,
-    stats: {
-      thisMonth: 8,
-      lastMonth: 12,
-      conversionRate: 0.74,
+  // Return empty/not found response - real data would come from database query
+  // TODO: Implement database query for referrer data when referral system is built
+  return NextResponse.json(
+    {
+      error: 'Referrer not found',
+      message: 'No referrer data available for this code',
     },
-  };
-
-  return NextResponse.json(mockReferrer, { status: 200 });
+    { status: 404 }
+  );
 }
