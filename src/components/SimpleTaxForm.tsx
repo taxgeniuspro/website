@@ -1151,7 +1151,7 @@ function DependentsPage({ formData, setFormData }: Omit<FormPageProps, 'handleIn
             type="number"
             min="1"
             value={formData.number_of_dependents}
-            onChange={handleInputChange}
+            onChange={(e) => setFormData({ ...formData, number_of_dependents: e.target.value })}
             required
             className="text-lg p-6"
             placeholder={t('numberOfDependentsPlaceholder')}
