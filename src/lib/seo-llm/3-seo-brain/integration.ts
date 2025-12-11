@@ -519,3 +519,44 @@ export class N8NIntegration {
     )
   }
 }
+
+/**
+ * SEO Brain - Main orchestrator for campaign analysis and optimization
+ *
+ * This object provides high-level methods for campaign management
+ * and integrates with performance analysis, Telegram notifications, etc.
+ */
+export const seoBrain = {
+  /**
+   * Analyze a campaign's performance and generate optimization recommendations
+   */
+  async analyzeCampaign(campaignId: string): Promise<void> {
+    console.log(`[SEO Brain] Starting analysis for campaign: ${campaignId}`)
+
+    // Trigger webhook for campaign analysis
+    await N8NIntegration.triggerWebhook('campaign_analysis', {
+      campaignId,
+      eventType: 'seo.campaign.analysis.started',
+      timestamp: new Date().toISOString(),
+    })
+
+    console.log(`[SEO Brain] Analysis triggered for campaign: ${campaignId}`)
+  },
+
+  /**
+   * Execute an approved decision for a campaign
+   */
+  async executeDecision(decisionId: string, selectedOption: string): Promise<void> {
+    console.log(`[SEO Brain] Executing decision ${decisionId} with option ${selectedOption}`)
+
+    // Trigger webhook for decision execution
+    await N8NIntegration.triggerWebhook('decision_executed', {
+      decisionId,
+      selectedOption,
+      eventType: 'seo.decision.executed',
+      timestamp: new Date().toISOString(),
+    })
+
+    console.log(`[SEO Brain] Decision ${decisionId} executed with option ${selectedOption}`)
+  },
+}
