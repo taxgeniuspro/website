@@ -5,6 +5,7 @@ import { writeFile, mkdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { logger } from '@/lib/logger';
+import { ClientFolderService } from '@/lib/services/client-folder.service';
 
 // Initialize Resend only when needed to avoid build errors
 const getResend = () => new Resend(process.env.RESEND_API_KEY || 're_placeholder');
@@ -49,33 +50,7 @@ export async function POST(request: NextRequest) {
 
     const preparerCode = formData.get('preparer_code') as string;
 
-    // Handle file upload
-    const licenseFile = formData.get('license_file') as File | null;
-    let uploadedFilePath: string | null = null;
-
-    if (licenseFile) {
-      const bytes = await licenseFile.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
-      // Create uploads directory if it doesn't exist
-      const uploadDir = join(process.cwd(), 'public', 'uploads', 'tax-documents');
-      if (!existsSync(uploadDir)) {
-        await mkdir(uploadDir, { recursive: true });
-      }
-
-      // Generate unique filename
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${licenseFile.name}`;
-      const filePath = join(uploadDir, fileName);
-
-      // Save file
-      await writeFile(filePath, buffer);
-      uploadedFilePath = `/uploads/tax-documents/${fileName}`;
-
-      logger.info('File uploaded', { fileName, size: buffer.length });
-    }
-
-    // Find preparer by tracking code
+    // Find preparer by tracking code first (needed for folder creation)
     const preparer = await prisma.profile.findFirst({
       where: {
         OR: [
@@ -95,6 +70,99 @@ export async function POST(request: NextRequest) {
 
     if (!preparer) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
+    }
+
+    // Handle file upload with proper client folder organization
+    const licenseFile = formData.get('license_file') as File | null;
+    let uploadedFilePath: string | null = null;
+    let documentRecord: any = null;
+
+    if (licenseFile) {
+      const bytes = await licenseFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const timestamp = Date.now();
+
+      try {
+        // Get or create client folder structure
+        const currentYear = new Date().getFullYear();
+        const folderResult = await ClientFolderService.getOrCreateClientFolder(
+          preparer.id,
+          taxFormData.first_name,
+          taxFormData.last_name,
+          currentYear
+        );
+
+        // Create folder-based upload directory
+        const uploadDir = join(process.cwd(), 'uploads', 'documents', folderResult.yearFolderId);
+        if (!existsSync(uploadDir)) {
+          await mkdir(uploadDir, { recursive: true });
+        }
+
+        // Generate descriptive filename: LastName-DL-timestamp-originalname
+        const sanitizedLastName = taxFormData.last_name.replace(/[^a-zA-Z0-9]/g, '');
+        const fileName = `${sanitizedLastName}-DL-${timestamp}-${licenseFile.name}`;
+        const filePath = join(uploadDir, fileName);
+
+        // Save file to client folder
+        await writeFile(filePath, buffer);
+        uploadedFilePath = `/uploads/documents/${folderResult.yearFolderId}/${fileName}`;
+
+        // Create Document record in database for tracking
+        documentRecord = await prisma.document.create({
+          data: {
+            profileId: preparer.id,
+            type: 'OTHER',
+            fileName: licenseFile.name,
+            fileUrl: uploadedFilePath,
+            fileSize: buffer.length,
+            mimeType: licenseFile.type || 'application/octet-stream',
+            taxYear: currentYear,
+            status: 'PENDING',
+            folderId: folderResult.yearFolderId,
+            metadata: {
+              clientEmail: taxFormData.email,
+              clientName: `${taxFormData.first_name} ${taxFormData.last_name}`,
+              uploadedVia: 'tax_intake_form',
+              documentCategory: 'ID-Documents',
+              documentType: 'drivers_license',
+            },
+          },
+        });
+
+        logger.info('Document uploaded to client folder', {
+          fileName,
+          folderId: folderResult.yearFolderId,
+          documentId: documentRecord.id,
+          size: buffer.length,
+        });
+
+        // Also update the lead with the folder ID if it exists
+        const existingLead = await prisma.taxIntakeLead.findUnique({
+          where: { email: taxFormData.email },
+        });
+
+        if (existingLead && !existingLead.clientFolderId) {
+          await prisma.taxIntakeLead.update({
+            where: { id: existingLead.id },
+            data: { clientFolderId: folderResult.folderId },
+          });
+        }
+      } catch (folderError) {
+        // Fallback to old behavior if folder creation fails
+        logger.error('Folder creation failed, using fallback', { error: folderError });
+
+        const uploadDir = join(process.cwd(), 'public', 'uploads', 'tax-documents');
+        if (!existsSync(uploadDir)) {
+          await mkdir(uploadDir, { recursive: true });
+        }
+
+        const fileName = `${timestamp}-${licenseFile.name}`;
+        const filePath = join(uploadDir, fileName);
+        await writeFile(filePath, buffer);
+        uploadedFilePath = `/uploads/tax-documents/${fileName}`;
+
+        logger.info('File uploaded (fallback)', { fileName, size: buffer.length });
+      }
     }
 
     // Generate comprehensive HTML email
@@ -321,7 +389,16 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     // Prepare email attachments
     const attachments: any[] = [];
     if (uploadedFilePath && licenseFile) {
-      const fullPath = join(process.cwd(), 'public', uploadedFilePath);
+      // Handle both new folder structure and fallback paths
+      let fullPath: string;
+      if (uploadedFilePath.startsWith('/uploads/documents/')) {
+        // New folder structure - file is outside public folder
+        fullPath = join(process.cwd(), uploadedFilePath.substring(1));
+      } else {
+        // Fallback - file is in public folder
+        fullPath = join(process.cwd(), 'public', uploadedFilePath);
+      }
+
       if (existsSync(fullPath)) {
         const fileBuffer = await readFile(fullPath);
         attachments.push({

@@ -11,15 +11,23 @@ async function isTaxPreparer() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
   const role = user?.role;
-  return role === 'TAX_PREPARER' || role === 'ADMIN';
+  return role === 'TAX_PREPARER' || role === 'ADMIN' || role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
 }
 
-export default async function TaxPreparerDocumentsPage() {
+interface PageProps {
+  searchParams: Promise<{ folderId?: string }>;
+}
+
+export default async function TaxPreparerDocumentsPage({ searchParams }: PageProps) {
   const userIsTaxPreparer = await isTaxPreparer();
 
   if (!userIsTaxPreparer) {
     redirect('/forbidden');
   }
+
+  // Await searchParams (Next.js 15+ requirement)
+  const params = await searchParams;
+  const folderId = params.folderId;
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,8 +40,8 @@ export default async function TaxPreparerDocumentsPage() {
           </p>
         </div>
 
-        {/* File Manager with Client Selector */}
-        <TaxPreparerFileCenter />
+        {/* File Manager with Client Selector - pass folderId for deep linking */}
+        <TaxPreparerFileCenter initialFolderId={folderId} />
       </div>
     </div>
   );
