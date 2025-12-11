@@ -178,8 +178,8 @@ export function AppointmentConfirmation({
                 📞 <strong>Phone:</strong> +1 404-627-1015
                 <br />
                 📧 <strong>Email:</strong>{' '}
-                <a href="mailto:taxgenius.tax@gmail.com" style={link}>
-                  taxgenius.tax@gmail.com
+                <a href="mailto:taxgenius.taxes@gmail.com" style={link}>
+                  taxgenius.taxes@gmail.com
                 </a>
               </Text>
             </Section>
