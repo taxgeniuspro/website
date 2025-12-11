@@ -22,7 +22,7 @@ const statCards = [
     icon: Users,
     key: 'totalClients' as const,
     suffix: '',
-    description: '+12% from last month',
+    description: 'All time',
     iconColor: 'text-muted-foreground',
   },
   {

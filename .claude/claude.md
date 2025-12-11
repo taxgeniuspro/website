@@ -116,3 +116,80 @@ If MCP tools fail:
 3. Document MCP usage in code comments
 4. Test MCP integrations before production
 5. Keep API keys secure and rotate regularly
+
+---
+
+## Tax Preparer System - MILESTONE COMPLETED (Dec 2025)
+
+### Overview
+All 35 tax preparers are fully configured with:
+- Profile pictures (avatarUrl) stored in Cloudinary
+- QR codes with their picture in the center
+- Short links for lead capture, intake forms, and appointments
+- Tracking codes for attribution
+
+### Profile Settings (All Preparers)
+| Setting | Status |
+|---------|--------|
+| `avatarUrl` | ✅ Set (Cloudinary) |
+| `qrCodeLogoUrl` | ✅ Set to avatar (for QR center image) |
+| `usePhotoInQRCodes` | ✅ true |
+| `trackingCodeFinalized` | ✅ true |
+| `customTrackingCode` | ✅ Set (e.g., gw, rh, ah) |
+| `shortLinkUsername` | ✅ Set |
+
+### Marketing Links (3 per preparer = 105 total)
+Each preparer has these short links:
+- `{code}-lead` → `/contact?ref={code}` (Lead capture form)
+- `{code}-intake` → `/start-filing/form?ref={code}` (Tax intake form)
+- `{code}-appt` → `/book?preparer={id}` (Appointment booking)
+
+### Tax Preparer Reference Table
+| Name | Code | Email | Links |
+|------|------|-------|-------|
+| Ale Hamilton | ah | goldenprotaxes@gmail.com | /go/ah-* |
+| Alicia Adams | aa | caydensmother29@gmail.com | /go/aa-* |
+| Angela Richards | ar | angeladesigndocs@gmail.com | /go/ar-* |
+| Anita Wilson | aw | anita@cm3mediagroup.pro | /go/aw-* |
+| Brandon Hawkins | bh | busyb101@gmail.com | /go/bh-* |
+| Carlton Gannaway | cg | f.alawishez@gmail.com | /go/cg-* |
+| Ceia Stewart | cs | consult.me@mail.com | /go/cs-* |
+| Chelsea Lowe | cl | c.mitchell.lowe@gmail.com | /go/cl-* |
+| Cynthia Bacon-whitted | cbw | cbawhitted@gmail.com | /go/cbw-* |
+| Derrick Stewart | ds | derrick.stewart31@yahoo.com | /go/ds-* |
+| Devlin Watkins | dw | iradwatkins+dw@gmail.com | /go/dw-* |
+| Devon Hamilton | dh | gxldmxb@gmail.com | /go/dh-* |
+| Erica Bridges | eb | msboss110284@gmail.com | /go/eb-* |
+| Gelisa White | gw | whitegelisa@gmail.com | /go/gw-* |
+| Gregory Edwards | ge | gregthetaxgenius@gmail.com | /go/ge-* |
+| Helen Holmes | hh | holmeshelen@yahoo.com | /go/hh-* |
+| Ira Watkins | iw | iradwatkins@gmail.com | /go/iw-* |
+| Iran Watkins | iw1 | iradwatkins+iw1@gmail.com | /go/iw1-* |
+| Jamel Pringle | jp | melpringle38@gmail.com | /go/jp-* |
+| Javarre Massey | jm | javareemassey@gmail.com | /go/jm-* |
+| Katie Winborn | kw | winbornkatie@gmail.com | /go/kw-* |
+| Kemnetta Pillette | kp | kpillette7@gmail.com | /go/kp-* |
+| LaJuana Frost | lf | lajuanafrost@gmail.com | /go/lf-* |
+| Lenore Bohanon | lb | lbohanon398@gmail.com | /go/lb-* |
+| Mariah Johnson | mj | msj1solution@gmail.com | /go/mj-* |
+| Michael Finley | mf | mrmikefinley@gmail.com | /go/mf-* |
+| Owliver Owl | ow | taxgenius.tax@gmail.com | /go/ow-* |
+| Pamela Johnson | pj | pamelajatl3@gmail.com | /go/pj-* |
+| Ray Hamilton | rh | rhamiltonfirm@gmail.com | /go/rh-* |
+| Sarah Wilson | sw | hest8133@bellsouth.net | /go/sw-* |
+| Shakia JGibbs | sj | shakiragibbs12@gmail.com | /go/sj-* |
+| Tiffany & Jakobe Pearson | tp | jakobepearson18@gmail.com | /go/tp-* |
+| Trevor Wikerson | tw | tjbw2005@gmail.com | /go/tw-* |
+| Wendy Casimir | wc | wendycasimir@gmail.com | /go/wc-* |
+| Yaumar Williams | yw | yaumarwilliams@gmail.com | /go/yw-* |
+
+### QR Code Generation
+QR codes are generated with:
+- Preparer's photo in the center (from avatarUrl)
+- High error correction (H level) for reliable scanning
+- White border/bevel for visibility on dark backgrounds
+- ~80KB PNG format stored as base64 in `qrCodeImageUrl`
+
+### Testing Credentials
+- **Gelisa White**: whitegelisa@gmail.com / Makiyah07@@
+- **Iran Watkins**: iradwatkins+iw1@gmail.com / TaxPreparer2024!

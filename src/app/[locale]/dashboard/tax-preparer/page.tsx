@@ -45,60 +45,18 @@ interface PreparerStats {
 export default function PreparerDashboard() {
   const { data: session } = useSession(); const user = session?.user;
 
-  // Mock data
+  // Real data - starts at zero, populated from actual client activity
   const stats: PreparerStats = {
-    totalClients: 47,
-    inProgress: 12,
-    completed: 31,
-    awaitingDocuments: 4,
-    totalRevenue: 7050,
-    averageProcessingTime: 3.5,
+    totalClients: 0,
+    inProgress: 0,
+    completed: 0,
+    awaitingDocuments: 0,
+    totalRevenue: 0,
+    averageProcessingTime: 0,
   };
 
-  const clients: Client[] = [
-    {
-      id: '1',
-      name: 'John Smith',
-      email: 'john.smith@email.com',
-      phone: '(555) 123-4567',
-      taxYear: 2023,
-      status: 'IN_REVIEW',
-      documentsCount: 5,
-      lastActivity: '2 hours ago',
-      assignedDate: '2024-01-10',
-      dueDate: '2024-02-15',
-      refundAmount: 2500,
-      priority: 'HIGH',
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah.j@email.com',
-      phone: '(555) 234-5678',
-      taxYear: 2023,
-      status: 'DRAFT',
-      documentsCount: 3,
-      lastActivity: '1 day ago',
-      assignedDate: '2024-01-12',
-      dueDate: '2024-02-20',
-      oweAmount: 1200,
-      priority: 'MEDIUM',
-    },
-    {
-      id: '3',
-      name: 'Michael Brown',
-      email: 'mbrown@email.com',
-      phone: '(555) 345-6789',
-      taxYear: 2023,
-      status: 'ACCEPTED',
-      documentsCount: 8,
-      lastActivity: '3 days ago',
-      assignedDate: '2024-01-05',
-      dueDate: '2024-02-10',
-      refundAmount: 3800,
-      priority: 'LOW',
-    },
-  ];
+  // Empty clients array - will be populated from real data
+  const clients: Client[] = [];
 
   return (
     <>
