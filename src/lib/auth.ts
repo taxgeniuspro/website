@@ -85,19 +85,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Missing email or password');
+          console.log('[Auth] Missing email or password');
+          return null;
         }
 
-        // Find user by email
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+        // Find user by email (case-insensitive)
+        const user = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: credentials.email as string,
+              mode: 'insensitive',
+            },
+          },
           include: {
             profile: true, // Include profile to get role
           },
         });
 
-        if (!user || !user.hashedPassword) {
-          throw new Error('Invalid email or password');
+        if (!user) {
+          console.log('[Auth] User not found:', credentials.email);
+          return null;
+        }
+
+        if (!user.hashedPassword) {
+          console.log('[Auth] User has no password (probably OAuth user):', credentials.email);
+          return null;
         }
 
         // Verify password
@@ -107,8 +119,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         );
 
         if (!isValidPassword) {
-          throw new Error('Invalid email or password');
+          console.log('[Auth] Invalid password for:', credentials.email);
+          return null;
         }
+
+        console.log('[Auth] Successful login for:', credentials.email, 'Role:', user.profile?.role);
 
         // Return user with role from profile
         return {
