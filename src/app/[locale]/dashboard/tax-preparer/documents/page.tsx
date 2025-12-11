@@ -10,8 +10,8 @@ export const metadata = {
 async function isTaxPreparer() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
-  const role = user?.role;
-  return role === 'TAX_PREPARER' || role === 'ADMIN' || role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
+  const role = (user?.role as string)?.toLowerCase();
+  return role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
 }
 
 interface PageProps {
