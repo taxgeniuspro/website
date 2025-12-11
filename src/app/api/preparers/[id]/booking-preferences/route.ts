@@ -21,6 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         firstName: true,
         lastName: true,
         companyName: true,
+        phone: true,
+        avatarUrl: true,
         role: true,
         bookingEnabled: true,
         allowPhoneBookings: true,
@@ -29,6 +31,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         requireApprovalForBookings: true,
         customBookingMessage: true,
         bookingCalendarColor: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
       },
     });
 
@@ -58,6 +65,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         id: preparer.id,
         name: `${preparer.firstName} ${preparer.lastName}`,
         companyName: preparer.companyName,
+        phone: preparer.phone,
+        email: preparer.user?.email,
+        avatarUrl: preparer.avatarUrl,
       },
       bookingEnabled: preparer.bookingEnabled,
       availableBookingMethods,

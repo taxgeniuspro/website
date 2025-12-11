@@ -41,6 +41,9 @@ interface PreprerBookingPreferences {
     id: string;
     name: string;
     companyName?: string;
+    phone?: string;
+    email?: string;
+    avatarUrl?: string;
   };
   bookingEnabled: boolean;
   availableBookingMethods: string[];
@@ -261,9 +264,46 @@ function BookingPageContent() {
             <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
               Book Your Appointment
             </Badge>
+
+            {/* Preparer Avatar */}
+            {preferences.preparer.avatarUrl && (
+              <div className="flex justify-center mb-6">
+                <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-primary/20 shadow-lg">
+                  <img
+                    src={preferences.preparer.avatarUrl}
+                    alt={preferences.preparer.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+            )}
+
             <h1 className="text-3xl lg:text-5xl font-bold text-foreground mb-4">
               Schedule with <span className="text-primary">{preferences.preparer.name}</span>
             </h1>
+
+            {/* Preparer Contact Info */}
+            <div className="flex flex-col items-center gap-2 mb-4">
+              {preferences.preparer.phone && (
+                <a
+                  href={`tel:${preferences.preparer.phone}`}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>{preferences.preparer.phone}</span>
+                </a>
+              )}
+              {preferences.preparer.email && (
+                <a
+                  href={`mailto:${preferences.preparer.email}`}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>{preferences.preparer.email}</span>
+                </a>
+              )}
+            </div>
+
             {preferences.customMessage && (
               <p className="text-lg text-muted-foreground mb-6">{preferences.customMessage}</p>
             )}
@@ -441,12 +481,14 @@ function BookingPageContent() {
                   )}
                 </Button>
 
-                <p className="text-center text-sm text-muted-foreground">
-                  Prefer to call?{' '}
-                  <a href="tel:+14046271015" className="text-primary hover:underline font-medium">
-                    +1 404-627-1015
-                  </a>
-                </p>
+                {preferences.preparer.phone && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Prefer to call?{' '}
+                    <a href={`tel:${preferences.preparer.phone}`} className="text-primary hover:underline font-medium">
+                      {preferences.preparer.phone}
+                    </a>
+                  </p>
+                )}
               </div>
             </div>
           </form>
