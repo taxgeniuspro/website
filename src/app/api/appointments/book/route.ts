@@ -357,7 +357,7 @@ export async function POST(req: NextRequest) {
           logger.info('Appointment confirmation email sent', { emailId: data?.id });
         }
 
-        // Also send notification to business
+        // Also send notification to business admin
         await getResendClient().emails.send({
           from: fromEmail,
           to: 'taxgenius.tax@gmail.com',
@@ -378,6 +378,37 @@ export async function POST(req: NextRequest) {
     } catch (emailError) {
       logger.error('Error sending appointment emails', emailError);
       // Continue - database save succeeded
+    }
+
+    // Send notification email to assigned tax preparer
+    if (assignedPreparerId && assignedPreparerId !== 'unassigned') {
+      try {
+        // Import EmailService dynamically to avoid circular dependency
+        const { EmailService } = await import('@/lib/services/email.service');
+
+        await EmailService.sendAppointmentNotificationEmail(
+          assignedPreparerId,
+          {
+            appointmentId: appointment.id,
+            clientName,
+            clientEmail,
+            clientPhone,
+            appointmentType: appointmentType as 'PHONE_CALL' | 'VIDEO_CALL' | 'IN_PERSON' | 'CONSULTATION' | 'FOLLOW_UP',
+            scheduledFor: scheduledDate || undefined,
+            duration,
+            status: appointmentStatus,
+            clientNotes: notes,
+          }
+        );
+
+        logger.info('Preparer notification email sent for appointment', {
+          appointmentId: appointment.id,
+          preparerId: assignedPreparerId,
+        });
+      } catch (preparerEmailError) {
+        logger.error('Error sending preparer notification email', preparerEmailError);
+        // Don't fail the request - client email was already sent
+      }
     }
 
     // Track journey stage: APPOINTMENT_BOOKED (Epic 6)
