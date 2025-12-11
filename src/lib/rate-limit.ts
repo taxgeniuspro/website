@@ -1,11 +1,17 @@
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from 'ioredis';
+/**
+ * Rate Limiting Module
+ *
+ * Uses ioredis for VPS Redis when available, falls back to in-memory store.
+ * Vercel deployments use in-memory since VPS Redis is not exposed externally.
+ */
+
+import Redis from 'ioredis';
 import { logger } from '@/lib/logger';
 
 // Check if we're in a build environment
-const isBuildTime = process.env.DOCKER_BUILD === 'true' || 
+const isBuildTime = process.env.DOCKER_BUILD === 'true' ||
                     process.env.NEXT_PHASE === 'phase-production-build' ||
-                    process.env.SKIP_REDIS === 'true'
+                    process.env.SKIP_REDIS === 'true';
 
 // In-memory store for rate limiting when Redis is unavailable
 class InMemoryRateLimitStore {
@@ -54,23 +60,28 @@ const inMemoryStore = new InMemoryRateLimitStore();
 // Only try to connect to Redis if not in build time
 if (!isBuildTime) {
   try {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    redis = new Redis(redisUrl, {
-      connectTimeout: 2000,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-      lazyConnect: true,
-    });
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      redis = new Redis(redisUrl, {
+        connectTimeout: 2000,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        lazyConnect: true,
+      });
 
-    // Test connection
-    redis.on('error', (err) => {
-      if (!usingInMemory) {
-        logger.warn('[RateLimit] Redis connection failed, using in-memory store', {
-          error: err.message,
-        });
-        usingInMemory = true;
-      }
-    });
+      // Test connection
+      redis.on('error', (err) => {
+        if (!usingInMemory) {
+          logger.warn('[RateLimit] Redis connection failed, using in-memory store', {
+            error: err.message,
+          });
+          usingInMemory = true;
+        }
+      });
+    } else {
+      // No REDIS_URL configured, use in-memory
+      usingInMemory = true;
+    }
   } catch (error) {
     logger.warn('[RateLimit] Redis initialization failed, using in-memory store');
     usingInMemory = true;
@@ -79,28 +90,65 @@ if (!isBuildTime) {
   console.log('[RateLimit] Skipping Redis connection during build time');
 }
 
-// ============ Rate Limiters for Different Endpoints ============
+// ============ Rate Limiter Implementation ============
+
+interface RateLimitResult {
+  success: boolean;
+  limit: number;
+  reset: number;
+  remaining: number;
+}
+
+interface RateLimiter {
+  limit: (key: string) => Promise<RateLimitResult>;
+}
 
 // Helper to create rate limiter with fallback
-function createRateLimiter(config: { max: number; windowMs: number; prefix: string }) {
+function createRateLimiter(config: { max: number; windowMs: number; prefix: string }): RateLimiter {
   if (redis && !usingInMemory) {
-    return new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(config.max, `${config.windowMs / 60000} m`),
-      analytics: true,
-      prefix: config.prefix,
-    });
+    // Use Redis-based sliding window rate limiter
+    return {
+      limit: async (key: string): Promise<RateLimitResult> => {
+        const fullKey = `${config.prefix}:${key}`;
+        const now = Date.now();
+        const windowStart = now - config.windowMs;
+
+        try {
+          // Use sorted set for sliding window
+          const multi = redis!.multi();
+          multi.zremrangebyscore(fullKey, 0, windowStart);
+          multi.zadd(fullKey, now, `${now}-${Math.random()}`);
+          multi.zcard(fullKey);
+          multi.expire(fullKey, Math.ceil(config.windowMs / 1000));
+
+          const results = await multi.exec();
+          const count = (results?.[2]?.[1] as number) || 0;
+
+          return {
+            success: count <= config.max,
+            limit: config.max,
+            reset: now + config.windowMs,
+            remaining: Math.max(0, config.max - count),
+          };
+        } catch (error) {
+          // Fall back to in-memory on error
+          return inMemoryStore.limit(fullKey, config.max, config.windowMs);
+        }
+      },
+    };
   }
 
   // Return in-memory limiter
   return {
-    limit: async (key: string) => {
+    limit: async (key: string): Promise<RateLimitResult> => {
       return inMemoryStore.limit(`${config.prefix}:${key}`, config.max, config.windowMs);
     },
   };
 }
 
-// AI Content Generation: 10 requests per minute per user (AC17)
+// ============ Rate Limiters for Different Endpoints ============
+
+// AI Content Generation: 10 requests per minute per user
 export const aiContentRateLimit = createRateLimiter({
   max: 10,
   windowMs: 60000,
@@ -184,7 +232,7 @@ export function getUserIdentifier(userId: string, ip?: string): string {
 /**
  * Check rate limit for a specific limiter
  */
-export async function checkRateLimit(identifier: string, limiter: Ratelimit = aiContentRateLimit) {
+export async function checkRateLimit(identifier: string, limiter: RateLimiter = aiContentRateLimit) {
   const { success, limit, reset, remaining } = await limiter.limit(identifier);
 
   return {

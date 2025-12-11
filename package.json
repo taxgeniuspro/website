@@ -40,7 +40,6 @@
     "@auth/prisma-adapter": "^2.11.1",
     "@aws-sdk/client-s3": "^3.888.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
-    "@clerk/backend": "^2.18.3",
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",
     "@fullcalendar/interaction": "^6.1.19",
@@ -89,8 +88,6 @@
     "@tanstack/react-query": "^5.87.4",
     "@types/archiver": "^6.0.3",
     "@types/qrcode": "^1.5.5",
-    "@upstash/ratelimit": "^2.0.6",
-    "@upstash/redis": "^1.35.5",
     "archiver": "^7.0.1",
     "axios": "^1.12.2",
     "axios-retry": "^4.5.0",
@@ -154,7 +151,6 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@clerk/clerk-sdk-node": "^4.13.23",
     "@jest/globals": "^30.2.0",
     "@next/bundle-analyzer": "^16.0.1",
     "@tailwindcss/postcss": "^4.1.16",
