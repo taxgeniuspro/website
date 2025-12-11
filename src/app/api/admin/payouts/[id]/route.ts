@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Only admins can access payout management
-    if (profile.role !== 'ADMIN') {
+    if (profile.role !== 'admin') {
       return NextResponse.json(
         { error: 'Only administrators can access payout management' },
         { status: 403 }

@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only clients and leads can access this endpoint
-    if (!['CLIENT', 'LEAD'].includes(profile.role)) {
+    if (!['client', 'lead'].includes(profile.role)) {
       return NextResponse.json(
         { error: 'Forbidden - This endpoint is for clients only' },
         { status: 403 }

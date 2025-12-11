@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Only admins can approve payouts
-    if (profile.role !== 'ADMIN') {
+    if (profile.role !== 'admin') {
       return NextResponse.json(
         { error: 'Only administrators can approve payouts' },
         { status: 403 }

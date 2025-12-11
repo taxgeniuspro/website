@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Create material with QR code
     const material = await createMaterial({
       creatorId: userId,
-      creatorType: 'REFERRER', // TODO: Get from user profile
+      creatorType: 'affiliate', // TODO: Get from user profile
       materialType: materialType as LinkType,
       campaignName,
       location,

@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'Saved reply not found' }, { status: 404 });
     }
 
-    const isAdmin = profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN';
+    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
     if (existing.createdById !== profile.id && !isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Create lead in database
     const lead = await prisma.lead.create({
       data: {
-        type: 'TAX_PREPARER',
+        type: 'tax_preparer',
         status: 'NEW',
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
@@ -155,11 +155,11 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
 
     // Queue notifications (async, non-blocking)
     await Promise.allSettled([
-      queueAdminNotification('TAX_PREPARER', lead),
-      queueConfirmationEmail('TAX_PREPARER', lead.email, lead.firstName),
+      queueAdminNotification('tax_preparer', lead),
+      queueConfirmationEmail('tax_preparer', lead.email, lead.firstName),
     ]);
 
-    return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('TAX_PREPARER'));
+    return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('tax_preparer'));
   } catch (error) {
     return handleApiError(error, 'creating preparer lead');
   }

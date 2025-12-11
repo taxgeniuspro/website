@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Only allow REFERRER and ADMIN roles to access marketing materials
-    if (profile.role !== 'REFERRER' && profile.role !== 'ADMIN') {
+    if (profile.role !== 'affiliate' && profile.role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. Only referrers can access marketing materials.' },
         { status: 403 }
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       where: { userId: user.id },
     });
 
-    if (!profile || profile.role !== 'ADMIN') {
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Access denied. Admin role required.' }, { status: 403 });
     }
 

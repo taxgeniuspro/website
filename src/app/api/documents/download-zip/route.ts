@@ -59,10 +59,10 @@ export async function POST(req: NextRequest) {
       if (doc.profileId === profile.id) return true;
 
       // Admins can download
-      if (profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN') return true;
+      if (profile.role === 'admin' || profile.role === 'super_admin') return true;
 
       // Tax preparers can download if assigned (we'll check)
-      return profile.role === 'TAX_PREPARER';
+      return profile.role === 'tax_preparer';
     });
 
     if (authorizedDocs.length === 0) {

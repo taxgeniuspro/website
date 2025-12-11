@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     // Check if user is a client (only clients can access this endpoint)
     const role = profile.role;
-    if (role !== 'CLIENT' && role !== 'ADMIN') {
+    if (role !== 'client' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for clients only.' },
         { status: 403 }

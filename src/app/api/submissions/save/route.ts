@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Only clients can submit
-    if (profile.role !== 'CLIENT') {
+    if (profile.role !== 'client') {
       return NextResponse.json({ error: 'Only clients can submit tax returns' }, { status: 403 });
     }
 

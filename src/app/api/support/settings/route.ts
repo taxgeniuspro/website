@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       where: { userId: userId },
     });
 
-    if (!profile || !['ADMIN', 'SUPER_ADMIN', 'TAX_PREPARER'].includes(profile.role)) {
+    if (!profile || !['admin', 'super_admin', 'tax_preparer'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       where: { userId: userId },
     });
 
-    if (!profile || !['ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -20,7 +20,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { userId: userId },
     });
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -108,7 +108,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       where: { userId: userId },
     });
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

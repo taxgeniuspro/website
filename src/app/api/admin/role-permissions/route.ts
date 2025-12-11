@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     // Only super_admin can access
     const role = session?.user?.role;
 
-    if (role !== 'SUPER_ADMIN') {
+    if (role !== 'super_admin') {
       return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
     }
 
@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
     // Only super_admin can access
     const role = session?.user?.role;
 
-    if (role !== 'SUPER_ADMIN') {
+    if (role !== 'super_admin') {
       return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
     }
 

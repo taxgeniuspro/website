@@ -33,15 +33,15 @@ export async function GET(req: NextRequest) {
     if (clientId) {
       // Only admins and tax preparers can view other users' folders
       if (
-        profile.role !== 'ADMIN' &&
-        profile.role !== 'SUPER_ADMIN' &&
-        profile.role !== 'TAX_PREPARER'
+        profile.role !== 'admin' &&
+        profile.role !== 'super_admin' &&
+        profile.role !== 'tax_preparer'
       ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
       // For tax preparers, verify they're assigned to this client
-      if (profile.role === 'TAX_PREPARER') {
+      if (profile.role === 'tax_preparer') {
         const assignment = await prisma.clientPreparer.findFirst({
           where: {
             clientId: clientId,
@@ -131,15 +131,15 @@ export async function POST(req: NextRequest) {
     if (clientId) {
       // Only admins and tax preparers can create folders for other users
       if (
-        profile.role !== 'ADMIN' &&
-        profile.role !== 'SUPER_ADMIN' &&
-        profile.role !== 'TAX_PREPARER'
+        profile.role !== 'admin' &&
+        profile.role !== 'super_admin' &&
+        profile.role !== 'tax_preparer'
       ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
       // For tax preparers, verify they're assigned to this client
-      if (profile.role === 'TAX_PREPARER') {
+      if (profile.role === 'tax_preparer') {
         const assignment = await prisma.clientPreparer.findFirst({
           where: {
             clientId: clientId,

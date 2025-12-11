@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only tax preparers and admins can query assignments
-    if (!['TAX_PREPARER', 'ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     });
 
     // For tax preparers, filter to only their clients
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       const preparerClients = await prisma.clientPreparer.findMany({
         where: { preparerId: profile.id },
         select: { clientId: true },

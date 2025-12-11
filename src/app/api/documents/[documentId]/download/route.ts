@@ -105,7 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: { documentId: 
     }
 
     // Check if user is admin
-    if (profile.role === 'ADMIN') {
+    if (profile.role === 'admin') {
       isAuthorized = true;
     }
 

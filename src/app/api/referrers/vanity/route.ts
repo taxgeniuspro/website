@@ -14,7 +14,7 @@ const vanitySlugSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const { profile } = await requireRole('REFERRER');
+    const { profile } = await requireRole('affiliate');
 
     const vanityUrl = await ReferrerService.getVanityUrl(profile.id);
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { profile } = await requireRole('REFERRER');
+    const { profile } = await requireRole('affiliate');
 
     const body = await request.json();
     const { slug } = vanitySlugSchema.parse(body);

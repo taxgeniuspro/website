@@ -28,7 +28,7 @@ export async function GET(
       where: { userId: userId },
     });
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -87,7 +87,7 @@ export async function PUT(
       where: { userId: userId },
     });
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -180,7 +180,7 @@ export async function DELETE(
       where: { userId: userId },
     });
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'admin' && profile.role !== 'super_admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

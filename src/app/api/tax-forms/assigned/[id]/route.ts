@@ -55,16 +55,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     let isClient = false;
 
     // Client can edit their own forms
-    if (assignment.clientId === profile.id && ['CLIENT', 'LEAD'].includes(profile.role)) {
+    if (assignment.clientId === profile.id && ['client', 'lead'].includes(profile.role)) {
       hasAccess = true;
       isClient = true;
     }
     // Admin can edit any form
-    else if (['ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    else if (['admin', 'super_admin'].includes(profile.role)) {
       hasAccess = true;
     }
     // Tax preparer can edit if they're assigned to this client
-    else if (profile.role === 'TAX_PREPARER') {
+    else if (profile.role === 'tax_preparer') {
       const clientAssignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId: assignment.clientId,
@@ -209,7 +209,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Only tax preparers and admins can unassign forms
-    if (!['TAX_PREPARER', 'ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json(
         { error: 'Forbidden - Only tax preparers and admins can unassign forms' },
         { status: 403 }
@@ -227,7 +227,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // For tax preparers, verify they have access to this client
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       const clientAssignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId: assignment.clientId,

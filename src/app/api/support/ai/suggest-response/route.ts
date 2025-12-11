@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // Only preparers and admins can use AI features
     const canUseAI =
-      profile.role === 'TAX_PREPARER' || profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN';
+      profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'super_admin';
 
     if (!canUseAI) {
       return NextResponse.json(
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
-    const isAdmin = profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN';
+    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
     if (ticket.assignedToId !== profile.id && !isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

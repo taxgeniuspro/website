@@ -86,7 +86,7 @@ export async function POST(
     }
 
     // Verify the preparer created this link
-    if (uploadLink.createdBy !== preparer.id && preparer.role !== 'ADMIN' && preparer.role !== 'SUPER_ADMIN') {
+    if (uploadLink.createdBy !== preparer.id && preparer.role !== 'admin' && preparer.role !== 'super_admin') {
       return NextResponse.json(
         { error: 'You do not have permission to share this link' },
         { status: 403 }

@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only tax preparers can purchase professional emails
-    if (profile.role !== 'TAX_PREPARER' && profile.role !== 'ADMIN') {
+    if (profile.role !== 'tax_preparer' && profile.role !== 'admin') {
       return NextResponse.json(
         { error: 'Only tax preparers can purchase professional email addresses' },
         { status: 403 }

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Check if referrer is a tax preparer
-    if (attribution.attribution.referrerType !== 'TAX_PREPARER') {
+    if (attribution.attribution.referrerType !== 'tax_preparer') {
       return NextResponse.json({ preparer: null }, { status: 200 });
     }
 

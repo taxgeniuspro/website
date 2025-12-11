@@ -81,6 +81,41 @@ export async function GET(request: NextRequest) {
     // Get contacts
     const result = await CRMService.listContacts(filters, { page, limit }, accessContext);
 
+    // Fetch TaxIntakeLead data for folder information
+    const emails = result.contacts.map((c: any) => c.email.toLowerCase());
+    const taxIntakeLeads = await prisma.taxIntakeLead.findMany({
+      where: {
+        email: { in: emails },
+      },
+      select: {
+        email: true,
+        clientFolderId: true,
+        clientFolder: {
+          select: {
+            id: true,
+            name: true,
+            path: true,
+          },
+        },
+      },
+    });
+
+    // Create a lookup map by email
+    const leadsByEmail = new Map(
+      taxIntakeLeads.map((lead) => [lead.email.toLowerCase(), lead])
+    );
+
+    // Enrich contacts with folder data
+    const enrichedContacts = result.contacts.map((contact: any) => {
+      const lead = leadsByEmail.get(contact.email.toLowerCase());
+      return {
+        ...contact,
+        clientFolderId: lead?.clientFolderId || null,
+        folderPath: lead?.clientFolder?.path || null,
+        folderName: lead?.clientFolder?.name || null,
+      };
+    });
+
     logger.info('[CRM API] Contacts listed successfully', {
       total: result.total,
       returned: result.contacts.length,
@@ -88,7 +123,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        contacts: enrichedContacts,
+      },
     });
   } catch (error: any) {
     logger.error('[CRM API] Error listing contacts', { error: error.message });

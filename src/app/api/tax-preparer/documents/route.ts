@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'TAX_PREPARER' && role !== 'ADMIN') {
+    if (role !== 'tax_preparer' && role !== 'admin' && role !== 'super_admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     // Get assigned clients for this preparer (or all clients if admin)
     let assignedClientIds: string[] = [];
 
-    if (role === 'ADMIN') {
+    if (role === 'admin' || role === 'super_admin') {
       // Admin can see all clients
       const allClients = await prisma.profile.findMany({
         where: { role: 'client' },
