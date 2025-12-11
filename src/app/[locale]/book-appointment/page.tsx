@@ -33,6 +33,7 @@ async function getPreparerByRef(ref: string | undefined) {
       firstName: profile.firstName,
       lastName: profile.lastName,
       avatarUrl: profile.avatarUrl,
+      phone: profile.phone,
       email: profile.user?.email,
     };
   } catch (error) {

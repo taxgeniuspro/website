@@ -4,12 +4,13 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import AppointmentBooking from '@/components/AppointmentBooking';
-import { User, Phone, Video, FileText } from 'lucide-react';
+import { User, Phone, Video, FileText, Mail } from 'lucide-react';
 
 interface Preparer {
   firstName: string | null;
   lastName: string | null;
   avatarUrl: string | null;
+  phone: string | null;
   email: string | null;
 }
 
@@ -128,9 +129,31 @@ export function BookingPageClient({ preparer }: BookingPageClientProps) {
                         className="text-center mt-6 pb-8"
                       >
                         <h2 className="text-2xl font-bold mb-1">{preparerName}</h2>
-                        <p className="text-base text-muted-foreground font-medium">
+                        <p className="text-base text-muted-foreground font-medium mb-4">
                           {t('preparer.licensedTaxProfessional')}
                         </p>
+
+                        {/* Contact Info */}
+                        <div className="flex flex-col items-center gap-2 mt-4">
+                          {preparer.phone && (
+                            <a
+                              href={`tel:${preparer.phone}`}
+                              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              <Phone className="w-4 h-4" />
+                              <span>{preparer.phone}</span>
+                            </a>
+                          )}
+                          {preparer.email && (
+                            <a
+                              href={`mailto:${preparer.email}`}
+                              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              <Mail className="w-4 h-4" />
+                              <span>{preparer.email}</span>
+                            </a>
+                          )}
+                        </div>
                       </motion.div>
                     </div>
                   </div>

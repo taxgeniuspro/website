@@ -116,6 +116,7 @@ interface SimpleTaxFormProps {
     firstName: string | null;
     lastName: string | null;
     avatarUrl: string | null;
+    phone: string | null;
     email: string | null;
   } | null;
 }

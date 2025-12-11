@@ -43,8 +43,12 @@ export async function GET(req: NextRequest) {
         licenseNo: true,
         bio: true,
         phone: true,
-        email: true,
         trackingCodeQRUrl: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
       },
     });
 
@@ -62,7 +66,7 @@ export async function GET(req: NextRequest) {
           licenseNo: profile.licenseNo,
           bio: profile.bio,
           phone: profile.phone,
-          email: profile.email,
+          email: profile.user?.email,
           qrCodeUrl: profile.trackingCodeQRUrl,
         },
       },
