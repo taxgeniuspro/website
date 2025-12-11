@@ -463,6 +463,30 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                                 {lead.country_code} {lead.phone}
                               </a>
                             </div>
+                            {/* Quick Contact Buttons */}
+                            <div className="flex gap-2 mt-2">
+                              <a
+                                href={`tel:${lead.country_code}${lead.phone.replace(/[^0-9]/g, '')}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                              >
+                                <Phone className="h-3 w-3" />
+                                Call
+                              </a>
+                              <a
+                                href={`sms:${lead.country_code}${lead.phone.replace(/[^0-9]/g, '')}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                Text
+                              </a>
+                              <a
+                                href={`mailto:${lead.email}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500 text-gray-900 text-xs rounded hover:bg-yellow-400 transition-colors"
+                              >
+                                <Mail className="h-3 w-3" />
+                                Email
+                              </a>
+                            </div>
                             {lead.address_line_1 && (
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <MapPin className="h-4 w-4" />
@@ -685,6 +709,66 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
           {taxDetailsLead?.full_form_data && (
             <div className="space-y-4">
+              {/* Quick Actions Bar */}
+              <Card className="bg-green-50 border-green-200">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      asChild
+                    >
+                      <a href={`tel:${taxDetailsLead.country_code || '+1'}${taxDetailsLead.phone.replace(/[^0-9]/g, '')}`}>
+                        <Phone className="h-4 w-4 mr-2" />
+                        Call
+                      </a>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      asChild
+                    >
+                      <a href={`sms:${taxDetailsLead.country_code || '+1'}${taxDetailsLead.phone.replace(/[^0-9]/g, '')}`}>
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Text
+                      </a>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"
+                      asChild
+                    >
+                      <a href={`mailto:${taxDetailsLead.email}`}>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Email
+                      </a>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      asChild
+                    >
+                      <Link href={`/en/dashboard/tax-preparer/calendar`}>
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Schedule
+                      </Link>
+                    </Button>
+                    {taxDetailsLead.clientFolderId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        asChild
+                      >
+                        <Link href={`/en/dashboard/tax-preparer/documents?folderId=${taxDetailsLead.clientFolderId}`}>
+                          <FolderOpen className="h-4 w-4 mr-2" />
+                          Documents
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Personal Information */}
               <Card>
                 <CardHeader className="pb-3">
