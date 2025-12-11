@@ -16,7 +16,16 @@ export async function POST(req: NextRequest) {
 
     // Allow if admin OR if using a special admin key for initial setup
     const adminKey = req.headers.get('x-admin-key');
-    const isAdminKey = adminKey === process.env.ADMIN_SETUP_KEY;
+    const envKey = process.env.ADMIN_SETUP_KEY;
+    const isAdminKey = adminKey && envKey && adminKey === envKey;
+
+    console.log('[Admin SetPassword] Auth check:', {
+      hasSession: !!currentUser,
+      userRole: currentUser?.role,
+      hasAdminKey: !!adminKey,
+      hasEnvKey: !!envKey,
+      keysMatch: isAdminKey,
+    });
 
     if (!isAdminKey && (!currentUser || !['admin', 'super_admin'].includes(currentUser.role as string))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
