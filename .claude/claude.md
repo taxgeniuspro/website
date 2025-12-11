@@ -3,6 +3,24 @@
 ## Project Context
 Tax Genius Pro - An AI-powered tax preparation platform using Next.js 15.5.2, TypeScript, and modern tech stack.
 
+## CRITICAL: Vercel Deployment Rules
+
+**NEVER create new Vercel projects.** Use the existing project:
+- **Project Name**: `taxgeniuspro`
+- **Production Domain**: `taxgeniuspro.tax`
+- **Git Repository**: `taxgeniuspro/website` (main branch deploys to production)
+
+When deploying:
+1. Push changes to git (main branch for production)
+2. Vercel will auto-deploy from the connected git repository
+3. Only use `vercel --prod` if git deploy fails, and always link to `taxgeniuspro` project first
+4. NEVER run `vercel` without first checking which project is linked (`.vercel/project.json`)
+
+**Delete these orphaned projects if you see them:**
+- nifty-ramanujan (worktree artifact)
+- blissful-wozniak (worktree artifact)
+- unruffled-mendeleev (worktree artifact)
+
 ## Available MCP Tools:
 
 ### 1. **Shadcn-UI MCP**
