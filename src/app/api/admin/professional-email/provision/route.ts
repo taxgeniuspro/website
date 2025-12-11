@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
     }
 
-    if (preparer.profile.role !== 'TAX_PREPARER') {
+    if (preparer.profile.role !== 'tax_preparer') {
       return NextResponse.json(
         { error: 'User is not a tax preparer' },
         { status: 400 }

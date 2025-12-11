@@ -187,7 +187,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Only admins can delete tickets
-    const isAdmin = profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN';
+    const isAdmin = profile.role === 'super_admin' || profile.role === 'admin';
 
     if (!isAdmin) {
       return NextResponse.json(

@@ -47,15 +47,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     let hasAccess = false;
 
     // Client can view their own form history
-    if (assignment.clientId === profile.id && ['CLIENT', 'LEAD'].includes(profile.role)) {
+    if (assignment.clientId === profile.id && ['client', 'lead'].includes(profile.role)) {
       hasAccess = true;
     }
     // Admin can view any history
-    else if (['ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    else if (['admin', 'super_admin'].includes(profile.role)) {
       hasAccess = true;
     }
     // Tax preparer can view if they're assigned to this client
-    else if (profile.role === 'TAX_PREPARER') {
+    else if (profile.role === 'tax_preparer') {
       const clientAssignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId: assignment.clientId,

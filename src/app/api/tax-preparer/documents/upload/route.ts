@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'TAX_PREPARER' && role !== 'ADMIN') {
+    if (role !== 'tax_preparer' && role !== 'admin' && role !== 'super_admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -88,12 +88,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    if (client.role !== 'CLIENT') {
+    if (client.role !== 'client') {
       return NextResponse.json({ error: 'Invalid client ID' }, { status: 400 });
     }
 
     // Check if preparer has access to this client
-    if (role === 'TAX_PREPARER') {
+    if (role === 'tax_preparer') {
       const hasAccess = await prisma.clientPreparer.findFirst({
         where: {
           clientId: clientId,
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
           category,
           uploadedAt: new Date().toISOString(),
           uploadedBy: profile.id,
-          uploaderRole: 'TAX_PREPARER',
+          uploaderRole: 'tax_preparer',
         },
       },
       include: {

@@ -106,7 +106,7 @@ export async function POST(
       }
 
       // Update profile role to CLIENT if not already
-      if (lead.profile.role !== 'CLIENT') {
+      if (lead.profile.role !== 'client') {
         await prisma.profile.update({
           where: { id: lead.profile.id },
           data: { role: 'client' },

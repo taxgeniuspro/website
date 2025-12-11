@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     // Admin only
     const { user } = await validateRequest()
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -143,7 +143,7 @@ async function startCampaignGeneration(campaignId: string, productSpec: any) {
 export async function GET(request: NextRequest) {
   try {
     const { user } = await validateRequest()
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

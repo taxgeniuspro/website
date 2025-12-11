@@ -1,6 +1,6 @@
 /**
  * Sign Up API Route
- * Creates new user accounts with hashed passwords
+ * Creates new user accounts with hashed passwords and profile
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -25,9 +25,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    // Check if user already exists (case-insensitive)
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
     });
 
     if (existingUser) {
@@ -40,14 +45,50 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        hashedPassword,
-      },
+    // Parse name into firstName, middleName, lastName
+    const nameParts = name.split(' ').filter((part: string) => part.length > 0);
+    let firstName = '';
+    let middleName: string | undefined;
+    let lastName = '';
+
+    if (nameParts.length === 1) {
+      firstName = nameParts[0];
+    } else if (nameParts.length === 2) {
+      firstName = nameParts[0];
+      lastName = nameParts[1];
+    } else if (nameParts.length >= 3) {
+      firstName = nameParts[0];
+      middleName = nameParts.slice(1, -1).join(' ');
+      lastName = nameParts[nameParts.length - 1];
+    }
+
+    // Create user with profile in a transaction
+    const user = await prisma.$transaction(async (tx) => {
+      // Create user
+      const newUser = await tx.user.create({
+        data: {
+          name,
+          email: email.toLowerCase(), // Store email in lowercase
+          hashedPassword,
+        },
+      });
+
+      // Create profile for the user
+      await tx.profile.create({
+        data: {
+          userId: newUser.id,
+          role: 'lead', // Default role for new signups
+          firstName,
+          middleName,
+          lastName,
+          email: email.toLowerCase(),
+        },
+      });
+
+      return newUser;
     });
+
+    console.log('[Signup] User created successfully:', email);
 
     // Return success (without password)
     return NextResponse.json(

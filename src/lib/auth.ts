@@ -42,6 +42,7 @@ declare module '@auth/core/jwt' {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   trustHost: true, // Trust the host in production (required for NextAuth v5)
   session: {
     strategy: 'jwt', // Use JWT for faster session checks
@@ -89,7 +90,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Find user by email
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email: (credentials.email as string).toLowerCase() },
           include: {
             profile: true, // Include profile to get role
           },

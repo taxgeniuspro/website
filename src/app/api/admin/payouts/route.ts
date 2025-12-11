@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Only admins and super_admins can access payout management
-    if (profile.role !== 'ADMIN' && profile.role !== 'SUPER_ADMIN') {
+    if (profile.role !== 'admin' && profile.role !== 'super_admin') {
       return NextResponse.json(
         { error: 'Only administrators can access payout management' },
         { status: 403 }

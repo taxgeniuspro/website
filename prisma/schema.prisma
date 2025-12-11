@@ -754,6 +754,9 @@ model Folder {
   // Upload Links (NEW - shareable links for client uploads)
   uploadLinks FolderUploadLink[]
 
+  // Lead folders (for tax intake leads before conversion)
+  leadFolders TaxIntakeLead[] @relation("LeadClientFolder")
+
   // Soft delete
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
@@ -1418,6 +1421,10 @@ model TaxIntakeLead {
   emailOpens        Int       @default(0) // Email open count
   emailClicks       Int       @default(0) // Email click count
 
+  // Document Management - Client Folder
+  clientFolderId    String?   // Root folder for this lead's documents
+  clientFolder      Folder?   @relation("LeadClientFolder", fields: [clientFolderId], references: [id], onDelete: SetNull)
+
   // Relations
   activities        LeadActivity[] // Activity timeline
   tasks             LeadTask[]     // Task management
@@ -1438,6 +1445,7 @@ model TaxIntakeLead {
   @@index([leadScore])
   @@index([urgency])
   @@index([lastViewedAt])
+  @@index([clientFolderId])
   @@map("tax_intake_leads")
 }
 

@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       if (referrerProfile) {
         // Business Rule: Assign lead based on referrer role
         switch (referrerProfile.role) {
-          case 'CLIENT':
+          case 'client':
             // CLIENT refers → Assign to Tax Genius (null = corporate)
             // TODO: Look up client's assigned preparer via ClientPreparer relation
             assignedPreparerId = null;
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
             });
             break;
 
-          case 'AFFILIATE':
+          case 'affiliate':
             // AFFILIATE refers → Assign to Tax Genius (null = corporate)
             assignedPreparerId = null;
             logger.info(`Appointment from AFFILIATE referral assigned to Tax Genius corporate`, {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
             });
             break;
 
-          case 'TAX_PREPARER':
+          case 'tax_preparer':
             // TAX_PREPARER refers → Assign to THAT tax preparer
             assignedPreparerId = referrerProfile.id;
             logger.info(`Appointment from TAX_PREPARER referral assigned to that preparer`, {
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
             });
             break;
 
-          case 'REFERRER':
+          case 'affiliate':
             // REFERRER refers → Assign to Tax Genius (null = corporate)
             assignedPreparerId = null;
             logger.info(`Appointment from REFERRER assigned to Tax Genius corporate`, {
@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
     if (!crmContact) {
       crmContact = await prisma.cRMContact.create({
         data: {
-          contactType: 'LEAD',
+          contactType: 'lead',
           firstName,
           lastName,
           email: clientEmail.toLowerCase(),

@@ -1,6 +1,6 @@
 {
   "name": "taxgeniusprov1-app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "PORT=3005 next dev -p 3005",
@@ -117,8 +117,8 @@
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.544.0",
     "nanoid": "^5.1.6",
-    "next": "^15.5.7",
-    "next-auth": "^5.0.0-beta.29",
+    "next": "^16.0.7",
+    "next-auth": "^5.0.0-beta.30",
     "next-intl": "^4.4.0",
     "next-themes": "^0.4.6",
     "openai": "^6.6.0",

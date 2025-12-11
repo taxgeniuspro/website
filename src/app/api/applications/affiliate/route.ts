@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid tax preparer username' }, { status: 400 });
       }
 
-      if (preparer.role !== 'TAX_PREPARER') {
+      if (preparer.role !== 'tax_preparer') {
         return NextResponse.json(
           { error: 'The provided username is not a tax preparer' },
           { status: 400 }
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const lead = await prisma.lead.create({
       data: {
-        type: 'AFFILIATE',
+        type: 'affiliate',
         status: 'NEW',
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       const crmContact = await prisma.cRMContact.upsert({
         where: { email: validatedData.email.toLowerCase() },
         create: {
-          contactType: 'AFFILIATE',
+          contactType: 'affiliate',
           firstName: validatedData.firstName,
           lastName: validatedData.lastName,
           email: validatedData.email.toLowerCase(),

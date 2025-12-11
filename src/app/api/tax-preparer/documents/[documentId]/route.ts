@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { documentId
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'TAX_PREPARER' && role !== 'ADMIN') {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { documentId
     }
 
     // Check if preparer has access to this client's documents
-    if (role === 'TAX_PREPARER') {
+    if (role === 'tax_preparer') {
       const hasAccess = await prisma.clientPreparer.findFirst({
         where: {
           clientId: document.profileId,
@@ -136,7 +136,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { documentI
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'TAX_PREPARER' && role !== 'ADMIN') {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -155,7 +155,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { documentI
     }
 
     // Check if preparer has access to this client's documents
-    if (role === 'TAX_PREPARER') {
+    if (role === 'tax_preparer') {
       const hasAccess = await prisma.clientPreparer.findFirst({
         where: {
           clientId: document.profileId,
@@ -222,7 +222,7 @@ export async function GET(req: NextRequest, { params }: { params: { documentId: 
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'TAX_PREPARER' && role !== 'ADMIN') {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -252,7 +252,7 @@ export async function GET(req: NextRequest, { params }: { params: { documentId: 
     }
 
     // Check if preparer has access to this client's documents
-    if (role === 'TAX_PREPARER') {
+    if (role === 'tax_preparer') {
       const hasAccess = await prisma.clientPreparer.findFirst({
         where: {
           clientId: document.profileId,

@@ -6,6 +6,7 @@ import { getAttribution, saveTaxIntakeAttribution } from '@/lib/services/attribu
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
 import { getEmailRecipients } from '@/config/email-routing';
+import { ClientFolderService } from '@/lib/services/client-folder.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -220,6 +221,58 @@ export async function POST(req: NextRequest) {
     }
 
     // ========================================
+    // DOCUMENT MANAGEMENT: Create Client Folder
+    // Auto-create folder structure for lead documents
+    // ========================================
+    try {
+      // Only create folder if we have an assigned preparer
+      // Use the preparer's profile ID as the folder owner
+      let folderOwnerId: string | null = null;
+
+      if (assignedPreparerId) {
+        // Get the preparer's profile ID
+        const preparerProfile = await prisma.profile.findFirst({
+          where: { userId: assignedPreparerId },
+          select: { id: true },
+        });
+        folderOwnerId = preparerProfile?.id || null;
+      }
+
+      if (folderOwnerId) {
+        const currentYear = new Date().getFullYear();
+        const folderResult = await ClientFolderService.getOrCreateClientFolder(
+          folderOwnerId,
+          first_name,
+          last_name,
+          currentYear
+        );
+
+        // Link folder to lead
+        await prisma.taxIntakeLead.update({
+          where: { id: lead.id },
+          data: { clientFolderId: folderResult.folderId },
+        });
+
+        logger.info('Client folder created for tax intake lead', {
+          leadId: lead.id,
+          folderId: folderResult.folderId,
+          path: folderResult.path,
+          yearFolderId: folderResult.yearFolderId,
+        });
+      } else {
+        logger.info('No folder created - no assigned preparer', {
+          leadId: lead.id,
+        });
+      }
+    } catch (folderError) {
+      // Log but don't fail - folder can be created later manually
+      logger.error('Failed to create client folder for lead', {
+        leadId: lead.id,
+        error: folderError,
+      });
+    }
+
+    // ========================================
     // CRITICAL: CRM INTEGRATION
     // Create/Update CRMContact for unified tracking
     // ========================================
@@ -228,7 +281,7 @@ export async function POST(req: NextRequest) {
       crmContact = await prisma.cRMContact.upsert({
         where: { email: email.toLowerCase() },
         create: {
-          contactType: 'LEAD',
+          contactType: 'lead',
           firstName: first_name,
           lastName: last_name,
           email: email.toLowerCase(),

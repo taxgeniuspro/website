@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     // Build where clause
     const where: any = {
-      type: 'AFFILIATE',
+      type: 'affiliate',
     };
 
     if (status) {

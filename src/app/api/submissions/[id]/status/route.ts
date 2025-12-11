@@ -97,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Only preparers assigned to this client or admins can update status
     let isAuthorized = false;
 
-    if (profile.role === 'ADMIN') {
+    if (profile.role === 'admin') {
       isAuthorized = true;
     } else if (profile.role === 'PREPARER') {
       const assignment = await prisma.clientPreparer.findFirst({
@@ -372,7 +372,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Admin can view
-    if (profile.role === 'ADMIN') {
+    if (profile.role === 'admin') {
       isAuthorized = true;
     }
 

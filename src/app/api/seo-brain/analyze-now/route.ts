@@ -13,7 +13,7 @@ import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
 export async function POST(request: NextRequest) {
   try {
     const { user } = await validateRequest()
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

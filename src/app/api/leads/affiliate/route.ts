@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Create lead in database
     const lead = await prisma.lead.create({
       data: {
-        type: 'AFFILIATE',
+        type: 'affiliate',
         status: 'NEW',
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       const crmContact = await prisma.cRMContact.upsert({
         where: { email: lead.email.toLowerCase() },
         create: {
-          contactType: 'AFFILIATE',
+          contactType: 'affiliate',
           firstName: lead.firstName,
           lastName: lead.lastName,
           email: lead.email.toLowerCase(),
@@ -152,11 +152,11 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
 
     // Queue notifications (async, non-blocking)
     await Promise.allSettled([
-      queueAdminNotification('AFFILIATE', lead),
-      queueConfirmationEmail('AFFILIATE', lead.email, lead.firstName),
+      queueAdminNotification('affiliate', lead),
+      queueConfirmationEmail('affiliate', lead.email, lead.firstName),
     ]);
 
-    return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('AFFILIATE'));
+    return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('affiliate'));
   } catch (error) {
     return handleApiError(error, 'creating affiliate lead');
   }

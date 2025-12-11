@@ -32,9 +32,9 @@ export async function POST(request: NextRequest) {
 
     // Only tax preparers and admins can share forms
     if (
-      profile.role !== 'TAX_PREPARER' &&
-      profile.role !== 'ADMIN' &&
-      profile.role !== 'SUPER_ADMIN'
+      profile.role !== 'tax_preparer' &&
+      profile.role !== 'admin' &&
+      profile.role !== 'super_admin'
     ) {
       return NextResponse.json(
         { error: 'Only tax preparers and admins can share forms' },

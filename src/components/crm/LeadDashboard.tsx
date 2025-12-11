@@ -54,7 +54,11 @@ import {
   FileText,
   TrendingUp,
   Users,
+  ExternalLink,
+  FolderOpen,
+  FolderPlus,
 } from 'lucide-react';
+import Link from 'next/link';
 import { format } from 'date-fns';
 
 interface TaxIntakeLead {
@@ -80,6 +84,8 @@ interface TaxIntakeLead {
   created_at: string;
   updated_at: string;
   full_form_data?: any;
+  crmContactId?: string | null;
+  clientFolderId?: string | null;
 }
 
 interface LeadStats {
@@ -126,6 +132,9 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
   // Tax details dialog state
   const [taxDetailsDialogOpen, setTaxDetailsDialogOpen] = useState(false);
   const [taxDetailsLead, setTaxDetailsLead] = useState<TaxIntakeLead | null>(null);
+
+  // Folder creation state
+  const [creatingFolderId, setCreatingFolderId] = useState<string | null>(null);
 
   // Fetch leads
   useEffect(() => {
@@ -203,6 +212,39 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         status: getLeadStatus(lead),
       },
     });
+  };
+
+  const handleCreateFolder = async (lead: TaxIntakeLead) => {
+    try {
+      setCreatingFolderId(lead.id);
+
+      const response = await fetch('/api/tax-preparer/lead-folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: lead.id }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create folder');
+      }
+
+      const data = await response.json();
+
+      // Update the lead in local state with the new folder ID
+      setLeads((prevLeads) =>
+        prevLeads.map((l) =>
+          l.id === lead.id ? { ...l, clientFolderId: data.folder.id } : l
+        )
+      );
+
+      // Navigate to the documents page with the new folder
+      window.location.href = `/en/dashboard/tax-preparer/documents?folderId=${data.folder.id}`;
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      setError('Failed to create folder');
+    } finally {
+      setCreatingFolderId(null);
+    }
   };
 
   const handleSubmitContact = async () => {
@@ -448,11 +490,26 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
                         {/* Actions */}
                         <div className="flex flex-col gap-2 md:w-48">
-                          {lead.full_form_data && (
+                          {/* View in CRM - Primary action when CRM contact exists */}
+                          {lead.crmContactId && (
                             <Button
                               variant="default"
                               size="sm"
-                              className="w-full bg-primary text-primary-foreground"
+                              className="w-full"
+                              asChild
+                            >
+                              <Link href={`/en/crm/contacts/${lead.crmContactId}`}>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View in CRM
+                              </Link>
+                            </Button>
+                          )}
+
+                          {lead.full_form_data && (
+                            <Button
+                              variant={lead.crmContactId ? 'outline' : 'default'}
+                              size="sm"
+                              className="w-full"
                               onClick={() => {
                                 setTaxDetailsLead(lead);
                                 setTaxDetailsDialogOpen(true);
@@ -460,6 +517,36 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                             >
                               <FileText className="h-4 w-4 mr-2" />
                               View Tax Details
+                            </Button>
+                          )}
+
+                          {/* View Documents - links to client's document folder */}
+                          {lead.clientFolderId ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              asChild
+                            >
+                              <Link href={`/en/dashboard/tax-preparer/documents?folderId=${lead.clientFolderId}`}>
+                                <FolderOpen className="h-4 w-4 mr-2" />
+                                View Documents
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => handleCreateFolder(lead)}
+                              disabled={creatingFolderId === lead.id}
+                            >
+                              {creatingFolderId === lead.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <FolderPlus className="h-4 w-4 mr-2" />
+                              )}
+                              Create Folder
                             </Button>
                           )}
 

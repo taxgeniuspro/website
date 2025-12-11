@@ -4,13 +4,12 @@ import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Image from 'next/image';
-import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Eye, EyeOff, Mail, ChevronDown } from 'lucide-react';
+import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Eye, EyeOff, Mail } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { useTranslations } from 'next-intl';
 
 function SignInContent() {
@@ -36,7 +35,6 @@ function SignInContent() {
   const [password, setPassword] = useState('');
   const [magicLinkEmail, setMagicLinkEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showTraditionalAuth, setShowTraditionalAuth] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
@@ -334,109 +332,85 @@ function SignInContent() {
             </div>
           </div>
 
-          {/* Traditional Email/Password - Third, in collapsible */}
-          <Collapsible
-            open={showTraditionalAuth}
-            onOpenChange={setShowTraditionalAuth}
-            className="space-y-2"
-          >
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full justify-between h-10 text-sm font-normal"
-              >
-                <span>
-                  {showTraditionalAuth
-                    ? t('form.hideEmailPasswordOptions', { defaultValue: 'Hide email/password options' })
-                    : t('form.showEmailPasswordOptions', { defaultValue: 'Show email/password options' })
-                  }
-                </span>
-                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showTraditionalAuth ? 'rotate-180' : ''}`} />
-              </Button>
-            </CollapsibleTrigger>
+          {/* Traditional Email/Password - Always visible */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">{t('form.email')}</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder={t('form.emailPlaceholder')}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                className="h-12"
+              />
+            </div>
 
-            <CollapsibleContent className="space-y-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t('form.email')}</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder={t('form.emailPlaceholder')}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    className="h-12"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">{t('form.password')}</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={t('form.passwordPlaceholder')}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="h-12 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      disabled={isLoading}
-                      aria-label={showPassword ? t('form.hidePassword') : t('form.showPassword')}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      disabled={isLoading}
-                    />
-                    <span className="text-muted-foreground">{t('form.rememberMe')}</span>
-                  </label>
-                  <a
-                    href="/auth/forgot-password"
-                    className="text-primary hover:underline"
-                  >
-                    {t('form.forgotPassword')}
-                  </a>
-                </div>
-
-                <Button
-                  type="submit"
-                  className={`w-full h-12 text-lg ${
-                    role === 'affiliate' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
-                  }`}
-                  disabled={isLoading || isMagicLinkLoading}
+            <div className="space-y-2">
+              <Label htmlFor="password">{t('form.password')}</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={t('form.passwordPlaceholder')}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-12 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={isLoading}
+                  aria-label={showPassword ? t('form.hidePassword') : t('form.showPassword')}
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t('form.signingInButton')}
-                    </>
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    t('form.signInButton')
+                    <Eye className="h-4 w-4" />
                   )}
-                </Button>
-              </form>
-            </CollapsibleContent>
-          </Collapsible>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  disabled={isLoading}
+                />
+                <span className="text-muted-foreground">{t('form.rememberMe')}</span>
+              </label>
+              <a
+                href="/auth/forgot-password"
+                className="text-primary hover:underline"
+              >
+                {t('form.forgotPassword')}
+              </a>
+            </div>
+
+            <Button
+              type="submit"
+              className={`w-full h-12 text-lg ${
+                role === 'affiliate' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+              }`}
+              disabled={isLoading || isMagicLinkLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('form.signingInButton')}
+                </>
+              ) : (
+                t('form.signInButton')
+              )}
+            </Button>
+          </form>
 
           <div className="text-center text-sm text-muted-foreground">
             {t('form.dontHaveAccount')}{' '}

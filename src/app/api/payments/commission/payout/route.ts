@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Only referrers can request payouts
-    if (profile.role !== 'REFERRER') {
+    if (profile.role !== 'affiliate') {
       return NextResponse.json(
         { error: 'Only referrers can request commission payouts' },
         { status: 403 }
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Only referrers can request payouts
-    if (profile.role !== 'REFERRER') {
+    if (profile.role !== 'affiliate') {
       return NextResponse.json(
         { error: 'Only referrers can request commission payouts' },
         { status: 403 }

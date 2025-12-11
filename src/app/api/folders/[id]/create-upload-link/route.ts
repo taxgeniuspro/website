@@ -47,9 +47,9 @@ export async function POST(
 
     // Only tax preparers, admins, and super admins can create upload links
     if (
-      preparer.role !== 'TAX_PREPARER' &&
-      preparer.role !== 'ADMIN' &&
-      preparer.role !== 'SUPER_ADMIN'
+      preparer.role !== 'tax_preparer' &&
+      preparer.role !== 'admin' &&
+      preparer.role !== 'super_admin'
     ) {
       return NextResponse.json(
         { error: 'Only tax preparers can create upload links' },
@@ -84,7 +84,7 @@ export async function POST(
     }
 
     // For tax preparers (not admins), verify they're assigned to this client
-    if (preparer.role === 'TAX_PREPARER') {
+    if (preparer.role === 'tax_preparer') {
       const assignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId: clientId,

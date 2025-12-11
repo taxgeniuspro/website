@@ -64,9 +64,9 @@ export async function GET(request: NextRequest) {
 
     // Search clients (for preparers and admins)
     if (
-      profile.role === 'TAX_PREPARER' ||
-      profile.role === 'ADMIN' ||
-      profile.role === 'SUPER_ADMIN'
+      profile.role === 'tax_preparer' ||
+      profile.role === 'admin' ||
+      profile.role === 'super_admin'
     ) {
       const clients = await prisma.profile.findMany({
         where: {
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
             },
           ],
           // For preparers, only show their assigned clients
-          ...(profile.role === 'TAX_PREPARER'
+          ...(profile.role === 'tax_preparer'
             ? [{ taxPreparerId: profile.id }]
             : []),
         },
@@ -105,9 +105,9 @@ export async function GET(request: NextRequest) {
 
     // Search leads (for preparers and admins)
     if (
-      profile.role === 'TAX_PREPARER' ||
-      profile.role === 'ADMIN' ||
-      profile.role === 'SUPER_ADMIN'
+      profile.role === 'tax_preparer' ||
+      profile.role === 'admin' ||
+      profile.role === 'super_admin'
     ) {
       const leads = await prisma.cRMContact.findMany({
         where: {
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
             { phone: { contains: query, mode: 'insensitive' } },
           ],
           // For preparers, only show their assigned leads
-          ...(profile.role === 'TAX_PREPARER'
+          ...(profile.role === 'tax_preparer'
             ? [{ assignedToId: profile.id }]
             : []),
         },

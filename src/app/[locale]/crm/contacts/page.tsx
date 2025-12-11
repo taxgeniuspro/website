@@ -24,6 +24,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { useToast } from '@/hooks/use-toast';
@@ -32,19 +49,22 @@ import {
   Plus,
   Mail,
   Phone,
-  MapPin,
   User,
   Users,
   UserCheck,
   UserPlus,
   TrendingUp,
-  Calendar,
-  Filter,
-  Download,
-  Upload,
   FileText,
   AlertCircle,
   Loader2,
+  FolderOpen,
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  Trash2,
+  ClipboardList,
+  MessageSquare,
+  UserRound,
 } from 'lucide-react';
 
 /**
@@ -72,9 +92,13 @@ interface Contact {
   contactType: string;
   stage: string;
   leadScore: number;
+  source?: string;
   assignedPreparerId?: string;
   createdAt: string;
   lastContactedAt?: string;
+  clientFolderId?: string;
+  folderPath?: string;
+  folderName?: string;
   _count?: {
     interactions: number;
     tasks: number;
@@ -90,6 +114,9 @@ export default function CRMContactsPage() {
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   // Check permissions
@@ -184,6 +211,88 @@ export default function CRMContactsPage() {
     } finally {
       setUpdatingStatus(null);
     }
+  };
+
+  const handleDeleteClick = (contact: Contact) => {
+    setContactToDelete(contact);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!contactToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/crm/contacts/${contactToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setContacts((prev) => prev.filter((c) => c.id !== contactToDelete.id));
+        toast({
+          title: 'Success',
+          description: 'Contact deleted successfully',
+        });
+      } else {
+        const data = await response.json();
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to delete contact',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      logger.error('Error deleting contact:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete contact',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setContactToDelete(null);
+    }
+  };
+
+  // Helper function to get form type label from source
+  const getFormTypeLabel = (source?: string): string => {
+    if (!source) return 'Unknown';
+    const sourceMap: Record<string, string> = {
+      'tax_intake_form': 'Tax Intake',
+      'tax_intake': 'Tax Intake',
+      'contact_form': 'Contact Form',
+      'referral': 'Referral',
+      'manual': 'Manual',
+      'import': 'Import',
+    };
+    return sourceMap[source.toLowerCase()] || source;
+  };
+
+  // Helper function to get badge variant for form type
+  const getFormTypeBadgeClass = (source?: string): string => {
+    if (!source) return '';
+    const sourceClasses: Record<string, string> = {
+      'tax_intake_form': 'bg-green-100 text-green-800 border-green-300',
+      'tax_intake': 'bg-green-100 text-green-800 border-green-300',
+      'contact_form': 'bg-blue-100 text-blue-800 border-blue-300',
+      'referral': 'bg-purple-100 text-purple-800 border-purple-300',
+      'manual': 'bg-gray-100 text-gray-800 border-gray-300',
+    };
+    return sourceClasses[source.toLowerCase()] || '';
+  };
+
+  // Helper function to get icon for form type
+  const getFormTypeIcon = (source?: string) => {
+    if (!source) return FileText;
+    const sourceIcons: Record<string, any> = {
+      'tax_intake_form': ClipboardList,
+      'tax_intake': ClipboardList,
+      'contact_form': MessageSquare,
+      'referral': UserRound,
+      'manual': Pencil,
+    };
+    return sourceIcons[source.toLowerCase()] || FileText;
   };
 
   if (!isLoaded || loading) {
@@ -336,9 +445,8 @@ export default function CRMContactsPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Stage</TableHead>
-                <TableHead>Lead Score</TableHead>
-                <TableHead>Tasks</TableHead>
-                <TableHead>Interactions</TableHead>
+                <TableHead>Form Type</TableHead>
+                <TableHead>Documents</TableHead>
                 <TableHead>Last Contact</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -346,7 +454,7 @@ export default function CRMContactsPage() {
             <TableBody>
               {contacts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No contacts found
                   </TableCell>
                 </TableRow>
@@ -427,43 +535,90 @@ export default function CRMContactsPage() {
                         </Badge>
                       )}
                     </TableCell>
+                    {/* Form Type Column */}
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-12 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={cn(
-                              'h-full rounded-full',
-                              contact.leadScore >= 70 && 'bg-green-500',
-                              contact.leadScore >= 40 && contact.leadScore < 70 && 'bg-yellow-500',
-                              contact.leadScore < 40 && 'bg-red-500'
-                            )}
-                            style={{ width: `${contact.leadScore}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium">{contact.leadScore}</span>
-                      </div>
+                      {(() => {
+                        const FormIcon = getFormTypeIcon(contact.source);
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={cn('flex items-center gap-1 w-fit', getFormTypeBadgeClass(contact.source))}
+                          >
+                            <FormIcon className="h-3 w-3" />
+                            {getFormTypeLabel(contact.source)}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
+                    {/* Documents Column */}
                     <TableCell>
-                      <Badge variant="secondary">{contact._count?.tasks || 0}</Badge>
+                      {contact.clientFolderId ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2"
+                          onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
+                        >
+                          <FolderOpen className="h-4 w-4 mr-1 text-primary" />
+                          <span className="text-xs">Files</span>
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No folder</span>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{contact._count?.interactions || 0}</Badge>
-                    </TableCell>
+                    {/* Last Contact Column */}
                     <TableCell className="text-sm text-muted-foreground">
                       {contact.lastContactedAt
                         ? new Date(contact.lastContactedAt).toLocaleDateString()
                         : 'Never'}
                     </TableCell>
+                    {/* Actions Column with Dropdown */}
                     <TableCell className="text-right">
-                      {canView && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}
-                        >
-                          View
-                        </Button>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canView && (
+                            <DropdownMenuItem
+                              onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                          )}
+                          {canEdit && (
+                            <DropdownMenuItem
+                              onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit Contact
+                            </DropdownMenuItem>
+                          )}
+                          {contact.clientFolderId && canView && (
+                            <DropdownMenuItem
+                              onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
+                            >
+                              <FolderOpen className="mr-2 h-4 w-4" />
+                              View Documents
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteClick(contact)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
@@ -472,6 +627,40 @@ export default function CRMContactsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contact?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{' '}
+              <strong>
+                {contactToDelete?.firstName} {contactToDelete?.lastName}
+              </strong>
+              ? This action cannot be undone and will permanently remove this contact and all
+              associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

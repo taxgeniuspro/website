@@ -70,11 +70,54 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get contact
     const contact = await CRMService.getContactById(params.id, accessContext);
 
-    logger.info('[CRM API] Contact retrieved successfully', { contactId: params.id });
+    // Fetch associated tax intake lead by email for full form data
+    let taxIntakeLead = null;
+    if (contact.email) {
+      taxIntakeLead = await prisma.taxIntakeLead.findUnique({
+        where: { email: contact.email.toLowerCase() },
+        select: {
+          id: true,
+          first_name: true,
+          middle_name: true,
+          last_name: true,
+          email: true,
+          phone: true,
+          country_code: true,
+          address_line_1: true,
+          address_line_2: true,
+          city: true,
+          state: true,
+          zip_code: true,
+          full_form_data: true,
+          completed: true,
+          created_at: true,
+          updated_at: true,
+          referrerUsername: true,
+          referrerType: true,
+          attributionMethod: true,
+          assignedPreparerId: true,
+          contactRequested: true,
+          contactMethod: true,
+          lastContactedAt: true,
+          contactNotes: true,
+          convertedToClient: true,
+          leadScore: true,
+          urgency: true,
+        },
+      });
+    }
+
+    logger.info('[CRM API] Contact retrieved successfully', {
+      contactId: params.id,
+      hasTaxIntakeLead: !!taxIntakeLead,
+    });
 
     return NextResponse.json({
       success: true,
-      data: contact,
+      data: {
+        ...contact,
+        taxIntakeLead,
+      },
     });
   } catch (error: any) {
     logger.error('[CRM API] Error getting contact', { error: error.message, contactId: params.id });

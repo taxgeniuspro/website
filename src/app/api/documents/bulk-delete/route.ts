@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       const authorizedFileIds = files
         .filter((file) => {
           // ❌ CLIENTS CANNOT DELETE DOCUMENTS (security requirement)
-          if (profile.role === 'CLIENT' || profile.role === 'LEAD') {
+          if (profile.role === 'client' || profile.role === 'lead') {
             return false;
           }
 
@@ -59,10 +59,10 @@ export async function POST(req: NextRequest) {
           if (file.profileId === profile.id) return true;
 
           // Admins can delete
-          if (profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN') return true;
+          if (profile.role === 'admin' || profile.role === 'super_admin') return true;
 
           // Tax preparers can delete if assigned (checked below)
-          return profile.role === 'TAX_PREPARER';
+          return profile.role === 'tax_preparer';
         })
         .map((f) => f.id);
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       const authorizedFolderIds = folders
         .filter((folder) => {
           // ❌ CLIENTS CANNOT DELETE FOLDERS (security requirement)
-          if (profile.role === 'CLIENT' || profile.role === 'LEAD') {
+          if (profile.role === 'client' || profile.role === 'lead') {
             return false;
           }
 
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
           if (folder.ownerId === profile.id) return true;
 
           // Admins can delete
-          if (profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN') return true;
+          if (profile.role === 'admin' || profile.role === 'super_admin') return true;
 
           return false;
         })

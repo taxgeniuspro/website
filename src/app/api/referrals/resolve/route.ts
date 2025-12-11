@@ -45,20 +45,20 @@ export async function GET(req: NextRequest) {
     let preparerId: string | null = null;
 
     switch (profile.role) {
-      case 'TAX_PREPARER':
-      case 'ADMIN':
-      case 'SUPER_ADMIN':
+      case 'tax_preparer':
+      case 'admin':
+      case 'super_admin':
         // Direct booking with preparer
         preparerId = profile.id;
         break;
 
-      case 'CLIENT':
+      case 'client':
         // Book with client's assigned preparer
         // TODO: Look up client's assigned preparer via ClientPreparer relation
         preparerId = null;
         break;
 
-      case 'AFFILIATE':
+      case 'affiliate':
         // Book with affiliate's bonded preparer
         preparerId = profile.affiliateBondedToPreparerId || null;
         break;

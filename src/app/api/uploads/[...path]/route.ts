@@ -87,11 +87,11 @@ export async function GET(req: NextRequest, { params }: { params: { path: string
           hasAccess = true;
         }
         // Check if user is admin
-        else if (profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN') {
+        else if (profile.role === 'admin' || profile.role === 'super_admin') {
           hasAccess = true;
         }
         // Check if tax preparer has access to this client
-        else if (profile.role === 'TAX_PREPARER') {
+        else if (profile.role === 'tax_preparer') {
           const assignment = await prisma.clientPreparer.findFirst({
             where: {
               clientId: fileOwnerId,

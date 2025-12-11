@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const currentRole = session?.user?.role;
 
     // Only SUPER_ADMIN can use this endpoint
-    if (currentRole !== 'SUPER_ADMIN') {
+    if (currentRole !== 'super_admin') {
       return NextResponse.json(
         { error: 'Forbidden - Only super admins can use this endpoint' },
         { status: 403 }
@@ -33,10 +33,10 @@ export async function POST(request: Request) {
 
     // Get the role to set from request body
     const body = await request.json();
-    const roleInput = body.role?.toUpperCase() || 'ADMIN'; // Default to ADMIN
+    const roleInput = body.role?.toUpperCase() || 'admin'; // Default to ADMIN
 
     // Validate role
-    const validRoles: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'LEAD', 'CLIENT', 'TAX_PREPARER', 'AFFILIATE'];
+    const validRoles: UserRole[] = ['super_admin', 'admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
     if (!validRoles.includes(roleInput as UserRole)) {
       return NextResponse.json(
         {
@@ -109,7 +109,7 @@ export async function GET() {
       },
     });
 
-    const currentRole = profile?.role || 'LEAD';
+    const currentRole = profile?.role || 'lead';
 
     return NextResponse.json({
       userId: userId,

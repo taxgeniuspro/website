@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only tax preparers and admins can assign forms
-    if (!['TAX_PREPARER', 'ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json(
         { error: 'Forbidden - Only tax preparers and admins can assign forms' },
         { status: 403 }
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    if (!['CLIENT', 'LEAD'].includes(client.role)) {
+    if (!['client', 'lead'].includes(client.role)) {
       return NextResponse.json({ error: 'Target user must be a client or lead' }, { status: 400 });
     }
 
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     // For tax preparers, verify they have access to this client
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       const assignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId,
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only tax preparers and admins can view assignments
-    if (!['TAX_PREPARER', 'ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
     }
 
     // For tax preparers, verify they have access to this client
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       const assignment = await prisma.clientPreparer.findFirst({
         where: {
           clientId,
