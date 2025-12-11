@@ -12,6 +12,7 @@ import { CertificationCompleteEmail } from '../../../emails/certification-comple
 import { TaxPreparerWelcomeEmail } from '../../../emails/TaxPreparerWelcomeEmail';
 import { NewLeadNotification } from '../../../emails/new-lead-notification';
 import { TaxIntakeComplete } from '../../../emails/tax-intake-complete';
+import { AppointmentNotificationPreparer } from '../../../emails/appointment-notification-preparer';
 import { logger } from '@/lib/logger';
 
 // Lazy-initialize Resend to avoid build-time errors when API key is not set
@@ -1412,6 +1413,102 @@ export class EmailService {
       return true;
     } catch (error) {
       logger.error('Error sending tax intake complete email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send appointment notification email to tax preparer
+   * Triggered when a client books an appointment
+   */
+  static async sendAppointmentNotificationEmail(
+    preparerId: string,
+    appointmentData: {
+      appointmentId: string;
+      clientName: string;
+      clientEmail: string;
+      clientPhone?: string;
+      appointmentType: 'PHONE_CALL' | 'VIDEO_CALL' | 'IN_PERSON' | 'CONSULTATION' | 'FOLLOW_UP';
+      scheduledFor?: Date | string;
+      duration: number;
+      status: string;
+      clientNotes?: string;
+    },
+    locale?: 'en' | 'es'
+  ): Promise<boolean> {
+    try {
+      // Check if preparerId is an email address (for language-based routing)
+      const isEmail = preparerId.includes('@');
+      const preparerEmail = isEmail
+        ? preparerId
+        : await this.getPreparerNotificationEmail(preparerId);
+
+      // Get preparer's name (only if preparerId is a user ID, not an email)
+      let preparerName = 'Tax Professional';
+      if (!isEmail) {
+        const preparer = await prisma.user.findUnique({
+          where: { id: preparerId },
+          select: {
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        });
+        preparerName = preparer?.profile?.firstName || 'Tax Preparer';
+      }
+
+      // Include locale in dashboard URL for proper language routing
+      const localePrefix = locale === 'es' ? '/es' : '/en';
+      const dashboardUrl = `${this.appUrl}${localePrefix}/dashboard/tax-preparer/calendar`;
+
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Appointment Notification Email (Dev Mode):', {
+          to: preparerEmail,
+          preparerName,
+          appointmentId: appointmentData.appointmentId,
+          clientName: appointmentData.clientName,
+          appointmentType: appointmentData.appointmentType,
+        });
+        return true;
+      }
+
+      const { data, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to: preparerEmail,
+        subject: `📅 New Appointment: ${appointmentData.clientName} - ${appointmentData.appointmentType.replace(/_/g, ' ')}`,
+        react: AppointmentNotificationPreparer({
+          preparerName,
+          clientName: appointmentData.clientName,
+          clientEmail: appointmentData.clientEmail,
+          clientPhone: appointmentData.clientPhone,
+          appointmentType: appointmentData.appointmentType,
+          scheduledFor: appointmentData.scheduledFor,
+          duration: appointmentData.duration,
+          status: appointmentData.status,
+          clientNotes: appointmentData.clientNotes,
+          dashboardUrl,
+          appointmentId: appointmentData.appointmentId,
+          locale: locale || 'en',
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending appointment notification email:', error);
+        return false;
+      }
+
+      logger.info('Appointment notification email sent:', {
+        emailId: data?.id,
+        preparerId,
+        preparerEmail,
+        appointmentId: appointmentData.appointmentId,
+      });
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment notification email:', error);
       return false;
     }
   }

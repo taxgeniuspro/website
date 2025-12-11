@@ -25,14 +25,22 @@ interface CalendarViewProps {
   onDateClick?: (date: Date) => void;
 }
 
+interface DayAvailability {
+  available: number;
+  total: number;
+  status: 'available' | 'limited' | 'full' | 'unavailable' | 'disabled' | 'past';
+}
+
 export function CalendarView({ preparerId, onAppointmentClick, onDateClick }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [dayAvailability, setDayAvailability] = useState<Record<string, DayAvailability>>({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'month' | 'week' | 'day'>('month');
 
   useEffect(() => {
     loadAppointments();
+    loadDayAvailability();
   }, [currentDate, preparerId]);
 
   const loadAppointments = async () => {
@@ -53,6 +61,51 @@ export function CalendarView({ preparerId, onAppointmentClick, onDateClick }: Ca
       console.error('Failed to load appointments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDayAvailability = async () => {
+    try {
+      const monthStr = format(currentDate, 'yyyy-MM');
+      const response = await fetch(
+        `/api/appointments/day-availability?preparerId=${preparerId}&month=${monthStr}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setDayAvailability(data.availability || {});
+      }
+    } catch (error) {
+      console.error('Failed to load day availability:', error);
+    }
+  };
+
+  const getAvailabilityIndicator = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const availability = dayAvailability[dateStr];
+
+    if (!availability) return null;
+
+    switch (availability.status) {
+      case 'full':
+        return (
+          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" title="Fully booked" />
+        );
+      case 'limited':
+        return (
+          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-yellow-500" title={`${availability.available} slots left`} />
+        );
+      case 'unavailable':
+      case 'disabled':
+        return (
+          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-gray-400" title="Not available" />
+        );
+      case 'available':
+        return (
+          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-500" title={`${availability.available} slots available`} />
+        );
+      default:
+        return null;
     }
   };
 
@@ -212,20 +265,33 @@ export function CalendarView({ preparerId, onAppointmentClick, onDateClick }: Ca
           {/* Days */}
           {generateMonthView().map((date) => {
             const dayAppointments = getDayAppointments(date);
+            const dateStr = format(date, 'yyyy-MM-dd');
+            const availability = dayAvailability[dateStr];
             const isToday =
               date.getDate() === new Date().getDate() &&
               date.getMonth() === new Date().getMonth() &&
               date.getFullYear() === new Date().getFullYear();
+            const isFull = availability?.status === 'full';
+            const isUnavailable = availability?.status === 'unavailable' || availability?.status === 'disabled';
 
             return (
               <div
                 key={date.toISOString()}
-                className={`aspect-square border rounded-lg p-2 cursor-pointer transition-colors ${
-                  isToday ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                className={`relative aspect-square border rounded-lg p-2 cursor-pointer transition-colors ${
+                  isToday
+                    ? 'border-blue-500 bg-blue-50'
+                    : isFull
+                      ? 'border-red-200 bg-red-50/30'
+                      : isUnavailable
+                        ? 'border-gray-200 bg-gray-100/50'
+                        : 'border-gray-200 hover:border-blue-300'
                 }`}
                 onClick={() => onDateClick?.(date)}
               >
-                <div className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+                {/* Availability Indicator */}
+                {getAvailabilityIndicator(date)}
+
+                <div className={`text-sm font-medium ${isToday ? 'text-blue-600' : isUnavailable ? 'text-gray-400' : 'text-gray-900'}`}>
                   {date.getDate()}
                 </div>
 
@@ -257,18 +323,39 @@ export function CalendarView({ preparerId, onAppointmentClick, onDateClick }: Ca
 
       {/* Legend */}
       <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg">
-        <div className="flex items-center gap-6 text-xs text-gray-600">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+          {/* Appointment Types */}
           <div className="flex items-center gap-2">
             <Video className="w-4 h-4" />
-            <span>Video Call</span>
+            <span>Video</span>
           </div>
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4" />
-            <span>Phone Call</span>
+            <span>Phone</span>
           </div>
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
             <span>In Person</span>
+          </div>
+
+          <div className="w-px h-4 bg-gray-300 mx-2" />
+
+          {/* Availability Indicators */}
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <span>Available</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-yellow-500" />
+            <span>Limited</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500" />
+            <span>Full</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-gray-400" />
+            <span>Unavailable</span>
           </div>
         </div>
       </div>
