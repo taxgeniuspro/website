@@ -86,10 +86,13 @@ export async function GET(req: NextRequest) {
         cannotLogin: formattedPreparers.filter(p => !p.authStatus.canLogin).length,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('List tax preparers error:', error);
     return NextResponse.json(
-      { error: 'Failed to list tax preparers' },
+      {
+        error: 'Failed to list tax preparers',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }

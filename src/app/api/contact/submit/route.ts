@@ -3,16 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { ContactFormNotification } from '../../../../../emails/contact-form-notification';
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
+import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { getEmailRecipients } from '@/config/email-routing';
-
-// Rate limiting: 3 requests per 10 minutes per IP
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(3, '10 m'),
-  analytics: true,
-});
 
 /**
  * POST /api/contact/submit - Handle contact form submissions
@@ -25,32 +17,23 @@ const ratelimit = new Ratelimit({
  */
 export async function POST(req: NextRequest) {
   try {
-    // Rate limiting check - TEMPORARILY DISABLED due to Upstash not configured
-    // const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
-    // const {
-    //   success: rateLimitSuccess,
-    //   limit,
-    //   reset,
-    //   remaining,
-    // } = await ratelimit.limit(`contact_${ip}`);
+    // Rate limiting check
+    const ip = getClientIdentifier(req);
+    const rateLimitResult = await apiRateLimit.limit(`contact_${ip}`);
 
-    // if (!rateLimitSuccess) {
-    //   logger.warn('Rate limit exceeded for contact form', { ip, limit, reset, remaining });
-    //   return NextResponse.json(
-    //     {
-    //       error: 'Too many requests. Please try again later.',
-    //       retryAfter: Math.ceil((reset - Date.now()) / 1000),
-    //     },
-    //     {
-    //       status: 429,
-    //       headers: {
-    //         'X-RateLimit-Limit': limit.toString(),
-    //         'X-RateLimit-Remaining': remaining.toString(),
-    //         'X-RateLimit-Reset': reset.toString(),
-    //         },
-    //     }
-    //   );
-    // }
+    if (!rateLimitResult.success) {
+      logger.warn('Rate limit exceeded for contact form', { ip });
+      return NextResponse.json(
+        {
+          error: 'Too many requests. Please try again later.',
+          retryAfter: Math.ceil((rateLimitResult.reset - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: getRateLimitHeaders(rateLimitResult),
+        }
+      );
+    }
 
     const body = await req.json();
     const { name, email, phone, service, message, locale } = body;
