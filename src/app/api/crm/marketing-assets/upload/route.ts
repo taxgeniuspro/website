@@ -4,12 +4,15 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { v2 as cloudinary } from 'cloudinary';
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Lazy initialize Cloudinary to avoid build errors
+const getCloudinary = () => {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
+    api_key: process.env.CLOUDINARY_API_KEY || '',
+    api_secret: process.env.CLOUDINARY_API_SECRET || '',
+  });
+  return cloudinary;
+};
 
 /**
  * POST /api/crm/marketing-assets/upload
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     // Upload to Cloudinary
     const uploadResult = await new Promise<any>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
+      const uploadStream = getCloudinary().uploader.upload_stream(
         {
           folder: `marketing-assets/${profile.id}/${category}`,
           resource_type: 'image',
