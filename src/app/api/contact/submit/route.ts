@@ -12,7 +12,7 @@ import { getEmailRecipients } from '@/config/email-routing';
  * This endpoint:
  * 1. Validates the form data
  * 2. Saves submission to CRMContact database
- * 3. Sends email notification to taxgenius.tax@gmail.com
+ * 3. Sends email notification to taxgenius.taxes@gmail.com (Ray) with CC to taxgenius.tax@gmail.com (Owliver)
  * 4. Returns success/error response
  */
 export async function POST(req: NextRequest) {

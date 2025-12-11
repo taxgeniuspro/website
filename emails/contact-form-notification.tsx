@@ -192,7 +192,7 @@ export function ContactFormNotification({
             <Text style={copyright}>
               {t(contactFormTranslations.notificationSentTo, locale).replace(
                 '{email}',
-                'taxgenius.tax@gmail.com'
+                'taxgenius.taxes@gmail.com'
               )}
             </Text>
           </Section>

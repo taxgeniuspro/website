@@ -357,10 +357,11 @@ export async function POST(req: NextRequest) {
           logger.info('Appointment confirmation email sent', { emailId: data?.id });
         }
 
-        // Also send notification to business admin
+        // Also send notification to business admin (Ray Hamilton primary, Owliver Owl CC)
         await getResendClient().emails.send({
           from: fromEmail,
-          to: 'taxgenius.tax@gmail.com',
+          to: 'taxgenius.taxes@gmail.com',  // Ray Hamilton - Primary admin
+          cc: 'taxgenius.tax@gmail.com',     // Owliver Owl - CC copy
           subject: `New Appointment Request: ${clientName} - ${appointmentType}`,
           html: `
             <h2>New Appointment Request</h2>

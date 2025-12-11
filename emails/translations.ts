@@ -540,8 +540,8 @@ export const affiliateApplicationTranslations = {
     es: '© 2025 Equipo de Afiliados TaxGeniusPro',
   },
   emailSentTo: {
-    en: 'This email was sent to taxgenius.tax@gmail.com',
-    es: 'Este correo fue enviado a taxgenius.tax@gmail.com',
+    en: 'This email was sent to taxgenius.taxes@gmail.com',
+    es: 'Este correo fue enviado a taxgenius.taxes@gmail.com',
   },
 };
 
@@ -726,8 +726,8 @@ export const preparerApplicationTranslations = {
     es: '© 2025 Equipo de RRHH TaxGeniusPro',
   },
   emailSentTo: {
-    en: 'This email was sent to taxgenius.tax@gmail.com',
-    es: 'Este correo fue enviado a taxgenius.tax@gmail.com',
+    en: 'This email was sent to taxgenius.taxes@gmail.com',
+    es: 'Este correo fue enviado a taxgenius.taxes@gmail.com',
   },
 };
 
