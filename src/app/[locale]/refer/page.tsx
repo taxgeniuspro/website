@@ -213,19 +213,9 @@ function ReferralContent() {
   }, [referralCode]);
 
   const fetchReferrerData = async (code: string) => {
-    // Simulate API call (in production, fetch from database)
-    setTimeout(() => {
-      setReferrer({
-        name: 'Sarah Johnson',
-        avatar: '/avatars/sarah.jpg',
-        referralCode: code,
-        totalReferrals: 47,
-        tier: 'gold',
-        joinedDate: '2023-11-15',
-        testimonial: "I've made over $5,000 referring friends!",
-        earnings: 5250,
-      });
-    }, 500);
+    // Real data - show empty state, will be populated from actual referrer data
+    // In production, this should fetch from /api/referrals/track?code=...
+    setReferrer(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

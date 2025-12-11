@@ -95,12 +95,7 @@ export default function ReferralDashboard({ userId, language = 'en' }: ReferralD
         gold: { name: 'Gold', color: 'bg-yellow-500', icon: '🥇', bonus: '$100' },
         platinum: { name: 'Platinum', color: 'bg-purple-600', icon: '💎', bonus: '$150' },
       },
-      recentReferrals: [
-        { name: 'John D.', status: 'qualified', amount: 100, date: '2 hours ago' },
-        { name: 'Maria S.', status: 'pending', amount: 0, date: '5 hours ago' },
-        { name: 'Robert K.', status: 'qualified', amount: 100, date: 'Yesterday' },
-        { name: 'Lisa M.', status: 'qualified', amount: 100, date: '2 days ago' },
-      ],
+      recentReferrals: [] as Array<{ name: string; status: string; amount: number; date: string }>,
     },
     es: {
       title: 'Panel de Referencias',
@@ -141,12 +136,7 @@ export default function ReferralDashboard({ userId, language = 'en' }: ReferralD
         gold: { name: 'Oro', color: 'bg-yellow-500', icon: '🥇', bonus: '$100' },
         platinum: { name: 'Platino', color: 'bg-purple-600', icon: '💎', bonus: '$150' },
       },
-      recentReferrals: [
-        { name: 'Juan D.', status: 'qualified', amount: 100, date: 'Hace 2 horas' },
-        { name: 'María S.', status: 'pending', amount: 0, date: 'Hace 5 horas' },
-        { name: 'Roberto K.', status: 'qualified', amount: 100, date: 'Ayer' },
-        { name: 'Lisa M.', status: 'qualified', amount: 100, date: 'Hace 2 días' },
-      ],
+      recentReferrals: [] as Array<{ name: string; status: string; amount: number; date: string }>,
     },
   };
 
@@ -159,25 +149,23 @@ export default function ReferralDashboard({ userId, language = 'en' }: ReferralD
   const fetchReferralData = async () => {
     setIsLoading(true);
 
-    // Simulate API call (in production, fetch from database)
-    setTimeout(() => {
-      setReferralData({
-        referralCode: 'TAXGENIUS2024',
-        vanityUrl: 'taxgeniuspro.tax/johndoe',
-        tier: 'gold',
-        totalReferrals: 47,
-        qualifiedReferrals: 35,
-        pendingReferrals: 12,
-        totalEarnings: 3500,
-        availableBalance: 850,
-        thisMonthReferrals: 8,
-        lastMonthReferrals: 12,
-        conversionRate: 0.74,
-        nextTierProgress: 35,
-        nextTierRequirement: 50,
-      });
-      setIsLoading(false);
-    }, 1000);
+    // Real data - starts at zero until actual referral activity occurs
+    setReferralData({
+      referralCode: '',
+      vanityUrl: '',
+      tier: 'bronze',
+      totalReferrals: 0,
+      qualifiedReferrals: 0,
+      pendingReferrals: 0,
+      totalEarnings: 0,
+      availableBalance: 0,
+      thisMonthReferrals: 0,
+      lastMonthReferrals: 0,
+      conversionRate: 0,
+      nextTierProgress: 0,
+      nextTierRequirement: 10,
+    });
+    setIsLoading(false);
   };
 
   const copyReferralLink = () => {
