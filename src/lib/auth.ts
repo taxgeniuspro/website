@@ -42,6 +42,7 @@ declare module '@auth/core/jwt' {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   trustHost: true, // Trust the host in production (required for NextAuth v5)
   session: {
     strategy: 'jwt', // Use JWT for faster session checks
