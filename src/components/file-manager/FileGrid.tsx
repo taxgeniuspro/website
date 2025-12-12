@@ -100,10 +100,16 @@ export function FileGrid({
         {files.map((file) => {
           const isSelected = selectedFiles.has(file.id);
           const FileIcon = getFileIcon(file.mimeType);
-          // Ensure fileUrl uses /api/uploads prefix
-          const fileUrl = file.fileUrl.startsWith('/api/uploads')
-            ? file.fileUrl
-            : file.fileUrl.replace('/uploads', '/api/uploads');
+          // Handle different file URL formats:
+          // - External URLs (Cloudinary, R2, etc.) - use as-is
+          // - Local uploads (/uploads/...) - convert to /api/uploads for auth
+          const getFileUrl = (url: string) => {
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            if (url.startsWith('/api/uploads')) return url;
+            if (url.startsWith('/uploads')) return url.replace('/uploads', '/api/uploads');
+            return url;
+          };
+          const fileUrl = getFileUrl(file.fileUrl);
 
           return (
             <div

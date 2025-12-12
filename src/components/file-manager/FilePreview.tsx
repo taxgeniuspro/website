@@ -30,10 +30,27 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
     });
   }, [file.id]);
 
-  // Ensure fileUrl uses /api/uploads prefix
-  const fileUrl = file.fileUrl.startsWith('/api/uploads')
-    ? file.fileUrl
-    : file.fileUrl.replace('/uploads', '/api/uploads');
+  // Handle different file URL formats:
+  // - External URLs (Cloudinary, R2, etc.) - use as-is
+  // - Local uploads (/uploads/...) - convert to /api/uploads for auth
+  const getFileUrl = (url: string) => {
+    // External URLs (https://, http://) - use directly
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    // Already using api/uploads prefix
+    if (url.startsWith('/api/uploads')) {
+      return url;
+    }
+    // Local uploads - convert to API route
+    if (url.startsWith('/uploads')) {
+      return url.replace('/uploads', '/api/uploads');
+    }
+    // Fallback
+    return url;
+  };
+
+  const fileUrl = getFileUrl(file.fileUrl);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';
@@ -43,10 +60,6 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    // Ensure fileUrl uses /api/uploads prefix
-    const fileUrl = file.fileUrl.startsWith('/api/uploads')
-      ? file.fileUrl
-      : file.fileUrl.replace('/uploads', '/api/uploads');
     a.href = fileUrl;
     a.download = file.fileName;
     document.body.appendChild(a);
