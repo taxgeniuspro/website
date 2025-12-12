@@ -44,6 +44,8 @@ import { StatsWidget } from '@/components/gamification/StatsWidget';
 import { useSession } from 'next-auth/react';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { UserRole } from '@/lib/permissions';
+import { TierProgress } from '@/components/affiliate/TierProgress';
+import { Image as ImageIcon } from 'lucide-react';
 
 export default function AffiliateDashboard() {
   const { data: session } = useSession(); const user = session?.user;
@@ -143,6 +145,9 @@ export default function AffiliateDashboard() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
+            {/* Commission Tier Progress */}
+            <TierProgress />
+
             <div className="grid gap-4 md:grid-cols-2">
               {/* Recent Activity */}
               <Card>
@@ -224,6 +229,14 @@ export default function AffiliateDashboard() {
                   >
                     <BarChart3 className="mr-2 h-4 w-4" />
                     View Full Analytics
+                  </Button>
+                  <Button
+                    className="w-full justify-start"
+                    variant="outline"
+                    onClick={() => router.push('/dashboard/affiliate/creatives')}
+                  >
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    Browse Marketing Materials
                   </Button>
                 </CardContent>
               </Card>

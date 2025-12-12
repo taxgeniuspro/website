@@ -455,6 +455,40 @@ export async function trackCreativeUsage(
 }
 
 /**
+ * Get creative statistics (simplified version for API responses)
+ */
+export async function getCreativeStatistics(
+  creativeId: string,
+  dateRange?: { startDate: Date; endDate: Date }
+): Promise<{
+  totalViews: number;
+  totalDownloads: number;
+  totalClicks: number;
+  uniqueAffiliates: number;
+  conversionRate: number;
+}> {
+  const analytics = await getCreativeAnalytics(creativeId, dateRange ? { start: dateRange.startDate, end: dateRange.endDate } : undefined);
+
+  // Calculate conversion rate (conversions / views) if we have data
+  const creative = await prisma.affiliateCreative.findUnique({
+    where: { id: creativeId },
+    select: { conversions: true, views: true, clicks: true },
+  });
+
+  const conversionRate = creative && creative.views > 0
+    ? (creative.conversions / creative.views) * 100
+    : 0;
+
+  return {
+    totalViews: analytics.totalViews,
+    totalDownloads: analytics.totalDownloads,
+    totalClicks: creative?.clicks ?? 0,
+    uniqueAffiliates: analytics.uniqueAffiliates,
+    conversionRate: Math.round(conversionRate * 100) / 100,
+  };
+}
+
+/**
  * Get creative usage analytics
  */
 export async function getCreativeAnalytics(

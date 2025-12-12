@@ -123,7 +123,8 @@ export async function getAffiliateGroups(
  * Get a single affiliate group by ID
  */
 export async function getAffiliateGroupById(
-  id: string
+  id: string,
+  includeAffiliates: boolean = false
 ): Promise<GroupWithStats | null> {
   return prisma.affiliateGroup.findUnique({
     where: { id },
@@ -131,6 +132,21 @@ export async function getAffiliateGroupById(
       _count: {
         select: { affiliates: true },
       },
+      affiliates: includeAffiliates
+        ? {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatarUrl: true,
+              affiliateStatus: true,
+              totalConversions: true,
+              lifetimeEarnings: true,
+            },
+            take: 10,
+          }
+        : false,
     },
   });
 }
@@ -175,17 +191,41 @@ export async function updateAffiliateGroup(
  * Delete an affiliate group
  * Affiliates in the group will have their groupId set to null
  */
-export async function deleteAffiliateGroup(id: string): Promise<void> {
-  // First remove all affiliates from the group
-  await prisma.profile.updateMany({
+export async function deleteAffiliateGroup(
+  id: string,
+  force: boolean = false
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  // Check if group has affiliates
+  const affiliateCount = await prisma.profile.count({
     where: { affiliateGroupId: id },
-    data: { affiliateGroupId: null },
   });
 
-  // Then delete the group
+  if (affiliateCount > 0 && !force) {
+    return {
+      success: false,
+      error: `Cannot delete group with ${affiliateCount} affiliates. Use force=true to remove affiliates from group and delete.`,
+    };
+  }
+
+  // Remove all affiliates from the group if force is true
+  if (affiliateCount > 0) {
+    await prisma.profile.updateMany({
+      where: { affiliateGroupId: id },
+      data: { affiliateGroupId: null },
+    });
+  }
+
+  // Delete the group
   await prisma.affiliateGroup.delete({
     where: { id },
   });
+
+  return {
+    success: true,
+    message: force
+      ? `Group deleted. ${affiliateCount} affiliates removed from group.`
+      : 'Group deleted successfully.',
+  };
 }
 
 /**
@@ -339,7 +379,7 @@ export async function moveAffiliatesToGroup(
  */
 export async function getGroupStatistics(
   groupId: string,
-  dateRange?: { start: Date; end: Date }
+  dateRange?: { startDate: Date; endDate: Date }
 ): Promise<{
   totalAffiliates: number;
   activeAffiliates: number;
