@@ -54,7 +54,11 @@ export function MobileBottomNav({
   return (
     <>
       {/* Spacer to prevent content from being hidden behind fixed nav */}
-      <div className="h-16 md:hidden" aria-hidden="true" />
+      <div
+        className="md:hidden"
+        style={{ height: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+        aria-hidden="true"
+      />
 
       {/* Mobile Bottom Navigation */}
       <nav

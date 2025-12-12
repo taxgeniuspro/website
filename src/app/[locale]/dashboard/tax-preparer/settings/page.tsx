@@ -31,7 +31,9 @@ import {
   Clock,
 } from 'lucide-react';
 import { MarketingContactForm } from '@/components/settings/MarketingContactForm';
+import { SocialMediaLinksForm } from '@/components/settings/SocialMediaLinksForm';
 import { AvailabilitySettings } from '@/components/settings/AvailabilitySettings';
+import { NotificationSettingsCard } from '@/components/settings/NotificationSettingsCard';
 
 export const metadata = {
   title: 'Settings | Tax Genius Pro',
@@ -273,6 +275,9 @@ export default async function TaxPreparerSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Push Notification Settings */}
+      <NotificationSettingsCard />
+
       {/* Notification Settings */}
       <Card>
         <CardHeader>
@@ -417,6 +422,9 @@ export default async function TaxPreparerSettingsPage() {
 
       {/* Marketing Contact Information */}
       <MarketingContactForm />
+
+      {/* Social Media Links */}
+      <SocialMediaLinksForm />
 
       {/* Danger Zone */}
       <Card className="border-red-200 dark:border-red-800">

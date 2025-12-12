@@ -772,12 +772,12 @@ export default function CRMContactsPage() {
                         {/* Contact Info */}
                         <TableCell>
                           <div className="space-y-1">
-                            <a href={`mailto:${contact.email}`} className="flex items-center text-sm text-primary hover:underline cursor-pointer transition-colors">
+                            <a href={`mailto:${contact.email}`} className="flex items-center text-sm text-foreground hover:text-primary hover:underline cursor-pointer transition-colors">
                               <Mail className="h-3.5 w-3.5 mr-2 shrink-0" />
                               <span className="max-w-[200px] truncate">{contact.email}</span>
                             </a>
                             {contact.phone && (
-                              <a href={`tel:${contact.phone}`} className="flex items-center text-sm text-primary hover:underline cursor-pointer transition-colors">
+                              <a href={`tel:${contact.phone}`} className="flex items-center text-sm text-foreground hover:text-primary hover:underline cursor-pointer transition-colors">
                                 <Phone className="h-3.5 w-3.5 mr-2 shrink-0" />
                                 {contact.phone}
                               </a>
