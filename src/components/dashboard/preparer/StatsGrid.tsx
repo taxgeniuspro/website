@@ -70,7 +70,7 @@ const statCards = [
 
 export function StatsGrid({ stats }: StatsGridProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {statCards.map((card) => {
         const value = stats[card.key];
         const displayValue = card.formatter ? card.formatter(value) : value;

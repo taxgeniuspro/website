@@ -56,8 +56,8 @@ export default async function PreparerOverviewDashboard() {
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Preparer Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, {user?.firstName || 'Preparer'}</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Preparer Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Welcome back, {user?.firstName || 'Preparer'}</p>
         </div>
 
         {/* CRITICAL ALERTS - Missed Follow-Ups */}
@@ -132,7 +132,7 @@ export default async function PreparerOverviewDashboard() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Intake Forms</CardTitle>
