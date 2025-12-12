@@ -14,6 +14,8 @@ import {
   MessageSquare,
   HelpCircle,
   UserPlus,
+  Search,
+  DollarSign,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,7 +25,7 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   href?: string;
-  action?: 'links' | 'notifications' | 'more';
+  action?: 'links' | 'notifications' | 'more' | 'search';
 }
 
 export interface MobileNavConfig {
@@ -36,12 +38,13 @@ const TAX_PREPARER_CONFIG: MobileNavConfig = {
   primary: [
     { label: 'CRM', icon: Users, href: '/crm/contacts' },
     { label: 'Calendar', icon: Calendar, href: '/dashboard/tax-preparer/calendar' },
-    { label: 'Links', icon: Link, action: 'links' },
+    { label: 'Search', icon: Search, action: 'search' },
     { label: 'Alerts', icon: Bell, action: 'notifications' },
     { label: 'More', icon: Menu, action: 'more' },
   ],
   secondary: [
     { label: 'Dashboard', icon: Home, href: '/dashboard/tax-preparer' },
+    { label: 'Links', icon: Link, href: '/dashboard/tax-preparer/tracking' },
     { label: 'Stats', icon: BarChart3, href: '/dashboard/tax-preparer/analytics' },
     { label: 'Leads', icon: UserPlus, href: '/dashboard/tax-preparer/leads' },
     { label: 'Settings', icon: Settings, href: '/dashboard/tax-preparer/settings' },
@@ -88,17 +91,17 @@ const ADMIN_CONFIG: MobileNavConfig = {
   primary: [
     { label: 'CRM', icon: Users, href: '/crm/contacts' },
     { label: 'Calendar', icon: Calendar, href: '/dashboard/tax-preparer/calendar' },
-    { label: 'Links', icon: Link, action: 'links' },
+    { label: 'Search', icon: Search, action: 'search' },
     { label: 'Alerts', icon: Bell, action: 'notifications' },
     { label: 'More', icon: Menu, action: 'more' },
   ],
   secondary: [
     { label: 'Dashboard', icon: Home, href: '/dashboard/admin' },
+    { label: 'Links', icon: Link, href: '/dashboard/tax-preparer/tracking' },
     { label: 'Users', icon: Users, href: '/admin/users' },
     { label: 'Clients', icon: Briefcase, href: '/admin/clients-status' },
     { label: 'Leads', icon: UserPlus, href: '/admin/leads' },
     { label: 'Analytics', icon: BarChart3, href: '/admin/analytics' },
-    { label: 'Payouts', icon: DollarSign, href: '/admin/payouts' },
     { label: 'Settings', icon: Settings, href: '/admin/database' },
   ],
 };

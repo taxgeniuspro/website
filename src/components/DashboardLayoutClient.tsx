@@ -8,6 +8,7 @@ import { TaxAssistantWidget } from '@/components/tax-assistant/TaxAssistantWidge
 import { MobileBottomNav } from '@/components/ui/mobile-bottom-nav';
 import { NotificationDrawer, type Notification } from '@/components/mobile/NotificationDrawer';
 import { QuickLinksSheet, type QuickLink } from '@/components/mobile/QuickLinksSheet';
+import { SearchDrawer } from '@/components/mobile/SearchDrawer';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { type UserRole as MobileNavRole } from '@/lib/mobile-navigation-config';
@@ -44,6 +45,7 @@ export function DashboardLayoutClient({
 }: DashboardLayoutClientProps) {
   const [linksOpen, setLinksOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
 
@@ -119,6 +121,7 @@ export function DashboardLayoutClient({
         role={convertToMobileNavRole(effectiveRole)}
         onLinksOpen={() => setLinksOpen(true)}
         onNotificationsOpen={() => setNotificationsOpen(true)}
+        onSearchOpen={() => setSearchOpen(true)}
         notificationCount={unreadCount}
       />
 
@@ -138,6 +141,9 @@ export function DashboardLayoutClient({
         onMarkAllRead={handleMarkAllRead}
         onClearAll={handleClearNotifications}
       />
+
+      {/* Search Drawer */}
+      <SearchDrawer open={searchOpen} onOpenChange={setSearchOpen} />
     </SidebarProvider>
   );
 }

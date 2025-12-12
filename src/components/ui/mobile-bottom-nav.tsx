@@ -19,6 +19,7 @@ interface MobileBottomNavProps {
   role: UserRole;
   onLinksOpen?: () => void;
   onNotificationsOpen?: () => void;
+  onSearchOpen?: () => void;
   notificationCount?: number;
 }
 
@@ -26,6 +27,7 @@ export function MobileBottomNav({
   role,
   onLinksOpen,
   onNotificationsOpen,
+  onSearchOpen,
   notificationCount = 0,
 }: MobileBottomNavProps) {
   const pathname = usePathname();
@@ -37,6 +39,8 @@ export function MobileBottomNav({
       onLinksOpen();
     } else if (item.action === 'notifications' && onNotificationsOpen) {
       onNotificationsOpen();
+    } else if (item.action === 'search' && onSearchOpen) {
+      onSearchOpen();
     } else if (item.action === 'more') {
       setMoreOpen(true);
     }
