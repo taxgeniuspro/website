@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
         documentRecord = await prisma.document.create({
           data: {
             profileId: preparer.id,
-            type: 'ID_DOCUMENT',
+            type: 'OTHER', // Driver's license - use OTHER as ID_DOCUMENT doesn't exist in enum
             fileName: licenseFile.name,
             fileUrl: uploadedFileUrl,
             fileSize: fileBuffer.length,
