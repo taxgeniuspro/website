@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Phone, Video, MapPin, Users, Clock, User, Mail, Loader2 } from 'lucide-react';
+import { Phone, Video, MapPin, Users, Clock, User, Mail, Loader2, FileText, Send } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import AppointmentDialog from '@/components/AppointmentDialog';
 import CancelAppointmentDialog from '@/components/CancelAppointmentDialog';
@@ -71,9 +71,23 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
   const [mounted, setMounted] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirming, setConfirming] = useState(false);
+  const [sendingIntake, setSendingIntake] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
+      setIsMobile(mobileRegex.test(userAgent.toLowerCase()));
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   // Transform appointments to FullCalendar events
@@ -172,6 +186,59 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
       });
     } finally {
       setConfirming(false);
+    }
+  };
+
+  // Send intake form link to client (email on desktop, SMS on mobile)
+  const handleSendIntakeForm = async () => {
+    if (!selectedEvent) return;
+
+    setSendingIntake(true);
+    try {
+      const sendMethod = isMobile ? 'sms' : 'email';
+
+      const response = await fetch(`/api/appointments/${selectedEvent.id}/send-intake`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendMethod }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to send intake form',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (sendMethod === 'sms' && data.smsUri) {
+        // Open SMS app with pre-filled message
+        window.location.href = data.smsUri;
+        toast({
+          title: 'SMS Ready',
+          description: 'Your SMS app should open with the intake form link',
+        });
+      } else {
+        // Email sent successfully
+        toast({
+          title: 'Success',
+          description: `Intake form link sent to ${data.email}`,
+        });
+      }
+
+      logger.info('Intake form sent', { method: sendMethod, appointmentId: selectedEvent.id });
+    } catch (error) {
+      logger.error('Error sending intake form:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send intake form. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingIntake(false);
     }
   };
 
@@ -344,7 +411,7 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
 
               {/* Actions */}
               <div className="flex justify-between gap-2 pt-4 border-t">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {canConfirm &&
                     (selectedEvent.status === 'REQUESTED' ||
                       selectedEvent.status === 'SCHEDULED') && (
@@ -359,6 +426,23 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
                         Confirm Appointment
                       </Button>
                     )}
+                  {/* Send Intake Form - visible for tax preparers/admins */}
+                  {canConfirm && selectedEvent.status !== 'CANCELLED' && selectedEvent.status !== 'COMPLETED' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSendIntakeForm}
+                      disabled={sendingIntake}
+                      className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                    >
+                      {sendingIntake ? (
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="mr-2 h-3 w-3" />
+                      )}
+                      {isMobile ? 'SMS Intake Form' : 'Email Intake Form'}
+                    </Button>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {canEdit && selectedEvent.status !== 'CANCELLED' && (
