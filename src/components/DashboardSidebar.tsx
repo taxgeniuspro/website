@@ -27,7 +27,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Settings } from 'lucide-react';
 import { PWASidebarInstall } from '@/components/PWASidebarInstall';
 import { RestartTourButton } from '@/components/RestartTourButton';
 
@@ -337,6 +337,20 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
 
         {/* Restart Tour Button */}
         <RestartTourButton role={role} />
+
+        {/* Settings Link */}
+        <SidebarMenuButton asChild tooltip="Settings">
+          <Link href={
+            role === 'super_admin' || role === 'admin' ? '/admin/settings' :
+            role === 'lead' ? '/dashboard/lead/settings' :
+            role === 'tax_preparer' ? '/dashboard/tax-preparer/settings' :
+            role === 'affiliate' ? '/dashboard/affiliate/settings' :
+            '/dashboard/client/settings'
+          }>
+            <Settings className="h-4 w-4" />
+            {!isCollapsed && <span>Settings</span>}
+          </Link>
+        </SidebarMenuButton>
 
         {/* Role Badge */}
         <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">

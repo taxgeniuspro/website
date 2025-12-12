@@ -412,8 +412,8 @@ export class AchievementEngine {
       const isConsecutive =
         yesterday.toDateString() === lastLogin.toDateString();
 
-      let newStreak = isConsecutive ? userStats.loginStreak + 1 : 1;
-      let newLongest = Math.max(newStreak, userStats.longestLoginStreak);
+      const newStreak = isConsecutive ? userStats.loginStreak + 1 : 1;
+      const newLongest = Math.max(newStreak, userStats.longestLoginStreak);
 
       await prisma.userStats.update({
         where: { userId },

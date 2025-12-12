@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const { role } = userProfile;
 
     // Build query based on role
-    let whereClause: any = {};
+    const whereClause: any = {};
 
     if (role === 'tax_preparer') {
       // Tax preparers see only their assigned appointments

@@ -48,7 +48,7 @@ function generateInitialsFromName(
   const lastInitial = getFirstLetter(lastName);
 
   // Combine initials (at least first and last should exist)
-  let initials = firstInitial + middleInitial + lastInitial;
+  const initials = firstInitial + middleInitial + lastInitial;
 
   // If no initials could be extracted, use fallback
   if (initials.length === 0) {

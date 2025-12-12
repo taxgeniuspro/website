@@ -311,7 +311,7 @@ async function queueAdminNotification(lead: any, bondedPreparerId: string | null
     const website = lead.message?.match(/Website: ([^\n]+)/)?.[1];
 
     const socialMediaMatches = lead.message?.match(/Social Media: ([^\n]+)/)?.[1];
-    let socialMedia: any = {};
+    const socialMedia: any = {};
     if (socialMediaMatches) {
       socialMediaMatches.split(', ').forEach((item: string) => {
         const [key, value] = item.split(': ');

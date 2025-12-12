@@ -10,7 +10,7 @@ export const defaultLocale: Locale = 'en'
 export default getRequestConfig(async ({ requestLocale }) => {
   // CRITICAL: Next-Intl v3.x uses requestLocale (returns a promise) not locale
   // Get the requested locale (await the promise)
-  let locale = await requestLocale
+  const locale = await requestLocale
 
   // Ensure locale is valid, fallback to default if not
   const validLocale =

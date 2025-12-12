@@ -160,7 +160,7 @@ export function CalendarView({ preparerId, onAppointmentClick, onDateClick }: Ca
     const days: Date[] = [];
 
     // Get all days in the month
-    let day = monthStart;
+    const day = monthStart;
     while (day <= monthEnd) {
       days.push(new Date(day));
       day.setDate(day.getDate() + 1);
