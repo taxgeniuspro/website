@@ -75,6 +75,8 @@ export class CRMService {
     accessContext: CRMAccessContext
   ): Promise<CRMContactWithRelations> {
     try {
+      // SIMPLIFIED QUERY - Removed tags, tasks, emailActivities to fix 500 error
+      // These relations aren't displayed on the contact detail page and may cause issues
       const contact = await prisma.cRMContact.findUnique({
         where: { id },
         include: {
@@ -100,24 +102,9 @@ export class CRMService {
             orderBy: { createdAt: 'desc' },
             take: 10,
           },
-          tags: {
-            include: {
-              tag: true,
-            },
-          },
-          tasks: {
-            orderBy: { dueDate: 'asc' },
-            take: 5,
-          },
-          emailActivities: {
-            orderBy: { sentAt: 'desc' },
-            take: 10,
-          },
           _count: {
             select: {
               interactions: true,
-              tasks: true,
-              emailActivities: true,
             },
           },
         },
