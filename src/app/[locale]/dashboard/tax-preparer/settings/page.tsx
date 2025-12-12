@@ -96,9 +96,9 @@ export default async function TaxPreparerSettingsPage() {
           {/* Profile Photo */}
           <div className="flex items-center gap-6">
             <Avatar className="w-20 h-20">
-              <AvatarImage src={user?.imageUrl} />
+              <AvatarImage src={user?.image || undefined} />
               <AvatarFallback className="text-2xl">
-                {user?.firstName?.[0] || user?.emailAddresses[0]?.emailAddress[0] || 'U'}
+                {user?.name?.[0] || user?.email?.[0] || 'U'}
               </AvatarFallback>
             </Avatar>
             <div className="space-y-2 flex-1">
@@ -127,11 +127,11 @@ export default async function TaxPreparerSettingsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
-              <Input id="firstName" defaultValue={user?.firstName || ''} />
+              <Input id="firstName" defaultValue={user?.name?.split(' ')[0] || ''} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="lastName">Last Name</Label>
-              <Input id="lastName" defaultValue={user?.lastName || ''} />
+              <Input id="lastName" defaultValue={user?.name?.split(' ').slice(1).join(' ') || ''} />
             </div>
           </div>
 
@@ -140,7 +140,7 @@ export default async function TaxPreparerSettingsPage() {
             <Input
               id="email"
               type="email"
-              defaultValue={user?.emailAddresses[0]?.emailAddress || ''}
+              defaultValue={user?.email || ''}
               disabled
             />
           </div>
