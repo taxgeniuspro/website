@@ -38,7 +38,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="bg-card border-t">
+    <footer className="bg-card border-t pb-20 md:pb-0">
       {/* Collapsed View - Icon Buttons Only (Mobile & Desktop) */}
       <div className={`${isCollapsed ? 'block' : 'hidden'}`}>
         <div className="container mx-auto px-4 py-4">
