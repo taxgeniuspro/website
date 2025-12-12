@@ -129,7 +129,7 @@ export class CRMService {
 
       // Row-level security: tax preparers can only see their assigned contacts
       // Note: assignedPreparerId stores the User ID (not Profile ID)
-      if (accessContext.userRole === UserRole.TAX_PREPARER) {
+      if (accessContext.userRole === UserRole.tax_preparer) {
         if (!accessContext.userId) {
           throw new Error('User ID not found for tax preparer user');
         }
@@ -200,8 +200,8 @@ export class CRMService {
     try {
       // Only admins can delete
       if (
-        accessContext.userRole !== UserRole.ADMIN &&
-        accessContext.userRole !== UserRole.SUPER_ADMIN
+        accessContext.userRole !== UserRole.admin &&
+        accessContext.userRole !== UserRole.super_admin
       ) {
         throw new Error('Access denied: Only admins can delete contacts');
       }
@@ -267,7 +267,7 @@ export class CRMService {
 
       // Row-level security: tax preparers see only their assigned contacts
       // Note: assignedPreparerId stores the User ID (not Profile ID)
-      if (accessContext.userRole === UserRole.TAX_PREPARER) {
+      if (accessContext.userRole === UserRole.tax_preparer) {
         if (!accessContext.userId) {
           throw new Error('User ID not found for tax preparer user');
         }
@@ -326,8 +326,8 @@ export class CRMService {
     try {
       // Only admins can assign contacts
       if (
-        accessContext.userRole !== UserRole.ADMIN &&
-        accessContext.userRole !== UserRole.SUPER_ADMIN
+        accessContext.userRole !== UserRole.admin &&
+        accessContext.userRole !== UserRole.super_admin
       ) {
         throw new Error('Access denied: Only admins can assign contacts');
       }
