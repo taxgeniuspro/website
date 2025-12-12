@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Download, Eye, BarChart3, Calendar, Loader2 } from 'lucide-react';
+import { Search, Download, Eye, BarChart3, Calendar, Loader2, FileText, FolderOpen } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -27,6 +27,7 @@ import {
 import { logger } from '@/lib/logger';
 import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton, StatCardSkeleton } from '@/components/SkeletonPatterns';
+import { cn } from '@/lib/utils';
 
 interface TaxForm {
   id: string;
@@ -186,141 +187,324 @@ export default function AdminTaxFormsPage() {
     );
   }
 
+  // Helper to get category badge styling
+  const getCategoryBadgeClass = (category: string) => {
+    const classes: Record<string, string> = {
+      'individual': 'bg-blue-100 text-blue-800 border-blue-300',
+      'business': 'bg-purple-100 text-purple-800 border-purple-300',
+      'employment': 'bg-green-100 text-green-800 border-green-300',
+      'information': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      'state': 'bg-orange-100 text-orange-800 border-orange-300',
+    };
+    return classes[category.toLowerCase()] || '';
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile responsive */}
       <div>
-        <h1 className="text-3xl font-bold">Tax Forms Management</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Tax Forms Management</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Manage tax forms library and view usage statistics
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Forms</CardTitle>
-            <Eye className="h-4 w-4 text-muted-foreground" />
+      {/* Stats Cards - Responsive grid */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-2 sm:p-4 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Forms</CardTitle>
+            <div className="hidden sm:flex p-2 bg-primary/10 rounded-full">
+              <FileText className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{forms.length}</div>
-            <p className="text-xs text-muted-foreground">
+          <CardContent className="p-2 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{forms.length}</div>
+            <p className="text-xs text-muted-foreground hidden sm:block">
               Active: {forms.filter((f) => f.isActive).length}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Downloads</CardTitle>
-            <Download className="h-4 w-4 text-muted-foreground" />
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-2 sm:p-4 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Downloads</CardTitle>
+            <div className="hidden sm:flex p-2 bg-green-500/10 rounded-full">
+              <Download className="h-4 w-4 text-green-500" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalDownloads.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Avg: {(totalDownloads / forms.length).toFixed(1)} per form
+          <CardContent className="p-2 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{totalDownloads.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              Avg: {forms.length > 0 ? (totalDownloads / forms.length).toFixed(1) : 0} per form
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Size</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-2 sm:p-4 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Size</CardTitle>
+            <div className="hidden sm:flex p-2 bg-purple-500/10 rounded-full">
+              <FolderOpen className="h-4 w-4 text-purple-500" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{(totalSize / 1024 / 1024).toFixed(1)} MB</div>
-            <p className="text-xs text-muted-foreground">
-              Avg: {(totalSize / forms.length / 1024).toFixed(0)} KB per form
+          <CardContent className="p-2 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-purple-600">{(totalSize / 1024 / 1024).toFixed(1)} MB</div>
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              Avg: {forms.length > 0 ? (totalSize / forms.length / 1024).toFixed(0) : 0} KB per form
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by form number or title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        {availableYears.length > 1 && (
-          <Select
-            value={selectedYear?.toString() || 'all'}
-            onValueChange={(value) => setSelectedYear(value === 'all' ? null : parseInt(value))}
-          >
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <Calendar className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Tax Year" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Years</SelectItem>
-              {availableYears.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {/* Forms Table */}
+      {/* Search and Filter - Mobile responsive */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Form Number</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Year</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Downloads</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredForms.map((form) => (
-                <TableRow key={form.id}>
-                  <TableCell className="font-medium">{form.formNumber}</TableCell>
-                  <TableCell>{form.title}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{form.category.replace('_', ' ')}</Badge>
-                  </TableCell>
-                  <TableCell>{form.taxYear}</TableCell>
-                  <TableCell>{(form.fileSize / 1024).toFixed(0)} KB</TableCell>
-                  <TableCell>{form.downloadCount}</TableCell>
-                  <TableCell>
-                    {form.isActive ? (
-                      <Badge variant="default">Active</Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownload(form.id, form.formNumber)}
-                      disabled={!canDownload || !form.isActive}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search forms..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 h-10"
+              />
+            </div>
+            {availableYears.length > 1 && (
+              <Select
+                value={selectedYear?.toString() || 'all'}
+                onValueChange={(value) => setSelectedYear(value === 'all' ? null : parseInt(value))}
+              >
+                <SelectTrigger className="w-full sm:w-[140px] h-10">
+                  <Calendar className="h-4 w-4 mr-2 shrink-0" />
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {availableYears.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {/* Results count on mobile */}
+          <div className="mt-2 text-xs text-muted-foreground sm:hidden">
+            {filteredForms.length} form{filteredForms.length !== 1 ? 's' : ''} found
+          </div>
         </CardContent>
       </Card>
+
+      {/* Forms List */}
+      {filteredForms.length === 0 ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-medium">No forms found</p>
+              <p className="text-sm mt-1">Try adjusting your search or filters</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* ===== MOBILE VIEW (< 640px) - Stack Cards ===== */}
+          <div className="sm:hidden space-y-3">
+            {filteredForms.map((form) => (
+              <Card key={form.id} className="hover:border-primary/30 transition-colors">
+                <CardContent className="p-3">
+                  {/* Header with form number and status */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm">{form.formNumber}</p>
+                        <p className="text-xs text-muted-foreground truncate">{form.title}</p>
+                      </div>
+                    </div>
+                    {form.isActive ? (
+                      <Badge variant="default" className="shrink-0 text-xs">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="shrink-0 text-xs">Inactive</Badge>
+                    )}
+                  </div>
+
+                  {/* Details */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-3">
+                    <Badge variant="outline" className={cn('text-xs', getCategoryBadgeClass(form.category))}>
+                      {form.category.replace('_', ' ')}
+                    </Badge>
+                    <span>·</span>
+                    <span>{form.taxYear}</span>
+                    <span>·</span>
+                    <span>{(form.fileSize / 1024).toFixed(0)} KB</span>
+                    <span>·</span>
+                    <span>{form.downloadCount} downloads</span>
+                  </div>
+
+                  {/* Download Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-9"
+                    onClick={() => handleDownload(form.id, form.formNumber)}
+                    disabled={!canDownload || !form.isActive}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* ===== TABLET VIEW (640px - 1024px) - Grid Cards ===== */}
+          <div className="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+            {filteredForms.map((form) => (
+              <Card key={form.id} className="hover:shadow-md hover:border-primary/30 transition-all">
+                <CardContent className="p-4">
+                  {/* Header */}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="p-2.5 bg-primary/10 rounded-lg shrink-0">
+                      <FileText className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-semibold truncate">{form.formNumber}</h3>
+                        {form.isActive ? (
+                          <Badge variant="default" className="shrink-0">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="shrink-0">Inactive</Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{form.title}</p>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                    <div>
+                      <span className="text-muted-foreground">Category:</span>
+                      <Badge variant="outline" className={cn('ml-2 text-xs', getCategoryBadgeClass(form.category))}>
+                        {form.category.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Year:</span>
+                      <span className="ml-2 font-medium">{form.taxYear}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Size:</span>
+                      <span className="ml-2 font-medium">{(form.fileSize / 1024).toFixed(0)} KB</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Downloads:</span>
+                      <span className="ml-2 font-medium">{form.downloadCount}</span>
+                    </div>
+                  </div>
+
+                  {/* Download Button */}
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => handleDownload(form.id, form.formNumber)}
+                    disabled={!canDownload || !form.isActive}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* ===== DESKTOP VIEW (>= 1024px) - Table ===== */}
+          <Card className="hidden lg:block">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Forms Library</CardTitle>
+                <span className="text-sm text-muted-foreground">
+                  {filteredForms.length} form{filteredForms.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="font-semibold">Form Number</TableHead>
+                      <TableHead className="font-semibold">Title</TableHead>
+                      <TableHead className="font-semibold">Category</TableHead>
+                      <TableHead className="font-semibold">Year</TableHead>
+                      <TableHead className="font-semibold">Size</TableHead>
+                      <TableHead className="font-semibold">Downloads</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredForms.map((form, index) => (
+                      <TableRow
+                        key={form.id}
+                        className={cn(
+                          "hover:bg-muted/30 transition-colors",
+                          index % 2 === 0 && "bg-muted/5"
+                        )}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-primary shrink-0" />
+                            <span className="font-medium">{form.formNumber}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-[300px]">
+                          <span className="truncate block">{form.title}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn('text-xs', getCategoryBadgeClass(form.category))}>
+                            {form.category.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{form.taxYear}</TableCell>
+                        <TableCell>{(form.fileSize / 1024).toFixed(0)} KB</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Download className="h-3 w-3 text-muted-foreground" />
+                            {form.downloadCount}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {form.isActive ? (
+                            <Badge variant="default" className="bg-green-100 text-green-800 border-green-300 hover:bg-green-100">Active</Badge>
+                          ) : (
+                            <Badge variant="secondary">Inactive</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownload(form.id, form.formNumber)}
+                            disabled={!canDownload || !form.isActive}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
