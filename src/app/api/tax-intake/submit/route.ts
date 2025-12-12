@@ -118,7 +118,16 @@ export async function POST(request: NextRequest) {
     let documentRecord: { id: string } | null = null;
     let fileBuffer: Buffer | null = null;
 
-    if (licenseFile) {
+    logger.info('Checking for license file', {
+      hasFile: !!licenseFile,
+      fileType: licenseFile ? typeof licenseFile : 'none',
+      fileName: licenseFile?.name,
+      fileSize: licenseFile?.size,
+      isFile: licenseFile instanceof File,
+      isBlob: licenseFile instanceof Blob,
+    });
+
+    if (licenseFile && licenseFile.size > 0) {
       const bytes = await licenseFile.arrayBuffer();
       fileBuffer = Buffer.from(bytes);
       const timestamp = Date.now();
@@ -197,8 +206,16 @@ export async function POST(request: NextRequest) {
             data: { clientFolderId: folderResult.folderId },
           });
         }
-      } catch (uploadError) {
-        logger.error('Cloudinary upload failed', { error: uploadError });
+      } catch (uploadError: any) {
+        logger.error('Cloudinary upload failed', {
+          error: uploadError?.message || uploadError,
+          stack: uploadError?.stack,
+          cloudinaryConfig: {
+            hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
+            hasApiKey: !!process.env.CLOUDINARY_API_KEY,
+            hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
+          },
+        });
         // Continue without file - don't fail the whole submission
       }
     }
