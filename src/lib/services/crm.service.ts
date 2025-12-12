@@ -128,12 +128,13 @@ export class CRMService {
       }
 
       // Row-level security: tax preparers can only see their assigned contacts
+      // Note: assignedPreparerId stores the User ID (not Profile ID)
       if (accessContext.userRole === UserRole.TAX_PREPARER) {
-        if (!accessContext.preparerId) {
-          throw new Error('Preparer ID not found for tax preparer user');
+        if (!accessContext.userId) {
+          throw new Error('User ID not found for tax preparer user');
         }
 
-        if (contact.assignedPreparerId !== accessContext.preparerId) {
+        if (contact.assignedPreparerId !== accessContext.userId) {
           throw new Error('Access denied: Contact not assigned to you');
         }
       }
@@ -265,11 +266,12 @@ export class CRMService {
       }
 
       // Row-level security: tax preparers see only their assigned contacts
+      // Note: assignedPreparerId stores the User ID (not Profile ID)
       if (accessContext.userRole === UserRole.TAX_PREPARER) {
-        if (!accessContext.preparerId) {
-          throw new Error('Preparer ID not found for tax preparer user');
+        if (!accessContext.userId) {
+          throw new Error('User ID not found for tax preparer user');
         }
-        where.assignedPreparerId = accessContext.preparerId;
+        where.assignedPreparerId = accessContext.userId;
       }
 
       if (filters.assignedPreparerId) {
