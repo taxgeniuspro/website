@@ -343,88 +343,149 @@ export default function CRMContactsPage() {
         )}
       </div>
 
-      {/* Stats Cards - Responsive grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium">Total</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+      {/* Stats Cards - Responsive grid with enhanced desktop view */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-4 lg:pb-2">
+            <CardTitle className="text-xs lg:text-sm font-medium">Total Contacts</CardTitle>
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Users className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-xl md:text-2xl font-bold">{contacts.length}</div>
+          <CardContent className="p-3 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold">{contacts.length}</div>
+            <p className="text-xs text-muted-foreground mt-1 hidden lg:block">All time contacts</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium">New</CardTitle>
-            <UserPlus className="h-4 w-4 text-muted-foreground" />
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-4 lg:pb-2">
+            <CardTitle className="text-xs lg:text-sm font-medium">New Leads</CardTitle>
+            <div className="p-2 bg-blue-500/10 rounded-full">
+              <UserPlus className="h-4 w-4 text-blue-500" />
+            </div>
           </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-xl md:text-2xl font-bold">
+          <CardContent className="p-3 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold text-blue-600">
               {contacts.filter((c) => c.stage === 'NEW').length}
             </div>
+            <p className="text-xs text-muted-foreground mt-1 hidden lg:block">Awaiting contact</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium">Active</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-xl md:text-2xl font-bold">
-              {
-                contacts.filter((c) => ['CONTACTED', 'QUALIFIED', 'DOCUMENTS'].includes(c.stage))
-                  .length
-              }
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-4 lg:pb-2">
+            <CardTitle className="text-xs lg:text-sm font-medium">In Progress</CardTitle>
+            <div className="p-2 bg-purple-500/10 rounded-full">
+              <TrendingUp className="h-4 w-4 text-purple-500" />
             </div>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold text-purple-600">
+              {contacts.filter((c) => ['CONTACTED', 'QUALIFIED', 'DOCUMENTS'].includes(c.stage)).length}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 hidden lg:block">Active pipeline</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium">Closed</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-4 lg:pb-2">
+            <CardTitle className="text-xs lg:text-sm font-medium">Closed Won</CardTitle>
+            <div className="p-2 bg-green-500/10 rounded-full">
+              <UserCheck className="h-4 w-4 text-green-500" />
+            </div>
           </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-xl md:text-2xl font-bold">
+          <CardContent className="p-3 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold text-green-600">
               {contacts.filter((c) => c.stage === 'CLOSED').length}
             </div>
+            <p className="text-xs text-muted-foreground mt-1 hidden lg:block">Converted clients</p>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow hidden lg:block">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 lg:p-4 lg:pb-2">
+            <CardTitle className="text-xs lg:text-sm font-medium">Lost</CardTitle>
+            <div className="p-2 bg-red-500/10 rounded-full">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 lg:p-4 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold text-red-600">
+              {contacts.filter((c) => c.stage === 'LOST').length}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Did not convert</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search & Filters - Mobile responsive */}
+      {/* Search & Filters - Fully responsive */}
       <Card>
-        <CardContent className="p-3 md:p-6">
-          <div className="flex flex-col gap-3">
-            {/* Search input - full width */}
-            <div className="relative">
+        <CardContent className="p-3 lg:p-4">
+          {/* Desktop: Single row layout | Mobile/Tablet: Stacked */}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
+            {/* Search input */}
+            <div className="relative flex-1 lg:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name, email, phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-10"
+                className="pl-9 h-10 lg:h-11"
               />
             </div>
-            {/* Filter chips - horizontally scrollable on mobile */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+
+            {/* Filters - Scrollable on mobile, inline on desktop */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0 scrollbar-hide">
               <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger className="w-auto min-w-[100px] h-9 text-xs md:text-sm">
+                <SelectTrigger className="w-auto min-w-[120px] lg:min-w-[140px] h-9 lg:h-10 text-xs lg:text-sm bg-background">
                   <SelectValue placeholder="Stage" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="NEW">New</SelectItem>
-                  <SelectItem value="CONTACTED">Contacted</SelectItem>
-                  <SelectItem value="QUALIFIED">Qualified</SelectItem>
-                  <SelectItem value="DOCUMENTS">Documents</SelectItem>
-                  <SelectItem value="FILED">Filed</SelectItem>
-                  <SelectItem value="CLOSED">Closed</SelectItem>
-                  <SelectItem value="LOST">Lost</SelectItem>
+                  <SelectItem value="NEW">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      New
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="CONTACTED">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-purple-500" />
+                      Contacted
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="QUALIFIED">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      Qualified
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="DOCUMENTS">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      Documents
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="FILED">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
+                      Filed
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="CLOSED">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      Closed
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="LOST">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      Lost
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
+
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-auto min-w-[100px] h-9 text-xs md:text-sm">
+                <SelectTrigger className="w-auto min-w-[110px] lg:min-w-[130px] h-9 lg:h-10 text-xs lg:text-sm bg-background">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -434,17 +495,23 @@ export default function CRMContactsPage() {
                   <SelectItem value="REFERRER">Referrer</SelectItem>
                 </SelectContent>
               </Select>
-              {/* Clear filters button when filters are active */}
+
+              {/* Clear filters */}
               {(stageFilter !== 'all' || typeFilter !== 'all') && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-9 text-xs whitespace-nowrap"
+                  className="h-9 lg:h-10 text-xs lg:text-sm whitespace-nowrap"
                   onClick={() => { setStageFilter('all'); setTypeFilter('all'); }}
                 >
-                  Clear filters
+                  Clear
                 </Button>
               )}
+            </div>
+
+            {/* Results count - Desktop only */}
+            <div className="hidden lg:flex items-center text-sm text-muted-foreground ml-auto">
+              Showing <span className="font-medium text-foreground mx-1">{contacts.length}</span> contacts
             </div>
           </div>
         </CardContent>
@@ -452,13 +519,17 @@ export default function CRMContactsPage() {
 
       {/* Contacts List */}
       <Card>
-        <CardHeader className="p-4 md:p-6">
-          <CardTitle className="text-base md:text-lg">{canSeeAll ? 'All Contacts' : 'My Assigned Contacts'}</CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            {contacts.length} contact{contacts.length !== 1 ? 's' : ''} found
-          </CardDescription>
+        <CardHeader className="p-4 lg:p-6 pb-2 lg:pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base lg:text-lg">{canSeeAll ? 'All Contacts' : 'My Assigned Contacts'}</CardTitle>
+              <CardDescription className="text-xs lg:text-sm mt-1">
+                {contacts.length} contact{contacts.length !== 1 ? 's' : ''} found
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+        <CardContent className="p-3 lg:p-6 pt-0">
           {error && (
             <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-md flex items-center">
               <AlertCircle className="h-4 w-4 mr-2" />
@@ -467,184 +538,253 @@ export default function CRMContactsPage() {
           )}
 
           {contacts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No contacts found</p>
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-medium">No contacts found</p>
+              <p className="text-sm mt-1">Try adjusting your search or filters</p>
             </div>
           ) : (
             <>
-              {/* Mobile Card View */}
-              <div className="md:hidden space-y-3">
-                {contacts.map((contact) => {
-                  const FormIcon = getFormTypeIcon(contact.source);
-                  return (
-                    <div key={contact.id} className="border rounded-lg p-3 bg-card">
-                      {/* Header: Avatar, Name, Stage Badge */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Avatar className="h-10 w-10 shrink-0">
-                            <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                              {contact.firstName[0]}{contact.lastName[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate">
-                              {contact.firstName} {contact.lastName}
-                            </p>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Badge variant="outline" className={cn('text-xs px-1.5 py-0', getStageBadgeClass(contact.stage))}>
-                                {contact.stage}
-                              </Badge>
-                              <span className="text-muted-foreground">·</span>
-                              <span>{contact.contactType}</span>
-                            </div>
+              {/* ===== MOBILE VIEW (< 640px) - Stack Cards ===== */}
+              <div className="sm:hidden space-y-3">
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="border rounded-lg p-3 bg-card hover:border-primary/30 transition-colors">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Avatar className="h-10 w-10 shrink-0">
+                          <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                            {contact.firstName[0]}{contact.lastName[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate">{contact.firstName} {contact.lastName}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Badge variant="outline" className={cn('text-xs px-1.5 py-0', getStageBadgeClass(contact.stage))}>
+                              {contact.stage}
+                            </Badge>
+                            <span>·</span>
+                            <span>{contact.contactType}</span>
                           </div>
                         </div>
-                        {/* More Menu */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canView && (
-                              <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                            )}
-                            {canEdit && (
-                              <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                            )}
-                            {contact.clientFolderId && (
-                              <DropdownMenuItem onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}>
-                                <FolderOpen className="h-4 w-4 mr-2" />
-                                View Files
-                              </DropdownMenuItem>
-                            )}
-                            {canDelete && (
-                              <DropdownMenuItem
-                                onClick={() => handleDeleteClick(contact)}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
-
-                      {/* Contact Info */}
-                      <div className="space-y-1 text-xs text-muted-foreground mb-3">
-                        <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-primary truncate">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{contact.email}</span>
-                        </a>
-                        {contact.phone && (
-                          <a href={`tel:${contact.phone}`} className="flex items-center gap-1 hover:text-primary">
-                            <Phone className="h-3 w-3 shrink-0" />
-                            {contact.phone}
-                          </a>
-                        )}
-                      </div>
-
-                      {/* Stage Selector (if can edit) */}
-                      {canEdit && (
-                        <div className="mb-3">
-                          <Select
-                            value={contact.stage}
-                            onValueChange={(value) => handleStatusChange(contact.id, value)}
-                            disabled={updatingStatus === contact.id}
-                          >
-                            <SelectTrigger className={cn('w-full h-9 text-xs', getStageBadgeClass(contact.stage))}>
-                              {updatingStatus === contact.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <SelectValue placeholder="Change stage" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="NEW">New</SelectItem>
-                              <SelectItem value="CONTACTED">Contacted</SelectItem>
-                              <SelectItem value="QUALIFIED">Qualified</SelectItem>
-                              <SelectItem value="DOCUMENTS">Documents</SelectItem>
-                              <SelectItem value="FILED">Filed</SelectItem>
-                              <SelectItem value="CLOSED">Closed</SelectItem>
-                              <SelectItem value="LOST">Lost</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
-                      {/* Quick Actions */}
-                      <div className="flex gap-2 pt-2 border-t">
-                        <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
-                          <a href={`tel:${contact.phone}`}>
-                            <Phone className="w-4 h-4 mr-1" />
-                            Call
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
-                          <a href={`sms:${contact.phone}`}>
-                            <MessageCircle className="w-4 h-4 mr-1" />
-                            Text
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
-                          <a href={`mailto:${contact.email}`}>
-                            <Mail className="w-4 h-4 mr-1" />
-                            Email
-                          </a>
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canView && (
+                            <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}>
+                              <Eye className="h-4 w-4 mr-2" /> View
+                            </DropdownMenuItem>
+                          )}
+                          {canEdit && (
+                            <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}>
+                              <Pencil className="h-4 w-4 mr-2" /> Edit
+                            </DropdownMenuItem>
+                          )}
+                          {contact.clientFolderId && (
+                            <DropdownMenuItem onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}>
+                              <FolderOpen className="h-4 w-4 mr-2" /> Files
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <DropdownMenuItem onClick={() => handleDeleteClick(contact)} className="text-destructive">
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  );
-                })}
+                    {/* Contact Info */}
+                    <div className="space-y-1 text-xs text-muted-foreground mb-3">
+                      <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-primary truncate">
+                        <Mail className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{contact.email}</span>
+                      </a>
+                      {contact.phone && (
+                        <a href={`tel:${contact.phone}`} className="flex items-center gap-1 hover:text-primary">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          {contact.phone}
+                        </a>
+                      )}
+                    </div>
+                    {/* Stage Selector */}
+                    {canEdit && (
+                      <div className="mb-3">
+                        <Select value={contact.stage} onValueChange={(value) => handleStatusChange(contact.id, value)} disabled={updatingStatus === contact.id}>
+                          <SelectTrigger className={cn('w-full h-9 text-xs', getStageBadgeClass(contact.stage))}>
+                            {updatingStatus === contact.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <SelectValue />}
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NEW">New</SelectItem>
+                            <SelectItem value="CONTACTED">Contacted</SelectItem>
+                            <SelectItem value="QUALIFIED">Qualified</SelectItem>
+                            <SelectItem value="DOCUMENTS">Documents</SelectItem>
+                            <SelectItem value="FILED">Filed</SelectItem>
+                            <SelectItem value="CLOSED">Closed</SelectItem>
+                            <SelectItem value="LOST">Lost</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {/* Quick Actions */}
+                    <div className="flex gap-2 pt-2 border-t">
+                      <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
+                        <a href={`tel:${contact.phone}`}><Phone className="w-4 h-4 mr-1" />Call</a>
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
+                        <a href={`sms:${contact.phone}`}><MessageCircle className="w-4 h-4 mr-1" />Text</a>
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1 h-9" asChild>
+                        <a href={`mailto:${contact.email}`}><Mail className="w-4 h-4 mr-1" />Email</a>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              {/* Desktop Table View */}
-              <div className="hidden md:block">
+              {/* ===== TABLET VIEW (640px - 1024px) - Grid Cards ===== */}
+              <div className="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="border rounded-xl p-4 bg-card hover:shadow-md hover:border-primary/30 transition-all">
+                    {/* Header with Avatar */}
+                    <div className="flex items-start gap-3 mb-3">
+                      <Avatar className="h-12 w-12 shrink-0">
+                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                          {contact.firstName[0]}{contact.lastName[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-base truncate">{contact.firstName} {contact.lastName}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className={cn('text-xs', getStageBadgeClass(contact.stage))}>
+                            {contact.stage}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{contact.contactType}</span>
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canView && <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}><Eye className="h-4 w-4 mr-2" />View Details</DropdownMenuItem>}
+                          {canEdit && <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}><Pencil className="h-4 w-4 mr-2" />Edit</DropdownMenuItem>}
+                          {contact.clientFolderId && <DropdownMenuItem onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}><FolderOpen className="h-4 w-4 mr-2" />View Files</DropdownMenuItem>}
+                          {canDelete && <DropdownMenuItem onClick={() => handleDeleteClick(contact)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Delete</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    {/* Contact Details */}
+                    <div className="space-y-2 mb-4">
+                      <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                        <Mail className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{contact.email}</span>
+                      </a>
+                      {contact.phone && (
+                        <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                          <Phone className="h-4 w-4 shrink-0" />
+                          {contact.phone}
+                        </a>
+                      )}
+                      {contact.lastContactedAt && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <User className="h-3 w-3" />
+                          Last contact: {new Date(contact.lastContactedAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    {/* Stage Dropdown */}
+                    {canEdit && (
+                      <Select value={contact.stage} onValueChange={(value) => handleStatusChange(contact.id, value)} disabled={updatingStatus === contact.id}>
+                        <SelectTrigger className={cn('w-full h-10 mb-3', getStageBadgeClass(contact.stage))}>
+                          {updatingStatus === contact.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NEW">New</SelectItem>
+                          <SelectItem value="CONTACTED">Contacted</SelectItem>
+                          <SelectItem value="QUALIFIED">Qualified</SelectItem>
+                          <SelectItem value="DOCUMENTS">Documents</SelectItem>
+                          <SelectItem value="FILED">Filed</SelectItem>
+                          <SelectItem value="CLOSED">Closed</SelectItem>
+                          <SelectItem value="LOST">Lost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button variant="outline" size="sm" className="h-10" asChild>
+                        <a href={`tel:${contact.phone}`}><Phone className="w-4 h-4 mr-1" />Call</a>
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-10" asChild>
+                        <a href={`sms:${contact.phone}`}><MessageCircle className="w-4 h-4 mr-1" />Text</a>
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-10" asChild>
+                        <a href={`mailto:${contact.email}`}><Mail className="w-4 h-4 mr-1" />Email</a>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ===== DESKTOP VIEW (>= 1024px) - Enhanced Table ===== */}
+              <div className="hidden lg:block rounded-lg border overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Stage</TableHead>
-                      <TableHead>Form Type</TableHead>
-                      <TableHead>Documents</TableHead>
-                      <TableHead>Last Contact</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="font-semibold">Contact</TableHead>
+                      <TableHead className="font-semibold">Contact Info</TableHead>
+                      <TableHead className="font-semibold">Stage</TableHead>
+                      <TableHead className="font-semibold">Source</TableHead>
+                      <TableHead className="font-semibold">Documents</TableHead>
+                      <TableHead className="font-semibold">Last Contact</TableHead>
+                      <TableHead className="font-semibold text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {contacts.map((contact) => (
-                      <TableRow key={contact.id}>
+                    {contacts.map((contact, index) => (
+                      <TableRow
+                        key={contact.id}
+                        className={cn(
+                          "hover:bg-muted/30 transition-colors",
+                          index % 2 === 0 && "bg-muted/5"
+                        )}
+                      >
+                        {/* Contact Name with Avatar */}
                         <TableCell className="font-medium">
-                          <div className="flex items-center">
-                            <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                            {contact.firstName} {contact.lastName}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center text-sm">
-                            <Mail className="h-3 w-3 mr-1 text-muted-foreground" />
-                            {contact.email}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {contact.phone && (
-                            <div className="flex items-center text-sm">
-                              <Phone className="h-3 w-3 mr-1 text-muted-foreground" />
-                              {contact.phone}
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                                {contact.firstName[0]}{contact.lastName[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{contact.firstName} {contact.lastName}</p>
+                              <p className="text-xs text-muted-foreground">{contact.contactType}</p>
                             </div>
-                          )}
+                          </div>
                         </TableCell>
+                        {/* Contact Info */}
+                        <TableCell>
+                          <div className="space-y-1">
+                            <a href={`mailto:${contact.email}`} className="flex items-center text-sm hover:text-primary transition-colors">
+                              <Mail className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                              <span className="max-w-[200px] truncate">{contact.email}</span>
+                            </a>
+                            {contact.phone && (
+                              <a href={`tel:${contact.phone}`} className="flex items-center text-sm hover:text-primary transition-colors">
+                                <Phone className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                {contact.phone}
+                              </a>
+                            )}
+                          </div>
+                        </TableCell>
+                        {/* Stage */}
                         <TableCell>
                           {canEdit ? (
                             <Select
@@ -654,14 +794,8 @@ export default function CRMContactsPage() {
                             >
                               <SelectTrigger
                                 className={cn(
-                                  'w-[140px] h-7 text-xs',
-                                  contact.stage === 'NEW' && 'border-blue-500 text-blue-700',
-                                  contact.stage === 'CONTACTED' && 'border-purple-500 text-purple-700',
-                                  contact.stage === 'QUALIFIED' && 'border-indigo-500 text-indigo-700',
-                                  contact.stage === 'DOCUMENTS' && 'border-yellow-500 text-yellow-700',
-                                  contact.stage === 'FILED' && 'border-orange-500 text-orange-700',
-                                  contact.stage === 'CLOSED' && 'border-green-500 text-green-700',
-                                  contact.stage === 'LOST' && 'border-red-500 text-red-700'
+                                  'w-[130px] h-8 text-xs font-medium',
+                                  getStageBadgeClass(contact.stage)
                                 )}
                               >
                                 {updatingStatus === contact.id ? (
@@ -671,39 +805,57 @@ export default function CRMContactsPage() {
                                 )}
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="NEW">New</SelectItem>
-                                <SelectItem value="CONTACTED">Contacted</SelectItem>
-                                <SelectItem value="QUALIFIED">Qualified</SelectItem>
-                                <SelectItem value="DOCUMENTS">Documents</SelectItem>
-                                <SelectItem value="FILED">Filed</SelectItem>
-                                <SelectItem value="CLOSED">Closed</SelectItem>
-                                <SelectItem value="LOST">Lost</SelectItem>
+                                <SelectItem value="NEW">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue-500" />New
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="CONTACTED">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-purple-500" />Contacted
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="QUALIFIED">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-indigo-500" />Qualified
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="DOCUMENTS">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-yellow-500" />Documents
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="FILED">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-orange-500" />Filed
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="CLOSED">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-green-500" />Closed
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="LOST">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-red-500" />Lost
+                                  </span>
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Badge
-                              className={cn(
-                                contact.stage === 'NEW' && 'bg-blue-500',
-                                contact.stage === 'CONTACTED' && 'bg-purple-500',
-                                contact.stage === 'QUALIFIED' && 'bg-indigo-500',
-                                contact.stage === 'DOCUMENTS' && 'bg-yellow-500',
-                                contact.stage === 'FILED' && 'bg-orange-500',
-                                contact.stage === 'CLOSED' && 'bg-green-500',
-                                contact.stage === 'LOST' && 'bg-red-500'
-                              )}
-                            >
+                            <Badge variant="outline" className={cn('text-xs font-medium', getStageBadgeClass(contact.stage))}>
                               {contact.stage}
                             </Badge>
                           )}
                         </TableCell>
-                        {/* Form Type Column */}
+                        {/* Source/Form Type */}
                         <TableCell>
                           {(() => {
                             const FormIcon = getFormTypeIcon(contact.source);
                             return (
                               <Badge
                                 variant="outline"
-                                className={cn('flex items-center gap-1 w-fit', getFormTypeBadgeClass(contact.source))}
+                                className={cn('flex items-center gap-1.5 w-fit text-xs', getFormTypeBadgeClass(contact.source))}
                               >
                                 <FormIcon className="h-3 w-3" />
                                 {getFormTypeLabel(contact.source)}
@@ -711,61 +863,92 @@ export default function CRMContactsPage() {
                             );
                           })()}
                         </TableCell>
-                        {/* Documents Column */}
+                        {/* Documents */}
                         <TableCell>
                           {contact.clientFolderId ? (
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 px-2"
+                              className="h-8 px-3 text-xs"
                               onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
                             >
-                              <FolderOpen className="h-4 w-4 mr-1 text-primary" />
-                              <span className="text-xs">Files</span>
+                              <FolderOpen className="h-3.5 w-3.5 mr-1.5 text-primary" />
+                              View Files
                             </Button>
                           ) : (
-                            <span className="text-xs text-muted-foreground">No folder</span>
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        {/* Last Contact Column */}
-                        <TableCell className="text-sm text-muted-foreground">
-                          {contact.lastContactedAt
-                            ? new Date(contact.lastContactedAt).toLocaleDateString()
-                            : 'Never'}
+                        {/* Last Contact */}
+                        <TableCell>
+                          <div className="text-sm">
+                            {contact.lastContactedAt ? (
+                              <>
+                                <p className="text-foreground">{new Date(contact.lastContactedAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-muted-foreground">{new Date(contact.lastContactedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">Never</span>
+                            )}
+                          </div>
                         </TableCell>
-                        {/* Actions Column */}
+                        {/* Actions */}
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {canView && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2"
-                                onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}
-                              >
-                                View
-                              </Button>
-                            )}
-                            {canEdit && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2"
-                                onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
-                              >
-                                Edit
-                              </Button>
-                            )}
-                            {canDelete && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteClick(contact)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Quick Contact Buttons */}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                              <a href={`tel:${contact.phone}`} title="Call">
+                                <Phone className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                              </a>
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                              <a href={`mailto:${contact.email}`} title="Email">
+                                <Mail className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                              </a>
+                            </Button>
+                            {/* More Actions Dropdown */}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                {canView && (
+                                  <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                )}
+                                {canEdit && (
+                                  <DropdownMenuItem onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Edit Contact
+                                  </DropdownMenuItem>
+                                )}
+                                {contact.clientFolderId && (
+                                  <DropdownMenuItem onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}>
+                                    <FolderOpen className="h-4 w-4 mr-2" />
+                                    View Documents
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem asChild>
+                                  <a href={`sms:${contact.phone}`}>
+                                    <MessageCircle className="h-4 w-4 mr-2" />
+                                    Send Text
+                                  </a>
+                                </DropdownMenuItem>
+                                {canDelete && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteClick(contact)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Contact
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
