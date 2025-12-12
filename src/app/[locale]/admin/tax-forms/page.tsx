@@ -69,27 +69,12 @@ export default function AdminTaxFormsPage() {
     }
   }, [isLoaded, user, permissions]);
 
-  // Show loading skeleton while checking auth
-  if (!isLoaded || !permissions) {
-    return (
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="space-y-2">
-          <div className="h-8 w-48 rounded-md bg-muted animate-pulse" />
-          <div className="h-5 w-64 rounded-md bg-muted animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-        <TableSkeleton rows={10} columns={7} />
-      </div>
-    );
-  }
-
+  // Fetch forms when component mounts or year changes
   useEffect(() => {
-    fetchForms();
-  }, [selectedYear]);
+    if (isLoaded && permissions) {
+      fetchForms();
+    }
+  }, [selectedYear, isLoaded, permissions]);
 
   const fetchForms = async () => {
     try {
@@ -171,6 +156,24 @@ export default function AdminTaxFormsPage() {
       });
     }
   };
+
+  // Show loading skeleton while checking auth
+  if (!isLoaded || !permissions) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-48 rounded-md bg-muted animate-pulse" />
+          <div className="h-5 w-64 rounded-md bg-muted animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <TableSkeleton rows={10} columns={7} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (
