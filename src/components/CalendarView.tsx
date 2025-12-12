@@ -331,23 +331,23 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
 
       {/* Event Details Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               {selectedEvent?.type && typeIcons[selectedEvent.type]}
               {selectedEvent?.subject || selectedEvent?.type || 'Appointment Details'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               {selectedEvent?.scheduledFor &&
                 new Date(selectedEvent.scheduledFor).toLocaleString('en-US', {
-                  dateStyle: 'full',
+                  dateStyle: isMobile ? 'medium' : 'full',
                   timeStyle: 'short',
                 })}
             </DialogDescription>
           </DialogHeader>
 
           {selectedEvent && (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Status */}
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Status:</span>
@@ -362,30 +362,68 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
               </div>
 
               {/* Client Information */}
-              <div className="rounded-lg border p-4 space-y-3">
+              <div className="rounded-lg border p-3 sm:p-4 space-y-2 sm:space-y-3">
                 <h3 className="font-semibold text-sm">Client Information</h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">{selectedEvent.clientName}</span>
+                    <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium truncate">{selectedEvent.clientName}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Mail className="w-4 h-4 text-muted-foreground" />
-                    <a href={`mailto:${selectedEvent.clientEmail}`} className="text-primary hover:underline">
+                    <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <a href={`mailto:${selectedEvent.clientEmail}`} className="text-primary hover:underline truncate">
                       {selectedEvent.clientEmail}
                     </a>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <a href={`tel:${selectedEvent.clientPhone}`} className="text-primary hover:underline">
                       {selectedEvent.clientPhone}
                     </a>
                   </div>
                 </div>
+                {/* Mobile Quick Actions */}
+                {isMobile && (
+                  <div className="flex gap-2 pt-2 border-t mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9"
+                      asChild
+                    >
+                      <a href={`tel:${selectedEvent.clientPhone}`}>
+                        <Phone className="w-4 h-4 mr-1" />
+                        Call
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9"
+                      asChild
+                    >
+                      <a href={`sms:${selectedEvent.clientPhone}`}>
+                        <Send className="w-4 h-4 mr-1" />
+                        Text
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9"
+                      asChild
+                    >
+                      <a href={`mailto:${selectedEvent.clientEmail}`}>
+                        <Mail className="w-4 h-4 mr-1" />
+                        Email
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Appointment Details */}
-              <div className="rounded-lg border p-4 space-y-3">
+              <div className="rounded-lg border p-3 sm:p-4 space-y-2 sm:space-y-3">
                 <h3 className="font-semibold text-sm">Appointment Details</h3>
                 <div className="space-y-2">
                   {selectedEvent.duration && (
@@ -418,15 +456,16 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
 
               {/* Client Notes */}
               {selectedEvent.clientNotes && (
-                <div className="rounded-lg border p-4 space-y-2">
+                <div className="rounded-lg border p-3 sm:p-4 space-y-2">
                   <h3 className="font-semibold text-sm">Notes</h3>
                   <p className="text-sm text-muted-foreground">{selectedEvent.clientNotes}</p>
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex justify-between gap-2 pt-4 border-t">
-                <div className="flex gap-2 flex-wrap">
+              {/* Actions - Responsive layout */}
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-2 pt-3 sm:pt-4 border-t">
+                {/* Primary Actions */}
+                <div className="flex flex-col sm:flex-row gap-2">
                   {canConfirm &&
                     (selectedEvent.status === 'REQUESTED' ||
                       selectedEvent.status === 'SCHEDULED') && (
@@ -435,10 +474,10 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
                         size="sm"
                         onClick={handleConfirm}
                         disabled={confirming}
-                        className="bg-green-600 hover:bg-green-700"
+                        className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                       >
                         {confirming && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                        Confirm Appointment
+                        {isMobile ? 'Confirm' : 'Confirm Appointment'}
                       </Button>
                     )}
                   {/* Send Intake Form - visible for tax preparers/admins */}
@@ -448,32 +487,33 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
                       size="sm"
                       onClick={handleSendIntakeForm}
                       disabled={sendingIntake}
-                      className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                      className="border-blue-500 text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
                     >
                       {sendingIntake ? (
                         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                       ) : (
                         <Send className="mr-2 h-3 w-3" />
                       )}
-                      {isMobile ? 'SMS Intake Form' : 'Email Intake Form'}
+                      {isMobile ? 'Send Intake' : 'Email Intake Form'}
                     </Button>
                   )}
                 </div>
-                <div className="flex gap-2">
+                {/* Secondary Actions */}
+                <div className="flex flex-wrap gap-2">
                   {canEdit && selectedEvent.status !== 'CANCELLED' && (
                     <>
-                      <Button variant="outline" size="sm" onClick={handleReschedule}>
+                      <Button variant="outline" size="sm" onClick={handleReschedule} className="flex-1 sm:flex-none">
                         Reschedule
                       </Button>
-                      <Button variant="outline" size="sm" onClick={handleEdit}>
+                      <Button variant="outline" size="sm" onClick={handleEdit} className="flex-1 sm:flex-none">
                         Edit
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={handleCancelClick}>
+                      <Button variant="destructive" size="sm" onClick={handleCancelClick} className="flex-1 sm:flex-none">
                         Cancel
                       </Button>
                     </>
                   )}
-                  <Button variant="default" size="sm" onClick={() => setDialogOpen(false)}>
+                  <Button variant="default" size="sm" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">
                     Close
                   </Button>
                 </div>

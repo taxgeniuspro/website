@@ -149,25 +149,29 @@ export default function CalendarPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Calendar className="w-8 h-8" />
-              Calendar & Appointments
-            </h1>
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-8">
+        {/* Header - Mobile responsive */}
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold flex items-center gap-2">
+                <Calendar className="w-6 h-6 sm:w-8 sm:h-8" />
+                <span className="hidden sm:inline">Calendar & Appointments</span>
+                <span className="sm:hidden">Calendar</span>
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">Manage appointments and schedules</p>
+            </div>
             {canCreate && (
-              <Button onClick={() => setCreateDialogOpen(true)}>
+              <Button onClick={() => setCreateDialogOpen(true)} className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 New Appointment
               </Button>
             )}
           </div>
-          <p className="text-muted-foreground">Manage appointments and schedules</p>
         </div>
 
-        {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        {/* Stats - Responsive grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Today</CardTitle>
@@ -214,26 +218,35 @@ export default function CalendarPage() {
         </div>
 
         <Tabs defaultValue="calendar" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="calendar">Calendar View</TabsTrigger>
-            <TabsTrigger value="list">List View</TabsTrigger>
-            <TabsTrigger value="requests">
-              Requests
-              {requestedAppointments.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {requestedAppointments.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+          {/* Tabs - Scrollable on mobile */}
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+            <TabsList className="w-full sm:w-auto">
+              <TabsTrigger value="calendar" className="text-xs sm:text-sm">
+                <span className="hidden sm:inline">Calendar View</span>
+                <span className="sm:hidden">Calendar</span>
+              </TabsTrigger>
+              <TabsTrigger value="list" className="text-xs sm:text-sm">
+                <span className="hidden sm:inline">List View</span>
+                <span className="sm:hidden">List</span>
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="text-xs sm:text-sm">
+                Requests
+                {requestedAppointments.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">
+                    {requestedAppointments.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="calendar">
             <Card>
-              <CardHeader>
-                <CardTitle>Calendar</CardTitle>
-                <CardDescription>Interactive calendar view of all appointments</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">Calendar</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Interactive calendar view of all appointments</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-2 sm:p-4 md:p-6">
                 <CalendarView
                   appointments={appointments}
                   canCreate={canCreate}
@@ -246,12 +259,12 @@ export default function CalendarPage() {
 
           <TabsContent value="list">
             <Card>
-              <CardHeader>
-                <CardTitle>All Appointments</CardTitle>
-                <CardDescription>Complete list of all scheduled appointments</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">All Appointments</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Complete list of all scheduled appointments</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-3 md:p-6">
+                <div className="space-y-3 md:space-y-4">
                   {appointments.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -259,55 +272,56 @@ export default function CalendarPage() {
                     </div>
                   ) : (
                     appointments.map((apt) => (
-                      <div key={apt.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
+                      <div key={apt.id} className="border rounded-lg p-3 md:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div className="space-y-2 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
                               {apt.type && typeIcons[apt.type]}
-                              <p className="font-medium">{apt.subject || apt.type}</p>
-                              <Badge variant={statusColors[apt.status] as any}>{apt.status}</Badge>
+                              <p className="font-medium text-sm md:text-base truncate">{apt.subject || apt.type}</p>
+                              <Badge variant={statusColors[apt.status] as any} className="text-xs">{apt.status}</Badge>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
                               <div className="flex items-center gap-1">
-                                <User className="w-3 h-3" />
-                                {apt.clientName}
+                                <User className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{apt.clientName}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" />
+                              <a href={`tel:${apt.clientPhone}`} className="flex items-center gap-1 text-primary hover:underline">
+                                <Phone className="w-3 h-3 shrink-0" />
                                 {apt.clientPhone}
-                              </div>
+                              </a>
                             </div>
                             {apt.scheduledFor && (
-                              <div className="flex items-center gap-1 text-sm">
-                                <Clock className="w-3 h-3" />
+                              <div className="flex items-center gap-1 text-xs sm:text-sm">
+                                <Clock className="w-3 h-3 shrink-0" />
                                 {new Date(apt.scheduledFor).toLocaleString()}
                                 {apt.duration && ` (${apt.duration} mins)`}
                               </div>
                             )}
                             {apt.location && (
-                              <div className="flex items-center gap-1 text-sm">
-                                <MapPin className="w-3 h-3" />
-                                {apt.location}
+                              <div className="flex items-center gap-1 text-xs sm:text-sm">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{apt.location}</span>
                               </div>
                             )}
                             {apt.meetingLink && (
-                              <div className="flex items-center gap-1 text-sm">
-                                <Video className="w-3 h-3" />
-                                Meeting link available
+                              <div className="flex items-center gap-1 text-xs sm:text-sm">
+                                <Video className="w-3 h-3 shrink-0" />
+                                <a href={apt.meetingLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Join Meeting
+                                </a>
                               </div>
                             )}
                           </div>
-                          <div className="space-x-2">
-                            {apt.status === 'REQUESTED' && canCreate && (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => handleScheduleClick(apt)}
-                              >
-                                Schedule
-                              </Button>
-                            )}
-                          </div>
+                          {apt.status === 'REQUESTED' && canCreate && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleScheduleClick(apt)}
+                              className="w-full sm:w-auto"
+                            >
+                              Schedule
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))
@@ -319,12 +333,12 @@ export default function CalendarPage() {
 
           <TabsContent value="requests">
             <Card>
-              <CardHeader>
-                <CardTitle>Appointment Requests</CardTitle>
-                <CardDescription>Pending appointment requests that need scheduling</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">Appointment Requests</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Pending appointment requests that need scheduling</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-3 md:p-6">
+                <div className="space-y-3 md:space-y-4">
                   {requestedAppointments.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -334,34 +348,34 @@ export default function CalendarPage() {
                     requestedAppointments.map((apt) => (
                       <div
                         key={apt.id}
-                        className="border rounded-lg p-4 bg-yellow-50 dark:bg-yellow-950/20"
+                        className="border rounded-lg p-3 md:p-4 bg-yellow-50 dark:bg-yellow-950/20"
                       >
-                        <div className="flex items-start justify-between">
+                        <div className="flex flex-col gap-3">
                           <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">REQUEST</Badge>
-                              <p className="font-medium">{apt.clientName}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="secondary" className="text-xs">REQUEST</Badge>
+                              <p className="font-medium text-sm md:text-base">{apt.clientName}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                               {apt.clientNotes || 'No notes provided'}
                             </p>
-                            <div className="flex items-center gap-4 text-sm">
-                              <div className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {apt.clientEmail}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs sm:text-sm">
+                              <a href={`mailto:${apt.clientEmail}`} className="flex items-center gap-1 text-primary hover:underline truncate">
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{apt.clientEmail}</span>
+                              </a>
+                              <a href={`tel:${apt.clientPhone}`} className="flex items-center gap-1 text-primary hover:underline">
+                                <Phone className="w-3 h-3 shrink-0" />
                                 {apt.clientPhone}
-                              </div>
+                              </a>
                             </div>
                             <p className="text-xs text-muted-foreground">
                               Requested: {new Date(apt.requestedAt).toLocaleString()}
                             </p>
                           </div>
-                          <div className="space-x-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             {canCreate && (
-                              <Button size="sm" onClick={() => handleScheduleClick(apt)}>
+                              <Button size="sm" onClick={() => handleScheduleClick(apt)} className="flex-1 sm:flex-none">
                                 Schedule
                               </Button>
                             )}
@@ -369,6 +383,7 @@ export default function CalendarPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleContactClick(apt)}
+                              className="flex-1 sm:flex-none"
                             >
                               Contact
                             </Button>
