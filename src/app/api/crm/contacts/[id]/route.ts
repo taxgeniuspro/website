@@ -46,9 +46,16 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Auth check
+    logger.info('[CRM API] Starting GET contact request', { contactId: params.id });
+
     const { user, role } = await requireOneOfRoles(['super_admin', 'admin', 'tax_preparer']);
 
-    logger.info('[CRM API] Getting contact', { contactId: params.id, userId: user.id, role });
+    logger.info('[CRM API] Auth passed', {
+      contactId: params.id,
+      userId: user.id,
+      role,
+      roleType: typeof role,
+    });
 
     // Get preparer ID if user is a tax preparer
     let preparerId: string | undefined;
@@ -66,8 +73,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       preparerId,
     };
 
+    logger.info('[CRM API] Access context built', {
+      contactId: params.id,
+      accessContext: JSON.stringify(accessContext),
+    });
+
     // Get contact
     const contact = await CRMService.getContactById(params.id, accessContext);
+
+    logger.info('[CRM API] Contact fetched from service', {
+      contactId: params.id,
+      contactFound: !!contact,
+    });
 
     // Fetch associated tax intake lead by email for full form data
     let taxIntakeLead = null;
@@ -119,18 +136,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error: any) {
-    logger.error('[CRM API] Error getting contact', { error: error.message, contactId: params.id });
+    logger.error('[CRM API] Error getting contact', {
+      error: error.message,
+      stack: error.stack,
+      contactId: params.id,
+    });
 
-    if (error.message.includes('not found')) {
+    if (error.message?.includes('not found')) {
       return NextResponse.json({ success: false, error: 'Contact not found' }, { status: 404 });
     }
 
-    if (error.message.includes('Access denied') || error.message.includes('Unauthorized')) {
+    if (error.message?.includes('Access denied') || error.message?.includes('Unauthorized')) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get contact' },
+      { success: false, error: error.message || 'Failed to get contact', debug: error.stack?.slice(0, 500) },
       { status: 500 }
     );
   }
