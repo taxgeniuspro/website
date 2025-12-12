@@ -54,6 +54,8 @@ export async function GET(
         requireApprovalForBookings: true,
         customBookingMessage: true,
         bookingCalendarColor: true,
+        appointmentBufferMinutes: true,
+        defaultAppointmentDuration: true,
       },
     });
 
@@ -129,6 +131,8 @@ export async function PUT(
           requireApprovalForBookings: bookingPreferences.requireApprovalForBookings,
           customBookingMessage: bookingPreferences.customBookingMessage,
           bookingCalendarColor: bookingPreferences.bookingCalendarColor,
+          appointmentBufferMinutes: bookingPreferences.appointmentBufferMinutes,
+          defaultAppointmentDuration: bookingPreferences.defaultAppointmentDuration,
         },
       });
     }

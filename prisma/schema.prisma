@@ -143,6 +143,8 @@ model Profile {
   requireApprovalForBookings  Boolean @default(false) // Require manual approval for all bookings
   customBookingMessage        String? @db.Text // Custom message shown on booking page
   bookingCalendarColor        String? // Hex color for calendar display (#3B82F6)
+  appointmentBufferMinutes    Int     @default(15) // Minutes buffer between appointments
+  defaultAppointmentDuration  Int     @default(30) // Default appointment duration in minutes
 
   // QR Code Branding (For Tax Preparers - Epic 6)
   usePhotoInQRCodes           Boolean @default(false) // Use profile photo in QR codes instead of Tax Genius logo
