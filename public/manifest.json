@@ -7,7 +7,7 @@
     "display": "standalone",
     "orientation": "portrait",
     "scope": "/",
-    "start_url": "/",
+    "start_url": "/dashboard",
     "id": "tax-genius-pro",
     "categories": [
         "business",
@@ -44,6 +44,29 @@
             "sizes": "180x180",
             "type": "image/png",
             "purpose": "any"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "CRM Contacts",
+            "short_name": "CRM",
+            "description": "Manage your contacts and leads",
+            "url": "/crm/contacts",
+            "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Calendar",
+            "short_name": "Calendar",
+            "description": "View appointments and schedule",
+            "url": "/dashboard/tax-preparer/calendar",
+            "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Analytics",
+            "short_name": "Stats",
+            "description": "View your performance analytics",
+            "url": "/dashboard/tax-preparer/analytics",
+            "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
         }
     ],
     "prefer_related_applications": false,

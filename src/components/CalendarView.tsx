@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
+import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import {
@@ -78,12 +79,14 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
     setMounted(true);
   }, []);
 
-  // Detect mobile device
+  // Detect mobile device - using both user agent and viewport width
   useEffect(() => {
     const checkMobile = () => {
       const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
       const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
-      setIsMobile(mobileRegex.test(userAgent.toLowerCase()));
+      const isMobileAgent = mobileRegex.test(userAgent.toLowerCase());
+      const isMobileViewport = window.innerWidth < 768;
+      setIsMobile(isMobileAgent || isMobileViewport);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -289,13 +292,21 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
         `}</style>
 
         <FullCalendar
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay',
-          }}
+          plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+          initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+          headerToolbar={
+            isMobile
+              ? {
+                  left: 'prev,next',
+                  center: 'title',
+                  right: 'today',
+                }
+              : {
+                  left: 'prev,next today',
+                  center: 'title',
+                  right: 'dayGridMonth,timeGridWeek,timeGridDay',
+                }
+          }
           events={events}
           eventClick={handleEventClick}
           selectable={canCreate}
@@ -311,12 +322,16 @@ export default function CalendarView({ appointments, canCreate, canEdit, canConf
             startTime: '09:00',
             endTime: '17:00',
           }}
+          // Mobile optimizations
+          dayMaxEvents={isMobile ? 2 : true}
+          moreLinkClick="popover"
+          eventDisplay={isMobile ? 'block' : 'auto'}
         />
       </div>
 
       {/* Event Details Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedEvent?.type && typeIcons[selectedEvent.type]}
