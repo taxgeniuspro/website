@@ -44,8 +44,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Environment files - NEVER commit secrets!
+# Only .env.example (template without values) should be committed
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.vercel
+.env*.local
+.env-backups/
 
 # vercel
 .vercel
