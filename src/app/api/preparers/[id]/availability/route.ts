@@ -10,7 +10,7 @@ import { parseISO } from 'date-fns';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -18,7 +18,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: preparerId } = params;
+    const { id: preparerId } = await params;
 
     // Check permissions
     const userProfile = await prisma.profile.findUnique({
@@ -91,7 +91,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -99,7 +99,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: preparerId } = params;
+    const { id: preparerId } = await params;
     const body = await request.json();
     const { weeklySchedule, overrides, bookingPreferences } = body;
 
