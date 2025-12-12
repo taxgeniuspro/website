@@ -497,14 +497,6 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       message: 'Tax form submitted and preparer notified',
       fileUploaded: !!uploadedFileUrl,
       documentId: documentRecord?.id,
-      // Debug info (remove after testing)
-      debug: {
-        receivedFile: !!licenseFile,
-        fileSize: licenseFile?.size || 0,
-        fileName: licenseFile?.name || null,
-        cloudinaryUrl: uploadedFileUrl,
-        uploadError: uploadError,
-      },
     });
   } catch (error) {
     logger.error('Error submitting tax form:', error);
