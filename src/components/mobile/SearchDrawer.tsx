@@ -28,7 +28,6 @@ import {
   Mail,
   MessageCircle,
   Loader2,
-  User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
