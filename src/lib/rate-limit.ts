@@ -87,7 +87,7 @@ if (!isBuildTime) {
     usingInMemory = true;
   }
 } else {
-  console.log('[RateLimit] Skipping Redis connection during build time');
+  logger.debug('[RateLimit] Skipping Redis connection during build time');
 }
 
 // ============ Rate Limiter Implementation ============

@@ -11,6 +11,7 @@ import { validateRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generate200CityPages } from '@/lib/seo-llm/3-seo-brain/campaign-generator/city-page-generator'
 import { sendCampaignCompleteAlert } from '@/lib/seo-llm/3-seo-brain/telegram-notifier/telegram-notifier'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
         'Campaign started. Generation will take 6-7 hours. You will receive Telegram notification when complete.',
     })
   } catch (error) {
-    console.error('[SEO Brain API] Start campaign error:', error)
+    logger.error('[SEO Brain API] Start campaign error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to start campaign' }, { status: 500 })
   }
 }
@@ -128,7 +129,7 @@ async function startCampaignGeneration(campaignId: string, productSpec: any) {
       })
     }
   } catch (error) {
-    console.error('[SEO Brain] Campaign generation failed:', error)
+    logger.error('[SEO Brain] Campaign generation failed', { error: error instanceof Error ? error.message : 'Unknown error' })
 
     // Update campaign status to FAILED
     await prisma.productCampaignQueue.update({

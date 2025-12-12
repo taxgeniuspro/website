@@ -8,6 +8,7 @@ import { AvailabilityService } from '@/lib/services/availability.service';
 import { parseISO, startOfMonth, endOfMonth, addMonths } from 'date-fns';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -125,7 +126,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    console.error('Error fetching preparer schedule:', error);
+    logger.error('Error fetching preparer schedule', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         error: 'Failed to fetch schedule',

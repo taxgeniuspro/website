@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    console.error('List tax preparers error:', error);
+    logger.error('List tax preparers error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         error: 'Failed to list tax preparers',

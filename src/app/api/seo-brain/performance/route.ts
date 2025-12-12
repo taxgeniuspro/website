@@ -9,6 +9,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
       bottomPerformers,
     })
   } catch (error) {
-    console.error('[SEO Brain API] Performance error:', error)
+    logger.error('[SEO Brain API] Performance error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to fetch performance' }, { status: 500 })
   }
 }

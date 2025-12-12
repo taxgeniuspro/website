@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 /**
  * GET: Fetch preparer profile by tracking code or short link username
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(profile);
   } catch (error) {
-    console.error('Error fetching preparer by ref:', error);
+    logger.error('Error fetching preparer by ref', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ error: 'Failed to fetch preparer' }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { auth } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     const envKey = process.env.ADMIN_SETUP_KEY;
     const isAdminKey = adminKey && envKey && adminKey === envKey;
 
-    console.log('[Admin SetPassword] Auth check:', {
+    logger.debug('[Admin SetPassword] Auth check', {
       hasSession: !!currentUser,
       userRole: currentUser?.role,
       hasAdminKey: !!adminKey,
@@ -92,10 +93,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      console.log('[Admin] Created missing profile for user:', email);
+      logger.info('[Admin] Created missing profile for user', { email });
     }
 
-    console.log('[Admin] Password set for user:', email);
+    logger.info('[Admin] Password set for user', { email });
 
     return NextResponse.json({
       success: true,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
       profileCreated: !user.profile,
     });
   } catch (error) {
-    console.error('Admin set password error:', error);
+    logger.error('Admin set password error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to set password' },
       { status: 500 }

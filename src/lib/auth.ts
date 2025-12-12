@@ -15,6 +15,7 @@ import Resend from 'next-auth/providers/resend';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
+import { logger } from '@/lib/logger';
 
 // Extend NextAuth types to include our custom role field
 declare module 'next-auth' {
@@ -153,7 +154,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   events: {
     async signIn({ user, isNewUser }) {
       // Log sign in events
-      console.log(`User signed in: ${user.email} (${user.id})`);
+      logger.info('User signed in', { email: user.email, userId: user.id });
 
       // If new user, create a profile with default client role
       // (Note: tax_preparer and affiliate roles require manual admin upgrade)

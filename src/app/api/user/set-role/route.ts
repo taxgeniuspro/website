@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
+import { logger } from '@/lib/logger';
 
 /**
  * POST /api/user/set-role
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       message: 'Role updated successfully',
     });
   } catch (error) {
-    console.error('Error updating role:', error);
+    logger.error('Error updating role', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to update role' },
       { status: 500 }

@@ -10,6 +10,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       message: `Decision approved. Executing option ${selectedOption.toUpperCase()}...`,
     })
   } catch (error) {
-    console.error('[SEO Brain API] Approve decision error:', error)
+    logger.error('[SEO Brain API] Approve decision error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to approve decision' }, { status: 500 })
   }
 }

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('User check error:', error);
+    logger.error('User check error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to check user' },
       { status: 500 }

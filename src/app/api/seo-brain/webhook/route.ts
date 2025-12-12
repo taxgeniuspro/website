@@ -9,6 +9,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[SEO Brain Webhook] Error:', error)
+    logger.error('[SEO Brain Webhook] Error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ ok: true }) // Always return 200 to Telegram
   }
 }

@@ -362,11 +362,12 @@ export async function POST(req: NextRequest) {
           logger.info('Appointment confirmation email sent', { emailId: data?.id });
         }
 
-        // Also send notification to business admin (Ray Hamilton primary, Owliver Owl CC)
+        // Also send notification to business admin using centralized email routing
+        const { EMAIL_ROUTING } = await import('@/config/email-routing');
         await getResendClient().emails.send({
           from: fromEmail,
-          to: 'taxgenius.taxes@gmail.com',  // Ray Hamilton - Primary admin
-          cc: 'taxgenius.tax@gmail.com',     // Owliver Owl - CC copy
+          to: EMAIL_ROUTING.EN.primary,
+          cc: EMAIL_ROUTING.ADMIN,
           subject: `New Appointment Request: ${clientName} - ${appointmentType}`,
           html: `
             <h2>New Appointment Request</h2>

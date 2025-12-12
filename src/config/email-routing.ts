@@ -4,8 +4,15 @@
  * Defines email recipients for all form submissions based on language/locale.
  *
  * @configuration
- * - English forms go to Ray Hamilton (taxgenius.taxes@gmail.com) with CC to Owliver Owl
- * - Spanish forms go to Ale Hamilton (Goldenprotaxes@gmail.com) with CC to Owliver Owl
+ * - English forms go to Ray Hamilton with CC to Owliver Owl
+ * - Spanish forms go to Ale Hamilton with CC to Owliver Owl
+ *
+ * @environment
+ * - EMAIL_ROUTING_EN_PRIMARY: English form primary recipient
+ * - EMAIL_ROUTING_EN_CC: English form CC recipient
+ * - EMAIL_ROUTING_ES_PRIMARY: Spanish form primary recipient
+ * - EMAIL_ROUTING_ES_CC: Spanish form CC recipient
+ * - EMAIL_ADMIN_CC: Admin CC for all emails
  */
 
 export const EMAIL_ROUTING = {
@@ -13,19 +20,24 @@ export const EMAIL_ROUTING = {
    * English form recipients
    */
   EN: {
-    primary: 'taxgenius.taxes@gmail.com',  // Ray Hamilton - Tax Preparer on behalf of Owliver Owl
-    cc: 'taxgenius.tax@gmail.com',          // Owliver Owl - Courtesy copy
-    recipientName: 'Ray',                   // First name for personalized greeting
+    primary: process.env.EMAIL_ROUTING_EN_PRIMARY || 'taxgenius.taxes@gmail.com',  // Ray Hamilton
+    cc: process.env.EMAIL_ROUTING_EN_CC || process.env.EMAIL_ADMIN_CC || 'taxgenius.tax@gmail.com',  // Owliver Owl
+    recipientName: 'Ray',
   },
 
   /**
    * Spanish form recipients
    */
   ES: {
-    primary: 'Goldenprotaxes@gmail.com',    // Ale Hamilton - Tax Preparer on behalf of Owliver Owl
-    cc: 'taxgenius.tax@gmail.com',          // Owliver Owl - Courtesy copy
-    recipientName: 'Ale',                   // First name for personalized greeting
+    primary: process.env.EMAIL_ROUTING_ES_PRIMARY || 'Goldenprotaxes@gmail.com',  // Ale Hamilton
+    cc: process.env.EMAIL_ROUTING_ES_CC || process.env.EMAIL_ADMIN_CC || 'taxgenius.tax@gmail.com',  // Owliver Owl
+    recipientName: 'Ale',
   },
+
+  /**
+   * Admin email for system notifications
+   */
+  ADMIN: process.env.EMAIL_ADMIN || 'taxgenius.tax@gmail.com',
 } as const;
 
 /**

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { addMinutes, parseISO } from 'date-fns';
 import { auth } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function PATCH(
   request: NextRequest,
@@ -126,7 +127,7 @@ export async function PATCH(
       },
     });
   } catch (error) {
-    console.error('Error rescheduling appointment:', error);
+    logger.error('Error rescheduling appointment', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         error: 'Failed to reschedule appointment',

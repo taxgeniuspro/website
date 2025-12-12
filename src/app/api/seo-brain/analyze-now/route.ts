@@ -9,6 +9,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
 import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // Trigger analysis (runs in background)
     seoBrain.analyzeCampaign(campaignId).catch((error) => {
-      console.error('[SEO Brain] Analysis error:', error)
+      logger.error('[SEO Brain] Analysis error', { error: error instanceof Error ? error.message : 'Unknown error' })
     })
 
     return NextResponse.json({
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       message: 'Analysis started. You will receive decisions via Telegram.',
     })
   } catch (error) {
-    console.error('[SEO Brain API] Analyze now error:', error)
+    logger.error('[SEO Brain API] Analyze now error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to start analysis' }, { status: 500 })
   }
 }

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function PATCH(
   request: NextRequest,
@@ -101,7 +102,7 @@ export async function PATCH(
       },
     });
   } catch (error) {
-    console.error('Error cancelling appointment:', error);
+    logger.error('Error cancelling appointment', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         error: 'Failed to cancel appointment',

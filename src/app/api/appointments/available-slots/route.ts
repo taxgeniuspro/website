@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { parseISO } from 'date-fns';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error('Error fetching available slots:', error);
+    logger.error('Error fetching available slots', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         error: 'Failed to fetch available slots',

@@ -5,12 +5,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
+import { logger } from '@/lib/logger';
+
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Password strength validation
+function validatePassword(password: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters long');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+    errors.push('Password must contain at least one special character');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { name, email, password } = await req.json();
 
-    // Validation
+    // Validation - required fields
     if (!name || !email || !password) {
       return NextResponse.json(
         { error: 'Name, email, and password are required' },
@@ -18,9 +45,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (password.length < 8) {
+    // Name validation
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters long' },
+        { error: 'Name must be between 2 and 100 characters' },
+        { status: 400 }
+      );
+    }
+
+    // Email validation
+    if (!EMAIL_REGEX.test(email)) {
+      return NextResponse.json(
+        { error: 'Please enter a valid email address' },
+        { status: 400 }
+      );
+    }
+
+    // Password strength validation
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json(
+        { error: passwordValidation.errors[0], errors: passwordValidation.errors },
         { status: 400 }
       );
     }
@@ -88,7 +134,7 @@ export async function POST(req: NextRequest) {
       return newUser;
     });
 
-    console.log('[Signup] User created successfully:', email);
+    logger.info('[Signup] User created successfully', { email: email.toLowerCase() });
 
     // Return success (without password)
     return NextResponse.json(
@@ -103,7 +149,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Sign up error:', error);
+    logger.error('[Signup] Failed to create account', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to create account. Please try again.' },
       { status: 500 }
