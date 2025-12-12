@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
-import { UserRole, UserPermissions } from '@/lib/permissions';
+import { UserRole, UserPermissions, hasAffiliateAccess, hasTaxFilingAccess } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 import {
   ALL_NAV_ITEMS,
@@ -30,13 +30,17 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ShieldCheck, Settings } from 'lucide-react';
 import { PWASidebarInstall } from '@/components/PWASidebarInstall';
 import { RestartTourButton } from '@/components/RestartTourButton';
+import type { AffiliateStatus } from '@prisma/client';
 
 interface DashboardSidebarProps {
   role: UserRole;
   permissions: Partial<UserPermissions>;
+  // Status-based access control (for clients)
+  affiliateStatus?: AffiliateStatus | null;
+  hasFiledTaxes?: boolean | null;
 }
 
-export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
+export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledTaxes }: DashboardSidebarProps) {
   // Collapse all sections by default for a cleaner, less overwhelming interface
   // Users can expand the sections they need
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -44,17 +48,50 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
-  // Generate navigation items dynamically based on user's permissions AND role
+  // Check status-based access for clients
+  const canAccessAffiliateFeatures = hasAffiliateAccess(role, affiliateStatus);
+  const canAccessTaxFilingFeatures = hasTaxFilingAccess(role, hasFiledTaxes);
+
+  // List of affiliate-feature paths (only shown if affiliateStatus === 'APPROVED' for clients)
+  const affiliateFeaturePaths = [
+    '/dashboard/client/tracking',
+    '/dashboard/client/leads',
+    '/dashboard/client/analytics',
+    '/dashboard/client/creatives',
+    '/dashboard/client/earnings',
+    '/dashboard/client/referrals',
+  ];
+
+  // List of tax-filing paths (only shown if hasFiledTaxes for clients)
+  const taxFilingPaths = [
+    '/dashboard/client/documents',
+    '/dashboard/client/tickets',
+  ];
+
+  // Generate navigation items dynamically based on user's permissions, role, AND status flags
   const navItems = ALL_NAV_ITEMS.filter((item) => {
     // Check permission first
     if (permissions[item.permission] !== true) return false;
 
     // If item has role restrictions, check if user's role is included
     if (item.roles && item.roles.length > 0) {
-      return item.roles.includes(role);
+      if (!item.roles.includes(role)) return false;
     }
 
-    // No role restrictions, show to all users with permission
+    // For clients, apply additional status-based filtering
+    if (role === 'client') {
+      // Check if this is an affiliate feature path
+      if (affiliateFeaturePaths.some(path => item.href.startsWith(path))) {
+        if (!canAccessAffiliateFeatures) return false;
+      }
+
+      // Check if this is a tax-filing feature path
+      if (taxFilingPaths.some(path => item.href.startsWith(path))) {
+        if (!canAccessTaxFilingFeatures) return false;
+      }
+    }
+
+    // Show to all users with permission
     return true;
   }).map((item) => {
     // Dashboard Home is special - update href based on role (but only for the generic /dashboard route)
@@ -69,7 +106,6 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
         admin: '/admin/earnings',
         lead: '/dashboard/lead/earnings',
         tax_preparer: '/dashboard/tax-preparer/earnings',
-        affiliate: '/dashboard/affiliate/earnings',
         client: '/dashboard/client/earnings',
       };
       return { ...item, href: earningsRoutes[role] };
@@ -82,7 +118,6 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
         admin: '/admin/settings',
         lead: '/dashboard/lead/settings',
         tax_preparer: '/dashboard/tax-preparer/settings',
-        affiliate: '/dashboard/affiliate/settings',
         client: '/dashboard/client/settings',
       };
       return { ...item, href: settingsRoutes[role] };
@@ -237,15 +272,15 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
                 })}
               </div>
             ) : (
-              // Render with sections for non-admin users (tax_preparer, affiliate, client, lead, etc.)
+              // Render with sections for non-admin users (tax_preparer, client, lead)
+              // NOTE: '🎯 Affiliate Dashboard' section removed - affiliate features now in client dashboard
               <div className="space-y-4">
                 {[
-                  '📱 My Dashboard', // Client/Lead only section
-                  '🎯 Affiliate Dashboard', // Affiliate only section
+                  '📱 My Dashboard', // Client/Lead only section (includes affiliate features for approved affiliates)
                   '📊 Overview',
                   '👥 Clients',
                   '📋 CRM',
-                  '📊 Analytics', // Fixed: was '📈 Analytics'
+                  '📊 Analytics',
                   '💼 Business',
                   '⚙️ Settings',
                 ].map((sectionName, sectionIndex) => {
@@ -344,7 +379,6 @@ export function DashboardSidebar({ role, permissions }: DashboardSidebarProps) {
             role === 'super_admin' || role === 'admin' ? '/admin/settings' :
             role === 'lead' ? '/dashboard/lead/settings' :
             role === 'tax_preparer' ? '/dashboard/tax-preparer/settings' :
-            role === 'affiliate' ? '/dashboard/affiliate/settings' :
             '/dashboard/client/settings'
           }>
             <Settings className="h-4 w-4" />

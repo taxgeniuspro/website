@@ -35,6 +35,43 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // ==================================================================================
+  // AFFILIATE ROLE MIGRATION REDIRECTS
+  // Redirect old /dashboard/affiliate/* routes to /dashboard/client/*
+  // The 'affiliate' role has been removed - affiliates are now clients with
+  // affiliateStatus='APPROVED'. Tax preparers also have all affiliate features.
+  // ==================================================================================
+  const affiliateRedirectMap: Record<string, string> = {
+    '/dashboard/affiliate': '/dashboard/client',
+    '/dashboard/affiliate/tracking': '/dashboard/client/tracking',
+    '/dashboard/affiliate/leads': '/dashboard/client/leads',
+    '/dashboard/affiliate/analytics': '/dashboard/client/analytics',
+    '/dashboard/affiliate/creatives': '/dashboard/client/creatives',
+    '/dashboard/affiliate/earnings': '/dashboard/client/earnings',
+    '/dashboard/affiliate/settings': '/dashboard/client/settings',
+  };
+
+  // Check for locale prefix in pathname
+  const pathnameHasLocale = locales.some(
+    (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
+  );
+
+  let pathnameWithoutLocale = pathname;
+  let localePrefix = '';
+  if (pathnameHasLocale) {
+    const segments = pathname.split('/');
+    localePrefix = `/${segments[1]}`;
+    pathnameWithoutLocale = '/' + segments.slice(2).join('/');
+  }
+
+  // Check if this is an affiliate dashboard route that needs redirect
+  const redirectPath = affiliateRedirectMap[pathnameWithoutLocale];
+  if (redirectPath) {
+    const newUrl = req.nextUrl.clone();
+    newUrl.pathname = pathnameHasLocale ? `${localePrefix}${redirectPath}` : redirectPath;
+    return NextResponse.redirect(newUrl, { status: 301 }); // Permanent redirect
+  }
+
   // Apply i18n middleware to handle locale routing
   const intlResponse = intlMiddleware(req);
 

@@ -188,8 +188,13 @@ model Profile {
   customFlatAmount     Decimal?        @db.Decimal(10, 2) // Custom flat amount
   customMinimumPayout  Decimal?        @db.Decimal(10, 2) // Custom minimum payout
 
-  // Affiliate Status & Approval
-  affiliateStatus     AffiliateStatus @default(PENDING)
+  // Tax Filing Status (for clients)
+  hasFiledTaxes   Boolean   @default(false) // Has completed at least one tax filing with Tax Genius
+  firstFilingDate DateTime? // Date of first completed tax filing
+
+  // Affiliate Status & Approval (status-based, not role-based)
+  affiliateStatus     AffiliateStatus @default(NONE) // NONE for new users, APPROVED for active affiliates
+  affiliateAppliedAt  DateTime? // When user applied to become affiliate
   affiliateApprovedAt DateTime?
   affiliateApprovedBy String? // Admin who approved
 
@@ -262,6 +267,7 @@ model Profile {
   @@index([affiliateBondedToPreparerId])
   @@index([affiliateGroupId])
   @@index([affiliateStatus])
+  @@index([hasFiledTaxes])
   @@map("profiles")
 }
 
@@ -3647,10 +3653,11 @@ enum CreativeType {
 
 // Affiliate status for approval workflow
 enum AffiliateStatus {
-  PENDING
-  APPROVED
-  SUSPENDED
-  INACTIVE
+  NONE // Not an affiliate (default for new users)
+  PENDING // Applied, awaiting approval
+  APPROVED // Approved affiliate with full features
+  SUSPENDED // Temporarily suspended
+  INACTIVE // Permanently deactivated
 }
 
 // Affiliate Groups - Organize affiliates with shared commission rates

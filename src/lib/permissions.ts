@@ -1,4 +1,6 @@
 import { logger } from '@/lib/logger';
+import type { AffiliateStatus } from '@prisma/client';
+
 /**
  * Permission System
  *
@@ -194,7 +196,9 @@ export const SECTION_PERMISSIONS: Record<SectionPermission, Permission[]> = {
 export type UserPermissions = Record<Permission, boolean>;
 
 // TypeScript best practice: lowercase with underscores (matches Prisma enum)
-export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'affiliate' | 'lead' | 'client';
+// NOTE: 'affiliate' role has been REMOVED - affiliate features are now controlled by
+// affiliateStatus field on Profile (NONE | PENDING | APPROVED | SUSPENDED)
+export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'lead' | 'client';
 
 /**
  * Default permissions for each role
@@ -204,19 +208,31 @@ export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'affiliate' | 
  * QUICK REFERENCE: WHAT MAKES EACH ROLE UNIQUE
  * ==================================================================================
  *
- * 🛡️  SUPER admin:    Database, Permissions, Google Analytics, All Client Files, Alerts
- * 👑 admin:          User Management, Payouts, Content Generator, System-wide Analytics
+ * 🛡️  SUPER ADMIN:    Database, Permissions, Google Analytics, All Client Files, Alerts
+ * 👑 ADMIN:          User Management, Payouts, Content Generator, System-wide Analytics
  * 📊 TAX PREPARER:   Client Documents (their clients only), Lead Tracking, Academy
- * 🤝 affiliate:      Marketing Store, Professional Marketing Materials, Conversion Tracking
- * 🔶 lead:           Pending Approval (no access until role changed by admin)
- * 👤 client:         Upload Documents, Conditional Referral Access (most restricted)
+ *                    AUTO has all affiliate features (tracking code, commissions, marketing)
+ * 🔶 LEAD:           Pending Approval (no access until role changed by admin)
+ * 👤 CLIENT:         Base role for all general users
+ *                    - Tax filing features: controlled by hasFiledTaxes flag
+ *                    - Affiliate features: controlled by affiliateStatus (NONE → APPROVED)
  *
- * KEY DIFFERENTIATORS:
- * - LEAD has no dashboard access (pending approval page only)
- * - CLIENT can refer and see referral analytics (if they have shortLinkUsername)
- * - AFFILIATE works for Tax Genius but hasn't done taxes (can refer)
- * - TAX PREPARER sees only THEIR clients (backend filtered), not all system clients
- * - Only SUPER ADMIN can access database, manage permissions, and see all client files
+ * ==================================================================================
+ * STATUS-BASED ACCESS (replaces old affiliate role):
+ *
+ * For CLIENTS, feature access is determined by TWO flags:
+ *
+ * 📋 hasFiledTaxes (boolean):
+ *    - true: Can upload documents, view tax returns, create support tickets
+ *    - false: No tax-filing related features
+ *
+ * 🤝 affiliateStatus (enum):
+ *    - NONE: Not an affiliate, no affiliate features
+ *    - PENDING: Applied, awaiting admin approval
+ *    - APPROVED: Full affiliate features (tracking code, marketing, commissions)
+ *    - SUSPENDED: Temporarily disabled
+ *
+ * TAX PREPARERS automatically have all affiliate features (no status check needed).
  *
  * ==================================================================================
  * ROLE HIERARCHY:
@@ -243,26 +259,20 @@ export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'affiliate' | 
  *    - Manages THEIR OWN assigned clients only
  *    - Has client documents and file access (scoped to their clients)
  *    - Has tracking code for lead generation
+ *    - AUTO has all affiliate features (no status check needed)
  *    - CANNOT see other preparers' clients or system-wide data
  *
- * 4. AFFILIATE (External Professional Marketer)
- *    - Promotes TaxGeniusPro through professional marketing campaigns
- *    - Works for Tax Genius but hasn't done taxes yet
- *    - Has store access for marketing materials
- *    - Sophisticated tracking and analytics
- *    - CANNOT access any client data or admin features
- *
- * 5. LEAD (New Signup - Pending Approval)
+ * 4. LEAD (New Signup - Pending Approval)
  *    - Default role for all new signups
  *    - NO dashboard access (shows pending approval page)
- *    - Admin must change role to: CLIENT, AFFILIATE, or TAX_PREPARER
+ *    - Admin must change role to: CLIENT or TAX_PREPARER
  *    - Tax Preparers can only change: LEAD → CLIENT
  *
- * 6. CLIENT (Tax Service Customer)
- *    - User who has completed tax preparation with Tax Genius
- *    - Can upload documents and view their own status
- *    - Can refer new clients (shows "My Referrals" tab if active)
- *    - Earns commissions on referrals (same as affiliates)
+ * 5. CLIENT (Base Role for General Users)
+ *    - Base role for all non-staff users
+ *    - Tax filing features controlled by hasFiledTaxes flag
+ *    - Affiliate features controlled by affiliateStatus
+ *    - Can apply to become affiliate (status: NONE → PENDING → APPROVED)
  */
 export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
   super_admin: {
@@ -489,35 +499,9 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     marketing_download: true,
     marketing_delete: true,
   },
-  affiliate: {
-    // Affiliates are EXTERNAL PROFESSIONAL MARKETERS who promote TaxGeniusPro
-    // Focus: Professional marketing campaigns with detailed tracking
-    dashboard: true,
-    store: true,
-    marketing: true,
-    analytics: true,
-    trackingCode: true,
-    marketingAssets: true, // ✅ Need marketing assets
-    earnings: false,
-    quickShareLinks: false,
-    // 🎛️ Analytics Micro-Toggles (VIEW & ANALYTICS ONLY)
-    analytics_view: true,
-    analytics_export: true,
-    analytics_detailed: true,
-    // 🎛️ Tracking Micro-Toggles (ALL ENABLED for their campaigns)
-    tracking_view: true,
-    tracking_edit: true,
-    tracking_analytics: true,
-    // 🎛️ Store Micro-Toggles (ALL ENABLED)
-    store_view: true,
-    store_purchase: true,
-    store_cart: true,
-    // 🎛️ Marketing Assets Micro-Toggles (VIEW & DOWNLOAD ONLY)
-    marketing_view: true,
-    marketing_upload: false, // ⚠️ RESTRICTED: Can't upload marketing assets
-    marketing_download: true,
-    marketing_delete: false, // ⚠️ RESTRICTED: Can't delete marketing assets
-  },
+  // NOTE: 'affiliate' role has been REMOVED
+  // Affiliate features are now accessed by clients with affiliateStatus === 'APPROVED'
+  // Tax preparers automatically have all affiliate features (no status check needed)
   lead: {
     // Leads are NEW SIGNUPS pending admin approval
     // ❌ NO MICRO-TOGGLES - NO ACCESS until admin changes role
@@ -560,31 +544,46 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     marketing_delete: false,
   },
   client: {
-    // Clients have completed tax preparation and can refer new clients
-    // 🎯 CLIENTS CAN REFER! They need full tracking access to customize their referral code
+    // CLIENT is the base role for all general users
+    // Feature access is controlled by TWO flags:
+    //   - hasFiledTaxes: controls tax-filing features (documents, returns, tickets)
+    //   - affiliateStatus: controls affiliate features (tracking, marketing, commissions)
+    //
+    // All permissions below are available, but UI conditionally shows based on flags:
+    //   - Tax filing UI: shown when hasFiledTaxes === true
+    //   - Affiliate UI: shown when affiliateStatus === 'APPROVED'
     dashboard: true,
+    // Tax filing features (conditional on hasFiledTaxes)
     uploadDocuments: true,
+    // Affiliate features (conditional on affiliateStatus === 'APPROVED')
+    store: true,
     analytics: true,
     trackingCode: true,
     marketing: true,
-    // 🎛️ Files Micro-Toggles (UPLOAD ONLY for their documents)
-    files_view: true, // ✅ View their own files
-    files_upload: true, // ✅ Upload documents
-    files_download: true, // ✅ Download their files
+    marketingAssets: true, // ✅ Full access when approved affiliate
+    earnings: false,
+    // 🎛️ Files Micro-Toggles (for tax filing features - conditional on hasFiledTaxes)
+    files_view: true,
+    files_upload: true,
+    files_download: true,
     files_delete: false, // ⚠️ RESTRICTED: Can't delete files
     files_share: false, // ⚠️ RESTRICTED: Can't share files
-    // 🎛️ Analytics Micro-Toggles (FULL ACCESS for referral tracking)
+    // 🎛️ Analytics Micro-Toggles (for affiliate features - conditional on affiliateStatus)
     analytics_view: true,
-    analytics_export: true, // ✅ ENABLED: Export their referral data
-    analytics_detailed: true, // ✅ ENABLED: See detailed referral analytics
-    // 🎛️ Tracking Micro-Toggles (FULL ACCESS - they can refer!)
+    analytics_export: true,
+    analytics_detailed: true,
+    // 🎛️ Tracking Micro-Toggles (for affiliate features - conditional on affiliateStatus)
     tracking_view: true,
-    tracking_edit: true, // ✅ ENABLED: Customize tracking code (e.g., "JaneSmith" instead of "client123")
-    tracking_analytics: true, // ✅ View their referral performance
-    // 🎛️ Marketing Micro-Toggles (VIEW & DOWNLOAD to share with referrals)
+    tracking_edit: true,
+    tracking_analytics: true,
+    // 🎛️ Store Micro-Toggles (for affiliate features - conditional on affiliateStatus)
+    store_view: true,
+    store_purchase: true,
+    store_cart: true,
+    // 🎛️ Marketing Micro-Toggles (for affiliate features - conditional on affiliateStatus)
     marketing_view: true,
     marketing_upload: false, // ⚠️ RESTRICTED: Can't upload marketing materials
-    marketing_download: true, // ✅ Download materials to share
+    marketing_download: true,
     marketing_delete: false, // ⚠️ RESTRICTED: Can't delete materials
   },
 };
@@ -1010,33 +1009,8 @@ export function getEditablePermissions(role: UserRole): Permission[] {
         'marketing_delete',
       ];
 
-    case 'affiliate':
-      // Affiliates are professional external marketers
-      return [
-        'dashboard',
-        'store',
-        'marketing',
-        'marketingAssets',
-        'analytics',
-        'trackingCode',
-        // 🎛️ Analytics Micro-Toggles
-        'analytics_view',
-        'analytics_export',
-        'analytics_detailed',
-        // 🎛️ Tracking Micro-Toggles
-        'tracking_view',
-        'tracking_edit',
-        'tracking_analytics',
-        // 🎛️ Store Micro-Toggles
-        'store_view',
-        'store_purchase',
-        'store_cart',
-        // 🎛️ Marketing Assets Micro-Toggles
-        'marketing_view',
-        'marketing_upload',
-        'marketing_download',
-        'marketing_delete',
-      ];
+    // NOTE: 'affiliate' case removed - affiliate features are now part of client role
+    // controlled by affiliateStatus field
 
     case 'lead':
       // ❌ Leads have NO permissions until approved by admin
@@ -1044,12 +1018,17 @@ export function getEditablePermissions(role: UserRole): Permission[] {
       return [];
 
     case 'client':
+      // Client now includes all affiliate features (controlled by affiliateStatus)
       return [
         'dashboard',
+        // Tax filing features (conditional on hasFiledTaxes)
         'uploadDocuments',
+        // Affiliate features (conditional on affiliateStatus)
+        'store',
         'analytics',
         'trackingCode',
         'marketing',
+        'marketingAssets',
         // 🎛️ Files Micro-Toggles
         'files_view',
         'files_upload',
@@ -1064,6 +1043,10 @@ export function getEditablePermissions(role: UserRole): Permission[] {
         'tracking_view',
         'tracking_edit',
         'tracking_analytics',
+        // 🎛️ Store Micro-Toggles
+        'store_view',
+        'store_purchase',
+        'store_cart',
         // 🎛️ Marketing Micro-Toggles
         'marketing_view',
         'marketing_upload',
@@ -1147,14 +1130,14 @@ export async function getRolePermissionTemplate(role: UserRole): Promise<Partial
 
 /**
  * Get role display names for UI
+ * Note: Display 'Member' instead of 'Client' in user-facing contexts
  */
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   super_admin: 'Super Admin',
   admin: 'Admin',
   tax_preparer: 'Tax Preparer',
-  affiliate: 'Affiliate',
   lead: 'Lead',
-  client: 'Client',
+  client: 'Member', // Display as 'Member' to users
 };
 
 /**
@@ -1163,8 +1146,95 @@ export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   super_admin: 'Full system control - Database, Permissions, All Client Files',
   admin: 'Limited admin access - User Management, Payouts, Analytics',
-  tax_preparer: 'Independent tax professional - Manages their assigned clients only',
-  affiliate: 'External professional marketer - Promotes TaxGeniusPro',
+  tax_preparer: 'Independent tax professional - Manages clients, auto has affiliate features',
   lead: 'New signup pending approval - No access until role changed',
-  client: 'Tax service customer - Upload documents, view status, refer clients',
+  client: 'General member - Tax filing (if hasFiledTaxes), affiliate features (if approved)',
 };
+
+/**
+ * ==================================================================================
+ * STATUS-BASED ACCESS HELPERS
+ * These helpers check affiliate and tax filing feature access based on profile flags
+ * ==================================================================================
+ */
+
+/**
+ * Check if user has access to affiliate features
+ * Tax preparers always have access, clients need APPROVED status
+ */
+export function hasAffiliateAccess(
+  role: UserRole,
+  affiliateStatus?: AffiliateStatus | null
+): boolean {
+  // Tax preparers always have affiliate features
+  if (role === 'tax_preparer') {
+    return true;
+  }
+
+  // Clients need APPROVED status
+  if (role === 'client') {
+    return affiliateStatus === 'APPROVED';
+  }
+
+  // Admins don't typically use affiliate features but can view
+  if (role === 'super_admin' || role === 'admin') {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if user has access to tax filing features (documents, returns, tickets)
+ * Only clients with hasFiledTaxes flag can access
+ */
+export function hasTaxFilingAccess(
+  role: UserRole,
+  hasFiledTaxes?: boolean | null
+): boolean {
+  // Only clients can have tax filing features
+  if (role === 'client') {
+    return hasFiledTaxes === true;
+  }
+
+  // Tax preparers access client files through their own interface
+  // Admins can view but through admin interfaces
+
+  return false;
+}
+
+/**
+ * Get the affiliate status display text
+ */
+export function getAffiliateStatusDisplay(status: AffiliateStatus | null | undefined): string {
+  switch (status) {
+    case 'NONE':
+      return 'Not an Affiliate';
+    case 'PENDING':
+      return 'Pending Approval';
+    case 'APPROVED':
+      return 'Active Affiliate';
+    case 'SUSPENDED':
+      return 'Suspended';
+    case 'INACTIVE':
+      return 'Inactive';
+    default:
+      return 'Not an Affiliate';
+  }
+}
+
+/**
+ * Check if user can apply to become an affiliate
+ */
+export function canApplyForAffiliate(
+  role: UserRole,
+  affiliateStatus?: AffiliateStatus | null
+): boolean {
+  // Only clients who are not already affiliates can apply
+  if (role !== 'client') {
+    return false;
+  }
+
+  // Can only apply if status is NONE
+  return affiliateStatus === 'NONE' || affiliateStatus === null || affiliateStatus === undefined;
+}

@@ -53,6 +53,9 @@ export interface NavItem {
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
   // 📱 Client Section (for clients and leads only)
+  // Feature visibility is controlled by profile flags:
+  // - hasFiledTaxes: controls tax-filing features (documents, returns, tickets)
+  // - affiliateStatus: controls affiliate features (tracking, leads, analytics, creatives)
   {
     label: 'Overview',
     href: '/dashboard/client',
@@ -61,29 +64,71 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '📱 My Dashboard',
     roles: ['client', 'lead'],
   },
+  // Tax Filing Features (conditional on hasFiledTaxes)
   {
-    label: 'Documents',
+    label: 'My Documents',
     href: '/dashboard/client/documents',
     icon: FileText,
-    permission: 'dashboard',
+    permission: 'uploadDocuments', // conditional on hasFiledTaxes in component
     section: '📱 My Dashboard',
-    roles: ['client', 'lead'],
-  },
-  {
-    label: 'Referral Earnings',
-    href: '/dashboard/client/referrals',
-    icon: Share2,
-    permission: 'dashboard',
-    section: '📱 My Dashboard',
-    roles: ['client', 'lead'],
+    roles: ['client'],
   },
   {
     label: 'Ask Your Tax Genius',
     href: '/dashboard/client/tickets',
     icon: Ticket,
-    permission: 'dashboard',
+    permission: 'dashboard', // conditional on hasFiledTaxes in component
     section: '📱 My Dashboard',
-    roles: ['client', 'lead'],
+    roles: ['client'],
+  },
+  // Affiliate Features (conditional on affiliateStatus === 'APPROVED')
+  {
+    label: 'My Referrals',
+    href: '/dashboard/client/referrals',
+    icon: Share2,
+    permission: 'trackingCode', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
+  },
+  {
+    label: 'Tracking & QR',
+    href: '/dashboard/client/tracking',
+    icon: QrCode,
+    permission: 'trackingCode', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
+  },
+  {
+    label: 'My Leads',
+    href: '/dashboard/client/leads',
+    icon: Users,
+    permission: 'dashboard', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
+  },
+  {
+    label: 'Analytics',
+    href: '/dashboard/client/analytics',
+    icon: BarChart3,
+    permission: 'analytics', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
+  },
+  {
+    label: 'Marketing Assets',
+    href: '/dashboard/client/creatives',
+    icon: FolderOpen,
+    permission: 'marketingAssets', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
+  },
+  {
+    label: 'My Earnings',
+    href: '/dashboard/client/earnings',
+    icon: DollarSign,
+    permission: 'earnings', // conditional on affiliateStatus in component
+    section: '📱 My Dashboard',
+    roles: ['client'],
   },
   // Tax Forms hidden from navigation - clients will access assigned forms through direct links
   // {
@@ -95,39 +140,10 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   //   roles: ['client', 'lead'],
   // },
 
-  // 🎯 Affiliate Section (for affiliates only)
-  {
-    label: 'Overview',
-    href: '/dashboard/affiliate',
-    icon: Home,
-    permission: 'dashboard',
-    section: '🎯 Affiliate Dashboard',
-    roles: ['affiliate'],
-  },
-  {
-    label: 'Links & QR',
-    href: '/dashboard/affiliate/tracking',
-    icon: QrCode,
-    permission: 'trackingCode',
-    section: '🎯 Affiliate Dashboard',
-    roles: ['affiliate'],
-  },
-  {
-    label: 'My Leads',
-    href: '/dashboard/affiliate/leads',
-    icon: Users,
-    permission: 'dashboard',
-    section: '🎯 Affiliate Dashboard',
-    roles: ['affiliate'],
-  },
-  {
-    label: 'Analytics',
-    href: '/dashboard/affiliate/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
-    section: '🎯 Affiliate Dashboard',
-    roles: ['affiliate'],
-  },
+  // NOTE: Affiliate section REMOVED - affiliate features are now part of client dashboard
+  // and controlled by affiliateStatus field (NONE | PENDING | APPROVED | SUSPENDED)
+  // Tax preparers also get affiliate features automatically (no status check needed)
+  // See: /dashboard/client/tracking, /dashboard/client/leads, /dashboard/client/analytics
 
   // 👥 Clients Section (for tax preparers and admins)
   {
@@ -226,7 +242,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: QrCode,
     permission: 'trackingCode',
     section: '📊 Analytics',
-    roles: ['tax_preparer', 'super_admin', 'affiliate', 'client'],
+    roles: ['tax_preparer', 'super_admin', 'client'], // affiliate removed - clients with affiliateStatus=APPROVED see this
   },
 
   // 📋 CRM Section
@@ -413,7 +429,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
 
-  // 💼 Business Section (for tax preparers and affiliates)
+  // 💼 Business Section (for tax preparers and clients with affiliate status)
   {
     label: 'My Earnings',
     href: '/dashboard/tax-preparer/earnings',
@@ -422,14 +438,8 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '💼 Business',
     roles: ['tax_preparer'],
   },
-  {
-    label: 'My Earnings',
-    href: '/dashboard/affiliate/earnings',
-    icon: DollarSign,
-    permission: 'earnings',
-    section: '💼 Business',
-    roles: ['affiliate'],
-  },
+  // NOTE: Affiliate earnings moved to client dashboard - controlled by affiliateStatus
+  // Clients with affiliateStatus=APPROVED will see earnings at /dashboard/client/earnings
 
   // 🔗 Quick Share Tools Section
   {
@@ -491,13 +501,13 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
 /**
  * Dashboard routes by role (for redirecting generic /dashboard to role-specific dashboard)
+ * NOTE: 'affiliate' role removed - affiliates are now clients with affiliateStatus=APPROVED
  */
 export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
   super_admin: '/dashboard/admin',
   admin: '/dashboard/admin',
   lead: '/dashboard/lead',
   tax_preparer: '/dashboard/tax-preparer',
-  affiliate: '/dashboard/affiliate',
   client: '/dashboard/client',
 };
 
