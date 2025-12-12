@@ -62,7 +62,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Build access context
     const accessContext: CRMAccessContext = {
       userId: user.id,
-      userId: user.id,
       userRole: role,
       preparerId,
     };
@@ -170,7 +169,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Build access context
     const accessContext: CRMAccessContext = {
       userId: user.id,
-      userId: user.id,
       userRole: role,
       preparerId,
     };
@@ -225,7 +223,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Build access context
     const accessContext: CRMAccessContext = {
-      userId: user.id,
       userId: user.id,
       userRole: role,
     };
