@@ -44,6 +44,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  Globe,
 } from 'lucide-react';
 import { logger } from '@/lib/logger';
 
@@ -100,6 +101,17 @@ const formatTime = (time: string) => {
   return `${displayHour}:${minutes} ${ampm}`;
 };
 
+// US Timezone options
+const TIMEZONE_OPTIONS = [
+  { value: 'America/New_York', label: 'Eastern Time (ET)', abbr: 'EST/EDT' },
+  { value: 'America/Chicago', label: 'Central Time (CT)', abbr: 'CST/CDT' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)', abbr: 'MST/MDT' },
+  { value: 'America/Phoenix', label: 'Arizona Time (AZ)', abbr: 'MST' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)', abbr: 'PST/PDT' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AK)', abbr: 'AKST/AKDT' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HI)', abbr: 'HST' },
+];
+
 const DEFAULT_SCHEDULE: Record<number, DaySchedule> = {
   0: { enabled: false, startTime: '09:00', endTime: '17:00' }, // Sunday
   1: { enabled: true, startTime: '09:00', endTime: '17:00' },  // Monday
@@ -129,6 +141,7 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
   const [customMessage, setCustomMessage] = useState('');
   const [appointmentBufferMinutes, setAppointmentBufferMinutes] = useState(15);
   const [defaultAppointmentDuration, setDefaultAppointmentDuration] = useState(30);
+  const [timezone, setTimezone] = useState('America/New_York');
   const [timeOff, setTimeOff] = useState<TimeOffPeriod[]>([]);
 
   const [showAddTimeOff, setShowAddTimeOff] = useState(false);
@@ -171,6 +184,7 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
         setCustomMessage(data.bookingPreferences.customBookingMessage || '');
         setAppointmentBufferMinutes(data.bookingPreferences.appointmentBufferMinutes ?? 15);
         setDefaultAppointmentDuration(data.bookingPreferences.defaultAppointmentDuration ?? 30);
+        setTimezone(data.bookingPreferences.timezone || 'America/New_York');
       }
 
       // Parse weekly schedule
@@ -260,6 +274,7 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
             customBookingMessage: customMessage,
             appointmentBufferMinutes,
             defaultAppointmentDuration,
+            timezone,
           },
         }),
       });
@@ -518,6 +533,41 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
                 Break time between appointments
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Timezone Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Globe className="w-5 h-5" />
+            <CardTitle>Timezone</CardTitle>
+          </div>
+          <CardDescription>Set your business timezone for accurate scheduling</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="timezone">Your Timezone</Label>
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger className="w-full md:w-[300px]">
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    <div className="flex items-center justify-between gap-4">
+                      <span>{tz.label}</span>
+                      <span className="text-muted-foreground text-xs">{tz.abbr}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Your work hours and appointments will be displayed in this timezone.
+              Clients will see times converted to their local timezone.
+            </p>
           </div>
         </CardContent>
       </Card>

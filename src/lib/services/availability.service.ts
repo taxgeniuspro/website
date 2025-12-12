@@ -37,6 +37,7 @@ export interface AvailabilityParams {
   duration: number; // minutes
   serviceId?: string;
   timezone?: string; // Client timezone (defaults to preparer's)
+  includeUnavailable?: boolean; // Return all slots including unavailable ones
 }
 
 export interface PreparerSchedule {
@@ -59,7 +60,7 @@ export interface PreparerSchedule {
 export async function calculateAvailableSlots(
   params: AvailabilityParams
 ): Promise<TimeSlot[]> {
-  const { preparerId, date, duration, serviceId, timezone = 'America/New_York' } = params;
+  const { preparerId, date, duration, serviceId, timezone = 'America/New_York', includeUnavailable = false } = params;
 
   // 1. Get preparer profile and check if booking is enabled
   const preparer = await prisma.profile.findUnique({
@@ -72,6 +73,7 @@ export async function calculateAvailableSlots(
       requireApprovalForBookings: true,
       firstName: true,
       lastName: true,
+      timezone: true, // Get preparer's timezone
     },
   });
 
@@ -79,8 +81,15 @@ export async function calculateAvailableSlots(
     return [];
   }
 
-  // 2. Get the day of week (0 = Sunday)
-  const dayOfWeek = getDay(date);
+  // Use preparer's timezone for availability calculation
+  const preparerTimezone = preparer.timezone || 'America/New_York';
+  const clientTimezone = timezone;
+
+  // Convert the date to preparer's timezone for availability lookup
+  const dateInPreparerTz = toZonedTime(date, preparerTimezone);
+
+  // 2. Get the day of week (0 = Sunday) in preparer's timezone
+  const dayOfWeek = getDay(dateInPreparerTz);
 
   // 3. Get preparer's availability for this day
   const availability = await prisma.preparerAvailability.findMany({
@@ -175,8 +184,17 @@ export async function calculateAvailableSlots(
   const slotInterval = 30; // 30-minute slot intervals
 
   for (const rule of serviceFilteredRules) {
-    const startTime = parse(rule.startTime, 'HH:mm', date);
-    const endTime = parse(rule.endTime, 'HH:mm', date);
+    // Parse availability times in preparer's timezone
+    // Create date in preparer's timezone
+    const dateStr = format(dateInPreparerTz, 'yyyy-MM-dd');
+
+    // Parse the start and end times in the context of the preparer's timezone
+    const startTimeStr = `${dateStr}T${rule.startTime}:00`;
+    const endTimeStr = `${dateStr}T${rule.endTime}:00`;
+
+    // Convert from preparer timezone to UTC for comparison
+    const startTime = fromZonedTime(new Date(startTimeStr), preparerTimezone);
+    const endTime = fromZonedTime(new Date(endTimeStr), preparerTimezone);
 
     let currentSlot = startTime;
 
@@ -202,11 +220,15 @@ export async function calculateAvailableSlots(
       const isPast = isBefore(slotEnd, new Date());
 
       if (!isPast) {
+        // Convert slot times to client timezone for display
+        const slotInClientTz = toZonedTime(currentSlot, clientTimezone);
+        const slotEndInClientTz = toZonedTime(slotEnd, clientTimezone);
+
         slots.push({
-          start: currentSlot,
-          end: slotEnd,
-          startTime: format(currentSlot, 'HH:mm'),
-          endTime: format(slotEnd, 'HH:mm'),
+          start: currentSlot, // UTC time for booking
+          end: slotEnd, // UTC time for booking
+          startTime: format(slotInClientTz, 'HH:mm'), // Display time in client timezone
+          endTime: format(slotEndInClientTz, 'HH:mm'), // Display time in client timezone
           available: !hasConflict,
           preparerId,
           serviceId,
@@ -217,8 +239,8 @@ export async function calculateAvailableSlots(
     }
   }
 
-  // Return only available slots
-  return slots.filter((slot) => slot.available);
+  // Return all slots or only available based on parameter
+  return includeUnavailable ? slots : slots.filter((slot) => slot.available);
 }
 
 /**

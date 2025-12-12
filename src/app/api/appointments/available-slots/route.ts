@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const durationStr = searchParams.get('duration');
     const serviceId = searchParams.get('serviceId') || undefined;
     const timezone = searchParams.get('timezone') || 'America/New_York';
+    const includeUnavailable = searchParams.get('includeUnavailable') === 'true';
 
     // Validate required parameters
     if (!preparerId) {
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
       duration,
       serviceId,
       timezone,
+      includeUnavailable,
     });
 
     // Return slots with metadata
@@ -80,7 +82,9 @@ export async function GET(request: NextRequest) {
       duration,
       serviceId,
       timezone,
+      includeUnavailable,
       slotsCount: slots.length,
+      availableCount: slots.filter((s) => s.available).length,
       slots: slots.map((slot) => ({
         start: slot.start.toISOString(),
         end: slot.end.toISOString(),

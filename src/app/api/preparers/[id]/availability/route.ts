@@ -56,6 +56,7 @@ export async function GET(
         bookingCalendarColor: true,
         appointmentBufferMinutes: true,
         defaultAppointmentDuration: true,
+        timezone: true,
       },
     });
 
@@ -133,6 +134,7 @@ export async function PUT(
           bookingCalendarColor: bookingPreferences.bookingCalendarColor,
           appointmentBufferMinutes: bookingPreferences.appointmentBufferMinutes,
           defaultAppointmentDuration: bookingPreferences.defaultAppointmentDuration,
+          timezone: bookingPreferences.timezone,
         },
       });
     }

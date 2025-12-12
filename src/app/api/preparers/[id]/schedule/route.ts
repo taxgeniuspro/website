@@ -68,17 +68,39 @@ export async function GET(
       endDate = endOfMonth(addMonths(now, 1)); // Include next month
     }
 
-    // Get preparer's schedule
+    // Get preparer's schedule (appointments)
     const schedule = await AvailabilityService.getPreparerSchedule(
       preparerId,
       startDate,
       endDate
     );
 
+    // Get preparer's availability rules
+    const availability = await prisma.preparerAvailability.findMany({
+      where: {
+        preparerId,
+        isActive: true,
+      },
+      orderBy: [{ isOverride: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+
+    // Get preparer's timezone
+    const preparerProfile = await prisma.profile.findUnique({
+      where: { id: preparerId },
+      select: {
+        timezone: true,
+        defaultAppointmentDuration: true,
+        appointmentBufferMinutes: true,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       preparerId: schedule.preparerId,
       preparerName: schedule.preparerName,
+      timezone: preparerProfile?.timezone || 'America/New_York',
+      defaultDuration: preparerProfile?.defaultAppointmentDuration || 30,
+      bufferMinutes: preparerProfile?.appointmentBufferMinutes || 15,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       appointmentsCount: schedule.appointments.length,
@@ -90,6 +112,16 @@ export async function GET(
         status: appt.status,
         subject: appt.subject,
         type: appt.type,
+      })),
+      availability: availability.map((avail) => ({
+        id: avail.id,
+        dayOfWeek: avail.dayOfWeek,
+        startTime: avail.startTime,
+        endTime: avail.endTime,
+        isOverride: avail.isOverride,
+        overrideFrom: avail.overrideFrom?.toISOString(),
+        overrideUntil: avail.overrideUntil?.toISOString(),
+        overrideLabel: avail.overrideLabel,
       })),
     });
   } catch (error) {

@@ -191,8 +191,11 @@ function BookingPageContent() {
       setSelectedTimeSlot(null);
 
       const dateStr = format(date, 'yyyy-MM-dd');
+      // Detect client's timezone for accurate slot display
+      const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      // Fetch ALL slots including unavailable ones to show blocked times visually
       const response = await fetch(
-        `/api/appointments/available-slots?preparerId=${resolvedPreparerId}&date=${dateStr}&duration=30`
+        `/api/appointments/available-slots?preparerId=${resolvedPreparerId}&date=${dateStr}&duration=30&includeUnavailable=true&timezone=${encodeURIComponent(clientTimezone)}`
       );
 
       if (!response.ok) {
@@ -607,15 +610,24 @@ function BookingPageContent() {
                           <button
                             key={slot.startTime}
                             type="button"
-                            onClick={() => setSelectedTimeSlot(slot.startTime)}
+                            onClick={() => slot.available && setSelectedTimeSlot(slot.startTime)}
+                            disabled={!slot.available}
                             className={cn(
-                              'p-2 rounded-lg text-sm font-medium transition-all',
-                              selectedTimeSlot === slot.startTime
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted hover:bg-muted/80'
+                              'p-2 rounded-lg text-sm font-medium transition-all relative',
+                              slot.available
+                                ? selectedTimeSlot === slot.startTime
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted hover:bg-muted/80 cursor-pointer'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed line-through'
                             )}
+                            title={slot.available ? 'Click to select' : 'Already booked'}
                           >
                             {formatTimeSlot(slot.startTime)}
+                            {!slot.available && (
+                              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] px-1 rounded-full font-normal">
+                                Booked
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>
