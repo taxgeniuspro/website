@@ -39,10 +39,14 @@ export async function GET(request: NextRequest) {
             userId: true,
             firstName: true,
             lastName: true,
-            email: true,
             phone: true,
             createdAt: true,
             updatedAt: true,
+            user: {
+              select: {
+                email: true,
+              },
+            },
             _count: {
               select: {
                 documents: true,
@@ -57,7 +61,14 @@ export async function GET(request: NextRequest) {
     });
 
     const clients = clientPreparers.map((cp) => ({
-      ...cp.client,
+      id: cp.client.id,
+      userId: cp.client.userId,
+      firstName: cp.client.firstName,
+      lastName: cp.client.lastName,
+      email: cp.client.user?.email || null,
+      phone: cp.client.phone,
+      createdAt: cp.client.createdAt,
+      updatedAt: cp.client.updatedAt,
       documentCount: cp.client._count.documents,
       assignedAt: cp.assignedAt,
     }));
