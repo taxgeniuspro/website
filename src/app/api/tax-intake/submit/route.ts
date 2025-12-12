@@ -27,13 +27,19 @@ async function uploadToCloudinary(
 ): Promise<UploadApiResponse> {
   const cloud = getCloudinary();
 
+  // Sanitize filename for public_id - remove extension and special chars
+  const sanitizedName = fileName
+    .replace(/\.[^/.]+$/, '') // Remove extension
+    .replace(/[^a-zA-Z0-9-_]/g, '-') // Replace special chars with hyphen
+    .toLowerCase();
+
   return new Promise((resolve, reject) => {
     const uploadStream = cloud.uploader.upload_stream(
       {
         folder: `taxgeniuspro/client-documents/${folderPath}`,
-        public_id: fileName.replace(/\.[^/.]+$/, ''), // Remove extension for public_id
+        public_id: sanitizedName,
         resource_type: mimeType.startsWith('image/') ? 'image' : 'auto',
-        format: fileName.split('.').pop() || undefined,
+        // Don't specify format - let Cloudinary determine from the file
       },
       (error, result) => {
         if (error) {

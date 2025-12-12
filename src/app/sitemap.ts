@@ -12,7 +12,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const locales = ['en', 'es'];
 
   // Fetch all published landing pages (with fallback for build time)
-  let landingPageEntries: MetadataRoute.Sitemap = [];
+  const landingPageEntries: MetadataRoute.Sitemap = [];
 
   try {
     const landingPages = await prisma.landingPage.findMany({

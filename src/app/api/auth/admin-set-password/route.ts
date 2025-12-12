@@ -79,8 +79,8 @@ export async function POST(req: NextRequest) {
     // Create profile if missing
     if (!user.profile) {
       const nameParts = (user.name || '').split(' ').filter(part => part.length > 0);
-      let firstName = nameParts[0] || '';
-      let lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
 
       await prisma.profile.create({
         data: {

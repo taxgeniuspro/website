@@ -90,7 +90,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Handle i18n routing and get response
-  let response = intlMiddleware(request)
+  const response = intlMiddleware(request)
 
   // CRITICAL: Set headers on the response returned by intl middleware
   // These headers help debug locale detection and middleware execution
