@@ -108,7 +108,9 @@ interface Contact {
 }
 
 export default function CRMContactsPage() {
-  const { data: session, status } = useSession(); const user = session?.user; const isLoaded = status !== 'loading';
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const isLoaded = status !== 'loading';
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +122,7 @@ export default function CRMContactsPage() {
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile(); // Must be called before any conditional returns
 
   // Check permissions
   const role = user?.role as UserRole | undefined;
@@ -307,7 +310,6 @@ export default function CRMContactsPage() {
 
   const roleDisplay = role === 'tax_preparer' ? 'Tax Preparer' : 'Admin';
   const canSeeAll = role === 'admin' || role === 'super_admin';
-  const isMobile = useIsMobile();
 
   // Helper to get stage badge styling
   const getStageBadgeClass = (stage: string) => {
