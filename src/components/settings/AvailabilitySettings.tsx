@@ -127,6 +127,8 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
   const [allowInPersonBookings, setAllowInPersonBookings] = useState(true);
   const [requireApproval, setRequireApproval] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
+  const [appointmentBufferMinutes, setAppointmentBufferMinutes] = useState(15);
+  const [defaultAppointmentDuration, setDefaultAppointmentDuration] = useState(30);
   const [timeOff, setTimeOff] = useState<TimeOffPeriod[]>([]);
 
   const [showAddTimeOff, setShowAddTimeOff] = useState(false);
@@ -167,6 +169,8 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
         setAllowInPersonBookings(data.bookingPreferences.allowInPersonBookings ?? true);
         setRequireApproval(data.bookingPreferences.requireApprovalForBookings ?? false);
         setCustomMessage(data.bookingPreferences.customBookingMessage || '');
+        setAppointmentBufferMinutes(data.bookingPreferences.appointmentBufferMinutes ?? 15);
+        setDefaultAppointmentDuration(data.bookingPreferences.defaultAppointmentDuration ?? 30);
       }
 
       // Parse weekly schedule
@@ -254,6 +258,8 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
             allowInPersonBookings,
             requireApprovalForBookings: requireApproval,
             customBookingMessage: customMessage,
+            appointmentBufferMinutes,
+            defaultAppointmentDuration,
           },
         }),
       });
@@ -455,6 +461,63 @@ export function AvailabilitySettings({ profileId }: AvailabilitySettingsProps) {
               checked={allowInPersonBookings}
               onCheckedChange={setAllowInPersonBookings}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Appointment Duration & Buffer Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Appointment Settings</CardTitle>
+          <CardDescription>Set default duration and buffer time between appointments</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="duration">Default Appointment Duration</Label>
+              <Select
+                value={String(defaultAppointmentDuration)}
+                onValueChange={(value) => setDefaultAppointmentDuration(parseInt(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="45">45 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="90">1.5 hours</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                How long each appointment lasts
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="buffer">Buffer Between Appointments</Label>
+              <Select
+                value={String(appointmentBufferMinutes)}
+                onValueChange={(value) => setAppointmentBufferMinutes(parseInt(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">No buffer</SelectItem>
+                  <SelectItem value="5">5 minutes</SelectItem>
+                  <SelectItem value="10">10 minutes</SelectItem>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Break time between appointments
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
