@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     let uploadedFileUrl: string | null = null;
     let documentRecord: { id: string } | null = null;
     let fileBuffer: Buffer | null = null;
+    let uploadError: string | null = null;
 
     logger.info('Checking for license file', {
       hasFile: !!licenseFile,
@@ -206,10 +207,11 @@ export async function POST(request: NextRequest) {
             data: { clientFolderId: folderResult.folderId },
           });
         }
-      } catch (uploadError: any) {
+      } catch (err: any) {
+        uploadError = err?.message || String(err);
         logger.error('Cloudinary upload failed', {
-          error: uploadError?.message || uploadError,
-          stack: uploadError?.stack,
+          error: uploadError,
+          stack: err?.stack,
           cloudinaryConfig: {
             hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
             hasApiKey: !!process.env.CLOUDINARY_API_KEY,
@@ -495,6 +497,7 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
         fileSize: licenseFile?.size || 0,
         fileName: licenseFile?.name || null,
         cloudinaryUrl: uploadedFileUrl,
+        uploadError: uploadError,
       },
     });
   } catch (error) {
