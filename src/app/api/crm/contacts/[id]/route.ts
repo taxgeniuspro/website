@@ -89,7 +89,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       contactFound: !!contact,
     });
 
-    // Fetch associated tax intake lead by email for full form data
+    // Fetch associated tax intake lead by email for full form data + client folder
     let taxIntakeLead = null;
     if (contact.email) {
       taxIntakeLead = await prisma.taxIntakeLead.findUnique({
@@ -122,6 +122,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           convertedToClient: true,
           leadScore: true,
           urgency: true,
+          // Client folder data for Documents tab
+          clientFolderId: true,
+          clientFolder: {
+            select: {
+              id: true,
+              name: true,
+              path: true,
+            },
+          },
         },
       });
     }
