@@ -10,6 +10,25 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { FolderOpen, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import {
@@ -52,6 +71,12 @@ import { format } from 'date-fns';
  * - Tags
  */
 
+interface ClientFolder {
+  id: string;
+  name: string;
+  path: string;
+}
+
 interface TaxIntakeLead {
   id: string;
   first_name: string;
@@ -80,6 +105,8 @@ interface TaxIntakeLead {
   convertedToClient: boolean;
   leadScore?: number | null;
   urgency?: string | null;
+  clientFolderId?: string | null;
+  clientFolder?: ClientFolder | null;
 }
 
 interface Contact {
@@ -107,6 +134,9 @@ interface Contact {
   taxIntakeLead?: TaxIntakeLead | null;
 }
 
+// Pipeline stages
+const PIPELINE_STAGES = ['NEW', 'CONTACTED', 'DOCUMENTS', 'PREPARING', 'COMPLETE'];
+
 export default function ContactDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -114,6 +144,15 @@ export default function ContactDetailPage() {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    company: '',
+  });
 
   // Check permissions
   const role = user?.role as UserRole | undefined;
@@ -148,6 +187,72 @@ export default function ContactDetailPage() {
 
     fetchContact();
   }, [isLoaded, user, params.id]);
+
+  // Update pipeline stage
+  const handleStageChange = async (newStage: string) => {
+    if (!contact) return;
+
+    try {
+      setIsSaving(true);
+      const response = await fetch(`/api/crm/contacts/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: newStage }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update stage');
+      }
+
+      const data = await response.json();
+      setContact({ ...contact, stage: newStage });
+    } catch (err: any) {
+      logger.error('Error updating stage:', err);
+      alert('Failed to update stage: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Open edit dialog and populate form
+  const openEditDialog = () => {
+    if (!contact) return;
+    setEditForm({
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      email: contact.email,
+      phone: contact.phone || '',
+      company: contact.company || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  // Save contact edits
+  const handleSaveEdit = async () => {
+    if (!contact) return;
+
+    try {
+      setIsSaving(true);
+      const response = await fetch(`/api/crm/contacts/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update contact');
+      }
+
+      const data = await response.json();
+      setContact({ ...contact, ...editForm });
+      setIsEditDialogOpen(false);
+    } catch (err: any) {
+      logger.error('Error updating contact:', err);
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!isLoaded || loading) {
     return (
@@ -197,10 +302,89 @@ export default function ContactDetailPage() {
           </h1>
           <p className="text-muted-foreground">Contact Details</p>
         </div>
-        <Button variant="outline">
-          <Edit className="mr-2 h-4 w-4" />
-          Edit
-        </Button>
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" onClick={openEditDialog}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Contact</DialogTitle>
+              <DialogDescription>
+                Update contact information. Click save when you&apos;re done.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="firstName" className="text-right">
+                  First Name
+                </Label>
+                <Input
+                  id="firstName"
+                  value={editForm.firstName}
+                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="lastName" className="text-right">
+                  Last Name
+                </Label>
+                <Input
+                  id="lastName"
+                  value={editForm.lastName}
+                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="email" className="text-right">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="phone" className="text-right">
+                  Phone
+                </Label>
+                <Input
+                  id="phone"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="company" className="text-right">
+                  Company
+                </Label>
+                <Input
+                  id="company"
+                  value={editForm.company}
+                  onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
@@ -247,22 +431,47 @@ export default function ContactDetailPage() {
 
               <Separator />
 
-              {/* Pipeline Stage */}
+              {/* Pipeline Stage - Editable Dropdown */}
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Pipeline Stage</p>
-                <Badge
-                  className={cn(
-                    contact.stage === 'NEW' && 'bg-blue-500',
-                    contact.stage === 'CONTACTED' && 'bg-purple-500',
-                    contact.stage === 'QUALIFIED' && 'bg-indigo-500',
-                    contact.stage === 'DOCUMENTS' && 'bg-yellow-500',
-                    contact.stage === 'FILED' && 'bg-orange-500',
-                    contact.stage === 'CLOSED' && 'bg-green-500',
-                    contact.stage === 'LOST' && 'bg-red-500'
-                  )}
+                <Select
+                  value={contact.stage}
+                  onValueChange={handleStageChange}
+                  disabled={isSaving}
                 >
-                  {contact.stage}
-                </Badge>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      <Badge
+                        className={cn(
+                          contact.stage === 'NEW' && 'bg-blue-500',
+                          contact.stage === 'CONTACTED' && 'bg-purple-500',
+                          contact.stage === 'DOCUMENTS' && 'bg-yellow-500',
+                          contact.stage === 'PREPARING' && 'bg-orange-500',
+                          contact.stage === 'COMPLETE' && 'bg-green-500'
+                        )}
+                      >
+                        {contact.stage}
+                      </Badge>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PIPELINE_STAGES.map((stage) => (
+                      <SelectItem key={stage} value={stage}>
+                        <Badge
+                          className={cn(
+                            stage === 'NEW' && 'bg-blue-500',
+                            stage === 'CONTACTED' && 'bg-purple-500',
+                            stage === 'DOCUMENTS' && 'bg-yellow-500',
+                            stage === 'PREPARING' && 'bg-orange-500',
+                            stage === 'COMPLETE' && 'bg-green-500'
+                          )}
+                        >
+                          {stage}
+                        </Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Lead Score */}
@@ -467,9 +676,42 @@ export default function ContactDetailPage() {
                   <CardDescription>Files attached to this contact</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-center text-muted-foreground py-8">
-                    Document management coming soon
-                  </p>
+                  {contact.taxIntakeLead?.clientFolder ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <FolderOpen className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{contact.taxIntakeLead.clientFolder.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {contact.taxIntakeLead.clientFolder.path}
+                            </p>
+                          </div>
+                        </div>
+                        <Button asChild>
+                          <a
+                            href={`/en/dashboard/tax-preparer/documents?folder=${contact.taxIntakeLead.clientFolder.id}`}
+                          >
+                            <FolderOpen className="mr-2 h-4 w-4" />
+                            Open Folder
+                          </a>
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        View uploaded tax documents and ID photos in the client folder.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-muted-foreground">No client folder yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        A folder will be created when the client submits their intake form.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
