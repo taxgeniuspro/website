@@ -25,13 +25,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -58,8 +51,6 @@ import {
   AlertCircle,
   Loader2,
   FolderOpen,
-  MoreHorizontal,
-  Eye,
   Pencil,
   Trash2,
   ClipboardList,
@@ -570,7 +561,7 @@ export default function CRMContactsPage() {
                     </TableCell>
                     {/* Actions Column */}
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-2">
                         {canView && (
                           <Button
                             variant="ghost"
@@ -581,43 +572,26 @@ export default function CRMContactsPage() {
                             View
                           </Button>
                         )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canEdit && (
-                              <DropdownMenuItem
-                                onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
-                              >
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit Contact
-                              </DropdownMenuItem>
-                            )}
-                            {contact.clientFolderId && canView && (
-                              <DropdownMenuItem
-                                onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
-                              >
-                                <FolderOpen className="mr-2 h-4 w-4" />
-                                View Documents
-                              </DropdownMenuItem>
-                            )}
-                            {canDelete && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => handleDeleteClick(contact)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteClick(contact)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
