@@ -23,8 +23,10 @@ const inter = Inter({
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5, // Allow zoom for accessibility
+  userScalable: true,
   themeColor: '#ff6b35',
+  viewportFit: 'cover', // Better PWA support for notched devices
 };
 
 export const metadata: Metadata = {

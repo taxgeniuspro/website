@@ -44,6 +44,13 @@ export async function GET() {
         professionalTitle: true,
         website: true,
         publicAddress: true,
+        // Social media links
+        facebookUrl: true,
+        instagramUrl: true,
+        linkedinUrl: true,
+        twitterUrl: true,
+        youtubeUrl: true,
+        tiktokUrl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -97,6 +104,13 @@ export async function PATCH(request: NextRequest) {
       'professionalTitle',
       'website',
       'publicAddress',
+      // Social media links
+      'facebookUrl',
+      'instagramUrl',
+      'linkedinUrl',
+      'twitterUrl',
+      'youtubeUrl',
+      'tiktokUrl',
     ];
 
     // Filter out any fields that aren't allowed

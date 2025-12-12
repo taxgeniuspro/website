@@ -403,3 +403,452 @@ export async function getPayoutHistory(username: string, limit: number = 20): Pr
     return [];
   }
 }
+
+// ============ Enhanced Commission System (Affiliate System Enhancement) ============
+
+import {
+  getEffectiveCommissionRate,
+  calculateCommissionAmount,
+  updateAffiliateStats,
+  type EffectiveRate,
+  type CommissionCalculation,
+} from './tiered-commission.service';
+import { CommissionType, PaymentStatus } from '@prisma/client';
+
+/**
+ * Enhanced commission record with source tracking
+ */
+export interface EnhancedCommissionRecord {
+  id: string;
+  referrerId: string;
+  referrerName?: string;
+  amount: number;
+  status: PaymentStatus;
+  sourceType?: string;
+  sourceId?: string;
+  clientName?: string;
+  clientEmail?: string;
+  commissionType?: CommissionType;
+  commissionRate?: number;
+  rateSource?: string;
+  groupId?: string;
+  createdAt: Date;
+  approvedAt?: Date | null;
+  paidAt?: Date | null;
+}
+
+/**
+ * Create a commission for a profile-based referral (new system)
+ * Uses the tiered commission service for rate calculation
+ */
+export async function createEnhancedCommission(
+  referrerProfileId: string,
+  grossAmount: number,
+  sourceType: string,
+  sourceId: string,
+  clientName?: string,
+  clientEmail?: string
+): Promise<EnhancedCommissionRecord | null> {
+  try {
+    // Get effective commission rate using the hierarchy
+    const effectiveRate = await getEffectiveCommissionRate(referrerProfileId);
+
+    // Calculate commission amount
+    const calculation = calculateCommissionAmount(grossAmount, effectiveRate);
+
+    // Get referrer profile for linking
+    const profile = await prisma.profile.findUnique({
+      where: { id: referrerProfileId },
+      select: {
+        id: true,
+        affiliateGroupId: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (!profile) {
+      logger.error('Profile not found for commission creation', { referrerProfileId });
+      return null;
+    }
+
+    // Create the commission record
+    const commission = await prisma.commission.create({
+      data: {
+        referrerId: referrerProfileId,
+        amount: calculation.finalAmount,
+        status: PaymentStatus.PENDING,
+        sourceType,
+        sourceId,
+        clientName,
+        clientEmail,
+        grossAmount,
+        commissionType: calculation.commissionType,
+        commissionRate: calculation.rate,
+        rateAtCreation: calculation.rate,
+        rateSource: calculation.rateSource,
+        groupIdAtCreation: calculation.groupId,
+        calculatedAmount: calculation.finalAmount,
+        pendingAt: new Date(),
+      },
+    });
+
+    logger.info('Enhanced commission created', {
+      commissionId: commission.id,
+      referrerId: referrerProfileId,
+      amount: calculation.finalAmount,
+      rateSource: calculation.rateSource,
+    });
+
+    // Update affiliate stats
+    await updateAffiliateStats(referrerProfileId, calculation.finalAmount);
+
+    return {
+      id: commission.id,
+      referrerId: commission.referrerId,
+      referrerName: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
+      amount: Number(commission.amount),
+      status: commission.status,
+      sourceType: commission.sourceType || undefined,
+      sourceId: commission.sourceId || undefined,
+      clientName: commission.clientName || undefined,
+      clientEmail: commission.clientEmail || undefined,
+      commissionType: commission.commissionType || undefined,
+      commissionRate: commission.commissionRate?.toNumber(),
+      rateSource: commission.rateSource || undefined,
+      groupId: commission.groupIdAtCreation || undefined,
+      createdAt: commission.createdAt,
+      approvedAt: commission.approvedAt,
+      paidAt: commission.paidAt,
+    };
+  } catch (error) {
+    logger.error('Error creating enhanced commission', {
+      referrerProfileId,
+      grossAmount,
+      error,
+    });
+    return null;
+  }
+}
+
+/**
+ * Get commission summary for a profile (new system)
+ */
+export async function getProfileCommissionSummary(
+  profileId: string
+): Promise<{
+  totalEarnings: number;
+  pendingEarnings: number;
+  approvedEarnings: number;
+  paidEarnings: number;
+  availableForPayout: number;
+  totalCommissions: number;
+  thisMonthEarnings: number;
+  lastMonthEarnings: number;
+  effectiveRate: EffectiveRate;
+}> {
+  try {
+    const commissions = await prisma.commission.findMany({
+      where: { referrerId: profileId },
+      select: {
+        amount: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    // Get effective rate
+    const effectiveRate = await getEffectiveCommissionRate(profileId);
+
+    // Calculate totals by status
+    const totalEarnings = commissions.reduce((sum, c) => sum + Number(c.amount), 0);
+    const pendingEarnings = commissions
+      .filter((c) => c.status === PaymentStatus.PENDING)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+    const approvedEarnings = commissions
+      .filter((c) => c.status === PaymentStatus.APPROVED)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+    const paidEarnings = commissions
+      .filter((c) => c.status === PaymentStatus.PAID)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+
+    // Available for payout = approved but not yet paid
+    const availableForPayout = approvedEarnings;
+
+    // Calculate monthly earnings
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    const thisMonthEarnings = commissions
+      .filter((c) => c.createdAt >= thisMonthStart)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+
+    const lastMonthEarnings = commissions
+      .filter((c) => c.createdAt >= lastMonthStart && c.createdAt <= lastMonthEnd)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+
+    return {
+      totalEarnings,
+      pendingEarnings,
+      approvedEarnings,
+      paidEarnings,
+      availableForPayout,
+      totalCommissions: commissions.length,
+      thisMonthEarnings,
+      lastMonthEarnings,
+      effectiveRate,
+    };
+  } catch (error) {
+    logger.error('Error getting profile commission summary', { profileId, error });
+    const effectiveRate = await getEffectiveCommissionRate(profileId);
+    return {
+      totalEarnings: 0,
+      pendingEarnings: 0,
+      approvedEarnings: 0,
+      paidEarnings: 0,
+      availableForPayout: 0,
+      totalCommissions: 0,
+      thisMonthEarnings: 0,
+      lastMonthEarnings: 0,
+      effectiveRate,
+    };
+  }
+}
+
+/**
+ * Get commission history for a profile with pagination
+ */
+export async function getProfileCommissionHistory(
+  profileId: string,
+  options: { page?: number; limit?: number; status?: PaymentStatus } = {}
+): Promise<{
+  commissions: EnhancedCommissionRecord[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
+  const { page = 1, limit = 20, status } = options;
+  const skip = (page - 1) * limit;
+
+  const where: Record<string, unknown> = { referrerId: profileId };
+  if (status) {
+    where.status = status;
+  }
+
+  try {
+    const [commissions, total] = await Promise.all([
+      prisma.commission.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.commission.count({ where }),
+    ]);
+
+    return {
+      commissions: commissions.map((c) => ({
+        id: c.id,
+        referrerId: c.referrerId,
+        amount: Number(c.amount),
+        status: c.status,
+        sourceType: c.sourceType || undefined,
+        sourceId: c.sourceId || undefined,
+        clientName: c.clientName || undefined,
+        clientEmail: c.clientEmail || undefined,
+        commissionType: c.commissionType || undefined,
+        commissionRate: c.commissionRate?.toNumber(),
+        rateSource: c.rateSource || undefined,
+        groupId: c.groupIdAtCreation || undefined,
+        createdAt: c.createdAt,
+        approvedAt: c.approvedAt,
+        paidAt: c.paidAt,
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  } catch (error) {
+    logger.error('Error getting profile commission history', { profileId, error });
+    return {
+      commissions: [],
+      total: 0,
+      page,
+      totalPages: 0,
+    };
+  }
+}
+
+/**
+ * Request payout for a profile (new system)
+ */
+export async function requestProfilePayout(
+  profileId: string,
+  amount: number,
+  paymentMethod: string
+): Promise<{ success: boolean; payoutId?: string; error?: string }> {
+  try {
+    // Verify available balance
+    const summary = await getProfileCommissionSummary(profileId);
+
+    if (summary.availableForPayout < amount) {
+      return {
+        success: false,
+        error: `Insufficient approved earnings. Available: $${summary.availableForPayout.toFixed(2)}`,
+      };
+    }
+
+    // Check minimum payout threshold
+    if (amount < summary.effectiveRate.minimumPayout) {
+      return {
+        success: false,
+        error: `Minimum payout amount is $${summary.effectiveRate.minimumPayout}`,
+      };
+    }
+
+    // Get approved commissions to include in payout
+    const approvedCommissions = await prisma.commission.findMany({
+      where: {
+        referrerId: profileId,
+        status: PaymentStatus.APPROVED,
+        payoutRequestId: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Select commissions up to the requested amount
+    let runningTotal = 0;
+    const commissionIds: string[] = [];
+    for (const commission of approvedCommissions) {
+      if (runningTotal >= amount) break;
+      commissionIds.push(commission.id);
+      runningTotal += Number(commission.amount);
+    }
+
+    // Create payout request
+    const payout = await prisma.payoutRequest.create({
+      data: {
+        referrerId: profileId,
+        amount,
+        commissionIds,
+        status: 'PENDING',
+        paymentMethod,
+        requestedAt: new Date(),
+      },
+    });
+
+    // Link commissions to this payout request
+    await prisma.commission.updateMany({
+      where: { id: { in: commissionIds } },
+      data: { payoutRequestId: payout.id },
+    });
+
+    logger.info('Profile payout requested', {
+      payoutId: payout.id,
+      profileId,
+      amount,
+      commissionCount: commissionIds.length,
+    });
+
+    return {
+      success: true,
+      payoutId: payout.id,
+    };
+  } catch (error) {
+    logger.error('Error requesting profile payout', { profileId, amount, error });
+    return {
+      success: false,
+      error: 'Failed to create payout request',
+    };
+  }
+}
+
+/**
+ * Approve a commission (admin action)
+ */
+export async function approveCommission(
+  commissionId: string,
+  approvedBy: string,
+  notes?: string
+): Promise<boolean> {
+  try {
+    await prisma.commission.update({
+      where: { id: commissionId },
+      data: {
+        status: PaymentStatus.APPROVED,
+        approvedAt: new Date(),
+        approvedBy,
+        approvalNotes: notes,
+      },
+    });
+
+    logger.info('Commission approved', { commissionId, approvedBy });
+    return true;
+  } catch (error) {
+    logger.error('Error approving commission', { commissionId, error });
+    return false;
+  }
+}
+
+/**
+ * Bulk approve commissions (admin action)
+ */
+export async function bulkApproveCommissions(
+  commissionIds: string[],
+  approvedBy: string
+): Promise<number> {
+  try {
+    const result = await prisma.commission.updateMany({
+      where: {
+        id: { in: commissionIds },
+        status: PaymentStatus.PENDING,
+      },
+      data: {
+        status: PaymentStatus.APPROVED,
+        approvedAt: new Date(),
+        approvedBy,
+      },
+    });
+
+    logger.info('Bulk commissions approved', { count: result.count, approvedBy });
+    return result.count;
+  } catch (error) {
+    logger.error('Error bulk approving commissions', { commissionIds, error });
+    return 0;
+  }
+}
+
+/**
+ * Auto-approve commissions based on pending duration (enhanced)
+ */
+export async function autoApproveEnhancedCommissions(
+  daysThreshold: number = 30
+): Promise<number> {
+  try {
+    const thresholdDate = new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
+
+    const result = await prisma.commission.updateMany({
+      where: {
+        status: PaymentStatus.PENDING,
+        pendingAt: { lte: thresholdDate },
+      },
+      data: {
+        status: PaymentStatus.APPROVED,
+        approvedAt: new Date(),
+        approvalNotes: `Auto-approved after ${daysThreshold} days`,
+      },
+    });
+
+    logger.info('Auto-approved enhanced commissions', {
+      count: result.count,
+      daysThreshold,
+    });
+    return result.count;
+  } catch (error) {
+    logger.error('Error auto-approving enhanced commissions', { error });
+    return 0;
+  }
+}
