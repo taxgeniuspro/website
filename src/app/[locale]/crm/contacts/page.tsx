@@ -108,7 +108,9 @@ interface Contact {
 }
 
 export default function CRMContactsPage() {
-  const { data: session, status } = useSession(); const user = session?.user; const isLoaded = status !== 'loading';
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const isLoaded = status !== 'loading';
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +122,7 @@ export default function CRMContactsPage() {
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile(); // Must be called before any conditional returns
 
   // Check permissions
   const role = user?.role as UserRole | undefined;
@@ -308,6 +311,20 @@ export default function CRMContactsPage() {
   const roleDisplay = role === 'tax_preparer' ? 'Tax Preparer' : 'Admin';
   const canSeeAll = role === 'admin' || role === 'super_admin';
   const isMobile = useIsMobile();
+
+  // Helper to get stage badge styling
+  const getStageBadgeClass = (stage: string) => {
+    const classes: Record<string, string> = {
+      'NEW': 'bg-blue-100 text-blue-800 border-blue-300',
+      'CONTACTED': 'bg-purple-100 text-purple-800 border-purple-300',
+      'QUALIFIED': 'bg-indigo-100 text-indigo-800 border-indigo-300',
+      'DOCUMENTS': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      'FILED': 'bg-orange-100 text-orange-800 border-orange-300',
+      'CLOSED': 'bg-green-100 text-green-800 border-green-300',
+      'LOST': 'bg-red-100 text-red-800 border-red-300',
+    };
+    return classes[stage] || '';
+  };
 
   // Helper to get stage badge styling
   const getStageBadgeClass = (stage: string) => {
