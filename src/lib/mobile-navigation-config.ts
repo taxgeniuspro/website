@@ -8,7 +8,6 @@ import {
   FileText,
   BarChart3,
   Settings,
-  DollarSign,
   Share2,
   Trophy,
   Briefcase,
@@ -45,8 +44,6 @@ const TAX_PREPARER_CONFIG: MobileNavConfig = {
     { label: 'Dashboard', icon: Home, href: '/dashboard/tax-preparer' },
     { label: 'Stats', icon: BarChart3, href: '/dashboard/tax-preparer/analytics' },
     { label: 'Leads', icon: UserPlus, href: '/dashboard/tax-preparer/leads' },
-    { label: 'Documents', icon: FileText, href: '/dashboard/tax-preparer/documents' },
-    { label: 'Earnings', icon: DollarSign, href: '/dashboard/tax-preparer/earnings' },
     { label: 'Settings', icon: Settings, href: '/dashboard/tax-preparer/settings' },
   ],
 };
