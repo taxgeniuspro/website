@@ -74,7 +74,11 @@ export async function POST(req: NextRequest) {
     const attributionResult = await getAttribution(clientEmail, clientPhone);
 
     // CRITICAL: Determine lead assignment based on referrer role
-    let assignedPreparerId: string | null = null;
+    // Note: We track TWO IDs:
+    //   - preparerProfileId: Profile.id - used for Appointment.preparerId (schema requirement)
+    //   - preparerUserId: Profile.userId - used for CRMContact.assignedPreparerId (for CRM service)
+    let preparerProfileId: string | null = null;
+    let preparerUserId: string | null = null;
 
     if (attributionResult.attribution.referrerUsername) {
       // Find the referrer profile
@@ -99,7 +103,8 @@ export async function POST(req: NextRequest) {
           case 'client':
             // CLIENT refers → Assign to Tax Genius (null = corporate)
             // TODO: Look up client's assigned preparer via ClientPreparer relation
-            assignedPreparerId = null;
+            preparerProfileId = null;
+            preparerUserId = null;
             logger.info(`Appointment from CLIENT referral assigned to Tax Genius corporate`, {
               referrerId: referrerProfile.id,
             });
@@ -107,7 +112,8 @@ export async function POST(req: NextRequest) {
 
           case 'affiliate':
             // AFFILIATE refers → Assign to Tax Genius (null = corporate)
-            assignedPreparerId = null;
+            preparerProfileId = null;
+            preparerUserId = null;
             logger.info(`Appointment from AFFILIATE referral assigned to Tax Genius corporate`, {
               referrerId: referrerProfile.id,
             });
@@ -115,23 +121,18 @@ export async function POST(req: NextRequest) {
 
           case 'tax_preparer':
             // TAX_PREPARER refers → Assign to THAT tax preparer
-            assignedPreparerId = referrerProfile.id;
+            preparerProfileId = referrerProfile.id;
+            preparerUserId = referrerProfile.userId;
             logger.info(`Appointment from TAX_PREPARER referral assigned to that preparer`, {
-              preparerId: assignedPreparerId,
-            });
-            break;
-
-          case 'affiliate':
-            // REFERRER refers → Assign to Tax Genius (null = corporate)
-            assignedPreparerId = null;
-            logger.info(`Appointment from REFERRER assigned to Tax Genius corporate`, {
-              referrerId: referrerProfile.id,
+              preparerProfileId,
+              preparerUserId,
             });
             break;
 
           default:
             // Default: assign to Tax Genius
-            assignedPreparerId = null;
+            preparerProfileId = null;
+            preparerUserId = null;
             logger.info(`Appointment with unknown referrer role assigned to Tax Genius`, {
               role: referrerProfile.role,
             });
@@ -140,21 +141,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Fallback: Get default preparer if no smart assignment
-    if (!assignedPreparerId) {
+    if (!preparerProfileId) {
       const defaultPreparer = await prisma.profile.findFirst({
         where: {
           OR: [{ role: 'super_admin' }, { role: 'admin' }, { role: 'tax_preparer' }],
           bookingEnabled: true, // Only assign to preparers who accept bookings
         },
         orderBy: { createdAt: 'asc' },
+        select: { id: true, userId: true },
       });
-      assignedPreparerId = defaultPreparer?.id || null;
+      preparerProfileId = defaultPreparer?.id || null;
+      preparerUserId = defaultPreparer?.userId || null;
     }
 
     // Validate preparer booking preferences
-    if (assignedPreparerId) {
+    if (preparerProfileId) {
       const preparerPreferences = await prisma.profile.findUnique({
-        where: { id: assignedPreparerId },
+        where: { id: preparerProfileId },
         select: {
           bookingEnabled: true,
           allowPhoneBookings: true,
@@ -191,9 +194,9 @@ export async function POST(req: NextRequest) {
       }
 
       // Fluid Booking: Validate slot availability if scheduledFor is provided
-      if (scheduledDate && assignedPreparerId) {
+      if (scheduledDate && preparerProfileId) {
         const validation = await AvailabilityService.validateBookingSlot(
-          assignedPreparerId,
+          preparerProfileId,
           scheduledDate,
           duration,
           serviceId
@@ -210,7 +213,7 @@ export async function POST(req: NextRequest) {
         }
 
         logger.info('Fluid Booking: Slot validation passed', {
-          preparerId: assignedPreparerId,
+          preparerId: preparerProfileId,
           scheduledFor: scheduledDate.toISOString(),
           duration,
         });
@@ -218,6 +221,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Find or create CRMContact
+    // Note: CRMContact.assignedPreparerId uses User ID (not Profile ID) for CRM service compatibility
     const nameParts = clientName.trim().split(' ');
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(' ') || firstName;
@@ -237,7 +241,7 @@ export async function POST(req: NextRequest) {
           source: source || 'appointment_booking',
           stage: 'NEW',
           lastContactedAt: new Date(),
-          assignedPreparerId: assignedPreparerId,
+          assignedPreparerId: preparerUserId, // Use User ID for CRM service
         },
       });
 
@@ -247,11 +251,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const preparerId = assignedPreparerId || 'unassigned';
+    // Appointment.preparerId uses Profile ID (as per schema comment)
+    const appointmentPreparerId = preparerProfileId || 'unassigned';
 
     // Determine appointment status based on preparer preferences
     const preparerPrefs = await prisma.profile.findUnique({
-      where: { id: preparerId },
+      where: { id: appointmentPreparerId },
       select: { requireApprovalForBookings: true },
     });
 
@@ -266,7 +271,7 @@ export async function POST(req: NextRequest) {
         clientName,
         clientEmail: clientEmail.toLowerCase(),
         clientPhone,
-        preparerId,
+        preparerId: appointmentPreparerId,
         serviceId: serviceId || null,
         type: appointmentType as
           | 'PHONE_CALL'
@@ -318,9 +323,9 @@ export async function POST(req: NextRequest) {
 
     // Get preparer name for email
     let preparerName: string | undefined;
-    if (assignedPreparerId) {
+    if (preparerProfileId) {
       const assignedPreparer = await prisma.profile.findUnique({
-        where: { id: assignedPreparerId },
+        where: { id: preparerProfileId },
         select: { firstName: true, lastName: true },
       });
       if (assignedPreparer) {
@@ -382,13 +387,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Send notification email to assigned tax preparer
-    if (assignedPreparerId && assignedPreparerId !== 'unassigned') {
+    // EmailService expects Profile ID for looking up preparer email
+    if (preparerProfileId && preparerProfileId !== 'unassigned') {
       try {
         // Import EmailService dynamically to avoid circular dependency
         const { EmailService } = await import('@/lib/services/email.service');
 
         await EmailService.sendAppointmentNotificationEmail(
-          assignedPreparerId,
+          preparerProfileId,
           {
             appointmentId: appointment.id,
             clientName,
@@ -404,7 +410,7 @@ export async function POST(req: NextRequest) {
 
         logger.info('Preparer notification email sent for appointment', {
           appointmentId: appointment.id,
-          preparerId: assignedPreparerId,
+          preparerId: preparerProfileId,
         });
       } catch (preparerEmailError) {
         logger.error('Error sending preparer notification email', preparerEmailError);
