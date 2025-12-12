@@ -34,9 +34,9 @@ const updateContactSchema = z.object({
 });
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**
@@ -44,14 +44,16 @@ interface RouteParams {
  * Get contact details
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const { id: contactId } = await params;
+
   try {
     // Auth check
-    logger.info('[CRM API] Starting GET contact request', { contactId: params.id });
+    logger.info('[CRM API] Starting GET contact request', { contactId });
 
     const { user, role } = await requireOneOfRoles(['super_admin', 'admin', 'tax_preparer']);
 
     logger.info('[CRM API] Auth passed', {
-      contactId: params.id,
+      contactId,
       userId: user.id,
       role,
       roleType: typeof role,
@@ -74,15 +76,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     };
 
     logger.info('[CRM API] Access context built', {
-      contactId: params.id,
+      contactId,
       accessContext: JSON.stringify(accessContext),
     });
 
     // Get contact
-    const contact = await CRMService.getContactById(params.id, accessContext);
+    const contact = await CRMService.getContactById(contactId, accessContext);
 
     logger.info('[CRM API] Contact fetched from service', {
-      contactId: params.id,
+      contactId,
       contactFound: !!contact,
     });
 
@@ -124,7 +126,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     logger.info('[CRM API] Contact retrieved successfully', {
-      contactId: params.id,
+      contactId,
       hasTaxIntakeLead: !!taxIntakeLead,
     });
 
@@ -139,7 +141,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     logger.error('[CRM API] Error getting contact', {
       error: error.message,
       stack: error.stack,
-      contactId: params.id,
+      contactId,
     });
 
     if (error.message?.includes('not found')) {
@@ -162,11 +164,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * Update contact
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const { id: contactId } = await params;
+
   try {
     // Auth check
     const { user, role } = await requireOneOfRoles(['super_admin', 'admin', 'tax_preparer']);
 
-    logger.info('[CRM API] Updating contact', { contactId: params.id, userId: user.id, role });
+    logger.info('[CRM API] Updating contact', { contactId, userId: user.id, role });
 
     // Parse and validate body
     const body = await request.json();
@@ -195,9 +199,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     };
 
     // Update contact
-    const contact = await CRMService.updateContact(params.id, updateData, accessContext);
+    const contact = await CRMService.updateContact(contactId, updateData, accessContext);
 
-    logger.info('[CRM API] Contact updated successfully', { contactId: params.id });
+    logger.info('[CRM API] Contact updated successfully', { contactId });
 
     return NextResponse.json({
       success: true,
@@ -206,7 +210,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   } catch (error: any) {
     logger.error('[CRM API] Error updating contact', {
       error: error.message,
-      contactId: params.id,
+      contactId,
     });
 
     if (error.message.includes('not found')) {
@@ -236,11 +240,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
  * Delete contact (admin only)
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const { id: contactId } = await params;
+
   try {
     // Auth check - only admins can delete
     const { user, role } = await requireOneOfRoles(['super_admin', 'admin']);
 
-    logger.info('[CRM API] Deleting contact', { contactId: params.id, userId: user.id, role });
+    logger.info('[CRM API] Deleting contact', { contactId, userId: user.id, role });
 
     // Build access context
     const accessContext: CRMAccessContext = {
@@ -249,9 +255,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     };
 
     // Delete contact
-    const result = await CRMService.deleteContact(params.id, accessContext);
+    const result = await CRMService.deleteContact(contactId, accessContext);
 
-    logger.info('[CRM API] Contact deleted successfully', { contactId: params.id });
+    logger.info('[CRM API] Contact deleted successfully', { contactId });
 
     return NextResponse.json({
       success: true,
@@ -260,7 +266,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error: any) {
     logger.error('[CRM API] Error deleting contact', {
       error: error.message,
-      contactId: params.id,
+      contactId,
     });
 
     if (error.message.includes('not found')) {
