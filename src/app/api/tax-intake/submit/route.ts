@@ -1,14 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { prisma } from '@/lib/prisma';
-import { writeFile, mkdir, readFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
+import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+
+// Lazy initialize Cloudinary to avoid build errors
+const getCloudinary = () => {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
+    api_key: process.env.CLOUDINARY_API_KEY || '',
+    api_secret: process.env.CLOUDINARY_API_SECRET || '',
+  });
+  return cloudinary;
+};
 
 // Initialize Resend only when needed to avoid build errors
 const getResend = () => new Resend(process.env.RESEND_API_KEY || 're_placeholder');
+
+// Upload buffer to Cloudinary
+async function uploadToCloudinary(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  folderPath: string
+): Promise<UploadApiResponse> {
+  const cloud = getCloudinary();
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloud.uploader.upload_stream(
+      {
+        folder: `taxgeniuspro/client-documents/${folderPath}`,
+        public_id: fileName.replace(/\.[^/.]+$/, ''), // Remove extension for public_id
+        resource_type: mimeType.startsWith('image/') ? 'image' : 'auto',
+        format: fileName.split('.').pop() || undefined,
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else if (result) {
+          resolve(result);
+        } else {
+          reject(new Error('No result from Cloudinary'));
+        }
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,14 +112,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
     }
 
-    // Handle file upload with proper client folder organization
+    // Handle file upload to Cloudinary
     const licenseFile = formData.get('license_file') as File | null;
-    let uploadedFilePath: string | null = null;
-    let documentRecord: any = null;
+    let uploadedFileUrl: string | null = null;
+    let documentRecord: { id: string } | null = null;
+    let fileBuffer: Buffer | null = null;
 
     if (licenseFile) {
       const bytes = await licenseFile.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      fileBuffer = Buffer.from(bytes);
       const timestamp = Date.now();
 
       try {
@@ -92,29 +133,38 @@ export async function POST(request: NextRequest) {
           currentYear
         );
 
-        // Create folder-based upload directory
-        const uploadDir = join(process.cwd(), 'uploads', 'documents', folderResult.yearFolderId);
-        if (!existsSync(uploadDir)) {
-          await mkdir(uploadDir, { recursive: true });
-        }
-
-        // Generate descriptive filename: LastName-DL-timestamp-originalname
+        // Generate descriptive filename
         const sanitizedLastName = taxFormData.last_name.replace(/[^a-zA-Z0-9]/g, '');
-        const fileName = `${sanitizedLastName}-DL-${timestamp}-${licenseFile.name}`;
-        const filePath = join(uploadDir, fileName);
+        const sanitizedFirstName = taxFormData.first_name.replace(/[^a-zA-Z0-9]/g, '');
+        const fileExtension = licenseFile.name.split('.').pop() || 'jpg';
+        const cloudinaryFileName = `${sanitizedLastName}-${sanitizedFirstName}-DL-${timestamp}`;
+        const folderPath = `${preparer.id}/${currentYear}`;
 
-        // Save file to client folder
-        await writeFile(filePath, buffer);
-        uploadedFilePath = `/uploads/documents/${folderResult.yearFolderId}/${fileName}`;
+        // Upload to Cloudinary instead of local filesystem
+        const cloudinaryResult = await uploadToCloudinary(
+          fileBuffer,
+          cloudinaryFileName,
+          licenseFile.type || 'image/jpeg',
+          folderPath
+        );
+
+        uploadedFileUrl = cloudinaryResult.secure_url;
+
+        logger.info('Document uploaded to Cloudinary', {
+          fileName: cloudinaryFileName,
+          cloudinaryUrl: uploadedFileUrl,
+          publicId: cloudinaryResult.public_id,
+          size: fileBuffer.length,
+        });
 
         // Create Document record in database for tracking
         documentRecord = await prisma.document.create({
           data: {
             profileId: preparer.id,
-            type: 'OTHER',
+            type: 'ID_DOCUMENT',
             fileName: licenseFile.name,
-            fileUrl: uploadedFilePath,
-            fileSize: buffer.length,
+            fileUrl: uploadedFileUrl,
+            fileSize: fileBuffer.length,
             mimeType: licenseFile.type || 'application/octet-stream',
             taxYear: currentYear,
             status: 'PENDING',
@@ -125,15 +175,15 @@ export async function POST(request: NextRequest) {
               uploadedVia: 'tax_intake_form',
               documentCategory: 'ID-Documents',
               documentType: 'drivers_license',
+              cloudinaryPublicId: cloudinaryResult.public_id,
             },
           },
         });
 
-        logger.info('Document uploaded to client folder', {
-          fileName,
-          folderId: folderResult.yearFolderId,
+        logger.info('Document record created', {
           documentId: documentRecord.id,
-          size: buffer.length,
+          folderId: folderResult.yearFolderId,
+          fileUrl: uploadedFileUrl,
         });
 
         // Also update the lead with the folder ID if it exists
@@ -147,21 +197,9 @@ export async function POST(request: NextRequest) {
             data: { clientFolderId: folderResult.folderId },
           });
         }
-      } catch (folderError) {
-        // Fallback to old behavior if folder creation fails
-        logger.error('Folder creation failed, using fallback', { error: folderError });
-
-        const uploadDir = join(process.cwd(), 'public', 'uploads', 'tax-documents');
-        if (!existsSync(uploadDir)) {
-          await mkdir(uploadDir, { recursive: true });
-        }
-
-        const fileName = `${timestamp}-${licenseFile.name}`;
-        const filePath = join(uploadDir, fileName);
-        await writeFile(filePath, buffer);
-        uploadedFilePath = `/uploads/tax-documents/${fileName}`;
-
-        logger.info('File uploaded (fallback)', { fileName, size: buffer.length });
+      } catch (uploadError) {
+        logger.error('Cloudinary upload failed', { error: uploadError });
+        // Continue without file - don't fail the whole submission
       }
     }
 
@@ -182,22 +220,24 @@ export async function POST(request: NextRequest) {
     .footer { text-align: center; color: #666; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }
     .alert { background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px; }
     .cta-button { background: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 10px; }
+    .document-preview { margin: 20px 0; text-align: center; }
+    .document-preview img { max-width: 400px; max-height: 300px; border: 2px solid #ddd; border-radius: 8px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎯 New Tax Return Submission</h1>
+      <h1>New Tax Return Submission</h1>
       <p>Client: ${taxFormData.first_name} ${taxFormData.last_name}</p>
     </div>
 
     <div class="alert">
-      <strong>⚠️ Action Required:</strong> A new client has submitted their tax intake form using your referral code: <strong>${preparerCode}</strong>
+      <strong>Action Required:</strong> A new client has submitted their tax intake form using your referral code: <strong>${preparerCode}</strong>
     </div>
 
     <!-- PERSONAL INFORMATION -->
     <div class="section">
-      <h2>👤 Personal Information</h2>
+      <h2>Personal Information</h2>
       <table>
         <tr><td>Full Name</td><td>${taxFormData.first_name} ${taxFormData.middle_name} ${taxFormData.last_name}</td></tr>
         <tr><td>Email</td><td><a href="mailto:${taxFormData.email}">${taxFormData.email}</a></td></tr>
@@ -209,7 +249,7 @@ export async function POST(request: NextRequest) {
 
     <!-- ADDRESS -->
     <div class="section">
-      <h2>📍 Address</h2>
+      <h2>Address</h2>
       <table>
         <tr><td>Street Address</td><td>${taxFormData.address_line_1}</td></tr>
         ${taxFormData.address_line_2 ? `<tr><td>Address Line 2</td><td>${taxFormData.address_line_2}</td></tr>` : ''}
@@ -221,7 +261,7 @@ export async function POST(request: NextRequest) {
 
     <!-- TAX FILING INFORMATION -->
     <div class="section">
-      <h2>📋 Tax Filing Information</h2>
+      <h2>Tax Filing Information</h2>
       <table>
         <tr><td>Filing Status</td><td>${taxFormData.filing_status}</td></tr>
         <tr><td>Employment Type</td><td>${taxFormData.employment_type}</td></tr>
@@ -232,7 +272,7 @@ export async function POST(request: NextRequest) {
 
     <!-- EDUCATION -->
     <div class="section">
-      <h2>🎓 Education</h2>
+      <h2>Education</h2>
       <table>
         <tr><td>Currently in College</td><td>${taxFormData.in_college === 'yes' ? 'Yes' : 'No'}</td></tr>
       </table>
@@ -240,7 +280,7 @@ export async function POST(request: NextRequest) {
 
     <!-- DEPENDENTS -->
     <div class="section">
-      <h2>👨‍👩‍👧‍👦 Dependents</h2>
+      <h2>Dependents</h2>
       <table>
         <tr><td>Has Dependents</td><td>${taxFormData.has_dependents === 'yes' ? 'Yes' : 'None'}</td></tr>
         ${taxFormData.has_dependents === 'yes' ? `
@@ -254,7 +294,7 @@ export async function POST(request: NextRequest) {
 
     <!-- PROPERTY -->
     <div class="section">
-      <h2>🏠 Property Information</h2>
+      <h2>Property Information</h2>
       <table>
         <tr><td>Has Mortgage</td><td>${taxFormData.has_mortgage === 'yes' ? 'Yes' : 'No'}</td></tr>
       </table>
@@ -262,7 +302,7 @@ export async function POST(request: NextRequest) {
 
     <!-- TAX CREDITS -->
     <div class="section">
-      <h2>💰 Tax Credits & IRS Information</h2>
+      <h2>Tax Credits & IRS Information</h2>
       <table>
         <tr><td>Ever Denied EITC</td><td>${taxFormData.denied_eitc === 'yes' ? 'Yes' : 'No'}</td></tr>
         <tr><td>Has IRS PIN</td><td>${taxFormData.has_irs_pin}</td></tr>
@@ -272,7 +312,7 @@ export async function POST(request: NextRequest) {
 
     <!-- REFUND OPTIONS -->
     <div class="section">
-      <h2>💵 Refund Options</h2>
+      <h2>Refund Options</h2>
       <table>
         <tr><td>Wants Refund Advance</td><td>${taxFormData.wants_refund_advance === 'yes' ? 'Yes' : 'No'}</td></tr>
       </table>
@@ -280,17 +320,24 @@ export async function POST(request: NextRequest) {
 
     <!-- IDENTIFICATION -->
     <div class="section">
-      <h2>🪪 Identification Documents</h2>
+      <h2>Identification Documents</h2>
       <table>
         <tr><td>Driver's License #</td><td>${taxFormData.drivers_license}</td></tr>
         <tr><td>License Expiration</td><td>${taxFormData.license_expiration}</td></tr>
-        <tr><td>Uploaded Files</td><td>${uploadedFilePath ? 'Driver\'s License attached' : 'No files uploaded yet'}</td></tr>
+        <tr><td>Document Uploaded</td><td>${uploadedFileUrl ? 'Yes - Driver\'s License attached below and in email' : 'No files uploaded'}</td></tr>
       </table>
+      ${uploadedFileUrl ? `
+        <div class="document-preview">
+          <p><strong>Driver's License Preview:</strong></p>
+          <img src="${uploadedFileUrl}" alt="Driver's License" />
+          <p><a href="${uploadedFileUrl}" target="_blank">View Full Size</a></p>
+        </div>
+      ` : ''}
     </div>
 
     <!-- NEXT STEPS -->
     <div class="section" style="background: #E0F2FE;">
-      <h2>📝 Next Steps</h2>
+      <h2>Next Steps</h2>
       <ol>
         <li>Review all client information above</li>
         <li>Contact client at <a href="mailto:${taxFormData.email}">${taxFormData.email}</a> or <a href="tel:${taxFormData.phone}">${taxFormData.phone}</a></li>
@@ -298,7 +345,7 @@ export async function POST(request: NextRequest) {
         <li>Begin tax preparation</li>
         <li>Upload completed return to dashboard</li>
       </ol>
-      <p><a href="https://taxgeniuspro.tax/en/dashboard/tax-preparer" class="cta-button">View Dashboard →</a></p>
+      <p><a href="https://taxgeniuspro.tax/en/dashboard/tax-preparer" class="cta-button">View Dashboard</a></p>
     </div>
 
     <div class="footer">
@@ -369,7 +416,8 @@ IDENTIFICATION
 --------------
 Driver's License #: ${taxFormData.drivers_license}
 License Expiration: ${taxFormData.license_expiration}
-Uploaded Files: ${uploadedFilePath ? 'Driver\'s License attached' : 'No files uploaded yet'}
+Document Uploaded: ${uploadedFileUrl ? 'Yes - See attachment' : 'No files uploaded'}
+${uploadedFileUrl ? `Document URL: ${uploadedFileUrl}` : ''}
 
 NEXT STEPS
 ----------
@@ -386,26 +434,17 @@ Tax Genius Pro
 Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     `;
 
-    // Prepare email attachments
-    const attachments: any[] = [];
-    if (uploadedFilePath && licenseFile) {
-      // Handle both new folder structure and fallback paths
-      let fullPath: string;
-      if (uploadedFilePath.startsWith('/uploads/documents/')) {
-        // New folder structure - file is outside public folder
-        fullPath = join(process.cwd(), uploadedFilePath.substring(1));
-      } else {
-        // Fallback - file is in public folder
-        fullPath = join(process.cwd(), 'public', uploadedFilePath);
-      }
-
-      if (existsSync(fullPath)) {
-        const fileBuffer = await readFile(fullPath);
-        attachments.push({
-          filename: licenseFile.name,
-          content: fileBuffer,
-        });
-      }
+    // Prepare email attachments - attach from buffer directly (no filesystem)
+    const attachments: Array<{ filename: string; content: Buffer }> = [];
+    if (fileBuffer && licenseFile) {
+      attachments.push({
+        filename: licenseFile.name,
+        content: fileBuffer,
+      });
+      logger.info('Adding file attachment to email', {
+        filename: licenseFile.name,
+        size: fileBuffer.length,
+      });
     }
 
     // Send email via Resend
@@ -424,13 +463,15 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       preparer: preparer.firstName,
       client: `${taxFormData.first_name} ${taxFormData.last_name}`,
       hasAttachment: attachments.length > 0,
+      cloudinaryUrl: uploadedFileUrl,
     });
 
     return NextResponse.json({
       success: true,
       emailId: emailResult.id,
       message: 'Tax form submitted and preparer notified',
-      fileUploaded: !!uploadedFilePath,
+      fileUploaded: !!uploadedFileUrl,
+      documentId: documentRecord?.id,
     });
   } catch (error) {
     logger.error('Error submitting tax form:', error);
