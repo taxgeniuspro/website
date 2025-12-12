@@ -5,8 +5,8 @@ import { getUserPermissions, type UserPermissions } from '@/lib/permissions';
 import { TrackingCodeDashboard } from '@/components/tracking/TrackingCodeDashboard';
 
 export const metadata = {
-  title: 'My Tracking Code | Tax Genius Pro',
-  description: 'Manage your universal tracking code and view performance',
+  title: 'My Codes & Links | Tax Genius Pro',
+  description: 'Manage your tracking codes, QR codes, and marketing links',
 };
 
 async function checkPreparerAccess() {
