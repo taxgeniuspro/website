@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
       crmContact = await prisma.cRMContact.upsert({
         where: { email: email.toLowerCase() },
         create: {
-          contactType: 'lead',
+          contactType: 'LEAD',
           firstName: first_name,
           lastName: last_name,
           email: email.toLowerCase(),
