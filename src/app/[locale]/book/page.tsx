@@ -10,6 +10,12 @@
  *
  * Allows clients to book appointments directly with a specific preparer
  * or the default preparer if none specified.
+ *
+ * Features:
+ * - Calendar date picker
+ * - Available time slot selection
+ * - Meeting type selection (Phone, Video, In-Person)
+ * - Location display for in-person meetings
  */
 
 import { useState, useEffect, Suspense } from 'react';
@@ -21,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/header';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import {
   Calendar,
   Phone,
@@ -32,9 +39,13 @@ import {
   User,
   Mail,
   MessageCircle,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
+import { format, addDays, isBefore, startOfDay } from 'date-fns';
 
 interface PreprerBookingPreferences {
   preparer: {
@@ -44,12 +55,21 @@ interface PreprerBookingPreferences {
     phone?: string;
     email?: string;
     avatarUrl?: string;
+    publicAddress?: string;
   };
   bookingEnabled: boolean;
   availableBookingMethods: string[];
   requiresApproval: boolean;
   customMessage?: string;
   calendarColor: string;
+}
+
+interface TimeSlot {
+  start: string;
+  end: string;
+  startTime: string;
+  endTime: string;
+  available: boolean;
 }
 
 const bookingMethodIcons: Record<string, React.ReactNode> = {
@@ -70,6 +90,17 @@ const bookingMethodDescriptions: Record<string, string> = {
   IN_PERSON: 'Meet at our office',
 };
 
+const formatTimeSlot = (time: string) => {
+  const [hours, minutes] = time.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minutes} ${ampm}`;
+};
+
+// Default office address
+const DEFAULT_ADDRESS = '1632 Jonesboro Rd SE, Atlanta, GA 30315';
+
 function BookingPageContent() {
   const searchParams = useSearchParams();
   const preparerId = searchParams?.get('preparer');
@@ -78,8 +109,13 @@ function BookingPageContent() {
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState<PreprerBookingPreferences | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingInProgress, setBookingInProgress] = useState(false);
+  const [step, setStep] = useState<'method' | 'datetime' | 'info'>('method');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -87,9 +123,18 @@ function BookingPageContent() {
     notes: '',
   });
 
+  const resolvedPreparerId = preferences?.preparer?.id;
+
   useEffect(() => {
     fetchBookingPreferences();
   }, [preparerId, referralUsername]);
+
+  // Fetch available slots when date changes
+  useEffect(() => {
+    if (selectedDate && resolvedPreparerId) {
+      fetchAvailableSlots(selectedDate);
+    }
+  }, [selectedDate, resolvedPreparerId]);
 
   const fetchBookingPreferences = async () => {
     try {
@@ -137,6 +182,33 @@ function BookingPageContent() {
     }
   };
 
+  const fetchAvailableSlots = async (date: Date) => {
+    if (!resolvedPreparerId) return;
+
+    try {
+      setLoadingSlots(true);
+      setAvailableSlots([]);
+      setSelectedTimeSlot(null);
+
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const response = await fetch(
+        `/api/appointments/available-slots?preparerId=${resolvedPreparerId}&date=${dateStr}&duration=30`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch available slots');
+      }
+
+      const data = await response.json();
+      setAvailableSlots(data.slots || []);
+    } catch (error) {
+      logger.error('[BookingPage] Error fetching available slots:', error);
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
   const handleBookAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -151,6 +223,15 @@ function BookingPageContent() {
     try {
       setBookingInProgress(true);
 
+      // Build scheduled time if date and slot are selected
+      let scheduledFor: string | undefined;
+      if (selectedDate && selectedTimeSlot) {
+        const [hours, minutes] = selectedTimeSlot.split(':');
+        const scheduledDate = new Date(selectedDate);
+        scheduledDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        scheduledFor = scheduledDate.toISOString();
+      }
+
       const response = await fetch('/api/appointments/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,6 +240,8 @@ function BookingPageContent() {
           clientEmail: formData.email,
           clientPhone: formData.phone,
           appointmentType: selectedMethod,
+          scheduledFor,
+          duration: 30,
           source: referralUsername ? 'referral_direct_booking' : 'direct_booking_page',
           notes: formData.notes || 'Booked via direct booking page',
         }),
@@ -186,6 +269,29 @@ function BookingPageContent() {
       setBookingInProgress(false);
     }
   };
+
+  const handleMethodSelect = (method: string) => {
+    setSelectedMethod(method);
+    setStep('datetime');
+  };
+
+  const handleBack = () => {
+    if (step === 'info') {
+      setStep('datetime');
+    } else if (step === 'datetime') {
+      setStep('method');
+      setSelectedDate(undefined);
+      setSelectedTimeSlot(null);
+    }
+  };
+
+  const handleContinueToInfo = () => {
+    setStep('info');
+  };
+
+  // Get office address
+  const officeAddress = preferences?.preparer?.publicAddress || DEFAULT_ADDRESS;
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeAddress)}`;
 
   if (loading) {
     return (
@@ -232,11 +338,16 @@ function BookingPageContent() {
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <CheckCircle className="w-20 h-20 text-green-600 mb-4" />
               <h2 className="text-3xl font-bold mb-2">Appointment Requested!</h2>
-              <p className="text-muted-foreground max-w-md mb-6">
+              <p className="text-muted-foreground max-w-md mb-2">
                 {preferences.requiresApproval
                   ? `We've received your appointment request. ${preferences.preparer.name} will review and confirm within 24 hours.`
                   : 'Your appointment is confirmed! Check your email for details and calendar invite.'}
               </p>
+              {selectedDate && selectedTimeSlot && (
+                <p className="text-lg font-medium mb-6">
+                  {format(selectedDate, 'EEEE, MMMM d, yyyy')} at {formatTimeSlot(selectedTimeSlot)}
+                </p>
+              )}
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => window.location.reload()}>
                   Book Another
@@ -257,7 +368,7 @@ function BookingPageContent() {
       <Header />
 
       {/* Hero Section */}
-      <section className="relative py-12 lg:py-20 overflow-hidden">
+      <section className="relative py-8 lg:py-12 overflow-hidden">
         <div className="absolute inset-0 bg-background" />
         <div className="container mx-auto px-4 lg:px-8 relative">
           <div className="text-center max-w-3xl mx-auto">
@@ -267,8 +378,8 @@ function BookingPageContent() {
 
             {/* Preparer Avatar */}
             {preferences.preparer.avatarUrl && (
-              <div className="flex justify-center mb-6">
-                <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-primary/20 shadow-lg">
+              <div className="flex justify-center mb-4">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-4 border-primary/20 shadow-lg">
                   <img
                     src={preferences.preparer.avatarUrl}
                     alt={preferences.preparer.name}
@@ -278,16 +389,16 @@ function BookingPageContent() {
               </div>
             )}
 
-            <h1 className="text-3xl lg:text-5xl font-bold text-foreground mb-4">
+            <h1 className="text-2xl lg:text-4xl font-bold text-foreground mb-2">
               Schedule with <span className="text-primary">{preferences.preparer.name}</span>
             </h1>
 
             {/* Preparer Contact Info */}
-            <div className="flex flex-col items-center gap-2 mb-4">
+            <div className="flex flex-wrap justify-center items-center gap-4 mb-4 text-sm">
               {preferences.preparer.phone && (
                 <a
                   href={`tel:${preferences.preparer.phone}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Phone className="w-4 h-4" />
                   <span>{preferences.preparer.phone}</span>
@@ -296,7 +407,7 @@ function BookingPageContent() {
               {preferences.preparer.email && (
                 <a
                   href={`mailto:${preferences.preparer.email}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Mail className="w-4 h-4" />
                   <span>{preferences.preparer.email}</span>
@@ -305,19 +416,283 @@ function BookingPageContent() {
             </div>
 
             {preferences.customMessage && (
-              <p className="text-lg text-muted-foreground mb-6">{preferences.customMessage}</p>
+              <p className="text-muted-foreground mb-4">{preferences.customMessage}</p>
             )}
           </div>
         </div>
       </section>
 
-      {/* Booking Form */}
+      {/* Booking Steps */}
       <section className="container mx-auto px-4 pb-16">
-        <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleBookAppointment}>
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Left Column: Contact Info */}
-              <div className="space-y-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Progress Steps */}
+          <div className="flex items-center justify-center mb-8">
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                  step === 'method' || step === 'datetime' || step === 'info'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                1
+              </div>
+              <span className="text-sm font-medium hidden sm:inline">Meeting Type</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                  step === 'datetime' || step === 'info'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                2
+              </div>
+              <span className="text-sm font-medium hidden sm:inline">Date & Time</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                  step === 'info'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                3
+              </div>
+              <span className="text-sm font-medium hidden sm:inline">Your Info</span>
+            </div>
+          </div>
+
+          {/* Step 1: Meeting Type */}
+          {step === 'method' && (
+            <div className="max-w-2xl mx-auto">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl">Choose Meeting Type</CardTitle>
+                  <CardDescription>Select your preferred consultation method</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {preferences.availableBookingMethods.map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => handleMethodSelect(method)}
+                      className={cn(
+                        'w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
+                        selectedMethod === method
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'h-12 w-12 rounded-full flex items-center justify-center shrink-0',
+                          selectedMethod === method
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        )}
+                      >
+                        {bookingMethodIcons[method]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-base">{bookingMethodLabels[method]}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {bookingMethodDescriptions[method]}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+
+                  {/* Location Card for In-Person */}
+                  {preferences.availableBookingMethods.includes('IN_PERSON') && (
+                    <div className="mt-6 p-4 rounded-lg bg-muted/50 border">
+                      <div className="flex items-start gap-3">
+                        <MapPin className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">Office Location</p>
+                          <p className="text-sm text-muted-foreground">{officeAddress}</p>
+                          <a
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline mt-1"
+                          >
+                            Get Directions <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Step 2: Date & Time Selection */}
+          {step === 'datetime' && (
+            <div className="space-y-6">
+              <Button variant="ghost" onClick={handleBack} className="mb-4">
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                Back to Meeting Type
+              </Button>
+
+              {/* Selected Method Badge */}
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant="secondary" className="flex items-center gap-2 py-1 px-3">
+                  {selectedMethod && bookingMethodIcons[selectedMethod]}
+                  {selectedMethod && bookingMethodLabels[selectedMethod]}
+                </Badge>
+                {selectedMethod === 'IN_PERSON' && (
+                  <Badge variant="outline" className="flex items-center gap-1 py-1 px-3">
+                    <MapPin className="w-3 h-3" />
+                    {officeAddress}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Calendar */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Select a Date</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CalendarComponent
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) => isBefore(date, startOfDay(new Date()))}
+                      className="rounded-md border"
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* Time Slots */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      {selectedDate
+                        ? `Available Times for ${format(selectedDate, 'EEEE, MMM d')}`
+                        : 'Select a Date First'}
+                    </CardTitle>
+                    <CardDescription>
+                      {selectedDate
+                        ? 'Choose a time that works for you'
+                        : 'Pick a date from the calendar to see available times'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!selectedDate ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                        <Calendar className="w-12 h-12 mb-3 opacity-50" />
+                        <p>Please select a date</p>
+                      </div>
+                    ) : loadingSlots ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : availableSlots.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                        <Clock className="w-12 h-12 mb-3 opacity-50" />
+                        <p className="font-medium">No availability</p>
+                        <p className="text-sm">Try selecting a different date</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
+                        {availableSlots.map((slot) => (
+                          <button
+                            key={slot.startTime}
+                            type="button"
+                            onClick={() => setSelectedTimeSlot(slot.startTime)}
+                            className={cn(
+                              'p-2 rounded-lg text-sm font-medium transition-all',
+                              selectedTimeSlot === slot.startTime
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted hover:bg-muted/80'
+                            )}
+                          >
+                            {formatTimeSlot(slot.startTime)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Continue Button */}
+              <div className="flex justify-end">
+                <Button
+                  size="lg"
+                  onClick={handleContinueToInfo}
+                  disabled={!selectedDate || !selectedTimeSlot}
+                >
+                  Continue
+                  <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+
+              {/* Approval Notice */}
+              {preferences.requiresApproval && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900">
+                  <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+                      Approval Required
+                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300">
+                      Your request will be reviewed and confirmed within 24 hours
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Contact Info */}
+          {step === 'info' && (
+            <div className="max-w-2xl mx-auto space-y-6">
+              <Button variant="ghost" onClick={handleBack} className="mb-4">
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                Back to Date & Time
+              </Button>
+
+              {/* Booking Summary */}
+              <Card className="bg-primary/5 border-primary/20">
+                <CardContent className="pt-6">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <Badge variant="secondary" className="flex items-center gap-2 py-1 px-3">
+                      {selectedMethod && bookingMethodIcons[selectedMethod]}
+                      {selectedMethod && bookingMethodLabels[selectedMethod]}
+                    </Badge>
+                    {selectedDate && (
+                      <Badge variant="secondary" className="flex items-center gap-2 py-1 px-3">
+                        <Calendar className="w-3 h-3" />
+                        {format(selectedDate, 'EEE, MMM d, yyyy')}
+                      </Badge>
+                    )}
+                    {selectedTimeSlot && (
+                      <Badge variant="secondary" className="flex items-center gap-2 py-1 px-3">
+                        <Clock className="w-3 h-3" />
+                        {formatTimeSlot(selectedTimeSlot)}
+                      </Badge>
+                    )}
+                  </div>
+                  {selectedMethod === 'IN_PERSON' && (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      <span>{officeAddress}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Contact Form */}
+              <form onSubmit={handleBookAppointment}>
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-xl">Your Information</CardTitle>
@@ -400,73 +775,13 @@ function BookingPageContent() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Right Column: Booking Method */}
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">Choose Meeting Type</CardTitle>
-                    <CardDescription>Select your preferred consultation method</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {preferences.availableBookingMethods.map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setSelectedMethod(method)}
-                        className={cn(
-                          'w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
-                          selectedMethod === method
-                            ? 'border-primary bg-primary/5 shadow-sm'
-                            : 'border-border hover:border-primary/50 hover:bg-accent/50'
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'h-12 w-12 rounded-full flex items-center justify-center',
-                            selectedMethod === method
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          )}
-                        >
-                          {bookingMethodIcons[method]}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-base">{bookingMethodLabels[method]}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {bookingMethodDescriptions[method]}
-                          </p>
-                        </div>
-                        {selectedMethod === method && (
-                          <CheckCircle className="w-6 h-6 text-primary" />
-                        )}
-                      </button>
-                    ))}
-
-                    {/* Approval Notice */}
-                    {preferences.requiresApproval && (
-                      <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 mt-4">
-                        <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
-                            Approval Required
-                          </p>
-                          <p className="text-xs text-orange-700 dark:text-orange-300">
-                            Your request will be reviewed and confirmed within 24 hours
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
 
                 {/* Submit Button */}
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full"
-                  disabled={!selectedMethod || bookingInProgress}
+                  className="w-full mt-6"
+                  disabled={bookingInProgress}
                 >
                   {bookingInProgress ? (
                     <>
@@ -475,23 +790,26 @@ function BookingPageContent() {
                     </>
                   ) : (
                     <>
-                      <Calendar className="w-5 h-5 mr-2" />
-                      Book Appointment
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      Confirm Booking
                     </>
                   )}
                 </Button>
 
                 {preferences.preparer.phone && (
-                  <p className="text-center text-sm text-muted-foreground">
+                  <p className="text-center text-sm text-muted-foreground mt-4">
                     Prefer to call?{' '}
-                    <a href={`tel:${preferences.preparer.phone}`} className="text-primary hover:underline font-medium">
+                    <a
+                      href={`tel:${preferences.preparer.phone}`}
+                      className="text-primary hover:underline font-medium"
+                    >
                       {preferences.preparer.phone}
                     </a>
                   </p>
                 )}
-              </div>
+              </form>
             </div>
-          </form>
+          )}
         </div>
       </section>
     </div>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -27,29 +28,44 @@ import {
   Save,
   Upload,
   FileText,
+  Clock,
 } from 'lucide-react';
 import { MarketingContactForm } from '@/components/settings/MarketingContactForm';
+import { AvailabilitySettings } from '@/components/settings/AvailabilitySettings';
 
 export const metadata = {
   title: 'Settings | Tax Genius Pro',
   description: 'Manage your tax preparer settings',
 };
 
-async function isTaxPreparer() {
-  const session = await auth(); const user = session?.user;
-  if (!user) return false;
+async function checkAccess() {
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false, profileId: null };
+
   const role = user?.role;
-  return role === 'tax_preparer' || role === 'admin';
+  const hasAccess = role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
+
+  if (!hasAccess) return { hasAccess: false, profileId: null };
+
+  // Get profile ID
+  const profile = await prisma.profile.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+
+  return { hasAccess, profileId: profile?.id || null };
 }
 
 export default async function TaxPreparerSettingsPage() {
-  const userIsTaxPreparer = await isTaxPreparer();
+  const { hasAccess, profileId } = await checkAccess();
 
-  if (!userIsTaxPreparer) {
+  if (!hasAccess) {
     redirect('/forbidden');
   }
 
-  const session = await auth(); const user = session?.user;
+  const session = await auth();
+  const user = session?.user;
 
   return (
     <div className="p-6 space-y-6">
@@ -239,63 +255,21 @@ export default async function TaxPreparerSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Availability Settings */}
+      {/* Work Hours & Availability Settings */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            <CardTitle>Availability & Client Settings</CardTitle>
+            <Clock className="w-5 h-5" />
+            <CardTitle>Work Hours & Availability</CardTitle>
           </div>
-          <CardDescription>Manage when you're available for clients</CardDescription>
+          <CardDescription>Configure your schedule and booking preferences</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Accepting New Clients</Label>
-              <p className="text-sm text-muted-foreground">
-                Allow new clients to book appointments
-              </p>
-            </div>
-            <Switch defaultChecked />
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <Label htmlFor="maxClients">Maximum Active Clients</Label>
-            <Select defaultValue="50">
-              <SelectTrigger id="maxClients">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="25">25 clients</SelectItem>
-                <SelectItem value="50">50 clients</SelectItem>
-                <SelectItem value="100">100 clients</SelectItem>
-                <SelectItem value="unlimited">Unlimited</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="responseTime">Target Response Time</Label>
-              <Select defaultValue="24h">
-                <SelectTrigger id="responseTime">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="4h">4 hours</SelectItem>
-                  <SelectItem value="24h">24 hours</SelectItem>
-                  <SelectItem value="48h">48 hours</SelectItem>
-                  <SelectItem value="72h">72 hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="serviceFee">Standard Service Fee</Label>
-              <Input id="serviceFee" type="number" placeholder="350" />
-            </div>
-          </div>
+        <CardContent>
+          {profileId ? (
+            <AvailabilitySettings profileId={profileId} />
+          ) : (
+            <p className="text-muted-foreground">Unable to load availability settings. Please refresh the page.</p>
+          )}
         </CardContent>
       </Card>
 
