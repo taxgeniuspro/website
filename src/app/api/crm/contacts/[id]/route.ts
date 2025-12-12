@@ -6,6 +6,7 @@
  * DELETE /api/crm/contacts/[id] - Delete contact (admin only)
  *
  * Auth: super_admin, admin, tax_preparer only
+ * Updated: 2025-12-11 - Fixed Next.js 15 params handling
  */
 
 import { NextRequest, NextResponse } from 'next/server';
