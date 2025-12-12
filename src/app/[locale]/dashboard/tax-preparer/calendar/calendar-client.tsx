@@ -3,6 +3,7 @@
 /**
  * Tax Preparer Calendar Client Component
  * Interactive calendar display with appointment management
+ * Responsive design for mobile, tablet, and desktop
  */
 
 import React, { useState, useEffect } from 'react';
@@ -19,8 +20,11 @@ import {
   Clock,
   FileText,
   ExternalLink,
+  Video,
+  MapPin,
 } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 interface Appointment {
   id: string;
@@ -110,16 +114,16 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
     switch (status) {
       case 'CONFIRMED':
       case 'SCHEDULED':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
       case 'PENDING_APPROVAL':
       case 'REQUESTED':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
       case 'CANCELLED':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
       case 'COMPLETED':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400';
     }
   };
 
@@ -128,6 +132,9 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
       case 'PHONE_CALL':
         return <Phone className="w-4 h-4" />;
       case 'VIDEO_CALL':
+        return <Video className="w-4 h-4" />;
+      case 'IN_PERSON':
+        return <MapPin className="w-4 h-4" />;
       case 'CONSULTATION':
         return <Calendar className="w-4 h-4" />;
       default:
@@ -136,41 +143,40 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+    <div className="px-3 py-4 md:px-6 md:py-6 lg:px-8 max-w-7xl mx-auto">
+      {/* Header - Responsive */}
+      <div className="mb-4 md:mb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-blue-600" />
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2 md:gap-3">
+              <Calendar className="w-6 h-6 md:w-7 md:h-7 lg:w-8 lg:h-8 text-primary" />
               My Calendar
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-sm md:text-base text-muted-foreground mt-1">
               Manage your appointments and availability
             </p>
           </div>
 
           <Link
-            href="/dashboard/tax-preparer/calendar/settings"
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            href="/dashboard/tax-preparer/settings"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-card border rounded-lg hover:bg-muted transition-colors text-sm font-medium"
           >
             <Settings className="w-4 h-4" />
-            Availability Settings
+            <span className="hidden sm:inline">Availability</span> Settings
           </Link>
         </div>
 
         {/* Booking Status Banner */}
         {!profile.bookingEnabled && (
-          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <div className="mt-3 md:mt-4 p-3 md:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start gap-2 md:gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-yellow-900">Booking Disabled</p>
-              <p className="text-sm text-yellow-700">
-                You are not currently accepting new appointments. Enable booking in{' '}
-                <Link href="/dashboard/tax-preparer/calendar/settings" className="underline">
-                  settings
+              <p className="font-medium text-yellow-900 dark:text-yellow-200 text-sm md:text-base">Booking Disabled</p>
+              <p className="text-xs md:text-sm text-yellow-700 dark:text-yellow-400">
+                You are not currently accepting new appointments.{' '}
+                <Link href="/dashboard/tax-preparer/settings" className="underline font-medium">
+                  Enable in settings
                 </Link>
-                .
               </p>
             </div>
           </div>
@@ -178,7 +184,7 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
       </div>
 
       {/* Calendar View */}
-      <div className="bg-white rounded-lg shadow-sm">
+      <div className="bg-card rounded-lg shadow-sm">
         <CalendarView
           preparerId={profile.id}
           onAppointmentClick={handleAppointmentClick}
@@ -186,134 +192,144 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
         />
       </div>
 
-      {/* Quick Stats */}
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+      {/* Quick Stats - Responsive Grid */}
+      <div className="mt-4 md:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+        {/* Booking Status */}
+        <div className="bg-card p-4 md:p-5 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Booking Status</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
+              <p className="text-xs md:text-sm text-muted-foreground">Booking Status</p>
+              <p className="text-lg md:text-xl lg:text-2xl font-bold mt-0.5 md:mt-1">
                 {profile.bookingEnabled ? 'Active' : 'Inactive'}
               </p>
             </div>
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${profile.bookingEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
-              <Calendar className={`w-6 h-6 ${profile.bookingEnabled ? 'text-green-600' : 'text-gray-400'}`} />
+            <div className={cn(
+              'w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center',
+              profile.bookingEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'
+            )}>
+              <Calendar className={cn(
+                'w-5 h-5 md:w-6 md:h-6',
+                profile.bookingEnabled ? 'text-green-600 dark:text-green-500' : 'text-muted-foreground'
+              )} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Approval Mode</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {profile.requireApprovalForBookings ? 'Manual' : 'Auto'}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
+        {/* Approval Mode */}
+        <div className="bg-card p-4 md:p-5 rounded-lg shadow-sm border">
+          <p className="text-xs md:text-sm text-muted-foreground">Approval Mode</p>
+          <p className="text-lg md:text-xl lg:text-2xl font-bold mt-0.5 md:mt-1">
+            {profile.requireApprovalForBookings ? 'Manual' : 'Auto'}
+          </p>
+          <p className="text-[10px] md:text-xs text-muted-foreground mt-1 md:mt-2">
             {profile.requireApprovalForBookings
               ? 'You approve each booking'
-              : 'Bookings are automatically confirmed'}
+              : 'Bookings auto-confirmed'}
           </p>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Booking Types</p>
-              <div className="flex gap-2 mt-2">
-                {profile.allowPhoneBookings && (
-                  <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">Phone</span>
-                )}
-                {profile.allowVideoBookings && (
-                  <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">Video</span>
-                )}
-                {profile.allowInPersonBookings && (
-                  <span className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">In-Person</span>
-                )}
-              </div>
-            </div>
+        {/* Booking Types */}
+        <div className="bg-card p-4 md:p-5 rounded-lg shadow-sm border">
+          <p className="text-xs md:text-sm text-muted-foreground">Booking Types</p>
+          <div className="flex flex-wrap gap-1.5 md:gap-2 mt-2">
+            {profile.allowPhoneBookings && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] md:text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+                <Phone className="w-3 h-3" />
+                Phone
+              </span>
+            )}
+            {profile.allowVideoBookings && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] md:text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded">
+                <Video className="w-3 h-3" />
+                Video
+              </span>
+            )}
+            {profile.allowInPersonBookings && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] md:text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 rounded">
+                <MapPin className="w-3 h-3" />
+                In-Person
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Appointment Detail Modal */}
+      {/* Appointment Detail Modal - Mobile Optimized */}
       {showModal && appointmentDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-card rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-xl">
+            <div className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground p-4 md:p-6 rounded-t-2xl sm:rounded-t-xl">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3">
                   {getTypeIcon(appointmentDetails.type)}
-                  <h2 className="text-xl font-bold">Appointment Details</h2>
+                  <h2 className="text-lg md:text-xl font-bold">Appointment Details</h2>
                 </div>
                 <button
                   onClick={closeModal}
-                  className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                  className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 md:w-6 md:h-6" />
                 </button>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(appointmentDetails.status)}`}>
+              <div className="mt-2 md:mt-3 flex items-center gap-2 flex-wrap">
+                <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold', getStatusColor(appointmentDetails.status))}>
                   {appointmentDetails.status.replace(/_/g, ' ')}
                 </span>
-                <span className="text-sm opacity-90">
+                <span className="text-xs md:text-sm opacity-90">
                   {appointmentDetails.type.replace(/_/g, ' ')}
                 </span>
               </div>
             </div>
 
             {/* Client Information */}
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+            <div className="p-4 md:p-6 border-b">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
                 <User className="w-4 h-4" />
                 Client Information
               </h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-lg font-bold text-gray-900">{appointmentDetails.clientName}</p>
-                </div>
+              <div className="space-y-2 md:space-y-3">
+                <p className="text-base md:text-lg font-bold">{appointmentDetails.clientName}</p>
                 {appointmentDetails.clientEmail && (
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <Mail className="w-4 h-4 text-gray-400" />
-                    <a
-                      href={`mailto:${appointmentDetails.clientEmail}`}
-                      className="hover:text-green-600 hover:underline"
-                    >
-                      {appointmentDetails.clientEmail}
-                    </a>
-                  </div>
+                  <a
+                    href={`mailto:${appointmentDetails.clientEmail}`}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Mail className="w-4 h-4" />
+                    {appointmentDetails.clientEmail}
+                  </a>
                 )}
                 {appointmentDetails.clientPhone && (
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <Phone className="w-4 h-4 text-gray-400" />
-                    <a
-                      href={`tel:${formatPhoneForCall(appointmentDetails.clientPhone)}`}
-                      className="hover:text-green-600 hover:underline"
-                    >
-                      {appointmentDetails.clientPhone}
-                    </a>
-                  </div>
+                  <a
+                    href={`tel:${formatPhoneForCall(appointmentDetails.clientPhone)}`}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Phone className="w-4 h-4" />
+                    {appointmentDetails.clientPhone}
+                  </a>
                 )}
               </div>
 
-              {/* Quick Action Buttons */}
-              <div className="mt-4 flex flex-wrap gap-2">
+              {/* Quick Action Buttons - Full width on mobile */}
+              <div className="mt-4 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                 {appointmentDetails.clientPhone && (
                   <>
                     <a
                       href={`tel:${formatPhoneForCall(appointmentDetails.clientPhone)}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                     >
                       <Phone className="w-4 h-4" />
                       Call
                     </a>
                     <a
                       href={`sms:${formatPhoneForCall(appointmentDetails.clientPhone)}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       <MessageSquare className="w-4 h-4" />
                       Text
@@ -323,7 +339,10 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
                 {appointmentDetails.clientEmail && (
                   <a
                     href={`mailto:${appointmentDetails.clientEmail}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-400 transition-colors text-sm font-medium"
+                    className={cn(
+                      'inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-sm font-medium',
+                      !appointmentDetails.clientPhone && 'col-span-2'
+                    )}
                   >
                     <Mail className="w-4 h-4" />
                     Email
@@ -333,14 +352,14 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
             </div>
 
             {/* Appointment Time */}
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+            <div className="p-4 md:p-6 border-b">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 Schedule
               </h3>
-              <div className="space-y-2">
-                <p className="text-gray-900">
-                  <strong>Date:</strong>{' '}
+              <div className="space-y-1.5 md:space-y-2 text-sm md:text-base">
+                <p>
+                  <span className="font-semibold">Date:</span>{' '}
                   {new Date(appointmentDetails.scheduledFor).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
@@ -348,8 +367,8 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
                     day: 'numeric',
                   })}
                 </p>
-                <p className="text-gray-900">
-                  <strong>Time:</strong>{' '}
+                <p>
+                  <span className="font-semibold">Time:</span>{' '}
                   {new Date(appointmentDetails.scheduledFor).toLocaleTimeString('en-US', {
                     hour: 'numeric',
                     minute: '2-digit',
@@ -371,37 +390,37 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
 
             {/* Client Notes */}
             {appointmentDetails.clientNotes && (
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   Client Notes
                 </h3>
-                <p className="text-gray-700 bg-gray-50 p-4 rounded-lg italic">
+                <p className="text-sm bg-muted p-3 md:p-4 rounded-lg italic">
                   &quot;{appointmentDetails.clientNotes}&quot;
                 </p>
               </div>
             )}
 
             {/* Footer Actions */}
-            <div className="p-6 bg-gray-50 rounded-b-xl">
-              <div className="flex flex-wrap gap-3 justify-end">
+            <div className="p-4 md:p-6 bg-muted/30">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+                <button
+                  onClick={closeModal}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+                >
+                  Close
+                </button>
                 {appointmentDetails.clientId && (
                   <Link
                     href={`/dashboard/tax-preparer/leads?search=${encodeURIComponent(appointmentDetails.clientEmail || appointmentDetails.clientName)}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 border text-sm font-medium rounded-lg hover:bg-muted transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                     View Client Record
                   </Link>
                 )}
-                <button
-                  onClick={closeModal}
-                  className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors text-sm font-medium"
-                >
-                  Close
-                </button>
               </div>
-              <p className="text-xs text-gray-400 mt-3 text-center">
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-3 text-center">
                 Appointment ID: {appointmentDetails.id}
               </p>
             </div>
@@ -411,10 +430,10 @@ export default function TaxPreparerCalendarClient({ profile }: TaxPreparerCalend
 
       {/* Loading Indicator */}
       {loadingDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-            <p className="mt-3 text-gray-600">Loading appointment details...</p>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-card p-5 md:p-6 rounded-lg shadow-lg text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-3 text-sm text-muted-foreground">Loading appointment...</p>
           </div>
         </div>
       )}
