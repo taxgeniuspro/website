@@ -27,7 +27,13 @@ export default [
       "scripts/**",
       "prisma/**",
       "Ira folder/**", // Third-party plugins
+      "AAA Folder/**", // Reference/third-party files
       "vendor/**", // Third-party vendor code
+      "*.mjs", // Root utility scripts
+      "check-*.mjs",
+      "regenerate_*.mjs",
+      "uploads/**", // Uploaded test files
+      "Ira Folder/**", // Additional third-party reference files
     ],
   },
   ...tseslint.configs.recommended,
