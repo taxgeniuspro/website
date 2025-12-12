@@ -446,9 +446,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     logger.error('Error booking appointment', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = process.env.NODE_ENV === 'development'
+      ? { details: errorMessage, stack: error instanceof Error ? error.stack : undefined }
+      : { debugHint: errorMessage.substring(0, 100) }; // Show truncated error in prod for debugging
     return NextResponse.json(
       {
         error: 'Failed to book appointment. Please try again or call us at +1 404-627-1015',
+        ...errorDetails,
       },
       { status: 500 }
     );
