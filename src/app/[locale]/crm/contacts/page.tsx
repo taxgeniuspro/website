@@ -443,7 +443,6 @@ export default function CRMContactsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Form Type</TableHead>
                 <TableHead>Documents</TableHead>
@@ -454,7 +453,7 @@ export default function CRMContactsPage() {
             <TableBody>
               {contacts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No contacts found
                   </TableCell>
                 </TableRow>
@@ -480,9 +479,6 @@ export default function CRMContactsPage() {
                           {contact.phone}
                         </div>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{contact.contactType}</Badge>
                     </TableCell>
                     <TableCell>
                       {canEdit ? (
@@ -572,53 +568,57 @@ export default function CRMContactsPage() {
                         ? new Date(contact.lastContactedAt).toLocaleDateString()
                         : 'Never'}
                     </TableCell>
-                    {/* Actions Column with Dropdown */}
+                    {/* Actions Column */}
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
+                      <div className="flex items-center justify-end gap-1">
+                        {canView && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}
+                          >
+                            View
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {canView && (
-                            <DropdownMenuItem
-                              onClick={() => (window.location.href = `/crm/contacts/${contact.id}`)}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                          )}
-                          {canEdit && (
-                            <DropdownMenuItem
-                              onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit Contact
-                            </DropdownMenuItem>
-                          )}
-                          {contact.clientFolderId && canView && (
-                            <DropdownMenuItem
-                              onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
-                            >
-                              <FolderOpen className="mr-2 h-4 w-4" />
-                              View Documents
-                            </DropdownMenuItem>
-                          )}
-                          {canDelete && (
-                            <>
-                              <DropdownMenuSeparator />
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canEdit && (
                               <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => handleDeleteClick(contact)}
+                                onClick={() => (window.location.href = `/crm/contacts/${contact.id}?edit=true`)}
                               >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Contact
                               </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            )}
+                            {contact.clientFolderId && canView && (
+                              <DropdownMenuItem
+                                onClick={() => (window.location.href = `/dashboard/tax-preparer/documents?folderId=${contact.clientFolderId}`)}
+                              >
+                                <FolderOpen className="mr-2 h-4 w-4" />
+                                View Documents
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => handleDeleteClick(contact)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
