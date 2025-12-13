@@ -7,9 +7,6 @@ import {
   AlertTriangle,
   Calendar,
   Users,
-  FileText,
-  DollarSign,
-  Link as LinkIcon,
   PhoneCall,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -254,39 +251,6 @@ export default async function PreparerDashboard() {
           <ResponseTimeGauge averageHours={stats.averageResponseTime} targetHours={4} />
           <RecentActivityFeed data={recentActivity} />
         </div>
-
-        {/* Section 8: Quick Actions */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 grid-cols-2 md:grid-cols-4">
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/tax-preparer/leads">
-                <Users className="mr-2 h-4 w-4" />
-                View Leads
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/tax-preparer/documents">
-                <FileText className="mr-2 h-4 w-4" />
-                Documents
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/tax-preparer/earnings">
-                <DollarSign className="mr-2 h-4 w-4" />
-                Earnings
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/tax-preparer/tracking">
-                <LinkIcon className="mr-2 h-4 w-4" />
-                Marketing
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
