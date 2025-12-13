@@ -44,16 +44,21 @@ export const metadata = {
 };
 
 async function checkAdminAccess() {
-  const session = await auth();
-  const user = session?.user;
-  if (!user) return { hasAccess: false };
+  try {
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { hasAccess: false, role: undefined, permissions: undefined };
 
-  const role = user?.role as string;
-  const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
-  const permissions = getUserPermissions(role as any, customPermissions);
-  const hasAccess = role === 'admin' && permissions.analytics;
+    const role = user?.role as string;
+    const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
+    const permissions = getUserPermissions(role as any, customPermissions);
+    const hasAccess = role === 'admin' && permissions.analytics;
 
-  return { hasAccess, role, permissions };
+    return { hasAccess, role, permissions };
+  } catch (error) {
+    console.error('Auth check error:', error);
+    return { hasAccess: false, role: undefined, permissions: undefined };
+  }
 }
 
 export default async function AdminAnalyticsOverviewPage({
