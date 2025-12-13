@@ -13,9 +13,10 @@ import {
   FileText,
   Package,
   Calendar,
-  UserPlus,
   CheckSquare,
   Square,
+  Mail,
+  Copy,
 } from 'lucide-react';
 import {
   Select,
@@ -24,7 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { AssignFormDialog } from '@/components/tax-forms/AssignFormDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { logger } from '@/lib/logger';
 import { useToast } from '@/hooks/use-toast';
 
@@ -69,14 +75,6 @@ export default function TaxPreparerFormsPage() {
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedForms, setSelectedForms] = useState<Set<string>>(new Set());
-
-  // Assignment dialog state
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [formToAssign, setFormToAssign] = useState<{
-    id: string;
-    formNumber: string;
-    title: string;
-  } | null>(null);
 
   const { toast } = useToast();
 
@@ -270,20 +268,46 @@ export default function TaxPreparerFormsPage() {
     }
   };
 
-  const handleOpenAssignDialog = (form: TaxForm) => {
-    setFormToAssign({
-      id: form.id,
-      formNumber: form.formNumber,
-      title: form.title,
-    });
-    setAssignDialogOpen(true);
+  const handleShareForm = async (form: TaxForm) => {
+    try {
+      const response = await fetch('/api/tax-forms/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formIds: [form.id] }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.shares?.[0]) {
+        const shareUrl = data.shares[0].shareUrl;
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: 'Link Copied!',
+          description: `Share link for ${form.formNumber} copied to clipboard`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to create share link',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      logger.error('Error sharing form:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create share link',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleAssignmentSuccess = () => {
-    toast({
-      title: 'Form Assigned',
-      description: 'The tax form has been assigned to your client successfully',
-    });
+  const handleEmailForm = (form: TaxForm) => {
+    const subject = encodeURIComponent(`Tax Form: ${form.formNumber} - ${form.title}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease find the ${form.formNumber} (${form.title}) tax form attached or download it from the link below.\n\nBest regards`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
 
   const filteredForms = forms.filter(
@@ -301,7 +325,7 @@ export default function TaxPreparerFormsPage() {
       onClick={() => toggleFormSelection(form.id)}
     >
       {/* Checkbox */}
-      <div className="flex-shrink-0">
+      <div className="shrink-0">
         {selectedForms.has(form.id) ? (
           <CheckSquare className="h-5 w-5 text-primary" />
         ) : (
@@ -310,7 +334,7 @@ export default function TaxPreparerFormsPage() {
       </div>
 
       {/* Form Icon */}
-      <div className="flex-shrink-0">
+      <div className="shrink-0">
         <FileText className="h-8 w-8 text-primary" />
       </div>
 
@@ -329,7 +353,7 @@ export default function TaxPreparerFormsPage() {
       </div>
 
       {/* Actions */}
-      <div className="flex-shrink-0 flex items-center gap-2">
+      <div className="shrink-0 flex items-center gap-2">
         <Button
           size="sm"
           variant="default"
@@ -341,17 +365,34 @@ export default function TaxPreparerFormsPage() {
           <Download className="h-4 w-4 mr-1" />
           Download
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleOpenAssignDialog(form);
-          }}
-        >
-          <UserPlus className="h-4 w-4 mr-1" />
-          Assign
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button size="sm" variant="outline">
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShareForm(form);
+              }}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Link
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEmailForm(form);
+              }}
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Email to Client
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -492,18 +533,6 @@ export default function TaxPreparerFormsPage() {
           </TabsContent>
         ))}
       </Tabs>
-
-      {/* Assignment Dialog */}
-      {formToAssign && (
-        <AssignFormDialog
-          open={assignDialogOpen}
-          onOpenChange={setAssignDialogOpen}
-          formId={formToAssign.id}
-          formNumber={formToAssign.formNumber}
-          formTitle={formToAssign.title}
-          onSuccess={handleAssignmentSuccess}
-        />
-      )}
     </div>
   );
 }
