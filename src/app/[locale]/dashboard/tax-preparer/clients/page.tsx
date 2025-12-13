@@ -103,7 +103,8 @@ export default async function MyClientsPage() {
         preparerId: preparerProfile.id,
         isActive: true,
       },
-      include: {
+      select: {
+        assignedAt: true,
         client: {
           select: {
             id: true,
