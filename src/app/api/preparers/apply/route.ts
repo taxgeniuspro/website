@@ -136,6 +136,12 @@ export async function POST(req: NextRequest) {
         contactId: crmContact.id,
         applicationId: application.id,
       });
+
+      // Link CRM contact to the application
+      await prisma.preparerApplication.update({
+        where: { id: application.id },
+        data: { crmContactId: crmContact.id },
+      });
     } catch (crmError) {
       // Log error but don't fail the request
       logger.error('Failed to create CRM contact/interaction', {

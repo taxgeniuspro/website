@@ -385,6 +385,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '📋 CRM',
     roles: ['super_admin'],
   },
+  {
+    label: 'Tax Preparer Leads',
+    href: '/admin/applications/preparers',
+    icon: Users,
+    permission: 'users',
+    section: '📋 CRM',
+    roles: ['admin', 'super_admin'],
+  },
 
   // 💰 Financials Section (admin only)
   {

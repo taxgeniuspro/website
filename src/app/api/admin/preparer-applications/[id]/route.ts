@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { hash } from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
+import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 
 // Generate random password
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 16);
@@ -61,7 +62,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { action, notes } = body;
+    const { action, notes, targetRole } = body;
+    // targetRole: 'client' | 'affiliate' | 'tax_preparer' (default: 'tax_preparer')
 
     const application = await prisma.preparerApplication.findUnique({
       where: { id },
@@ -72,27 +74,38 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     if (action === 'approve') {
+      // Validate target role
+      const validRoles = ['client', 'affiliate', 'tax_preparer'];
+      const role = targetRole && validRoles.includes(targetRole) ? targetRole : 'tax_preparer';
+
       // Check if user already exists with this email
       let profile = await prisma.profile.findFirst({
         where: { email: application.email.toLowerCase() },
       });
 
+      const isNewProfile = !profile;
+
       if (profile) {
-        // User exists, update their role to tax_preparer
+        // User exists, update their role
         profile = await prisma.profile.update({
           where: { id: profile.id },
           data: {
-            role: 'tax_preparer',
+            role: role,
+            // Update name/phone if not already set
+            firstName: profile.firstName || application.firstName,
+            lastName: profile.lastName || application.lastName,
+            phone: profile.phone || application.phone,
           },
         });
 
-        logger.info('Existing user upgraded to tax_preparer', {
+        logger.info(`Existing user upgraded to ${role}`, {
           profileId: profile.id,
           email: application.email,
           applicationId: application.id,
+          role: role,
         });
       } else {
-        // Create new user account with tax_preparer role
+        // Create new user account with selected role
         const tempPassword = nanoid();
         const hashedPassword = await hash(tempPassword, 10);
 
@@ -102,33 +115,55 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             firstName: application.firstName,
             lastName: application.lastName,
             phone: application.phone,
-            role: 'tax_preparer',
+            role: role,
             password: hashedPassword,
             emailVerified: new Date(), // Auto-verify since admin approved
           },
         });
 
-        logger.info('New tax_preparer profile created', {
+        logger.info(`New ${role} profile created`, {
           profileId: profile.id,
           email: application.email,
           applicationId: application.id,
+          role: role,
         });
 
         // TODO: Send welcome email with temporary password or magic link
       }
 
-      // Update application status to APPROVED
+      // For tax_preparer and affiliate roles, set up tracking code + referral links
+      if (role === 'tax_preparer' || role === 'affiliate') {
+        try {
+          await assignTrackingCodeToUser(profile.id);
+          logger.info(`Assigned tracking code to ${role}`, {
+            profileId: profile.id,
+            email: application.email,
+          });
+        } catch (trackingError) {
+          // Log but don't fail the approval
+          logger.error('Failed to assign tracking code', {
+            error: trackingError,
+            profileId: profile.id,
+          });
+        }
+      }
+
+      // Update application status to APPROVED with conversion tracking
       const updatedApplication = await prisma.preparerApplication.update({
         where: { id },
         data: {
           status: 'APPROVED',
           notes: notes || application.notes,
+          stage: 'DECISION',
+          convertedToRole: role,
+          convertedProfileId: profile.id,
+          convertedAt: new Date(),
         },
       });
 
       return NextResponse.json({
         success: true,
-        message: 'Application approved successfully',
+        message: `Application approved - ${isNewProfile ? 'Created new' : 'Updated existing'} ${role} account`,
         application: updatedApplication,
         profile: {
           id: profile.id,

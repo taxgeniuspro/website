@@ -499,8 +499,22 @@ model PreparerApplication {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
+  // Pipeline & Interview tracking
+  stage              String    @default("NEW") // NEW, CONTACTED, INTERVIEWED, DECISION
+  interviewScheduled DateTime? // Scheduled interview date/time
+  interviewNotes     String?   @db.Text // Notes from the interview
+
+  // Conversion tracking (when approved)
+  convertedToRole    String? // "client", "affiliate", "tax_preparer"
+  convertedProfileId String? // Profile ID created on conversion
+  convertedAt        DateTime? // When conversion happened
+
+  // CRM integration
+  crmContactId String? // Link to CRMContact record
+
   @@index([email])
   @@index([status])
+  @@index([stage])
   @@map("preparer_applications")
 }
 
