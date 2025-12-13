@@ -96,8 +96,12 @@ export function ReferralLinksManager() {
     try {
       // Determine which API endpoint to use based on user role
       const userRole = session?.user?.role;
-      const endpoint =
-        userRole === 'tax_preparer' ? '/api/tax-preparer/links' : '/api/affiliate/links';
+      let endpoint = '/api/affiliate/links'; // Default for affiliates
+      if (userRole === 'tax_preparer') {
+        endpoint = '/api/tax-preparer/links';
+      } else if (userRole === 'client') {
+        endpoint = '/api/client/links';
+      }
 
       const response = await fetch(endpoint);
 
@@ -371,7 +375,9 @@ export function ReferralLinksManager() {
               <CardDescription>
                 {session?.user?.role === 'tax_preparer'
                   ? 'Share these links with your clients. Leads come directly to you.'
-                  : 'Share these links to earn commissions. Every click is tracked automatically.'}
+                  : session?.user?.role === 'client'
+                    ? 'Earn $50 for each friend who files their taxes with us! Share these links.'
+                    : 'Share these links to earn commissions. Every click is tracked automatically.'}
               </CardDescription>
             </div>
             {trackingCode && trackingCode.canCustomize && (

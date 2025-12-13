@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 /**
  * GET /api/tax-preparer/leads
@@ -12,6 +13,7 @@ import { logger } from '@/lib/logger';
  *  - preparerId: Filter by assigned preparer (optional, defaults to current user)
  *  - status: Filter by lead status (new, contacted, qualified, converted, all)
  *  - search: Search by name, email, or phone
+ *  - taxYear: Filter by tax year (optional, defaults to current filing year, use 'all' for all years)
  */
 export async function GET(req: NextRequest) {
   try {
@@ -37,9 +39,16 @@ export async function GET(req: NextRequest) {
     const preparerId = searchParams.get('preparerId');
     const statusFilter = searchParams.get('status');
     const searchTerm = searchParams.get('search');
+    const taxYearParam = searchParams.get('taxYear');
 
     // Build where clause
     const where: any = {};
+
+    // Filter by tax year (default to current filing year, 'all' shows all years)
+    if (taxYearParam !== 'all') {
+      const taxYear = taxYearParam ? parseInt(taxYearParam) : getCurrentFilingTaxYear();
+      where.tax_year = taxYear;
+    }
 
     // Tax preparers can only see their own assigned leads
     if (isTaxPreparer) {
@@ -139,6 +148,7 @@ export async function GET(req: NextRequest) {
       success: true,
       leads: filteredLeads,
       stats,
+      currentFilingYear: getCurrentFilingTaxYear(),
     });
   } catch (error) {
     logger.error('Error fetching tax preparer leads:', error);

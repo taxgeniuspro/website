@@ -1,9 +1,12 @@
 /**
- * Affiliate Links Service
+ * Client Links Service
  *
- * Automatically generates two standard tracking links with QR codes for affiliates:
- * 1. Lead Form Link - Quick contact form
- * 2. Intake Form Link - Full tax intake form
+ * Automatically generates two standard tracking links with QR codes for clients:
+ * 1. Lead Form Link - Quick contact form for referrals
+ * 2. Intake Form Link - Full tax intake form for referrals
+ *
+ * Unlike affiliates, clients don't need to "finalize" their tracking code -
+ * links are auto-generated on first access.
  */
 
 import { prisma } from '@/lib/prisma';
@@ -12,7 +15,7 @@ import { logger } from '@/lib/logger';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
 
-export interface AffiliateLinks {
+export interface ClientLinks {
   leadLink: {
     id: string;
     code: string;
@@ -32,11 +35,12 @@ export interface AffiliateLinks {
 }
 
 /**
- * Generate the two standard affiliate links with QR codes
+ * Generate the two standard client referral links with QR codes
+ * Auto-generates if they don't exist (no finalization required)
  */
-export async function generateAffiliateStandardLinks(profileId: string): Promise<AffiliateLinks> {
+export async function generateClientStandardLinks(profileId: string): Promise<ClientLinks> {
   try {
-    logger.info('🔗 Generating affiliate standard links', { profileId });
+    logger.info('🔗 Generating client standard links', { profileId });
 
     // Get profile with tracking code
     const profile = await prisma.profile.findUnique({
@@ -46,7 +50,6 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
         userId: true,
         trackingCode: true,
         customTrackingCode: true,
-        trackingCodeFinalized: true,
         qrCodeLogoUrl: true,
         role: true,
       },
@@ -55,9 +58,6 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
     }
-
-    // Note: We no longer require trackingCodeFinalized for affiliates
-    // Links are auto-generated on first access
 
     // Use custom tracking code if available, otherwise use auto-generated
     const trackingCode = profile.customTrackingCode || profile.trackingCode;
@@ -126,14 +126,14 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
     const leadLink = await prisma.marketingLink.create({
       data: {
         creatorId: profileId,
-        creatorType: 'AFFILIATE',
+        creatorType: 'CLIENT',
         linkType: 'QR_CODE',
         code: leadCode,
         url: leadUrl,
         shortUrl: leadShortUrl,
         targetPage: '/contact',
-        title: '📝 Lead Capture Form',
-        description: 'Quick contact form for potential clients to submit their information',
+        title: '📝 Referral Contact Form',
+        description: 'Share this link with friends to earn referral bonuses',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
         dateActivated: new Date(),
@@ -163,14 +163,14 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
     const intakeLink = await prisma.marketingLink.create({
       data: {
         creatorId: profileId,
-        creatorType: 'AFFILIATE',
+        creatorType: 'CLIENT',
         linkType: 'QR_CODE',
         code: intakeCode,
         url: intakeUrl,
         shortUrl: intakeShortUrl,
         targetPage: '/start-filing/form',
-        title: '📋 Tax Intake Form',
-        description: 'Complete tax intake form for clients ready to start their tax preparation',
+        title: '📋 Referral Tax Form',
+        description: 'Share this link with friends who are ready to start their taxes',
         qrCodeImageUrl: intakeQR.dataUrl,
         qrCodeFormat: 'PNG',
         dateActivated: new Date(),
@@ -181,7 +181,7 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
     links.push(intakeLink);
     logger.info('✅ Created intake form link', { id: intakeLink.id, code: intakeLink.code });
 
-    logger.info('🎉 Successfully generated affiliate standard links', {
+    logger.info('🎉 Successfully generated client standard links', {
       profileId,
       trackingCode,
       linkCount: links.length,
@@ -206,15 +206,16 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
       },
     };
   } catch (error) {
-    logger.error('❌ Error generating affiliate standard links', { error, profileId });
+    logger.error('❌ Error generating client standard links', { error, profileId });
     throw error;
   }
 }
 
 /**
- * Get existing affiliate links for a profile
+ * Get existing client links for a profile
+ * Returns null if links don't exist yet
  */
-export async function getAffiliateLinks(profileId: string): Promise<AffiliateLinks | null> {
+export async function getClientLinks(profileId: string): Promise<ClientLinks | null> {
   try {
     const profile = await prisma.profile.findUnique({
       where: { id: profileId },
@@ -273,114 +274,22 @@ export async function getAffiliateLinks(profileId: string): Promise<AffiliateLin
       },
     };
   } catch (error) {
-    logger.error('Error getting affiliate links', { error, profileId });
+    logger.error('Error getting client links', { error, profileId });
     return null;
   }
 }
 
 /**
- * Regenerate QR codes for existing affiliate links
- * Useful when logo changes or need to refresh QR codes
+ * Get or create client links
+ * This is the main function to use - it auto-generates if needed
  */
-export async function regenerateQRCodes(profileId: string): Promise<boolean> {
-  try {
-    logger.info('🔄 Regenerating QR codes', { profileId });
-
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
-
-    if (!profile) {
-      throw new Error('Profile not found');
-    }
-
-    const trackingCode = profile.customTrackingCode || profile.trackingCode;
-
-    if (!trackingCode) {
-      throw new Error('No tracking code found');
-    }
-
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
-
-    for (const link of links) {
-      const qr = await generateQRCode({
-        url: link.shortUrl || link.url,
-        materialId: link.code,
-        format: 'PNG',
-        size: 512,
-        userId: profile.userId || undefined,
-        withLogo: true,
-      });
-
-      await prisma.marketingLink.update({
-        where: { id: link.id },
-        data: {
-          qrCodeImageUrl: qr.dataUrl,
-          updatedAt: new Date(),
-        },
-      });
-
-      logger.info('✅ Regenerated QR code', { linkId: link.id, code: link.code });
-    }
-
-    logger.info('🎉 Successfully regenerated all QR codes', { profileId, count: links.length });
-
-    return true;
-  } catch (error) {
-    logger.error('Error regenerating QR codes', { error, profileId });
-    return false;
+export async function getOrCreateClientLinks(profileId: string): Promise<ClientLinks> {
+  // First try to get existing links
+  const existing = await getClientLinks(profileId);
+  if (existing) {
+    return existing;
   }
-}
 
-/**
- * Delete affiliate links (for cleanup or regeneration)
- */
-export async function deleteAffiliateLinks(profileId: string): Promise<boolean> {
-  try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
-
-    if (!profile) {
-      return false;
-    }
-
-    const trackingCode = profile.customTrackingCode || profile.trackingCode;
-
-    if (!trackingCode) {
-      return false;
-    }
-
-    await prisma.marketingLink.deleteMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
-
-    logger.info('🗑️ Deleted affiliate links', { profileId });
-
-    return true;
-  } catch (error) {
-    logger.error('Error deleting affiliate links', { error, profileId });
-    return false;
-  }
+  // Generate new links if they don't exist
+  return generateClientStandardLinks(profileId);
 }

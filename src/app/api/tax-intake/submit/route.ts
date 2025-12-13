@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 // Lazy initialize Cloudinary to avoid build errors
 const getCloudinary = () => {
@@ -96,6 +97,10 @@ export async function POST(request: NextRequest) {
 
     const preparerCode = formData.get('preparer_code') as string;
 
+    // Get tax year from form or use current filing year
+    const providedTaxYear = formData.get('tax_year') as string | null;
+    const tax_year = providedTaxYear ? parseInt(providedTaxYear) : getCurrentFilingTaxYear();
+
     // Find preparer by tracking code first (needed for folder creation)
     const preparer = await prisma.profile.findFirst({
       where: {
@@ -140,13 +145,12 @@ export async function POST(request: NextRequest) {
       const timestamp = Date.now();
 
       try {
-        // Get or create client folder structure
-        const currentYear = new Date().getFullYear();
+        // Get or create client folder structure using tax year
         const folderResult = await ClientFolderService.getOrCreateClientFolder(
           preparer.id,
           taxFormData.first_name,
           taxFormData.last_name,
-          currentYear
+          tax_year
         );
 
         // Generate descriptive filename
@@ -154,7 +158,7 @@ export async function POST(request: NextRequest) {
         const sanitizedFirstName = taxFormData.first_name.replace(/[^a-zA-Z0-9]/g, '');
         const fileExtension = licenseFile.name.split('.').pop() || 'jpg';
         const cloudinaryFileName = `${sanitizedLastName}-${sanitizedFirstName}-DL-${timestamp}`;
-        const folderPath = `${preparer.id}/${currentYear}`;
+        const folderPath = `${preparer.id}/${tax_year}`;
 
         // Upload to Cloudinary instead of local filesystem
         const cloudinaryResult = await uploadToCloudinary(
@@ -182,7 +186,7 @@ export async function POST(request: NextRequest) {
             fileUrl: uploadedFileUrl,
             fileSize: fileBuffer.length,
             mimeType: licenseFile.type || 'application/octet-stream',
-            taxYear: currentYear,
+            taxYear: tax_year,
             status: 'PENDING',
             folderId: folderResult.yearFolderId,
             metadata: {
@@ -202,9 +206,14 @@ export async function POST(request: NextRequest) {
           fileUrl: uploadedFileUrl,
         });
 
-        // Also update the lead with the folder ID if it exists
+        // Also update the lead with the folder ID if it exists (using composite key)
         const existingLead = await prisma.taxIntakeLead.findUnique({
-          where: { email: taxFormData.email },
+          where: {
+            email_tax_year: {
+              email: taxFormData.email,
+              tax_year: tax_year,
+            },
+          },
         });
 
         if (existingLead && !existingLead.clientFolderId) {
