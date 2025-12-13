@@ -105,13 +105,13 @@ export default async function MyClientsPage() {
       },
     },
     orderBy: {
-      createdAt: 'desc',
+      assignedAt: 'desc',
     },
   });
 
   const clients = clientRelationships.map((rel) => ({
     ...rel.client,
-    assignedAt: rel.createdAt,
+    assignedAt: rel.assignedAt,
   }));
 
   // Calculate statistics
