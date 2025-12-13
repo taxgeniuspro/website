@@ -14,7 +14,9 @@ import { test, expect, Page } from '@playwright/test';
  * NOTE: The 'affiliate' role was deprecated and merged into client with affiliateStatus.
  */
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3005';
+// Use production URL by default since the project is production-only
+// Override with PLAYWRIGHT_BASE_URL env var if needed for local testing
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://taxgeniuspro.tax';
 
 // ONLY 4 VALID ROLES (affiliate role removed - now clients with affiliateStatus)
 const testAccounts = [
