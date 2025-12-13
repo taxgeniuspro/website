@@ -28,7 +28,7 @@ export function QuickShareLanding({ userId, role, firstName }: QuickShareLanding
       case 'lead':
         return '/dashboard/client';
       case 'admin':
-      case 'super_admin':
+      case 'admin':
         return '/dashboard/admin';
       default:
         return '/dashboard';

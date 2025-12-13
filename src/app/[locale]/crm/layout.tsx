@@ -16,7 +16,7 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
   const role = user?.role as string | undefined;
 
   // Redirect users without CRM access (allow admin, super_admin, tax_preparer)
-  if (role !== 'admin' && role !== 'super_admin' && role !== 'tax_preparer') {
+  if (role !== 'admin'  && role !== 'tax_preparer') {
     redirect('/forbidden');
   }
 

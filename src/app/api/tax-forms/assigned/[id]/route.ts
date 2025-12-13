@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       isClient = true;
     }
     // Admin can edit any form
-    else if (['admin', 'super_admin'].includes(profile.role)) {
+    else if (['admin', 'admin'].includes(profile.role)) {
       hasAccess = true;
     }
     // Tax preparer can edit if they're assigned to this client
@@ -209,7 +209,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Only tax preparers and admins can unassign forms
-    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'admin'].includes(profile.role)) {
       return NextResponse.json(
         { error: 'Forbidden - Only tax preparers and admins can unassign forms' },
         { status: 403 }

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     if (
       profile.role !== 'tax_preparer' &&
       profile.role !== 'admin' &&
-      profile.role !== 'super_admin'
+      profile.role !== 'admin'
     ) {
       return NextResponse.json(
         { error: 'Only tax preparers and admins can email forms' },

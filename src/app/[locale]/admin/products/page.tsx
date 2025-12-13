@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -57,7 +58,11 @@ interface Product {
 }
 
 export default function AdminProductsPage() {
-  const { data: session } = useSession(); const user = session?.user;
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const isLoaded = status !== 'loading';
+  const isAdmin = user?.role === 'admin';
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -83,9 +88,18 @@ export default function AdminProductsPage() {
     images: [] as ProductImage[],
   });
 
+  // Check admin permission
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (isLoaded && (!user || !isAdmin)) {
+      redirect('/forbidden');
+    }
+  }, [isLoaded, user, isAdmin]);
+
+  useEffect(() => {
+    if (isLoaded && isAdmin) {
+      fetchProducts();
+    }
+  }, [isLoaded, isAdmin]);
 
   const fetchProducts = async () => {
     try {
@@ -272,12 +286,18 @@ export default function AdminProductsPage() {
     }));
   };
 
-  if (loading) {
+  // Show loading while checking auth or loading products
+  if (!isLoaded || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">Loading products...</div>
       </div>
     );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
   }
 
   return (

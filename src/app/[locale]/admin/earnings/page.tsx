@@ -44,7 +44,7 @@ async function isAdmin() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
   const role = user?.role as string;
-  return role === 'admin' || role === 'super_admin';
+  return role === 'admin' ;
 }
 
 export default async function AdminEarningsPage() {
@@ -55,12 +55,27 @@ export default async function AdminEarningsPage() {
   }
 
   const currentUserData = await auth();
-  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'super_admin';
+  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'admin';
 
-  // Fetch real data from database
-  const platformStats = await getAdminEarningsStats();
-  const topEarners = await getTopEarners(5);
-  const recentPayouts = await getRecentPayouts(5);
+  // Fetch real data from database with error handling
+  let platformStats = {
+    totalRevenue: 0,
+    monthlyRevenue: 0,
+    totalCommissions: 0,
+    monthlyCommissions: 0,
+    pendingPayouts: 0,
+  };
+  let topEarners: Awaited<ReturnType<typeof getTopEarners>> = [];
+  let recentPayouts: Awaited<ReturnType<typeof getRecentPayouts>> = [];
+
+  try {
+    platformStats = await getAdminEarningsStats();
+    topEarners = await getTopEarners(5);
+    recentPayouts = await getRecentPayouts(5);
+  } catch (error) {
+    console.error('Failed to fetch earnings data:', error);
+    // Continue with default empty values - page will still render
+  }
 
   const getRoleBadge = (role: string) => {
     const badges = {

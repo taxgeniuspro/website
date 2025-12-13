@@ -369,7 +369,7 @@ export default function TaxCoursePage() {
             >
               REGISTER FOR THIS COURSE
             </Button>
-            <Link href="/admin/preparer-job-form">
+            <Link href="/dashboard/tax-preparer/apply-form">
               <Button
                 size="lg"
                 variant="outline"

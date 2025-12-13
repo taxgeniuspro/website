@@ -23,7 +23,7 @@ export default async function PermissionsPage() {
   const role = user?.role as UserRole | undefined;
 
   // Only super_admin can access this page
-  if (role !== 'super_admin') {
+  if (role !== 'admin') {
     redirect('/forbidden');
   }
 
@@ -81,7 +81,7 @@ export default async function PermissionsPage() {
   }
 
   // All roles to display in tabs
-  const roles: UserRole[] = ['super_admin', 'admin', 'tax_preparer', 'affiliate', 'lead', 'client'];
+  const roles: UserRole[] = ['admin', 'admin', 'tax_preparer', 'affiliate', 'lead', 'client'];
 
   return (
     <div className="min-h-screen bg-background">
@@ -130,7 +130,7 @@ export default async function PermissionsPage() {
               </CardHeader>
               <CardContent>
                 {/* Nested tabs for each role */}
-                <Tabs defaultValue="super_admin" className="w-full">
+                <Tabs defaultValue="admin" className="w-full">
                   <TabsList className="grid w-full grid-cols-6">
                     {roles.map((roleKey) => (
                       <TabsTrigger key={roleKey} value={roleKey} className="text-xs">
@@ -142,7 +142,7 @@ export default async function PermissionsPage() {
                   {roles.map((roleKey) => {
                     const permissions = roleTemplates[roleKey] || {};
                     const affectedCount = userCountsByRole[roleKey] || 0;
-                    const isReadOnly = roleKey === 'super_admin'; // Super admin is view-only
+                    const isReadOnly = roleKey === 'admin'; // Super admin is view-only
 
                     return (
                       <TabsContent key={roleKey} value={roleKey} className="mt-6">

@@ -17,7 +17,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
   const actualRole = (user?.role as UserRole) || 'client';
 
   // Check if user has access to store (only admins and tax preparers)
-  const canAccessStore = actualRole === 'tax_preparer' || actualRole === 'admin' || actualRole === 'super_admin';
+  const canAccessStore = actualRole === 'tax_preparer' || actualRole === 'admin' || actualRole === 'admin';
 
   if (!canAccessStore) {
     redirect('/forbidden');

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' || role === 'super_admin';
+    const isAdmin = role === 'admin' ;
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' || role === 'super_admin';
+    const isAdmin = role === 'admin' ;
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {

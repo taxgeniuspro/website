@@ -16,7 +16,7 @@ async function isAdmin() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
   const role = user?.role;
-  return role === 'admin' || role === 'super_admin' || role === 'tax_preparer';
+  return role === 'admin'  || role === 'tax_preparer';
 }
 
 export default async function SavedRepliesPage() {

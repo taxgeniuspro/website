@@ -188,6 +188,32 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
 
+  // 📚 Tax Preparer Tools Section (Training, Recruitment, Academy)
+  {
+    label: 'Academy',
+    href: '/app/academy',
+    icon: GraduationCap,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Training Course',
+    href: '/dashboard/tax-preparer/training',
+    icon: BookOpen,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Recruit Preparers',
+    href: '/dashboard/tax-preparer/recruit',
+    icon: Users,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+
   // 👥 Clients Section (for tax preparers and admins)
   {
     label: 'My Clients',
@@ -219,7 +245,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: UserCheck,
     permission: 'clientsStatus',
     section: '👥 Clients',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Referrals Status',
@@ -227,7 +253,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Users,
     permission: 'referralsStatus',
     section: '👥 Clients',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
 
   // 📊 Analytics Section (Moved to top for admin - overview of whole company)
@@ -237,7 +263,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     permission: 'analytics',
     section: '📊 Analytics',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Tax Genius Analytics',
@@ -245,7 +271,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Sparkles,
     permission: 'analytics',
     section: '📊 Analytics',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Tax Preparers Analytics',
@@ -253,7 +279,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Users,
     permission: 'analytics',
     section: '📊 Analytics',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Affiliates Analytics',
@@ -261,7 +287,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Trophy,
     permission: 'analytics',
     section: '📊 Analytics',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Clients Analytics',
@@ -269,7 +295,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: TrendingUp,
     permission: 'analytics',
     section: '📊 Analytics',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'My Tracking Code',
@@ -277,7 +303,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: QrCode,
     permission: 'trackingCode',
     section: '📊 Analytics',
-    roles: ['tax_preparer', 'super_admin', 'client'], // affiliate removed - clients with affiliateStatus=APPROVED see this
+    roles: ['tax_preparer', 'admin', 'client'], // affiliate removed - clients with affiliateStatus=APPROVED see this
   },
 
   // 📋 CRM Section (Admin only - tax preparer items moved to Dashboard section above)
@@ -287,7 +313,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Calendar,
     permission: 'calendar',
     section: '📋 CRM',
-    roles: ['super_admin'], // Tax preparer version is in Dashboard section
+    roles: ['admin'], // Tax preparer version is in Dashboard section
   },
   {
     label: 'CRM Contacts',
@@ -295,7 +321,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     permission: 'addressBook',
     section: '📋 CRM',
-    roles: ['super_admin'], // Tax preparer version is in Dashboard section
+    roles: ['admin'], // Tax preparer version is in Dashboard section
   },
   {
     label: 'Client File Center',
@@ -303,23 +329,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: FolderOpen,
     permission: 'clientFileCenter',
     section: '📋 CRM',
-    roles: ['tax_preparer', 'super_admin'],
-  },
-  {
-    label: 'Emails',
-    href: '/admin/emails',
-    icon: Mail,
-    permission: 'emails',
-    section: '📋 CRM',
-    roles: ['admin', 'super_admin'],
-  },
-  {
-    label: 'Academy',
-    href: '/app/academy',
-    icon: GraduationCap,
-    permission: 'academy',
-    section: '📋 CRM',
-    roles: ['tax_preparer', 'admin', 'super_admin'],
+    roles: ['tax_preparer', 'admin'],
   },
   {
     label: 'IRS Forms',
@@ -327,7 +337,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: FileText,
     permission: 'taxForms', // ✅ NOW INDEPENDENT! Can toggle separately from Client File Center
     section: '📋 CRM',
-    roles: ['tax_preparer', 'admin', 'super_admin'], // ✅ Visible to tax preparers too!
+    roles: ['tax_preparer', 'admin'], // ✅ Visible to tax preparers too!
   },
   {
     label: 'Store',
@@ -335,7 +345,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Package,
     permission: 'store',
     section: '📋 CRM',
-    roles: ['tax_preparer', 'admin', 'super_admin'],
+    roles: ['tax_preparer', 'admin'],
   },
   {
     label: 'Marketing Assets',
@@ -343,7 +353,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: FolderOpen,
     permission: 'marketingAssets', // ✅ NOW INDEPENDENT! Can toggle separately from Client File Center
     section: '📋 CRM',
-    roles: ['tax_preparer', 'super_admin'],
+    roles: ['tax_preparer', 'admin'],
   },
   {
     label: 'Marketing Products',
@@ -359,7 +369,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: LifeBuoy,
     permission: 'clientFileCenter',
     section: '📋 CRM',
-    roles: ['super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Saved Replies',
@@ -367,7 +377,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: FileText,
     permission: 'clientFileCenter',
     section: '📋 CRM',
-    roles: ['super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Ticket Workflows',
@@ -375,7 +385,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: GitBranch,
     permission: 'clientFileCenter',
     section: '📋 CRM',
-    roles: ['super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Ticket Reports',
@@ -383,7 +393,15 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     permission: 'analytics',
     section: '📋 CRM',
-    roles: ['super_admin'],
+    roles: ['admin'],
+  },
+  {
+    label: 'Tax Preparer Leads',
+    href: '/admin/applications/preparers',
+    icon: Users,
+    permission: 'users',
+    section: '📋 CRM',
+    roles: ['admin'],
   },
 
   // 💰 Financials Section (admin only)
@@ -393,7 +411,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: DollarSign,
     permission: 'earnings',
     section: '💰 Financials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Payouts',
@@ -401,7 +419,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: DollarSign,
     permission: 'payouts',
     section: '💰 Financials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
 
   // 📢 Marketing Section
@@ -411,7 +429,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Megaphone,
     permission: 'marketingHub',
     section: '📢 Marketing',
-    roles: ['tax_preparer', 'super_admin'],
+    roles: ['tax_preparer', 'admin'],
   },
   {
     label: 'Tracking Codes',
@@ -419,7 +437,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: QrCode,
     permission: 'marketingHub',
     section: '📢 Marketing',
-    roles: ['tax_preparer', 'super_admin'],
+    roles: ['tax_preparer', 'admin'],
   },
 
   // 🛒 Marketing Materials Section (Paid Features: Store, Content Generator, Products)
@@ -429,7 +447,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Sparkles,
     permission: 'contentGenerator',
     section: '🛒 Marketing Materials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'AI Image Center',
@@ -437,7 +455,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Image,
     permission: 'contentGenerator',
     section: '🛒 Marketing Materials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Store',
@@ -445,7 +463,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Package,
     permission: 'store',
     section: '🛒 Marketing Materials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Product Management',
@@ -453,7 +471,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Package,
     permission: 'database',
     section: '🛒 Marketing Materials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Order Management',
@@ -461,7 +479,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Package,
     permission: 'database',
     section: '🛒 Marketing Materials',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
 
   // 💼 Business Section (for tax preparers and clients with affiliate status)
@@ -491,7 +509,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Link2,
     permission: 'quickShareLinks',
     section: '🔗 Quick Share Tools',
-    roles: ['admin', 'super_admin'],
+    roles: ['admin'],
   },
 
   // ⚙️ System Controls Section
@@ -508,7 +526,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: ShieldCheck,
     permission: 'users',
     section: '⚙️ System Controls',
-    roles: ['super_admin'],
+    roles: ['admin'],
   },
   {
     label: 'Content Restrictions',
@@ -516,14 +534,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Shield,
     permission: 'users',
     section: '⚙️ System Controls',
-    roles: ['admin', 'super_admin'],
-  },
-  {
-    label: 'Database',
-    href: '/admin/database',
-    icon: Database,
-    permission: 'database',
-    section: '⚙️ System Controls',
+    roles: ['admin'],
   },
   {
     label: 'Settings',
@@ -539,7 +550,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
  * NOTE: 'affiliate' role removed - affiliates are now clients with affiliateStatus=APPROVED
  */
 export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
-  super_admin: '/dashboard/admin',
   admin: '/dashboard/admin',
   lead: '/dashboard/lead',
   tax_preparer: '/dashboard/tax-preparer',
@@ -553,9 +563,9 @@ export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📊 Dashboard': ['tax_preparer'], // Tax preparer main dashboard section
-  '⚙️ System Controls': ['super_admin', 'admin'], // Only admins and super_admins can see system controls
-  '💰 Financials': ['super_admin', 'admin'], // Only admins can see financials
-  '📊 Analytics': ['super_admin', 'admin'], // Analytics section for admins only (tax preparer has it in Dashboard)
-  '📢 Marketing': ['super_admin', 'admin'], // Marketing hub for admins
-  '🛒 Marketing Materials': ['super_admin', 'admin'], // Marketing materials (paid features) for admins
+  '⚙️ System Controls': ['admin'], // Only admins can see system controls
+  '💰 Financials': ['admin'], // Only admins can see financials
+  '📊 Analytics': ['admin'], // Analytics section for admins only (tax preparer has it in Dashboard)
+  '📢 Marketing': ['admin'], // Marketing hub for admins
+  '🛒 Marketing Materials': ['admin'], // Marketing materials (paid features) for admins
 };

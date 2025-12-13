@@ -6,7 +6,7 @@
  *
  * @example
  * <AccessGate
- *   allowedRoles={['super_admin', 'admin']}
+ *   allowedRoles={['admin', 'admin']}
  *   redirectTo="/forbidden"
  *   loadingPage={<LoadingSpinner />}
  * >

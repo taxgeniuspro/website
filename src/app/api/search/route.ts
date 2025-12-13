@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     if (
       profile.role === 'tax_preparer' ||
       profile.role === 'admin' ||
-      profile.role === 'super_admin'
+      profile.role === 'admin'
     ) {
       const clients = await prisma.profile.findMany({
         where: {
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     if (
       profile.role === 'tax_preparer' ||
       profile.role === 'admin' ||
-      profile.role === 'super_admin'
+      profile.role === 'admin'
     ) {
       const leads = await prisma.cRMContact.findMany({
         where: {

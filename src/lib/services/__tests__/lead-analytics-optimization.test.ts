@@ -165,7 +165,7 @@ describe('Lead Analytics Optimization', () => {
     const { getPreparersAnalyticsOptimized } = await import('../lead-analytics-optimized.service');
 
     const startTime = performance.now();
-    const results = await getPreparersAnalyticsOptimized('system', 'super_admin');
+    const results = await getPreparersAnalyticsOptimized('system', 'admin');
     const endTime = performance.now();
 
     const executionTime = endTime - startTime;

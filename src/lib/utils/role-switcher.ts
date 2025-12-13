@@ -92,7 +92,7 @@ export async function getEffectiveRole(
   userId: string
 ): Promise<EffectiveRoleInfo> {
   // Only admins can have a different viewing role
-  if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin' && actualRole !== 'admin') {
     return {
       actualRole,
       effectiveRole: actualRole,
@@ -137,17 +137,17 @@ export async function getEffectiveRole(
  */
 export function canSwitchToRole(actualRole: UserRole, targetRole: UserRole): boolean {
   // Only admins can switch roles
-  if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin' && actualRole !== 'admin') {
     return false;
   }
 
   // Super admins can view as any role including admin
-  if (actualRole === 'super_admin') {
+  if (actualRole === 'admin') {
     return true;
   }
 
   // Regular admins cannot view as super_admin (privilege escalation prevention)
-  if (actualRole === 'admin' && targetRole === 'super_admin') {
+  if (actualRole === 'admin' && targetRole === 'admin') {
     return false;
   }
 

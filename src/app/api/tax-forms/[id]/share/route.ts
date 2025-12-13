@@ -32,7 +32,7 @@ export async function POST(
       select: { id: true, role: true },
     });
 
-    if (!preparer || (preparer.role !== 'tax_preparer' && preparer.role !== 'admin' && preparer.role !== 'super_admin')) {
+    if (!preparer || (preparer.role !== 'tax_preparer' && preparer.role !== 'admin' && preparer.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden: Tax preparer access required' }, { status: 403 });
     }
 

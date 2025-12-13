@@ -70,7 +70,7 @@ export async function PATCH(
       userProfile?.id === appointment.preparerId ||
       userProfile?.id === appointment.clientId ||
       userProfile?.role === 'admin' ||
-      userProfile?.role === 'super_admin';
+      userProfile?.role === 'admin';
 
     if (!isAuthorized) {
       return NextResponse.json(

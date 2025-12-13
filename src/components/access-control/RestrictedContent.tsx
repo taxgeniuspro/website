@@ -5,7 +5,7 @@
  * Can be used to hide/show entire sections of a page.
  *
  * @example
- * <RestrictedContent allowedRoles={['admin', 'super_admin']}>
+ * <RestrictedContent allowedRoles={['admin', 'admin']}>
  *   <AdminDashboard />
  * </RestrictedContent>
  *

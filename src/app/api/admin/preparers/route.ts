@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     const preparers = await prisma.profile.findMany({
       where: {
         role: {
-          in: ['tax_preparer', 'admin', 'super_admin'],
+          in: ['tax_preparer', 'admin', 'admin'],
         },
       },
       select: {

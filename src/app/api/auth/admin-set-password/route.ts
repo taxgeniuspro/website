@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       keysMatch: isAdminKey,
     });
 
-    if (!isAdminKey && (!currentUser || !['admin', 'super_admin'].includes(currentUser.role as string))) {
+    if (!isAdminKey && (!currentUser || !['admin', 'admin'].includes(currentUser.role as string))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

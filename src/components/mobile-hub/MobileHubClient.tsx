@@ -56,7 +56,7 @@ export function MobileHubClient({ user, permissions }: MobileHubClientProps) {
       case 'client':
         return <ClientActions userId={user.id} />;
       case 'admin':
-      case 'super_admin':
+      case 'admin':
         // Admins see tax preparer view by default
         return <TaxPreparerActions userId={user.id} />;
       default:

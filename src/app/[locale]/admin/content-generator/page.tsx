@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { redirect } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -42,6 +44,11 @@ interface GeneratedContent {
 }
 
 export default function ContentGeneratorPage() {
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const isLoaded = status !== 'loading';
+  const isAdmin = user?.role === 'admin';
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
@@ -60,6 +67,27 @@ export default function ContentGeneratorPage() {
       keywords: '',
     },
   });
+
+  // Check admin permission
+  useEffect(() => {
+    if (isLoaded && (!user || !isAdmin)) {
+      redirect('/forbidden');
+    }
+  }, [isLoaded, user, isAdmin]);
+
+  // Show loading while checking auth
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
+  }
 
   const onGenerate = async (data: ContentGeneratorForm) => {
     setIsGenerating(true);

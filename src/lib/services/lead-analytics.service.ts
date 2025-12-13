@@ -275,7 +275,7 @@ async function checkAnalyticsPermission(
   requestingUserId: string,
   requestingRole: UserRole
 ): Promise<boolean> {
-  if (requestingRole === 'super_admin') return true;
+  if (requestingRole === 'admin') return true;
 
   if (requestingRole === 'admin') {
     // Check if admin has analytics permission

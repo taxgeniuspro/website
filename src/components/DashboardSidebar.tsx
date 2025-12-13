@@ -152,7 +152,7 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
   // Debug: Log the role and grouped items
   logger.info('Dashboard Sidebar Debug:', {
     role,
-    isAdminOrSuperAdmin: role === 'admin' || role === 'super_admin',
+    isAdminOrSuperAdmin: role === 'admin' ,
     totalNavItems: navItems.length,
     sections: Object.keys(groupedItems),
     itemsPerSection: Object.entries(groupedItems).map(([section, items]) => ({
@@ -180,7 +180,7 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-            {role === 'admin' || role === 'super_admin' ? (
+            {role === 'admin'  ? (
               // Render with sections for admin users - ordered sections
               // Define section order for consistent display
               <div className="space-y-4">
@@ -376,7 +376,7 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
         {/* Settings Link */}
         <SidebarMenuButton asChild tooltip="Settings">
           <Link href={
-            role === 'super_admin' || role === 'admin' ? '/admin/settings' :
+            role === 'admin' ? '/admin/settings' :
             role === 'lead' ? '/dashboard/lead/settings' :
             role === 'tax_preparer' ? '/dashboard/tax-preparer/settings' :
             '/dashboard/client/settings'

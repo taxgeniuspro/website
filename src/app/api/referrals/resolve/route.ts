@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     switch (profile.role) {
       case 'tax_preparer':
       case 'admin':
-      case 'super_admin':
+      case 'admin':
         // Direct booking with preparer
         preparerId = profile.id;
         break;

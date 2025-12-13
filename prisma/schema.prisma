@@ -95,12 +95,10 @@ model MagicLink {
 // ============ User Profiles ============
 
 enum UserRole {
-  super_admin // Super administrator with full system access
-  admin // Administrator with limited system access
+  admin // Administrator with full system access
   lead // Default role for new signups (pending admin approval)
   client // User who has completed tax preparation with Tax Genius
   tax_preparer // Tax professional
-  affiliate // Referrer working for Tax Genius (hasn't done taxes with us)
 }
 
 model Profile {
@@ -499,8 +497,22 @@ model PreparerApplication {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
+  // Pipeline & Interview tracking
+  stage              String    @default("NEW") // NEW, CONTACTED, INTERVIEWED, DECISION
+  interviewScheduled DateTime? // Scheduled interview date/time
+  interviewNotes     String?   @db.Text // Notes from the interview
+
+  // Conversion tracking (when approved)
+  convertedToRole    String? // "client", "affiliate", "tax_preparer"
+  convertedProfileId String? // Profile ID created on conversion
+  convertedAt        DateTime? // When conversion happened
+
+  // CRM integration
+  crmContactId String? // Link to CRMContact record
+
   @@index([email])
   @@index([status])
+  @@index([stage])
   @@map("preparer_applications")
 }
 

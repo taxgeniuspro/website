@@ -86,7 +86,7 @@ function getRolePath(role: UserRole): string {
     case 'client':
       return 'client';
     case 'admin':
-    case 'super_admin':
+    case 'admin':
       return 'admin';
     default:
       return 'client';

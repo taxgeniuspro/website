@@ -46,7 +46,7 @@ async function checkAccess() {
   if (!user) return { hasAccess: false, profileId: null };
 
   const role = user?.role;
-  const hasAccess = role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
+  const hasAccess = role === 'tax_preparer' || role === 'admin' ;
 
   if (!hasAccess) return { hasAccess: false, profileId: null };
 

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only tax preparers and admins can query assignments
-    if (!['tax_preparer', 'admin', 'super_admin'].includes(profile.role)) {
+    if (!['tax_preparer', 'admin', 'admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

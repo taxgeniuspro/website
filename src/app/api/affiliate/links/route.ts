@@ -34,7 +34,7 @@ export async function GET() {
 
     // Check if user is affiliate
     const isAffiliate = profile.role === 'affiliate';
-    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
 
     if (!isAffiliate && !isAdmin) {
       return NextResponse.json(

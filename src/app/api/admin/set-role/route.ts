@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Authorization check
     const currentUserRole = session.user.role;
     const currentUserEmail = session.user.email.toLowerCase();
-    const isSuperAdmin = currentUserRole === 'super_admin';
+    const isSuperAdmin = currentUserRole === 'admin';
     const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.includes(currentUserEmail);
 
     if (!isSuperAdmin && !isAuthorizedAdmin) {
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
     }
 
-    const validRoles = ['super_admin', 'admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
+    const validRoles = ['admin', 'admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },

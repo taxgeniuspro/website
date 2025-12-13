@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       select: { role: true },
     });
 
-    if (!adminProfile || (adminProfile.role !== 'admin' && adminProfile.role !== 'super_admin')) {
+    if (!adminProfile || (adminProfile.role !== 'admin' && adminProfile.role !== 'admin')) {
       return NextResponse.json(
         { error: 'Only admins can view tax preparer permissions' },
         { status: 403 }

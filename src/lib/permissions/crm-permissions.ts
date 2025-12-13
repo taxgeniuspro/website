@@ -75,7 +75,7 @@ export async function checkCRMPermission(
     }
 
     // Admins always have access to all features
-    if (profile.role === 'admin' || profile.role === 'super_admin') {
+    if (profile.role === 'admin' || profile.role === 'admin') {
       return {
         allowed: true,
         reason: 'Admin access',
@@ -165,7 +165,7 @@ export async function checkMultipleCRMPermissions(
     // Check each feature
     features.forEach((feature) => {
       // Admins always have access
-      if (profile.role === 'admin' || profile.role === 'super_admin') {
+      if (profile.role === 'admin' || profile.role === 'admin') {
         results.set(feature, {
           allowed: true,
           reason: 'Admin access',
@@ -240,7 +240,7 @@ export async function getEnabledCRMFeatures(userId: string): Promise<CRMFeature[
     }
 
     // Admins have access to everything
-    if (profile.role === 'admin' || profile.role === 'super_admin') {
+    if (profile.role === 'admin' || profile.role === 'admin') {
       return Object.values(CRMFeature);
     }
 
@@ -287,7 +287,7 @@ export async function grantCRMPermission(
       select: { role: true },
     });
 
-    if (!admin || (admin.role !== 'admin' && admin.role !== 'super_admin')) {
+    if (!admin || (admin.role !== 'admin' && admin.role !== 'admin')) {
       return {
         success: false,
         error: 'Only admins can grant CRM permissions',
@@ -354,7 +354,7 @@ export async function revokeCRMPermission(
       select: { role: true },
     });
 
-    if (!admin || (admin.role !== 'admin' && admin.role !== 'super_admin')) {
+    if (!admin || (admin.role !== 'admin' && admin.role !== 'admin')) {
       return {
         success: false,
         error: 'Only admins can revoke CRM permissions',
@@ -401,7 +401,7 @@ export async function bulkUpdateCRMPermissions(
       select: { role: true },
     });
 
-    if (!admin || (admin.role !== 'admin' && admin.role !== 'super_admin')) {
+    if (!admin || (admin.role !== 'admin' && admin.role !== 'admin')) {
       return {
         success: false,
         error: 'Only admins can update CRM permissions',

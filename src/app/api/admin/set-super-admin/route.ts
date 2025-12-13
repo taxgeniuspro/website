@@ -38,7 +38,7 @@ export async function POST() {
       await prisma.profile.create({
         data: {
           userId: user.id,
-          role: 'super_admin',
+          role: 'admin',
           firstName: user.name?.split(' ')[0] || 'Super',
           lastName: user.name?.split(' ').slice(1).join(' ') || 'Admin',
         },
@@ -47,7 +47,7 @@ export async function POST() {
       logger.info(`Updating profile from ${existingProfile.role} to SUPER_ADMIN...`);
       await prisma.profile.update({
         where: { id: existingProfile.id },
-        data: { role: 'super_admin' },
+        data: { role: 'admin' },
       });
     }
 
@@ -57,7 +57,7 @@ export async function POST() {
       success: true,
       message: `Successfully set ${userEmail} as SUPER_ADMIN. Please sign out and sign back in for changes to take effect.`,
       userId: user.id,
-      role: 'super_admin',
+      role: 'admin',
     });
   } catch (error) {
     logger.error('Error setting super admin:', error);

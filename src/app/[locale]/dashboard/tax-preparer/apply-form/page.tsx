@@ -91,12 +91,12 @@ export default function PreparerJobFormPage() {
                 A member of our team will contact you within 2-3 business days to discuss the next steps.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/admin/preparer-landing">
+                <Link href="/dashboard/tax-preparer/recruit">
                   <Button size="lg" variant="outline">
                     Back to Landing Page
                   </Button>
                 </Link>
-                <Link href="/admin/tax-course">
+                <Link href="/dashboard/tax-preparer/training">
                   <Button size="lg" className="bg-[#4054b2] hover:bg-[#2a3a7a]">
                     View Training Course <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>

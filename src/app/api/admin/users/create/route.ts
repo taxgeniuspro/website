@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       select: { role: true },
     });
 
-    if (!adminProfile || !['super_admin', 'admin'].includes(adminProfile.role)) {
+    if (!adminProfile || !['admin', 'admin'].includes(adminProfile.role)) {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
 

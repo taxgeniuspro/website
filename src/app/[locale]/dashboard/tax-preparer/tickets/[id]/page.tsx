@@ -15,7 +15,7 @@ async function getUserProfile() {
   if (!user) return null;
 
   const role = user?.role;
-  if (role !== 'tax_preparer' && role !== 'admin' && role !== 'super_admin') {
+  if (role !== 'tax_preparer' && role !== 'admin' ) {
     return null;
   }
 

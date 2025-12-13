@@ -45,7 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Only allow booking preferences for tax preparers, admins, and super admins
-    if (!['tax_preparer', 'admin', 'super_admin'].includes(preparer.role)) {
+    if (!['tax_preparer', 'admin', 'admin'].includes(preparer.role)) {
       return NextResponse.json(
         { error: 'This user is not available for booking' },
         { status: 400 }

@@ -18,7 +18,7 @@ async function checkPreparerAccess() {
   const permissions = getUserPermissions(role as any, customPermissions);
 
   // Allow tax_preparer, admin, and super_admin to access tracking
-  const hasAccess = (role === 'tax_preparer' || role === 'admin' || role === 'super_admin' || role === 'affiliate' || role === 'client') && permissions.trackingCode;
+  const hasAccess = (role === 'tax_preparer' || role === 'admin'  || role === 'affiliate' || role === 'client') && permissions.trackingCode;
 
   // Get profile ID
   let profileId = null;

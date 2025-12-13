@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       profile.role === 'affiliate' ||
       profile.role === 'tax_preparer' ||
       profile.role === 'admin' ||
-      profile.role === 'super_admin';
+      profile.role === 'admin';
 
     if (!isAffiliate) {
       return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Check if creative is active
     if (creative.status !== CreativeStatus.ACTIVE) {
       // Admins can see all
-      if (profile.role !== 'admin' && profile.role !== 'super_admin') {
+      if (profile.role !== 'admin' && profile.role !== 'admin') {
         return NextResponse.json({ error: 'Creative not found' }, { status: 404 });
       }
     }
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Check if affiliate is in the allowed list
       if (!creative.affiliateIds.includes(profile.id)) {
         // Admins can see all
-        if (profile.role !== 'admin' && profile.role !== 'super_admin') {
+        if (profile.role !== 'admin' && profile.role !== 'admin') {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
       }
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       if (!hasAccess) {
         // Admins can see all
-        if (profile.role !== 'admin' && profile.role !== 'super_admin') {
+        if (profile.role !== 'admin' && profile.role !== 'admin') {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
       }

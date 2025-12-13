@@ -36,7 +36,7 @@ export async function GET() {
 
     // Clients can access this endpoint
     const isClient = profile.role === 'client';
-    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
 
     if (!isClient && !isAdmin) {
       return NextResponse.json(

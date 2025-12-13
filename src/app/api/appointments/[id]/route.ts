@@ -44,7 +44,7 @@ export async function GET(
       userProfile?.id === appointment.preparerId ||
       userProfile?.id === appointment.clientId ||
       userProfile?.role === 'admin' ||
-      userProfile?.role === 'super_admin';
+      userProfile?.role === 'admin';
 
     if (!isAuthorized) {
       return NextResponse.json(
@@ -103,7 +103,7 @@ export async function PATCH(
       userProfile?.id === appointment.preparerId ||
       userProfile?.id === appointment.clientId ||
       userProfile?.role === 'admin' ||
-      userProfile?.role === 'super_admin';
+      userProfile?.role === 'admin';
 
     if (!isAuthorized) {
       return NextResponse.json(
@@ -194,7 +194,7 @@ export async function DELETE(
 
     if (
       userProfile?.role !== 'admin' &&
-      userProfile?.role !== 'super_admin'
+      userProfile?.role !== 'admin'
     ) {
       return NextResponse.json(
         { error: 'Only administrators can delete appointments' },

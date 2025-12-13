@@ -62,7 +62,7 @@ export async function GET(
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
       currentUserProfile.role === 'admin' ||
-      currentUserProfile.role === 'super_admin';
+      currentUserProfile.role === 'admin';
 
     if (!canView) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to view this form history' }, { status: 403 });
@@ -169,7 +169,7 @@ export async function POST(
     const canRevert =
       currentUserProfile.id === clientTaxForm.assignedBy ||
       currentUserProfile.role === 'admin' ||
-      currentUserProfile.role === 'super_admin';
+      currentUserProfile.role === 'admin';
 
     if (!canRevert) {
       return NextResponse.json({ error: 'Forbidden: Only the tax preparer can revert versions' }, { status: 403 });

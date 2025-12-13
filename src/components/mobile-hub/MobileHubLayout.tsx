@@ -127,7 +127,7 @@ export function MobileHubLayout({ children, user }: MobileHubLayoutProps) {
 
       {/* Tax Assistant AI Chat Widget - Only for Tax Preparers and Admins */}
       {user.role &&
-        (user.role === 'tax_preparer' || user.role === 'admin' || user.role === 'super_admin') && (
+        (user.role === 'tax_preparer' || user.role === 'admin' || user.role === 'admin') && (
           <TaxAssistantWidget />
         )}
     </div>

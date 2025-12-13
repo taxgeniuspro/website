@@ -25,7 +25,7 @@ export default function LeadDashboard() {
           affiliate: '/dashboard/affiliate',
           tax_preparer: '/dashboard/tax-preparer',
           admin: '/dashboard/admin',
-          super_admin: '/dashboard/admin',
+          admin: '/dashboard/admin',
         };
         router.push(dashboardMap[normalizedRole] || '/dashboard');
       }

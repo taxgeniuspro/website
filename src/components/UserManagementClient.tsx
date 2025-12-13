@@ -116,7 +116,7 @@ export function UserManagementClient({
 
   const getRoleBadgeColor = (role?: string) => {
     switch (role) {
-      case 'super_admin':
+      case 'admin':
         return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
       case 'admin':
         return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
@@ -180,7 +180,7 @@ export function UserManagementClient({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
                 <SelectItem value="lead">Lead (Pending)</SelectItem>
