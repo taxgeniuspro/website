@@ -32,11 +32,7 @@ export async function GET(req: NextRequest) {
 
     if (clientId) {
       // Only admins and tax preparers can view other users' folders
-      if (
-        profile.role !== 'admin' &&
-        profile.
-        profile.role !== 'tax_preparer'
-      ) {
+      if (profile.role !== 'admin' && profile.role !== 'tax_preparer') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
@@ -130,11 +126,7 @@ export async function POST(req: NextRequest) {
 
     if (clientId) {
       // Only admins and tax preparers can create folders for other users
-      if (
-        profile.role !== 'admin' &&
-        profile.
-        profile.role !== 'tax_preparer'
-      ) {
+      if (profile.role !== 'admin' && profile.role !== 'tax_preparer') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
