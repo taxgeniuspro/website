@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = 'http://localhost:3005';
 
-// Test accounts
+// Test accounts - ONLY 4 VALID ROLES (affiliate removed - now client with affiliateStatus)
 const testAccounts = [
   {
     role: 'Admin',
@@ -27,13 +27,6 @@ const testAccounts = [
     password: 'preparer123',
     expectedUrl: '/dashboard/tax-preparer',
     dashboardTitle: 'Tax Preparer Dashboard',
-  },
-  {
-    role: 'Affiliate',
-    email: 'affiliate@test.com',
-    password: 'affiliate123',
-    expectedUrl: '/dashboard/affiliate',
-    dashboardTitle: 'Affiliate Dashboard',
   },
   {
     role: 'Client',
@@ -146,26 +139,7 @@ test.describe('Authentication Dashboard Tests', () => {
     });
   });
 
-  test('Affiliate: Should have affiliate-specific UI elements', async ({ page }) => {
-    await loginWithTestAccount(page, 'affiliate@test.com', 'affiliate123');
-    await page.waitForLoadState('networkidle');
-
-    // Check for affiliate-specific elements
-    const bodyText = await page.textContent('body');
-
-    const hasAffiliateContent =
-      bodyText?.includes('Affiliate') ||
-      bodyText?.includes('Earnings') ||
-      bodyText?.includes('Referrals') ||
-      bodyText?.includes('Dashboard');
-
-    expect(hasAffiliateContent).toBeTruthy();
-
-    await page.screenshot({
-      path: '__tests__/screenshots/affiliate-dashboard-detailed.png',
-      fullPage: true,
-    });
-  });
+  // NOTE: Affiliate role was removed - affiliates are now clients with affiliateStatus
 
   test('Client: Should have client-specific UI elements', async ({ page }) => {
     await loginWithTestAccount(page, 'client@test.com', 'client123');
