@@ -373,7 +373,7 @@ async function getCommissionRate(
     }
 
     // Tax preparers don't earn commission (but tracking still works)
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       return { rate: 0, source: 'preparer_bonus' };
     }
 
