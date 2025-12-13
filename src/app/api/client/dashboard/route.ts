@@ -29,6 +29,45 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
+    // Check for completed tax intake (by profileId or email match)
+    const taxIntake = await prisma.taxIntakeLead.findFirst({
+      where: {
+        OR: [
+          { profileId: profile.id },
+          { email: session.user?.email || '' },
+        ],
+        completed: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        clientFolder: true,
+      },
+    });
+
+    // Get assigned preparer (via ClientPreparer table)
+    const clientPreparer = await prisma.clientPreparer.findFirst({
+      where: {
+        clientId: profile.id,
+        isActive: true,
+      },
+      include: {
+        preparer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    // Count all documents for this client
+    const totalDocumentsCount = await prisma.document.count({
+      where: { profileId: profile.id },
+    });
+
     // Get current tax year
     const currentYear = new Date().getFullYear();
     const taxYear = req.nextUrl.searchParams.get('year')
@@ -134,12 +173,33 @@ export async function GET(req: NextRequest) {
         totalLeads: referralStats._count || 0,
       },
       stats: {
-        documentsCount: taxReturn?.documents.length || 0,
+        documentsCount: totalDocumentsCount,
         estimatedRefund: taxReturn?.refundAmount ? Number(taxReturn.refundAmount) : 0,
         daysUntilDeadline: Math.ceil(
           (new Date(`${taxYear + 1}-04-15`).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
         ),
       },
+      // Tax intake status for dashboard conditional rendering
+      intakeStatus: {
+        hasCompleted: !!taxIntake?.completed,
+        intakeId: taxIntake?.id || null,
+      },
+      // Assigned tax preparer info
+      assignedPreparer: clientPreparer?.preparer
+        ? {
+            id: clientPreparer.preparer.id,
+            name: `${clientPreparer.preparer.firstName || ''} ${clientPreparer.preparer.lastName || ''}`.trim(),
+            email: clientPreparer.preparer.email,
+            avatarUrl: clientPreparer.preparer.avatarUrl,
+          }
+        : null,
+      // Client's document folder
+      clientFolder: taxIntake?.clientFolder
+        ? {
+            id: taxIntake.clientFolder.id,
+            name: taxIntake.clientFolder.name,
+          }
+        : null,
     };
 
     return NextResponse.json(response);
