@@ -37,11 +37,7 @@ export async function GET(req: NextRequest) {
 
     if (clientId) {
       // Only admins and tax preparers can view other users' files
-      if (
-        profile.role !== 'admin' &&
-        profile.
-        profile.role !== 'tax_preparer'
-      ) {
+      if (profile.role !== 'admin' && profile.role !== 'tax_preparer') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
