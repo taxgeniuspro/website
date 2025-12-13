@@ -145,6 +145,40 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   // Tax preparers also get affiliate features automatically (no status check needed)
   // See: /dashboard/client/tracking, /dashboard/client/leads, /dashboard/client/analytics
 
+  // 📊 Tax Preparer Dashboard Section (top-level items, no dropdowns)
+  {
+    label: 'Overview',
+    href: '/dashboard/tax-preparer',
+    icon: Home,
+    permission: 'dashboard',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Calendar & Appointments',
+    href: '/dashboard/tax-preparer/calendar',
+    icon: Calendar,
+    permission: 'calendar',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'CRM Contacts',
+    href: '/crm/contacts',
+    icon: BookOpen,
+    permission: 'addressBook',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Analytics',
+    href: '/dashboard/tax-preparer/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+
   // 👥 Clients Section (for tax preparers and admins)
   {
     label: 'My Clients',
@@ -229,14 +263,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
   {
-    label: 'My Analytics',
-    href: '/dashboard/tax-preparer/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['tax_preparer'],
-  },
-  {
     label: 'My Tracking Code',
     href: '/dashboard/tax-preparer/tracking',
     icon: QrCode,
@@ -245,14 +271,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer', 'super_admin', 'client'], // affiliate removed - clients with affiliateStatus=APPROVED see this
   },
 
-  // 📋 CRM Section
+  // 📋 CRM Section (Admin only - tax preparer items moved to Dashboard section above)
   {
     label: 'Calendar & Appointments',
     href: '/admin/calendar',
     icon: Calendar,
     permission: 'calendar',
     section: '📋 CRM',
-    roles: ['tax_preparer', 'super_admin'],
+    roles: ['super_admin'], // Tax preparer version is in Dashboard section
   },
   {
     label: 'CRM Contacts',
@@ -260,7 +286,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     permission: 'addressBook',
     section: '📋 CRM',
-    roles: ['tax_preparer', 'super_admin'],
+    roles: ['super_admin'], // Tax preparer version is in Dashboard section
   },
   {
     label: 'Client File Center',
@@ -517,9 +543,10 @@ export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
  * If a section is not listed, it's visible to all roles (with proper permissions)
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
+  '📊 Dashboard': ['tax_preparer'], // Tax preparer main dashboard section
   '⚙️ System Controls': ['super_admin', 'admin'], // Only admins and super_admins can see system controls
   '💰 Financials': ['super_admin', 'admin'], // Only admins can see financials
-  '📊 Analytics': ['super_admin', 'admin', 'tax_preparer'], // Analytics section for admins and preparers
+  '📊 Analytics': ['super_admin', 'admin'], // Analytics section for admins only (tax preparer has it in Dashboard)
   '📢 Marketing': ['super_admin', 'admin'], // Marketing hub for admins
   '🛒 Marketing Materials': ['super_admin', 'admin'], // Marketing materials (paid features) for admins
 };
