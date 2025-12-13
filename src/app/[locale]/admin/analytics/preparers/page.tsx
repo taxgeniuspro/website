@@ -69,8 +69,14 @@ export default async function AdminPreparersAnalyticsPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch preparer performance data
-  const preparers = await getAllPreparersLeadPerformance(period);
+  // Fetch preparer performance data with error handling
+  let preparers: Awaited<ReturnType<typeof getAllPreparersLeadPerformance>> = [];
+
+  try {
+    preparers = await getAllPreparersLeadPerformance(period);
+  } catch (error) {
+    console.error('Preparer analytics data fetch error:', error);
+  }
 
   // Calculate aggregates
   const totalLeads = preparers.reduce((sum, p) => sum + p.leads, 0);

@@ -77,11 +77,23 @@ export default async function AdminAffiliatesAnalyticsPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch affiliate performance and commission data
-  const [affiliates, commissions] = await Promise.all([
-    getAllAffiliatesLeadPerformance(period),
-    getCommissionSummary(period),
-  ]);
+  // Fetch affiliate performance and commission data with error handling
+  let affiliates: Awaited<ReturnType<typeof getAllAffiliatesLeadPerformance>> = [];
+  let commissions: Awaited<ReturnType<typeof getCommissionSummary>> = {
+    total: { amount: 0, count: 0 },
+    pending: { amount: 0, count: 0 },
+    approved: { amount: 0, count: 0 },
+    paid: { amount: 0, count: 0 },
+  };
+
+  try {
+    [affiliates, commissions] = await Promise.all([
+      getAllAffiliatesLeadPerformance(period),
+      getCommissionSummary(period),
+    ]);
+  } catch (error) {
+    console.error('Affiliate analytics data fetch error:', error);
+  }
 
   // Calculate aggregates
   const totalLeads = affiliates.reduce((sum, a) => sum + a.leads, 0);

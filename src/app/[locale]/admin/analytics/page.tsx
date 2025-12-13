@@ -70,15 +70,28 @@ export default async function AdminAnalyticsOverviewPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch all analytics data in parallel
-  const [pipeline, funnel, entryPoints, performers, sources, commissions] = await Promise.all([
-    getLeadPipelineSummary(period),
-    getConversionFunnel(period),
-    getTopEntryPoints(10, period),
-    getTopPerformers(10, period),
-    getLeadsBySource(period),
-    getCommissionSummary(period),
-  ]);
+  // Fetch all analytics data in parallel with error handling
+  let pipeline, funnel, entryPoints, performers, sources, commissions;
+
+  try {
+    [pipeline, funnel, entryPoints, performers, sources, commissions] = await Promise.all([
+      getLeadPipelineSummary(period),
+      getConversionFunnel(period),
+      getTopEntryPoints(10, period),
+      getTopPerformers(10, period),
+      getLeadsBySource(period),
+      getCommissionSummary(period),
+    ]);
+  } catch (error) {
+    console.error('Analytics data fetch error:', error);
+    // Return default empty values if data fetch fails
+    pipeline = { pipeline: { NEW: 0, CONTACTED: 0, QUALIFIED: 0, CONVERTED: 0, DISQUALIFIED: 0 }, total: 0 };
+    funnel = { clicks: 0, leads: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0, conversionRates: { clickToLead: 0, leadToIntake: 0, intakeToComplete: 0, overallConversion: 0 } };
+    entryPoints = [];
+    performers = [];
+    sources = [];
+    commissions = { total: { amount: 0, count: 0 }, pending: { amount: 0, count: 0 }, approved: { amount: 0, count: 0 }, paid: { amount: 0, count: 0 } };
+  }
 
   const periodLabel =
     period === '7d'
