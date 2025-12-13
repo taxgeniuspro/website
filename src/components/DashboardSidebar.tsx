@@ -100,27 +100,8 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
       return { ...item, href: ROLE_DASHBOARD_ROUTES[role] };
     }
 
-    // Earnings is special - update href based on role
-    if (item.permission === 'earnings') {
-      const earningsRoutes: Record<UserRole, string> = {
-        admin: '/admin/earnings',
-        lead: '/dashboard/lead/earnings',
-        tax_preparer: '/dashboard/tax-preparer/earnings',
-        client: '/dashboard/client/earnings',
-      };
-      return { ...item, href: earningsRoutes[role] };
-    }
-
-    // Settings is special - update href based on role
-    if (item.permission === 'settings') {
-      const settingsRoutes: Record<UserRole, string> = {
-        admin: '/admin/settings',
-        lead: '/dashboard/lead/settings',
-        tax_preparer: '/dashboard/tax-preparer/settings',
-        client: '/dashboard/client/settings',
-      };
-      return { ...item, href: settingsRoutes[role] };
-    }
+    // NOTE: Earnings routes are now defined directly in nav items per role
+    // Settings is in sidebar footer only (not in nav items)
 
     // Return item as-is for all other cases
     return item;
@@ -200,11 +181,10 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
         {/* Restart Tour Button */}
         <RestartTourButton role={role} />
 
-        {/* Settings Link */}
+        {/* Settings Link - Single location to avoid duplicates */}
         <SidebarMenuButton asChild tooltip="Settings">
           <Link href={
             role === 'admin' ? '/admin/settings' :
-            role === 'lead' ? '/dashboard/lead/settings' :
             role === 'tax_preparer' ? '/dashboard/tax-preparer/settings' :
             '/dashboard/client/settings'
           }>
