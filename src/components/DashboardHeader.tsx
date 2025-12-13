@@ -3,7 +3,7 @@
 import { useSession, signOut } from 'next-auth/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Bell, Eye, LogOut, Settings, User } from 'lucide-react';
+import { Eye, LogOut, Settings, User } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Moon, Sun } from 'lucide-react';
 import {
@@ -22,6 +22,7 @@ import { GlobalSearch } from '@/components/GlobalSearch';
 import { KeyboardShortcutsDialog } from '@/components/KeyboardShortcutsDialog';
 import { RecentItemsDropdown } from '@/components/RecentItems';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Logo } from '@/components/Logo';
 
 interface DashboardHeaderProps {
   actualRole?: UserRole;
@@ -98,12 +99,8 @@ export function DashboardHeader({
         <Separator orientation="vertical" className="mr-2 h-4" />
 
         {/* Logo/Brand */}
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">TG</span>
-          </div>
-          <span className="text-lg font-semibold hidden md:block">Tax Genius</span>
-        </div>
+        <Logo size="md" showText className="hidden md:flex" />
+        <Logo size="md" showText={false} className="md:hidden" />
 
         {/* Spacer */}
         <div className="flex-1" />
