@@ -85,34 +85,56 @@ export default async function MyClientsPage() {
     redirect('/dashboard/tax-preparer');
   }
 
-  // Fetch clients assigned to this preparer
-  const clientRelationships = await prisma.clientPreparer.findMany({
-    where: {
-      preparerId: preparerProfile.id,
-      isActive: true,
-    },
-    include: {
-      client: {
-        include: {
-          taxReturns: {
-            orderBy: { taxYear: 'desc' },
-            take: 1,
-          },
-          user: {
-            select: { email: true },
+  // Fetch clients assigned to this preparer with error handling
+  let clients: Array<{
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    avatarUrl: string | null;
+    assignedAt: Date;
+    taxReturns: Array<{ taxYear: number; status: string }>;
+    user: { email: string } | null;
+  }> = [];
+
+  try {
+    const clientRelationships = await prisma.clientPreparer.findMany({
+      where: {
+        preparerId: preparerProfile.id,
+        isActive: true,
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            avatarUrl: true,
+            taxReturns: {
+              orderBy: { taxYear: 'desc' },
+              take: 1,
+              select: { taxYear: true, status: true },
+            },
+            user: {
+              select: { email: true },
+            },
           },
         },
       },
-    },
-    orderBy: {
-      assignedAt: 'desc',
-    },
-  });
+      orderBy: {
+        assignedAt: 'desc',
+      },
+    });
 
-  const clients = clientRelationships.map((rel) => ({
-    ...rel.client,
-    assignedAt: rel.assignedAt,
-  }));
+    clients = clientRelationships.map((rel) => ({
+      ...rel.client,
+      assignedAt: rel.assignedAt,
+    }));
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    // Continue with empty clients array
+  }
 
   // Calculate statistics
   const totalClients = clients.length;
