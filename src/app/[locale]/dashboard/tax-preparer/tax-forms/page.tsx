@@ -16,7 +16,6 @@ import {
   CheckSquare,
   Square,
   Mail,
-  Link2,
   Copy,
 } from 'lucide-react';
 import {
