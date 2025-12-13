@@ -348,7 +348,7 @@ async function getCommissionRate(
     }
 
     // If affiliate, check for custom commission structure from bonded preparer
-    if (profile.role === 'AFFILIATE' && profile.affiliateBondedToPreparerId) {
+    if (profile.role === 'affiliate' && profile.affiliateBondedToPreparerId) {
       const bonding = await prisma.affiliateBonding.findFirst({
         where: {
           affiliateId: profile.id,
@@ -373,7 +373,7 @@ async function getCommissionRate(
     }
 
     // Tax preparers don't earn commission (but tracking still works)
-    if (profile.role === 'TAX_PREPARER') {
+    if (profile.role === 'tax_preparer') {
       return { rate: 0, source: 'preparer_bonus' };
     }
 
