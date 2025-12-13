@@ -39,6 +39,7 @@ import {
   Ticket,
   Image,
   Gift,
+  GraduationCap,
 } from 'lucide-react';
 import { UserRole, Permission } from '@/lib/permissions';
 
@@ -149,39 +150,31 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 👥 CLIENTS SECTION (Tax Preparer)
-  // Client management, documents, support
+  // 📊 TAX PREPARER DASHBOARD SECTION
+  // Order: Analytics, Share & Earn, Dashboard, Calendar, File Center, Tax Forms, Training, Store
   // ═══════════════════════════════════════════════════════════════════════════
   {
-    label: 'My Clients',
-    href: '/dashboard/tax-preparer/clients',
-    icon: Users,
-    permission: 'clients',
-    section: '👥 Clients',
+    label: 'Analytics',
+    href: '/dashboard/tax-preparer/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
+    section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
-    label: 'Client File Center',
-    href: '/admin/file-center',
-    icon: FolderOpen,
-    permission: 'clientFileCenter',
-    section: '👥 Clients',
+    label: 'Share & Earn',
+    href: '/quick-share',
+    icon: Gift,
+    permission: 'trackingCode',
+    section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
-    label: 'IRS Forms Library',
-    href: '/dashboard/tax-preparer/tax-forms',
-    icon: FileText,
-    permission: 'taxForms',
-    section: '👥 Clients',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Support Tickets',
-    href: '/dashboard/tax-preparer/tickets',
-    icon: Ticket,
-    permission: 'clients',
-    section: '👥 Clients',
+    label: 'Overview',
+    href: '/dashboard/tax-preparer',
+    icon: Home,
+    permission: 'dashboard',
+    section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
@@ -189,7 +182,31 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/tax-preparer/calendar',
     icon: Calendar,
     permission: 'calendar',
-    section: '👥 Clients',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Client File Center',
+    href: '/admin/file-center',
+    icon: FolderOpen,
+    permission: 'clientFileCenter',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'IRS Forms Library',
+    href: '/dashboard/tax-preparer/tax-forms',
+    icon: FileText,
+    permission: 'taxForms',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Training',
+    href: '/dashboard/tax-preparer/training',
+    icon: GraduationCap,
+    permission: 'academy',
+    section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
@@ -197,7 +214,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/store',
     icon: Package,
     permission: 'store',
-    section: '👥 Clients',
+    section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
