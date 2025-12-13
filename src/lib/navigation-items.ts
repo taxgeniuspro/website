@@ -11,6 +11,11 @@
  * - Marketing Assets: Consolidated per role
  * - IRS Forms: Moved to Store & Products section
  * - My Tracking Code: Moved to Dashboard section for tax_preparer
+ *
+ * SIMPLIFIED NAVIGATION (Dec 2025):
+ * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools
+ * - Tax Preparer sections: 👥 Clients, 💼 Business, 🛒 Store & Products
+ * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 
 import {
@@ -24,7 +29,6 @@ import {
   FolderOpen,
   Megaphone,
   Sparkles,
-  GraduationCap,
   ShieldCheck,
   UserCheck,
   Trophy,
@@ -53,8 +57,8 @@ export interface NavItem {
  *
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
- * - Tax Preparer: 📊 Dashboard, 📚 Tools & Resources, 👥 Clients, 💼 Business, 🔗 Quick Share
- * - Admin: 👥 Clients, 📊 Analytics, 📋 CRM, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
+ * - Tax Preparer: 👥 Clients, 💼 Business, 🛒 Store & Products
+ * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
@@ -145,87 +149,29 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 📊 TAX PREPARER DASHBOARD SECTION
-  // Main navigation for tax preparers
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Overview',
-    href: '/dashboard/tax-preparer',
-    icon: Home,
-    permission: 'dashboard',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Calendar',
-    href: '/dashboard/tax-preparer/calendar',
-    icon: Calendar,
-    permission: 'calendar',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'CRM Contacts',
-    href: '/crm/contacts',
-    icon: BookOpen,
-    permission: 'addressBook',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Analytics',
-    href: '/dashboard/tax-preparer/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'My Tracking Code',
-    href: '/dashboard/tax-preparer/tracking',
-    icon: QrCode,
-    permission: 'trackingCode',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 📚 TOOLS & RESOURCES (Tax Preparer)
-  // Training, Academy, Recruitment
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Academy',
-    href: '/app/academy',
-    icon: GraduationCap,
-    permission: 'dashboard',
-    section: '📚 Tools & Resources',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Training Course',
-    href: '/dashboard/tax-preparer/training',
-    icon: BookOpen,
-    permission: 'dashboard',
-    section: '📚 Tools & Resources',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Recruit Preparers',
-    href: '/dashboard/tax-preparer/recruit',
-    icon: Users,
-    permission: 'dashboard',
-    section: '📚 Tools & Resources',
-    roles: ['tax_preparer'],
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 👥 CLIENTS SECTION
-  // Client management for tax preparers and admins
+  // 👥 CLIENTS SECTION (Tax Preparer)
+  // Client management, documents, support
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'My Clients',
     href: '/dashboard/tax-preparer/clients',
     icon: Users,
+    permission: 'clientsStatus',
+    section: '👥 Clients',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Client File Center',
+    href: '/admin/file-center',
+    icon: FolderOpen,
+    permission: 'clientFileCenter',
+    section: '👥 Clients',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'IRS Forms Library',
+    href: '/dashboard/tax-preparer/tax-forms',
+    icon: FileText,
     permission: 'clientsStatus',
     section: '👥 Clients',
     roles: ['tax_preparer'],
@@ -239,18 +185,10 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
-    label: 'Tax Forms Library',
-    href: '/dashboard/tax-preparer/tax-forms',
-    icon: FileText,
-    permission: 'clientsStatus',
-    section: '👥 Clients',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Client File Center',
-    href: '/admin/file-center',
-    icon: FolderOpen,
-    permission: 'clientFileCenter',
+    label: 'Calendar',
+    href: '/dashboard/tax-preparer/calendar',
+    icon: Calendar,
+    permission: 'calendar',
     section: '👥 Clients',
     roles: ['tax_preparer'],
   },
@@ -300,16 +238,12 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 📋 CRM SECTION (Admin)
-  // Customer relationship management tools
-  // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Calendar',
     href: '/admin/calendar',
     icon: Calendar,
     permission: 'calendar',
-    section: '📋 CRM',
+    section: '👥 Clients',
     roles: ['admin'],
   },
   {
@@ -317,7 +251,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/crm/contacts',
     icon: BookOpen,
     permission: 'addressBook',
-    section: '📋 CRM',
+    section: '👥 Clients',
     roles: ['admin'],
   },
   {
@@ -325,7 +259,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/file-center',
     icon: FolderOpen,
     permission: 'clientFileCenter',
-    section: '📋 CRM',
+    section: '👥 Clients',
     roles: ['admin'],
   },
   {
@@ -333,7 +267,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/applications/preparers',
     icon: Users,
     permission: 'users',
-    section: '📋 CRM',
+    section: '👥 Clients',
     roles: ['admin'],
   },
 
@@ -470,19 +404,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🔗 QUICK SHARE SECTION
-  // Personal link generation (not for admin)
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Quick Share',
-    href: '/quick-share',
-    icon: Share2,
-    permission: 'dashboard',
-    section: '🔗 Quick Share',
-    roles: ['tax_preparer', 'client'],
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // ⚙️ SYSTEM CONTROLS SECTION (Admin)
   // User management and permissions
   // NOTE: Settings is NOT here - it's only in sidebar footer to avoid duplicates
@@ -530,12 +451,8 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📱 My Dashboard': ['client'], // Client dashboard items
-  '📊 Dashboard': ['tax_preparer'], // Tax preparer main dashboard section
-  '📚 Tools & Resources': ['tax_preparer'], // Tax preparer training
   '💼 Business': ['tax_preparer'], // Tax preparer business section
-  '🔗 Quick Share': ['tax_preparer', 'client'], // Quick share for non-admin
   '📊 Analytics': ['admin'], // Admin analytics section
-  '📋 CRM': ['admin'], // Admin CRM section
   '💰 Financials': ['admin'], // Admin financials
   '📢 Marketing': ['admin'], // Admin marketing hub
   '⚙️ System Controls': ['admin'], // Admin system settings
