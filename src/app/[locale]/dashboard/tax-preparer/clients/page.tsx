@@ -78,7 +78,7 @@ export default async function MyClientsPage() {
   // Get preparer's profile
   const preparerProfile = await prisma.profile.findFirst({
     where: { userId: user.id },
-    select: { id: true, displayName: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true },
   });
 
   if (!preparerProfile) {
