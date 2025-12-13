@@ -469,7 +469,10 @@
       "faqQ3": "¿Puedo presentar desde cualquier lugar de los EE. UU.?",
       "faqA3": "¡Absolutamente! Servimos a clientes en los 50 estados y ofrecemos consultas virtuales y reuniones en persona donde estén disponibles.",
       "faqQ4": "¿Qué pasa si no estoy satisfecho con su servicio?",
-      "faqA4": "Ofrecemos una garantía de satisfacción del 100%. Si no está completamente satisfecho, lo arreglaremos o proporcionaremos un reembolso completo."
+      "faqA4": "Ofrecemos una garantía de satisfacción del 100%. Si no está completamente satisfecho, lo arreglaremos o proporcionaremos un reembolso completo.",
+      "yourTaxPreparer": "Su Preparador de Impuestos",
+      "directPhone": "Teléfono Directo",
+      "directEmail": "Correo Electrónico Directo"
     }
   },
   "home": {
