@@ -123,11 +123,34 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ user, account }) {
+      // For OAuth providers (Google), fetch role from database and attach to user
+      if (account?.provider === 'google' && user?.id) {
+        try {
+          const profile = await prisma.profile.findUnique({
+            where: { userId: user.id },
+            select: { role: true },
+          });
+          if (profile?.role) {
+            // Attach role to user object so JWT callback can access it
+            (user as NextAuthUser & { role: UserRole }).role = profile.role;
+          } else {
+            // Default to 'lead' if no profile exists yet (new users)
+            (user as NextAuthUser & { role: UserRole }).role = 'lead';
+          }
+        } catch (error) {
+          logger.error('Failed to fetch user role during OAuth sign-in', { error, userId: user.id });
+          // Default to 'lead' on error
+          (user as NextAuthUser & { role: UserRole }).role = 'lead';
+        }
+      }
+      return true;
+    },
     async jwt({ token, user, trigger, session }) {
       // Initial sign in - add user data to token
       if (user) {
         token.id = user.id;
-        token.role = user.role;
+        token.role = user.role || 'lead'; // Default to 'lead' if role not set
       }
 
       // Handle session updates (when user.update() is called)
@@ -135,9 +158,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = session.role;
       }
 
-      // Note: We don't fetch role from DB on every request because JWT callback
-      // runs on Edge Runtime which doesn't support Prisma. Role is set on initial
-      // sign-in and can be updated using the 'update' trigger if needed.
+      // Note: Role is fetched from DB in signIn callback for OAuth providers.
+      // For credentials, role is passed directly from authorize function.
+      // Role can be updated using the 'update' trigger if needed.
 
       return token;
     },
