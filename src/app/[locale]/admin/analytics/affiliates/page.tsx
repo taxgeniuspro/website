@@ -12,7 +12,7 @@
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { getUserPermissions } from '@/lib/permissions';
+import { getUserPermissions, UserPermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -56,7 +56,8 @@ async function checkAdminAccess() {
   if (!user) return { hasAccess: false };
 
   const role = user?.role as string;
-  const permissions = getUserPermissions(role as any, undefined);
+  const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
+  const permissions = getUserPermissions(role as any, customPermissions);
   const hasAccess = role === 'admin' && permissions.analytics;
 
   return { hasAccess, permissions };
