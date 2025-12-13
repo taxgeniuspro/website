@@ -188,6 +188,32 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
 
+  // 📚 Tax Preparer Tools Section (Training, Recruitment, Academy)
+  {
+    label: 'Academy',
+    href: '/app/academy',
+    icon: GraduationCap,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Training Course',
+    href: '/dashboard/tax-preparer/training',
+    icon: BookOpen,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Recruit Preparers',
+    href: '/dashboard/tax-preparer/recruit',
+    icon: Users,
+    permission: 'dashboard',
+    section: '📚 Tools & Resources',
+    roles: ['tax_preparer'],
+  },
+
   // 👥 Clients Section (for tax preparers and admins)
   {
     label: 'My Clients',
@@ -302,22 +328,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/file-center',
     icon: FolderOpen,
     permission: 'clientFileCenter',
-    section: '📋 CRM',
-    roles: ['tax_preparer', 'admin'],
-  },
-  {
-    label: 'Emails',
-    href: '/admin/emails',
-    icon: Mail,
-    permission: 'emails',
-    section: '📋 CRM',
-    roles: ['admin'],
-  },
-  {
-    label: 'Academy',
-    href: '/app/academy',
-    icon: GraduationCap,
-    permission: 'academy',
     section: '📋 CRM',
     roles: ['tax_preparer', 'admin'],
   },
@@ -525,13 +535,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     permission: 'users',
     section: '⚙️ System Controls',
     roles: ['admin'],
-  },
-  {
-    label: 'Database',
-    href: '/admin/database',
-    icon: Database,
-    permission: 'database',
-    section: '⚙️ System Controls',
   },
   {
     label: 'Settings',

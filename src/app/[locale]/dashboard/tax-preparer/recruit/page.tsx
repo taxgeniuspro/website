@@ -162,7 +162,7 @@ export default function PreparerLandingPage() {
             </Badge>
           </div>
 
-          <Link href="/admin/preparer-job-form">
+          <Link href="/dashboard/tax-preparer/apply-form">
             <Button size="lg" className="bg-[#F12727] hover:bg-[#d41f1f] text-white text-2xl px-16 py-8 h-auto font-black rounded-full shadow-2xl">
               Get My Free Consultation - I WANT TO START TODAY!
             </Button>
@@ -234,7 +234,7 @@ export default function PreparerLandingPage() {
               <p className="text-lg text-muted-foreground mb-8">
                 Tax Genius provided me with everything I needed to succeed - from training to marketing materials to ongoing support. Now I help others achieve the same financial freedom I found.
               </p>
-              <Link href="/admin/preparer-job-form">
+              <Link href="/dashboard/tax-preparer/apply-form">
                 <Button size="lg" className="bg-[#F12727] hover:bg-[#d41f1f] text-white text-xl px-12 py-6 h-auto font-bold">
                   START YOUR JOURNEY TODAY
                 </Button>
@@ -347,7 +347,7 @@ export default function PreparerLandingPage() {
               <p className="text-xl mb-8">
                 Get access to professional marketing materials, social media content, and branded merchandise that will help you attract and retain clients.
               </p>
-              <Link href="/admin/preparer-job-form">
+              <Link href="/dashboard/tax-preparer/apply-form">
                 <Button size="lg" className="bg-[#F12727] hover:bg-[#d41f1f] text-white text-xl px-12 py-6 h-auto font-bold">
                   GET STARTED NOW
                 </Button>
@@ -402,7 +402,7 @@ export default function PreparerLandingPage() {
           <p className="text-2xl font-bold text-[#F12727] mb-8">
             HURRY! START BUILDING YOUR CLIENTS BASE TODAY
           </p>
-          <Link href="/admin/preparer-job-form">
+          <Link href="/dashboard/tax-preparer/apply-form">
             <Button size="lg" className="bg-[#F12727] hover:bg-[#d41f1f] text-white text-2xl px-16 py-8 h-auto font-black rounded-full shadow-2xl">
               GET STARTED NOW
             </Button>
@@ -441,12 +441,12 @@ export default function PreparerLandingPage() {
             FREE TRAINING AND MARKETING PRODUCTS FOR THE FIRST 100 APPLICANTS
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-            <Link href="/admin/preparer-job-form">
+            <Link href="/dashboard/tax-preparer/apply-form">
               <Button size="lg" className="bg-[#F12727] hover:bg-[#d41f1f] text-white text-2xl px-16 py-8 h-auto font-black rounded-full shadow-2xl">
                 Get My Free Consultation
               </Button>
             </Link>
-            <Link href="/admin/tax-course">
+            <Link href="/dashboard/tax-preparer/training">
               <Button size="lg" variant="outline" className="bg-white text-[#4054b2] hover:bg-gray-100 text-xl px-12 py-6 h-auto font-bold border-2">
                 VIEW TRAINING COURSE
               </Button>

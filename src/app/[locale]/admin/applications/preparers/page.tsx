@@ -120,7 +120,7 @@ export default function PreparerApplicationsPage() {
   const { toast } = useToast();
 
   // Check permissions
-  const isAdmin = user?.role === 'admin' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   // Redirect if no access
   useEffect(() => {
@@ -129,29 +129,14 @@ export default function PreparerApplicationsPage() {
     }
   }, [isLoaded, user, isAdmin]);
 
-  // Show loading skeleton while checking auth
-  if (!isLoaded || !isAdmin) {
-    return (
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="space-y-2">
-          <div className="h-8 w-64 rounded-md bg-muted animate-pulse" />
-          <div className="h-5 w-96 rounded-md bg-muted animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-        <TableSkeleton rows={10} columns={7} />
-      </div>
-    );
-  }
-
+  // Fetch applications when auth is confirmed
   useEffect(() => {
-    fetchApplications();
-  }, []);
+    if (isLoaded && isAdmin) {
+      fetchApplications();
+    }
+  }, [isLoaded, isAdmin]);
 
+  // Filter applications when data changes
   useEffect(() => {
     filterApplications();
   }, [search, statusFilter, stageFilter, applications]);
@@ -439,15 +424,28 @@ export default function PreparerApplicationsPage() {
     DECISION: applications.filter((a) => a.stage === 'DECISION' && a.status === 'PENDING').length,
   };
 
-  if (loading) {
+  // Show loading skeleton while checking auth or loading data
+  if (!isLoaded || loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading applications...</p>
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-64 rounded-md bg-muted animate-pulse" />
+          <div className="h-5 w-96 rounded-md bg-muted animate-pulse" />
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <TableSkeleton rows={10} columns={7} />
       </div>
     );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
   }
 
   const renderPipelineView = () => {
