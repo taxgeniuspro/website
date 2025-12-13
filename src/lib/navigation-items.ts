@@ -194,10 +194,10 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
-    label: 'Client File Center',
-    href: '/admin/file-center',
+    label: 'Client Documents',
+    href: '/dashboard/tax-preparer/documents',
     icon: FolderOpen,
-    permission: 'clientFileCenter',
+    permission: 'documents',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },

@@ -1,0 +1,110 @@
+[
+  {
+    "name": "Analytics",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/analytics",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/analytics",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "My Lead Analytics | Tax Genius Pro",
+    "screenshot": "nav-test-1-analytics.png"
+  },
+  {
+    "name": "Quick Share",
+    "url": "https://taxgeniuspro.tax/en/quick-share",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/quick-share",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Share & Earn | TaxGeniusPro",
+    "screenshot": "nav-test-2-share-earn.png"
+  },
+  {
+    "name": "Overview",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Dashboard - Tax Genius Pro",
+    "screenshot": "nav-test-3-overview.png"
+  },
+  {
+    "name": "Clients",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/clients",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/clients",
+    "success": false,
+    "has404": false,
+    "hasError": true,
+    "wasRedirected": false,
+    "pageTitle": "My Clients - Tax Preparer | Tax Genius Pro",
+    "screenshot": "nav-test-4-clients.png"
+  },
+  {
+    "name": "Calendar",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/calendar",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/calendar",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Tax Genius Pro - Professional Tax Management Platform",
+    "screenshot": "nav-test-5-calendar.png"
+  },
+  {
+    "name": "File Center",
+    "url": "https://taxgeniuspro.tax/en/admin/file-center",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/forbidden",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": true,
+    "pageTitle": "Tax Genius Pro - Professional Tax Management Platform",
+    "screenshot": "nav-test-6-file-center.png"
+  },
+  {
+    "name": "Tax Forms",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/tax-forms",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/tax-forms",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Tax Genius Pro - Professional Tax Management Platform",
+    "screenshot": "nav-test-7-tax-forms.png"
+  },
+  {
+    "name": "Training",
+    "url": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/training",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/dashboard/tax-preparer/training",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Tax Genius Pro - Professional Tax Management Platform",
+    "screenshot": "nav-test-8-training.png"
+  },
+  {
+    "name": "Store",
+    "url": "https://taxgeniuspro.tax/en/store",
+    "statusCode": 200,
+    "finalUrl": "https://taxgeniuspro.tax/en/store",
+    "success": true,
+    "has404": false,
+    "hasError": false,
+    "wasRedirected": false,
+    "pageTitle": "Marketing Store - Tax Genius Pro",
+    "screenshot": "nav-test-9-store.png"
+  }
+]

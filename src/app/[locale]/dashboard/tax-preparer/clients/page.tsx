@@ -103,23 +103,14 @@ export default async function MyClientsPage() {
         preparerId: preparerProfile.id,
         isActive: true,
       },
-      select: {
-        assignedAt: true,
+      include: {
         client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            avatarUrl: true,
+          include: {
             taxReturns: {
               orderBy: { taxYear: 'desc' },
               take: 1,
-              select: { taxYear: true, status: true },
             },
-            user: {
-              select: { email: true },
-            },
+            user: true,
           },
         },
       },
@@ -129,8 +120,14 @@ export default async function MyClientsPage() {
     });
 
     clients = clientRelationships.map((rel) => ({
-      ...rel.client,
+      id: rel.client.id,
+      firstName: rel.client.firstName,
+      lastName: rel.client.lastName,
+      phone: rel.client.phone,
+      avatarUrl: rel.client.avatarUrl,
       assignedAt: rel.assignedAt,
+      taxReturns: rel.client.taxReturns.map(tr => ({ taxYear: tr.taxYear, status: tr.status })),
+      user: rel.client.user ? { email: rel.client.user.email } : null,
     }));
   } catch (error) {
     console.error('Error fetching clients:', error);
