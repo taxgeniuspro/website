@@ -32,6 +32,17 @@ export async function GET() {
       WHERE "userId" = ${session.user.id}
     ` as { id: string; role: string; firstName: string; lastName: string }[];
 
+    // Deep inspection of Prisma role value
+    const prismaRoleInspection = {
+      value: profile?.role,
+      type: typeof profile?.role,
+      toString: profile?.role?.toString?.(),
+      valueOf: profile?.role?.valueOf?.(),
+      json: JSON.stringify(profile?.role),
+      isString: typeof profile?.role === 'string',
+      constructorName: profile?.role?.constructor?.name,
+    };
+
     return NextResponse.json({
       session: {
         userId: session.user.id,
@@ -39,8 +50,10 @@ export async function GET() {
         name: session.user.name,
         roleFromSession: session.user.role,
         roleType: typeof session.user.role,
+        roleJSON: JSON.stringify(session.user.role),
       },
       profileFromPrisma: profile,
+      prismaRoleInspection,
       profileFromRawQuery: rawProfile[0] || null,
       comparison: {
         sessionRole: session.user.role,
@@ -48,6 +61,11 @@ export async function GET() {
         rawRole: rawProfile[0]?.role,
         sessionMatchesPrisma: session.user.role === profile?.role,
         sessionMatchesRaw: session.user.role === rawProfile[0]?.role,
+        sessionRoleToStringMatchesPrisma: String(session.user.role) === String(profile?.role),
+      },
+      fix: {
+        message: 'The JWT token has a stale role. Sign out and sign back in to refresh it.',
+        signOutUrl: '/auth/signout',
       },
     });
   } catch (error) {

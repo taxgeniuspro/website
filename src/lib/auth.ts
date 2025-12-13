@@ -194,12 +194,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // and deactivated users get blocked on their next request
       if (token.id) {
         try {
-          const profile = await prisma.profile.findUnique({
-            where: { userId: token.id as string },
-            select: { role: true, isActive: true },
-          });
+          // Use raw query to ensure we get the role as a plain string
+          // This bypasses any Prisma enum caching issues
+          const profiles = await prisma.$queryRaw<{ role: string; isActive: boolean }[]>`
+            SELECT role::text as role, "isActive"
+            FROM profiles
+            WHERE "userId" = ${token.id as string}
+            LIMIT 1
+          `;
+
+          const profile = profiles[0];
           if (profile?.role) {
-            token.role = profile.role;
+            // Force the role to be a plain string
+            token.role = profile.role as UserRole;
+            logger.debug('JWT role refreshed from database', {
+              userId: token.id,
+              oldRole: token.role,
+              newRole: profile.role
+            });
           }
           // Update isActive status - this will catch admin deactivations
           token.isActive = profile?.isActive ?? true;
