@@ -12,14 +12,10 @@ import {
   DollarSign,
   Settings,
   BarChart3,
-  CreditCard,
   Share2,
   Calendar,
-  Mail,
   FolderOpen,
   Megaphone,
-  Link2,
-  Database,
   Sparkles,
   GraduationCap,
   ShieldCheck,
@@ -284,7 +280,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: QrCode,
     permission: 'trackingCode',
     section: '📊 Analytics',
-    roles: ['tax_preparer', 'admin', 'client'], // affiliate removed - clients with affiliateStatus=APPROVED see this
+    roles: ['tax_preparer', 'client'], // Admin removed - admin doesn't have personal tracking codes
   },
 
   // 📋 CRM Section (Admin only - tax preparer items moved to Dashboard section above)
@@ -371,22 +367,22 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
 
-  // 📢 Marketing Section
+  // 📢 Marketing Section (Admin only - company-wide marketing management)
   {
     label: 'Marketing Hub',
     href: '/admin/marketing-hub',
     icon: Megaphone,
     permission: 'marketingHub',
     section: '📢 Marketing',
-    roles: ['tax_preparer', 'admin'],
+    roles: ['admin'], // Admin only - manages company marketing templates
   },
   {
-    label: 'Tracking Codes',
+    label: 'Tracking Codes Overview',
     href: '/admin/tracking-codes',
     icon: QrCode,
     permission: 'marketingHub',
     section: '📢 Marketing',
-    roles: ['tax_preparer', 'admin'],
+    roles: ['admin'], // Admin only - read-only view of all tracking codes
   },
 
   // 🛒 Marketing Materials Section (Paid Features: Store, Content Generator, Products)
@@ -443,23 +439,17 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   // NOTE: Affiliate earnings moved to client dashboard - controlled by affiliateStatus
   // Clients with affiliateStatus=APPROVED will see earnings at /dashboard/client/earnings
 
-  // 🔗 Quick Share Tools Section
+  // 🔗 Quick Share Tools Section (Personal link generation - NOT for admin)
   {
     label: 'Quick Share',
     href: '/quick-share',
     icon: Share2,
     permission: 'dashboard', // All users with dashboard access can share
     section: '🔗 Quick Share Tools',
-    // Available to all roles
+    roles: ['tax_preparer', 'client', 'lead'], // Admin removed - they don't have personal tracking codes
   },
-  {
-    label: 'Admin Quick Share',
-    href: '/admin/quick-share',
-    icon: Link2,
-    permission: 'quickShareLinks',
-    section: '🔗 Quick Share Tools',
-    roles: ['admin'],
-  },
+  // NOTE: Admin Quick Share removed - admin doesn't generate personal links
+  // If admin wants QR codes/links, they need a separate tax preparer account
 
   // ⚙️ System Controls Section
   {
@@ -468,6 +458,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Users,
     permission: 'users',
     section: '⚙️ System Controls',
+    roles: ['admin'],
   },
   {
     label: 'Permissions',
@@ -491,6 +482,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Settings,
     permission: 'settings',
     section: '⚙️ Settings', // Separate section so it's not hidden when System Controls is restricted
+    // No roles specified - visible to all authenticated users
   },
 ];
 

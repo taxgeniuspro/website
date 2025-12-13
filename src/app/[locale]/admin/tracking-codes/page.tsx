@@ -5,12 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { logger } from '@/lib/logger';
-import { QrCode, Users, Search, ExternalLink, Filter } from 'lucide-react';
-import { TrackingCodeActions } from './tracking-code-actions';
+import { QrCode, Users, Search, Filter, Eye } from 'lucide-react';
 
 export const metadata = {
-  title: 'Tracking Codes Management | Tax Genius Pro',
-  description: 'View and manage all user tracking codes',
+  title: 'Tracking Codes Overview | Tax Genius Pro',
+  description: 'View all user tracking codes across the platform (read-only)',
 };
 
 async function checkAdminAccess() {
@@ -106,9 +105,13 @@ export default async function AdminTrackingCodesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Tracking Codes Management</h1>
+        <div className="flex items-center gap-2 mb-1">
+          <Eye className="h-5 w-5 text-muted-foreground" />
+          <Badge variant="secondary" className="text-xs">Read-Only View</Badge>
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight">Tracking Codes Overview</h1>
         <p className="text-muted-foreground mt-1">
-          View and manage all user tracking codes across the platform
+          View all user tracking codes across the platform. To generate personal tracking codes and QR codes, log in as a tax preparer.
         </p>
       </div>
 
@@ -222,19 +225,15 @@ export default async function AdminTrackingCodesPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <code className="text-sm font-mono font-bold text-primary bg-primary/10 px-3 py-1 rounded">
-                        {tc.activeCode}
-                      </code>
-                      {tc.customTrackingCode && tc.trackingCode && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Original: <code className="text-xs">{tc.trackingCode}</code>
-                        </p>
-                      )}
-                    </div>
-
-                    <TrackingCodeActions activeCode={tc.activeCode} />
+                  <div className="text-right">
+                    <code className="text-sm font-mono font-bold text-primary bg-primary/10 px-3 py-1 rounded">
+                      {tc.activeCode}
+                    </code>
+                    {tc.customTrackingCode && tc.trackingCode && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Original: <code className="text-xs">{tc.trackingCode}</code>
+                      </p>
+                    )}
                   </div>
                 </div>
               ))
