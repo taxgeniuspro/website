@@ -15,9 +15,10 @@ import {
   AlertCircle,
   TrendingUp,
   Users,
+  Gift,
 } from 'lucide-react';
-import { ReferralLinksManager } from '@/components/dashboard/ReferralLinksManager';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
+import Link from 'next/link';
 import { UserRole } from '@/lib/permissions';
 
 export default function ClientDashboard() {
@@ -272,16 +273,42 @@ export default function ClientDashboard() {
           </Card>
         )}
 
-        {/* Referral Links Section */}
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold">Share & Earn</h2>
-            <p className="text-sm text-muted-foreground">
-              Refer friends and family to earn rewards
-            </p>
-          </div>
-          <ReferralLinksManager />
-        </div>
+        {/* Share & Earn Quick Card */}
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Gift className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Share & Earn</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Refer friends and family to earn rewards
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/client/share-earn"
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4"
+              >
+                Get Started
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Users className="h-4 w-4" />
+                <span>{referralStats?.totalLeads || 0} referrals</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <TrendingUp className="h-4 w-4" />
+                <span>Share your link to earn</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
       </div>
     </>
