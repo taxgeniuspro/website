@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { getUserPermissions, UserPermissions } from '@/lib/permissions';
+import { getUserPermissions } from '@/lib/permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -44,21 +44,15 @@ export const metadata = {
 };
 
 async function checkAdminAccess() {
-  try {
-    const session = await auth();
-    const user = session?.user;
-    if (!user) return { hasAccess: false, role: undefined, permissions: undefined };
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false };
 
-    const role = user?.role as string;
-    const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
-    const permissions = getUserPermissions(role as any, customPermissions);
-    const hasAccess = role === 'admin' && permissions.analytics;
+  const role = user?.role as string;
+  const permissions = getUserPermissions(role as any, undefined);
+  const hasAccess = role === 'admin' && permissions.analytics;
 
-    return { hasAccess, role, permissions };
-  } catch (error) {
-    console.error('Auth check error:', error);
-    return { hasAccess: false, role: undefined, permissions: undefined };
-  }
+  return { hasAccess, role, permissions };
 }
 
 export default async function AdminAnalyticsOverviewPage({
@@ -75,28 +69,15 @@ export default async function AdminAnalyticsOverviewPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch all analytics data in parallel with error handling
-  let pipeline, funnel, entryPoints, performers, sources, commissions;
-
-  try {
-    [pipeline, funnel, entryPoints, performers, sources, commissions] = await Promise.all([
-      getLeadPipelineSummary(period),
-      getConversionFunnel(period),
-      getTopEntryPoints(10, period),
-      getTopPerformers(10, period),
-      getLeadsBySource(period),
-      getCommissionSummary(period),
-    ]);
-  } catch (error) {
-    console.error('Analytics data fetch error:', error);
-    // Return default empty values if data fetch fails
-    pipeline = { pipeline: { NEW: 0, CONTACTED: 0, QUALIFIED: 0, CONVERTED: 0, DISQUALIFIED: 0 }, total: 0 };
-    funnel = { clicks: 0, leads: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0, conversionRates: { clickToLead: 0, leadToIntake: 0, intakeToComplete: 0, overallConversion: 0 } };
-    entryPoints = [];
-    performers = [];
-    sources = [];
-    commissions = { total: { amount: 0, count: 0 }, pending: { amount: 0, count: 0 }, approved: { amount: 0, count: 0 }, paid: { amount: 0, count: 0 } };
-  }
+  // Fetch all analytics data in parallel
+  const [pipeline, funnel, entryPoints, performers, sources, commissions] = await Promise.all([
+    getLeadPipelineSummary(period),
+    getConversionFunnel(period),
+    getTopEntryPoints(10, period),
+    getTopPerformers(10, period),
+    getLeadsBySource(period),
+    getCommissionSummary(period),
+  ]);
 
   const periodLabel =
     period === '7d'
