@@ -189,15 +189,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
-      // IMPORTANT: Always refresh role and isActive from database to catch admin changes
+      // IMPORTANT: Always refresh role from database to catch admin changes
       // This ensures users see updated permissions immediately after admin changes their role
-      // and deactivated users get blocked on their next request
       if (token.id) {
         try {
           // Use raw query to ensure we get the role as a plain string
           // This bypasses any Prisma enum caching issues
-          const profiles = await prisma.$queryRaw<{ role: string; isActive: boolean }[]>`
-            SELECT role::text as role, "isActive"
+          const profiles = await prisma.$queryRaw<{ role: string }[]>`
+            SELECT role::text as role
             FROM profiles
             WHERE "userId" = ${token.id as string}
             LIMIT 1
@@ -209,12 +208,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             token.role = profile.role as UserRole;
             logger.debug('JWT role refreshed from database', {
               userId: token.id,
-              oldRole: token.role,
               newRole: profile.role
             });
           }
-          // Update isActive status - this will catch admin deactivations
-          token.isActive = profile?.isActive ?? true;
         } catch (error) {
           // Keep existing token values on error
           logger.error('Failed to refresh user profile in JWT callback', { error, userId: token.id });
