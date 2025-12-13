@@ -13,8 +13,8 @@
  * - My Tracking Code: Moved to Dashboard section for tax_preparer
  *
  * SIMPLIFIED NAVIGATION (Dec 2025):
- * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools
- * - Tax Preparer sections: 👥 Clients, 💼 Business, 🛒 Store & Products
+ * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools, Business
+ * - Tax Preparer sections: 👥 Clients, 🛒 Store & Products
  * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 
@@ -57,7 +57,7 @@ export interface NavItem {
  *
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
- * - Tax Preparer: 👥 Clients, 💼 Business, 🛒 Store & Products
+ * - Tax Preparer: 👥 Clients, 🛒 Store & Products
  * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
@@ -375,35 +375,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 💼 BUSINESS SECTION (Tax Preparer)
-  // Personal earnings and marketing
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'My Earnings',
-    href: '/dashboard/tax-preparer/earnings',
-    icon: DollarSign,
-    permission: 'earnings',
-    section: '💼 Business',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Marketing Products',
-    href: '/dashboard/tax-preparer/marketing-products',
-    icon: Package,
-    permission: 'marketingAssets',
-    section: '💼 Business',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Marketing Assets',
-    href: '/crm/marketing-assets',
-    icon: FolderOpen,
-    permission: 'marketingAssets',
-    section: '💼 Business',
-    roles: ['tax_preparer'],
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // ⚙️ SYSTEM CONTROLS SECTION (Admin)
   // User management and permissions
   // NOTE: Settings is NOT here - it's only in sidebar footer to avoid duplicates
@@ -451,7 +422,6 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📱 My Dashboard': ['client'], // Client dashboard items
-  '💼 Business': ['tax_preparer'], // Tax preparer business section
   '📊 Analytics': ['admin'], // Admin analytics section
   '💰 Financials': ['admin'], // Admin financials
   '📢 Marketing': ['admin'], // Admin marketing hub
