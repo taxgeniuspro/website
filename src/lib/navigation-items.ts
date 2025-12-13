@@ -151,8 +151,16 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 📊 TAX PREPARER DASHBOARD SECTION
-  // Order: Analytics, Share & Earn, Dashboard, Clients, Calendar, File Center, Tax Forms, Training, Store
+  // Order: Overview, Analytics, Share & Earn, Clients, Calendar, Documents, Tax Forms, Training, Store
   // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'Overview',
+    href: '/dashboard/tax-preparer',
+    icon: Home,
+    permission: 'dashboard',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
   {
     label: 'Analytics',
     href: '/dashboard/tax-preparer/analytics',
@@ -163,17 +171,9 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Share & Earn',
-    href: '/quick-share',
+    href: '/dashboard/tax-preparer/share-earn',
     icon: Gift,
     permission: 'trackingCode',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Overview',
-    href: '/dashboard/tax-preparer',
-    icon: Home,
-    permission: 'dashboard',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
