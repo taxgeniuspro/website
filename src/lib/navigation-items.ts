@@ -34,6 +34,7 @@ import {
   GitBranch,
   LifeBuoy,
   Image,
+  Gift,
 } from 'lucide-react';
 import { UserRole, Permission } from '@/lib/permissions';
 
@@ -80,6 +81,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     permission: 'dashboard', // conditional on hasFiledTaxes in component
     section: '📱 My Dashboard',
     roles: ['client'],
+  },
+  {
+    label: 'Share & Earn',
+    href: '/dashboard/client/share-earn',
+    icon: Gift,
+    permission: 'dashboard',
+    section: '📱 My Dashboard',
+    roles: ['client', 'lead'],
   },
   // Affiliate Features (conditional on affiliateStatus === 'APPROVED')
   {
