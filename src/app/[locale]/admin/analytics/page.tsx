@@ -1,371 +1,410 @@
+/**
+ * Lead Flow Analytics Overview
+ *
+ * Admin dashboard for tracking lead generation performance.
+ * Focus: Lead status, conversion rates, entry points, top performers.
+ *
+ * Does NOT track tax preparer revenue from tax services.
+ */
+
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { UserRole } from '@prisma/client';
-import { getUserPermissions, type UserPermissions } from '@/lib/permissions';
-import { getCompanyLeadsSummary } from '@/lib/services/lead-analytics.service';
+import { getUserPermissions } from '@/lib/permissions';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 import {
-  getTrafficMetrics,
-  getTrafficSources,
-  getDeviceCategories,
-} from '@/lib/services/google-analytics.service';
+  Users,
+  Target,
+  TrendingUp,
+  MousePointerClick,
+  UserPlus,
+  FileCheck,
+  ArrowRight,
+  ExternalLink,
+  DollarSign,
+  Clock,
+} from 'lucide-react';
 import {
-  getSearchMetrics,
-  getTopQueries,
-  getTopPages,
-} from '@/lib/services/search-console.service';
-import { getCoreWebVitals } from '@/lib/services/pagespeed-insights.service';
-import { LeadMetricCard } from '@/components/admin/analytics/LeadMetricCard';
-import { GA4MetricsCard } from '@/components/admin/analytics/GA4MetricsCard';
-import { TrafficSourcesChart } from '@/components/admin/analytics/TrafficSourcesChart';
-import { DeviceCategoryChart } from '@/components/admin/analytics/DeviceCategoryChart';
-import { SearchMetricsCard } from '@/components/admin/analytics/SearchMetricsCard';
-import { TopQueriesChart } from '@/components/admin/analytics/TopQueriesChart';
-import { TopPagesChart } from '@/components/admin/analytics/TopPagesChart';
-import { CoreWebVitalsCard } from '@/components/admin/analytics/CoreWebVitalsCard';
-import { createFunnelStages } from '@/lib/utils/analytics';
-import { ConversionFunnelChart } from '@/components/admin/analytics/ConversionFunnelChart';
-import { SourceBreakdownChart } from '@/components/admin/analytics/SourceBreakdownChart';
-import { createSourceBreakdown } from '@/lib/utils/source-breakdown';
-import { ExportButton } from '@/components/admin/analytics/ExportButton';
+  getLeadPipelineSummary,
+  getConversionFunnel,
+  getTopEntryPoints,
+  getTopPerformers,
+  getLeadsBySource,
+  getCommissionSummary,
+  type Period,
+} from '@/lib/services/lead-flow-analytics.service';
 import { AnalyticsPeriodSelector } from './AnalyticsPeriodSelector';
-import type { Period } from '@/components/admin/analytics/PeriodToggle';
 
 export const metadata = {
-  title: 'Lead Generation Analytics - Admin | Tax Genius Pro',
+  title: 'Lead Analytics Overview - Admin | Tax Genius Pro',
   description: 'Track lead generation performance across all sources',
 };
 
 async function checkAdminAccess() {
-  const session = await auth(); const user = session?.user;
-  if (!user) return { hasAccess: false, userId: null, role: null, permissions: null };
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false };
 
   const role = user?.role as string;
-  const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
-  const permissions = getUserPermissions(role as any, customPermissions);
-  const hasAccess = (role === 'admin' ) && permissions.analytics;
+  const permissions = getUserPermissions(role as any, undefined);
+  const hasAccess = role === 'admin' && permissions.analytics;
 
-  return { hasAccess, userId: user.id, role, permissions };
+  return { hasAccess, role, permissions };
 }
 
 export default async function AdminAnalyticsOverviewPage({
   searchParams,
 }: {
-  searchParams: { period?: string };
+  searchParams: Promise<{ period?: string }>;
 }) {
-  const { hasAccess, userId, role, permissions } = await checkAdminAccess();
+  const { hasAccess, permissions } = await checkAdminAccess();
 
-  if (!hasAccess || !userId || !permissions) {
+  if (!hasAccess || !permissions) {
     redirect('/forbidden');
   }
 
-  // 🎛️ Extract micro-permissions for analytics features
-  const canView = permissions.analytics_view ?? permissions.analytics;
-  const canExport = permissions.analytics_export ?? false;
-  const canViewDetailed = permissions.analytics_detailed ?? permissions.analytics;
+  const params = await searchParams;
+  const period = (params.period as Period) || '30d';
 
-  // Get period from URL or default to 30d
-  const period = (searchParams.period as Period) || '30d';
-
-  // Fetch lead generation summary
-  const summary = await getCompanyLeadsSummary(userId, role as UserRole, period);
-
-  // Convert period to GA4 date format
-  const ga4DateMap: Record<Period, string> = {
-    '7d': '7daysAgo',
-    '30d': '30daysAgo',
-    '90d': '90daysAgo',
-    'all': '365daysAgo', // All time = last year for GA4
-  };
-  const ga4StartDate = ga4DateMap[period];
-
-  // Convert period to Search Console date format (YYYY-MM-DD)
-  const today = new Date();
-  const scDateMap: Record<Period, { startDate: string; endDate: string }> = {
-    '7d': {
-      startDate: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0],
-    },
-    '30d': {
-      startDate: new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0],
-    },
-    '90d': {
-      startDate: new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0],
-    },
-    'all': {
-      startDate: new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0],
-    },
-  };
-  const { startDate: scStartDate, endDate: scEndDate } = scDateMap[period];
-
-  // Fetch GA4 website metrics, Search Console data, and Core Web Vitals (parallel fetching for performance)
-  const [ga4Metrics, ga4Sources, ga4Devices, scMetrics, scQueries, scPages, coreWebVitals] = await Promise.all([
-    getTrafficMetrics(ga4StartDate, 'today'),
-    getTrafficSources(ga4StartDate, 'today'),
-    getDeviceCategories(ga4StartDate, 'today'),
-    getSearchMetrics(scStartDate, scEndDate),
-    getTopQueries(scStartDate, scEndDate),
-    getTopPages(scStartDate, scEndDate),
-    getCoreWebVitals('https://taxgeniuspro.tax'),
+  // Fetch all analytics data in parallel
+  const [pipeline, funnel, entryPoints, performers, sources, commissions] = await Promise.all([
+    getLeadPipelineSummary(period),
+    getConversionFunnel(period),
+    getTopEntryPoints(10, period),
+    getTopPerformers(10, period),
+    getLeadsBySource(period),
+    getCommissionSummary(period),
   ]);
 
-  // Prepare export data
-  const exportData = [
-    {
-      source: 'Tax Genius',
-      clicks: summary.taxGeniusLeads.clicks,
-      leads: summary.taxGeniusLeads.leads,
-      conversions: summary.taxGeniusLeads.conversions,
-      returnsFiled: summary.taxGeniusLeads.returnsFiled,
-      conversionRate: summary.taxGeniusLeads.conversionRate,
-      revenue: summary.taxGeniusLeads.revenue,
-      growthRate: summary.taxGeniusLeads.growthRate,
-    },
-    {
-      source: 'Tax Preparers',
-      clicks: summary.taxPreparerLeads.clicks,
-      leads: summary.taxPreparerLeads.leads,
-      conversions: summary.taxPreparerLeads.conversions,
-      returnsFiled: summary.taxPreparerLeads.returnsFiled,
-      conversionRate: summary.taxPreparerLeads.conversionRate,
-      revenue: summary.taxPreparerLeads.revenue,
-      growthRate: summary.taxPreparerLeads.growthRate,
-    },
-    {
-      source: 'Affiliates',
-      clicks: summary.affiliateLeads.clicks,
-      leads: summary.affiliateLeads.leads,
-      conversions: summary.affiliateLeads.conversions,
-      returnsFiled: summary.affiliateLeads.returnsFiled,
-      conversionRate: summary.affiliateLeads.conversionRate,
-      revenue: summary.affiliateLeads.revenue,
-      growthRate: summary.affiliateLeads.growthRate,
-    },
-    {
-      source: 'Client Referrals',
-      clicks: summary.clientReferrals.clicks,
-      leads: summary.clientReferrals.leads,
-      conversions: summary.clientReferrals.conversions,
-      returnsFiled: summary.clientReferrals.returnsFiled,
-      conversionRate: summary.clientReferrals.conversionRate,
-      revenue: summary.clientReferrals.revenue,
-      growthRate: summary.clientReferrals.growthRate,
-    },
-  ];
-
-  // Calculate totals
-  const totalClicks = exportData.reduce((sum, s) => sum + s.clicks, 0);
-  const totalLeads = exportData.reduce((sum, s) => sum + s.leads, 0);
-  const totalConversions = exportData.reduce((sum, s) => sum + s.conversions, 0);
-  const totalReturnsFiled = exportData.reduce((sum, s) => sum + s.returnsFiled, 0);
-  const overallConversionRate = totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
-
-  // Create funnel data for overall conversion
-  const funnelStages = createFunnelStages(
-    totalClicks,
-    totalLeads,
-    totalConversions,
-    totalReturnsFiled
-  );
-
-  // Create source breakdown data
-  const sourceBreakdown = createSourceBreakdown(
-    summary.taxGeniusLeads.leads,
-    summary.taxPreparerLeads.leads,
-    summary.affiliateLeads.leads,
-    summary.clientReferrals.leads
-  );
+  const periodLabel =
+    period === '7d'
+      ? 'Last 7 days'
+      : period === '30d'
+        ? 'Last 30 days'
+        : period === '90d'
+          ? 'Last 90 days'
+          : 'All time';
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Lead Generation Analytics</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Lead Analytics Overview</h1>
           <p className="text-muted-foreground mt-1">
-            Company-wide lead tracking across all sources
+            Track lead flow and conversion performance across all sources
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <AnalyticsPeriodSelector currentPeriod={period} />
-          {canExport && (
-            <ExportButton data={exportData} filename="lead-analytics-overview" variant="default" />
-          )}
-        </div>
+        <AnalyticsPeriodSelector currentPeriod={period} />
       </div>
 
-      {/* Overall Metrics Grid */}
+      {/* Key Metrics Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <LeadMetricCard
-          title="Total Clicks"
-          value={totalClicks}
-          growthRate={
-            (summary.taxGeniusLeads.growthRate +
-              summary.taxPreparerLeads.growthRate +
-              summary.affiliateLeads.growthRate +
-              summary.clientReferrals.growthRate) /
-            4
-          }
-          icon="mouse-pointer-click"
-          color="blue"
-          format="number"
-          subtitle={`${period === '7d' ? 'Last 7 days' : period === '30d' ? 'Last 30 days' : period === '90d' ? 'Last 90 days' : 'All time'}`}
-        />
-        <LeadMetricCard
-          title="Total Leads"
-          value={totalLeads}
-          icon="user-plus"
-          color="purple"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Conversions"
-          value={totalConversions}
-          icon="file-check"
-          color="green"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Total Revenue"
-          value={summary.totalRevenue}
-          icon="dollar-sign"
-          color="yellow"
-          format="currency"
-        />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pipeline.total.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{periodLabel}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Conversions</CardTitle>
+            <FileCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{funnel.intakeCompletes.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              {funnel.conversionRates.overallConversion.toFixed(1)}% conversion rate
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Clicks</CardTitle>
+            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{funnel.clicks.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">From all marketing links</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Commissions</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${commissions.pending.amount.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {commissions.pending.count} awaiting payout
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Source Performance Grid */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Performance by Source</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {/* Tax Genius Leads */}
-          <LeadMetricCard
-            title="Tax Genius Leads"
-            value={summary.taxGeniusLeads.leads}
-            growthRate={summary.taxGeniusLeads.growthRate}
-            icon="zap"
-            color="blue"
-            format="number"
-            subtitle={`${summary.taxGeniusLeads.conversionRate.toFixed(1)}% conversion`}
-          />
+      {/* Lead Pipeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Lead Pipeline</CardTitle>
+          <CardDescription>Current status of all leads in the funnel</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-5">
+            {Object.entries(pipeline.pipeline).map(([status, count]) => {
+              const percentage = pipeline.total > 0 ? (count / pipeline.total) * 100 : 0;
+              const statusColors: Record<string, string> = {
+                NEW: 'bg-blue-500',
+                CONTACTED: 'bg-yellow-500',
+                QUALIFIED: 'bg-purple-500',
+                CONVERTED: 'bg-green-500',
+                DISQUALIFIED: 'bg-red-500',
+              };
 
-          {/* Tax Preparer Leads */}
-          <LeadMetricCard
-            title="Tax Preparer Leads"
-            value={summary.taxPreparerLeads.leads}
-            growthRate={summary.taxPreparerLeads.growthRate}
-            icon="users"
-            color="purple"
-            format="number"
-            subtitle={`${summary.taxPreparerLeads.conversionRate.toFixed(1)}% conversion`}
-          />
+              return (
+                <div key={status} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{status}</span>
+                    <span className="text-sm text-muted-foreground">{count}</span>
+                  </div>
+                  <Progress value={percentage} className={statusColors[status]} />
+                  <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}%</p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Affiliate Leads */}
-          <LeadMetricCard
-            title="Affiliate Leads"
-            value={summary.affiliateLeads.leads}
-            growthRate={summary.affiliateLeads.growthRate}
-            icon="target"
-            color="orange"
-            format="number"
-            subtitle={`${summary.affiliateLeads.conversionRate.toFixed(1)}% conversion`}
-          />
+      {/* Conversion Funnel */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Conversion Funnel</CardTitle>
+          <CardDescription>Track leads through each stage of the funnel</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-2">
+            {/* Clicks */}
+            <div className="flex-1 text-center p-4 rounded-lg bg-blue-50 dark:bg-blue-950">
+              <MousePointerClick className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+              <div className="text-2xl font-bold">{funnel.clicks.toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground">Clicks</p>
+            </div>
+            <ArrowRight className="h-6 w-6 text-muted-foreground flex-shrink-0" />
 
-          {/* Client Referral Leads */}
-          <LeadMetricCard
-            title="Client Referrals"
-            value={summary.clientReferrals.leads}
-            growthRate={summary.clientReferrals.growthRate}
-            icon="trending-up"
-            color="green"
-            format="number"
-            subtitle={`${summary.clientReferrals.conversionRate.toFixed(1)}% conversion`}
-          />
-        </div>
-      </div>
+            {/* Leads */}
+            <div className="flex-1 text-center p-4 rounded-lg bg-purple-50 dark:bg-purple-950">
+              <UserPlus className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+              <div className="text-2xl font-bold">{funnel.leads.toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground">Leads</p>
+              <p className="text-xs text-green-600">{funnel.conversionRates.clickToLead.toFixed(1)}%</p>
+            </div>
+            <ArrowRight className="h-6 w-6 text-muted-foreground flex-shrink-0" />
 
-      {/* Revenue by Source Grid */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Revenue by Source</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <LeadMetricCard
-            title="Tax Genius Revenue"
-            value={summary.taxGeniusLeads.revenue}
-            icon="dollar-sign"
-            color="blue"
-            format="currency"
-            subtitle={`${summary.taxGeniusLeads.returnsFiled} returns filed`}
-          />
-          <LeadMetricCard
-            title="Tax Preparer Revenue"
-            value={summary.taxPreparerLeads.revenue}
-            icon="dollar-sign"
-            color="purple"
-            format="currency"
-            subtitle={`${summary.taxPreparerLeads.returnsFiled} returns filed`}
-          />
-          <LeadMetricCard
-            title="Affiliate Revenue"
-            value={summary.affiliateLeads.revenue}
-            icon="dollar-sign"
-            color="orange"
-            format="currency"
-            subtitle={`${summary.affiliateLeads.returnsFiled} returns filed`}
-          />
-          <LeadMetricCard
-            title="Referral Revenue"
-            value={summary.clientReferrals.revenue}
-            icon="dollar-sign"
-            color="green"
-            format="currency"
-            subtitle={`${summary.clientReferrals.returnsFiled} returns filed`}
-          />
-        </div>
-      </div>
+            {/* Intake Started */}
+            <div className="flex-1 text-center p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950">
+              <FileCheck className="h-8 w-8 mx-auto mb-2 text-yellow-600" />
+              <div className="text-2xl font-bold">{funnel.intakeStarts.toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground">Intake Started</p>
+              <p className="text-xs text-green-600">{funnel.conversionRates.leadToIntake.toFixed(1)}%</p>
+            </div>
+            <ArrowRight className="h-6 w-6 text-muted-foreground flex-shrink-0" />
 
-      {/* Google Analytics 4 Website Performance Section */}
-      <GA4MetricsCard metrics={ga4Metrics} />
+            {/* Intake Completed */}
+            <div className="flex-1 text-center p-4 rounded-lg bg-green-50 dark:bg-green-950">
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 text-green-600" />
+              <div className="text-2xl font-bold">{funnel.intakeCompletes.toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground">Completed</p>
+              <p className="text-xs text-green-600">{funnel.conversionRates.intakeToComplete.toFixed(1)}%</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* GA4 Charts Row - Traffic Sources & Device Breakdown */}
+      {/* Two Column Layout */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <TrafficSourcesChart sources={ga4Sources} />
-        <DeviceCategoryChart devices={ga4Devices} />
-      </div>
+        {/* Top Entry Points */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ExternalLink className="h-5 w-5" />
+              Top Entry Points
+            </CardTitle>
+            <CardDescription>Marketing links bringing the most leads</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {entryPoints.length > 0 ? (
+                entryPoints.slice(0, 5).map((link, index) => (
+                  <div key={link.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{link.title || link.code}</p>
+                        <p className="text-xs text-muted-foreground">{link.targetPage}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{link.conversions} leads</p>
+                      <p className="text-xs text-muted-foreground">
+                        {link.clicks} clicks ({link.conversionRate.toFixed(1)}%)
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No marketing links data yet
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Google Search Console SEO Performance Section */}
-      <SearchMetricsCard metrics={scMetrics} />
+        {/* Top Performers */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Top Performers
+            </CardTitle>
+            <CardDescription>Preparers and affiliates with most leads</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {performers.length > 0 ? (
+                performers.slice(0, 5).map((performer, index) => (
+                  <div key={performer.username} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={performer.avatarUrl || undefined} />
+                        <AvatarFallback>
+                          {performer.displayName?.charAt(0) || performer.username?.charAt(0) || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{performer.displayName || performer.username}</p>
+                        <Badge
+                          variant="outline"
+                          className={
+                            performer.type === 'TAX_PREPARER'
+                              ? 'text-purple-600 border-purple-200'
+                              : 'text-orange-600 border-orange-200'
+                          }
+                        >
+                          {performer.type === 'TAX_PREPARER' ? 'Preparer' : 'Affiliate'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{performer.leads} leads</p>
+                      <p className="text-xs text-muted-foreground">
+                        {performer.conversions} converted ({performer.conversionRate.toFixed(1)}%)
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No performer data yet
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Search Console Charts Row - Top Queries & Top Pages */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TopQueriesChart queries={scQueries} />
-        <TopPagesChart pages={scPages} />
-      </div>
+        {/* Leads by Source */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Leads by Source</CardTitle>
+            <CardDescription>Distribution of leads across channels</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {sources.map((source) => (
+                <div key={source.source} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: source.color }}
+                      />
+                      <span className="text-sm font-medium">{source.source}</span>
+                    </div>
+                    <span className="text-sm">
+                      {source.count} ({source.percentage.toFixed(1)}%)
+                    </span>
+                  </div>
+                  <Progress
+                    value={source.percentage}
+                    className="h-2"
+                    style={
+                      { '--progress-color': source.color } as React.CSSProperties
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Core Web Vitals Section */}
-      <CoreWebVitalsCard vitals={coreWebVitals} />
-
-      {/* Lead Generation Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Conversion Funnel */}
-        <ConversionFunnelChart
-          stages={funnelStages}
-          title="Overall Conversion Funnel"
-          subtitle="Aggregate performance across all lead sources"
-        />
-
-        {/* Source Breakdown */}
-        <SourceBreakdownChart
-          data={sourceBreakdown}
-          title="Leads by Source"
-          subtitle="Distribution of leads across channels"
-        />
+        {/* Commission Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Commission Summary
+            </CardTitle>
+            <CardDescription>Affiliate earnings and payouts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground">Total Earned</p>
+                <p className="text-2xl font-bold">${commissions.total.amount.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">{commissions.total.count} commissions</p>
+              </div>
+              <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950">
+                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  ${commissions.pending.amount.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{commissions.pending.count} awaiting</p>
+              </div>
+              <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950">
+                <p className="text-sm text-muted-foreground">Approved</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  ${commissions.approved.amount.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{commissions.approved.count} ready</p>
+              </div>
+              <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950">
+                <p className="text-sm text-muted-foreground">Paid Out</p>
+                <p className="text-2xl font-bold text-green-600">
+                  ${commissions.paid.amount.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{commissions.paid.count} completed</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Quick Links to Detailed Pages */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Link
           href="/admin/analytics/preparers"
           className="block p-6 border rounded-lg hover:bg-accent transition-colors"
@@ -375,7 +414,7 @@ export default async function AdminAnalyticsOverviewPage({
             <h3 className="font-semibold">Tax Preparer Analytics</h3>
           </div>
           <p className="text-sm text-muted-foreground">
-            View individual preparer performance and filter by specific preparers
+            View individual preparer lead performance and conversion rates
           </p>
         </Link>
 
@@ -388,20 +427,7 @@ export default async function AdminAnalyticsOverviewPage({
             <h3 className="font-semibold">Affiliate Analytics</h3>
           </div>
           <p className="text-sm text-muted-foreground">
-            Track affiliate campaign performance and earnings
-          </p>
-        </Link>
-
-        <Link
-          href="/admin/analytics/clients"
-          className="block p-6 border rounded-lg hover:bg-accent transition-colors"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <TrendingUp className="w-5 h-5 text-green-600" />
-            <h3 className="font-semibold">Client Referral Analytics</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Monitor client referral programs and rewards
+            Track affiliate performance, commissions, and sub-affiliate relationships
           </p>
         </Link>
       </div>

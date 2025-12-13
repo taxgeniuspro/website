@@ -1,26 +1,41 @@
+/**
+ * Tax Preparer Lead Analytics
+ *
+ * Tracks tax preparer lead generation performance.
+ * Focus: Leads, conversions, entry points - NO revenue tracking.
+ */
+
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { getUserPermissions } from '@/lib/permissions';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Users,
   MousePointerClick,
   UserPlus,
   FileCheck,
-  DollarSign,
   Link2,
   TrendingUp,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
-import { getPreparersAnalytics } from '@/lib/services/lead-analytics.service';
-import { LeadMetricCard } from '@/components/admin/analytics/LeadMetricCard';
 import {
-  PerformanceTable,
-  type Column,
-  type PerformanceData,
-} from '@/components/admin/analytics/PerformanceTable';
-import { createFunnelStages } from '@/lib/utils/analytics';
-import { ConversionFunnelChart } from '@/components/admin/analytics/ConversionFunnelChart';
-import { ExportButton } from '@/components/admin/analytics/ExportButton';
-import { PreparerFilterBar } from './PreparerFilterBar';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+  getAllPreparersLeadPerformance,
+  getTopEntryPoints,
+  type Period,
+} from '@/lib/services/lead-flow-analytics.service';
+import { AnalyticsPeriodSelector } from '../AnalyticsPeriodSelector';
 
 export const metadata = {
   title: 'Tax Preparer Analytics - Admin | Tax Genius Pro',
@@ -28,315 +43,292 @@ export const metadata = {
 };
 
 async function checkAdminAccess() {
-  const session = await auth(); const user = session?.user;
-  if (!user) return { hasAccess: false, userId: null, role: null };
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false };
 
   const role = user?.role as string;
-  const hasAccess = role === 'admin' ;
+  const permissions = getUserPermissions(role as any, undefined);
+  const hasAccess = role === 'admin' && permissions.analytics;
 
-  return { hasAccess, userId: user.id, role };
+  return { hasAccess, permissions };
 }
 
 export default async function AdminPreparersAnalyticsPage({
   searchParams,
 }: {
-  searchParams: { preparerId?: string };
+  searchParams: Promise<{ period?: string }>;
 }) {
-  const { hasAccess, userId, role } = await checkAdminAccess();
+  const { hasAccess, permissions } = await checkAdminAccess();
 
-  if (!hasAccess || !userId) {
+  if (!hasAccess || !permissions) {
     redirect('/forbidden');
   }
 
-  // Get filter from URL
-  const filterPreparerId = searchParams.preparerId || undefined;
+  const params = await searchParams;
+  const period = (params.period as Period) || '30d';
 
-  // Fetch preparers analytics (filtered or all)
-  const preparersData = await getPreparersAnalytics(userId, role as UserRole, filterPreparerId);
+  // Fetch preparer performance data
+  const preparers = await getAllPreparersLeadPerformance(period);
 
-  // Calculate aggregate metrics
-  const totalClicks = preparersData.reduce((sum, p) => sum + p.clicks, 0);
-  const totalLeads = preparersData.reduce((sum, p) => sum + p.leads, 0);
-  const totalConversions = preparersData.reduce((sum, p) => sum + p.conversions, 0);
-  const totalReturnsFiled = preparersData.reduce((sum, p) => sum + p.returnsFiled, 0);
-  const totalRevenue = preparersData.reduce((sum, p) => sum + p.revenue, 0);
-  const totalMarketingLinks = preparersData.reduce((sum, p) => sum + p.marketingLinksCount, 0);
+  // Calculate aggregates
+  const totalLeads = preparers.reduce((sum, p) => sum + p.leads, 0);
+  const totalConversions = preparers.reduce((sum, p) => sum + p.conversions, 0);
+  const activePreparers = preparers.filter((p) => p.leads > 0).length;
   const avgConversionRate =
-    preparersData.length > 0
-      ? preparersData.reduce((sum, p) => sum + p.conversionRate, 0) / preparersData.length
-      : 0;
+    totalLeads > 0 ? (totalConversions / totalLeads) * 100 : 0;
 
-  // Create funnel data
-  const funnelStages = createFunnelStages(
-    totalClicks,
-    totalLeads,
-    totalConversions,
-    totalReturnsFiled
-  );
-
-  // Prepare table data
-  const tableData: PerformanceData[] = preparersData.map((preparer) => ({
-    id: preparer.preparerId,
-    name: preparer.preparerName,
-    email: preparer.preparerEmail,
-    marketingLinks: preparer.marketingLinksCount,
-    clicks: preparer.clicks,
-    leads: preparer.leads,
-    conversions: preparer.conversions,
-    returnsFiled: preparer.returnsFiled,
-    conversionRate: preparer.conversionRate,
-    revenue: preparer.revenue,
-    lastActive: preparer.lastActive,
-  }));
-
-  // Define table columns
-  const columns: Column[] = [
-    { key: 'name', label: 'Preparer', sortable: true },
-    { key: 'email', label: 'Email', sortable: true, className: 'hidden md:table-cell' },
-    { key: 'marketingLinks', label: 'Links', sortable: true, format: 'number' },
-    { key: 'clicks', label: 'Clicks', sortable: true, format: 'number' },
-    { key: 'leads', label: 'Leads', sortable: true, format: 'number' },
-    { key: 'conversions', label: 'Conversions', sortable: true, format: 'number' },
-    {
-      key: 'conversionRate',
-      label: 'Conv. Rate',
-      sortable: true,
-      format: 'percent',
-      className: 'hidden lg:table-cell',
-    },
-    { key: 'revenue', label: 'Revenue', sortable: true, format: 'currency' },
-  ];
-
-  // Prepare export data
-  const exportData = preparersData.map((p) => ({
-    preparerId: p.preparerId,
-    preparerName: p.preparerName,
-    preparerEmail: p.preparerEmail,
-    marketingLinksCount: p.marketingLinksCount,
-    clicks: p.clicks,
-    leads: p.leads,
-    conversions: p.conversions,
-    returnsFiled: p.returnsFiled,
-    conversionRate: p.conversionRate,
-    revenue: p.revenue,
-    lastActive: p.lastActive?.toISOString() || 'Never',
-  }));
+  const periodLabel =
+    period === '7d'
+      ? 'Last 7 days'
+      : period === '30d'
+        ? 'Last 30 days'
+        : period === '90d'
+          ? 'Last 90 days'
+          : 'All time';
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Tax Preparer Analytics</h1>
-            <p className="text-muted-foreground mt-1">
-              {filterPreparerId
-                ? 'Viewing individual preparer performance'
-                : 'Performance metrics for all tax preparers'}
-            </p>
-          </div>
-          <ExportButton
-            data={exportData}
-            filename={
-              filterPreparerId
-                ? `preparer-analytics-${filterPreparerId}`
-                : 'all-preparers-analytics'
-            }
-            variant="default"
-          />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Tax Preparer Analytics</h1>
+          <p className="text-muted-foreground mt-1">
+            Lead generation performance for all tax preparers
+          </p>
         </div>
-
-        {/* Filter Bar */}
-        <PreparerFilterBar
-          preparers={preparersData.map((p) => ({
-            id: p.preparerId,
-            name: p.preparerName,
-            email: p.preparerEmail,
-          }))}
-          currentPreparerId={filterPreparerId}
-        />
+        <AnalyticsPeriodSelector currentPeriod={period} />
       </div>
 
-      {/* Aggregate Metrics */}
+      {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <LeadMetricCard
-          title="Total Marketing Links"
-          value={totalMarketingLinks}
-          icon="link-2"
-          color="blue"
-          format="number"
-          subtitle={`${preparersData.length} preparer${preparersData.length !== 1 ? 's' : ''}`}
-        />
-        <LeadMetricCard
-          title="Total Clicks"
-          value={totalClicks}
-          icon="mouse-pointer-click"
-          color="purple"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Total Leads"
-          value={totalLeads}
-          icon="user-plus"
-          color="green"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Total Revenue"
-          value={totalRevenue}
-          icon="dollar-sign"
-          color="yellow"
-          format="currency"
-          subtitle={`${avgConversionRate.toFixed(1)}% avg conversion`}
-        />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Preparers</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{preparers.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {activePreparers} active ({periodLabel})
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalLeads.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">From all preparers</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Conversions</CardTitle>
+            <FileCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalConversions.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Completed intakes</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg Conversion Rate</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{avgConversionRate.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground">Lead to conversion</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Performance Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <LeadMetricCard
-          title="Conversions"
-          value={totalConversions}
-          icon="file-check"
-          color="green"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Returns Filed"
-          value={totalReturnsFiled}
-          icon="trending-up"
-          color="blue"
-          format="number"
-        />
-        <LeadMetricCard
-          title="Avg Conversion Rate"
-          value={avgConversionRate.toFixed(1)}
-          icon="trending-up"
-          color="purple"
-          format="percent"
-        />
-        <LeadMetricCard
-          title="Avg Revenue per Preparer"
-          value={preparersData.length > 0 ? totalRevenue / preparersData.length : 0}
-          icon="dollar-sign"
-          color="orange"
-          format="currency"
-        />
-      </div>
-
-      {/* Conversion Funnel */}
-      <ConversionFunnelChart
-        stages={funnelStages}
-        title={
-          filterPreparerId
-            ? 'Individual Preparer Conversion Funnel'
-            : 'Aggregate Preparer Conversion Funnel'
-        }
-        subtitle={
-          filterPreparerId
-            ? `Performance breakdown for ${preparersData[0]?.preparerName || 'selected preparer'}`
-            : 'Combined performance across all tax preparers'
-        }
-      />
-
-      {/* Performance Table */}
+      {/* Preparer Performance Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Tax Preparer Performance</CardTitle>
+          <CardTitle>Preparer Performance</CardTitle>
           <CardDescription>
-            {filterPreparerId
-              ? 'Detailed metrics for selected preparer'
-              : 'Compare performance across all preparers'}
+            Lead generation and conversion metrics by tax preparer
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PerformanceTable
-            data={tableData}
-            columns={columns}
-            emptyMessage="No preparer data available"
-          />
+          {preparers.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Preparer</TableHead>
+                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Conversions</TableHead>
+                  <TableHead className="text-right">Conv. Rate</TableHead>
+                  <TableHead className="text-right hidden md:table-cell">Performance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preparers.map((preparer) => {
+                  const isAboveAvg = preparer.conversionRate > avgConversionRate;
+                  return (
+                    <TableRow key={preparer.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={preparer.avatarUrl || undefined} />
+                            <AvatarFallback>
+                              {preparer.displayName?.charAt(0) || preparer.username?.charAt(0) || '?'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{preparer.displayName || preparer.username}</p>
+                            <p className="text-xs text-muted-foreground">@{preparer.username}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {preparer.leads.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {preparer.conversions.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span
+                          className={
+                            preparer.conversionRate > 50
+                              ? 'text-green-600'
+                              : preparer.conversionRate > 25
+                                ? 'text-yellow-600'
+                                : 'text-muted-foreground'
+                          }
+                        >
+                          {preparer.conversionRate.toFixed(1)}%
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right hidden md:table-cell">
+                        {preparer.leads > 0 && (
+                          <Badge
+                            variant="outline"
+                            className={
+                              isAboveAvg
+                                ? 'text-green-600 border-green-200'
+                                : 'text-orange-600 border-orange-200'
+                            }
+                          >
+                            {isAboveAvg ? (
+                              <ArrowUpRight className="h-3 w-3 mr-1" />
+                            ) : (
+                              <ArrowDownRight className="h-3 w-3 mr-1" />
+                            )}
+                            {isAboveAvg ? 'Above Avg' : 'Below Avg'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No preparer data available for this period
+            </p>
+          )}
         </CardContent>
       </Card>
 
-      {/* Recent Leads (for filtered view) */}
-      {filterPreparerId && preparersData.length > 0 && preparersData[0].recentLeads.length > 0 && (
+      {/* Top Performers */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top by Leads */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Leads</CardTitle>
-            <CardDescription>
-              Latest leads generated by {preparersData[0].preparerName}
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-purple-600" />
+              Top by Lead Generation
+            </CardTitle>
+            <CardDescription>Preparers bringing in the most leads</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {preparersData[0].recentLeads.map((lead) => (
-                <div
-                  key={lead.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium">{lead.name}</p>
-                    <p className="text-sm text-muted-foreground">{lead.email}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">
-                      {lead.status === 'CONVERTED' ? '✓ Converted' : 'In Progress'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(lead.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Link Performance (for filtered view) */}
-      {filterPreparerId &&
-        preparersData.length > 0 &&
-        preparersData[0].linkBreakdown.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Marketing Link Performance</CardTitle>
-              <CardDescription>
-                Individual link metrics for {preparersData[0].preparerName}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {preparersData[0].linkBreakdown.map((link) => (
-                  <div key={link.linkId} className="p-4 border rounded-lg space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">{link.linkName}</p>
-                      <span className="text-xs text-muted-foreground">
-                        {link.conversionRate.toFixed(1)}% conversion
-                      </span>
+            <div className="space-y-4">
+              {preparers
+                .sort((a, b) => b.leads - a.leads)
+                .slice(0, 5)
+                .map((preparer, index) => (
+                  <div key={preparer.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-600 font-semibold">
+                        {index + 1}
+                      </div>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={preparer.avatarUrl || undefined} />
+                        <AvatarFallback>
+                          {preparer.displayName?.charAt(0) || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium">{preparer.displayName || preparer.username}</span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs">Clicks</p>
-                        <p className="font-semibold">{link.clicks}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Leads</p>
-                        <p className="font-semibold">{link.leads}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Conversions</p>
-                        <p className="font-semibold">{link.conversions}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Revenue</p>
-                        <p className="font-semibold">${link.revenue.toLocaleString()}</p>
-                      </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{preparer.leads} leads</p>
+                      <p className="text-xs text-muted-foreground">
+                        {preparer.conversions} converted
+                      </p>
                     </div>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top by Conversion Rate */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-green-600" />
+              Top by Conversion Rate
+            </CardTitle>
+            <CardDescription>Preparers with highest conversion efficiency</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {preparers
+                .filter((p) => p.leads >= 5) // Minimum leads for meaningful rate
+                .sort((a, b) => b.conversionRate - a.conversionRate)
+                .slice(0, 5)
+                .map((preparer, index) => (
+                  <div key={preparer.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 text-green-600 font-semibold">
+                        {index + 1}
+                      </div>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={preparer.avatarUrl || undefined} />
+                        <AvatarFallback>
+                          {preparer.displayName?.charAt(0) || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium">{preparer.displayName || preparer.username}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-green-600">
+                        {preparer.conversionRate.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {preparer.conversions}/{preparer.leads} leads
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              {preparers.filter((p) => p.leads >= 5).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Need at least 5 leads for conversion rate ranking
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

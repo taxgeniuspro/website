@@ -23,7 +23,6 @@ import {
   Sparkles,
   GraduationCap,
   ShieldCheck,
-  TrendingUp,
   UserCheck,
   Trophy,
   QrCode,
@@ -254,9 +253,9 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
 
-  // 📊 Analytics Section (Moved to top for admin - overview of whole company)
+  // 📊 Analytics Section (Lead flow focused - no revenue tracking)
   {
-    label: 'Analytics Overview',
+    label: 'Lead Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
     permission: 'analytics',
@@ -264,15 +263,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
-    label: 'Tax Genius Analytics',
-    href: '/admin/analytics/tax-genius',
-    icon: Sparkles,
-    permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['admin'],
-  },
-  {
-    label: 'Tax Preparers Analytics',
+    label: 'Preparer Performance',
     href: '/admin/analytics/preparers',
     icon: Users,
     permission: 'analytics',
@@ -280,17 +271,9 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
-    label: 'Affiliates Analytics',
+    label: 'Affiliate Performance',
     href: '/admin/analytics/affiliates',
     icon: Trophy,
-    permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['admin'],
-  },
-  {
-    label: 'Clients Analytics',
-    href: '/admin/analytics/clients',
-    icon: TrendingUp,
     permission: 'analytics',
     section: '📊 Analytics',
     roles: ['admin'],

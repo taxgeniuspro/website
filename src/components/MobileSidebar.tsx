@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UserRole, UserPermissions } from '@/lib/permissions';
-import { ALL_NAV_ITEMS, ROLE_DASHBOARD_ROUTES, type NavItem } from '@/lib/navigation-items';
+import { ALL_NAV_ITEMS, ROLE_DASHBOARD_ROUTES, SECTION_ROLE_RESTRICTIONS, type NavItem } from '@/lib/navigation-items';
 import { Phone, MapPin, Share2, ChevronUp, ChevronDown, Settings, LogOut } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -21,7 +21,6 @@ interface MobileSidebarProps {
 
 export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSidebarProps) {
   const pathname = usePathname();
-  const { signOut } = useClerk();
   const router = useRouter();
   const [isFooterCollapsed, setIsFooterCollapsed] = useState(true);
 
@@ -45,12 +44,9 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
     switch (role) {
       case 'tax_preparer':
         return '/dashboard/tax-preparer/settings';
-      case 'affiliate':
-        return '/dashboard/affiliate/settings';
       case 'client':
       case 'lead':
         return '/dashboard/client/settings';
-      case 'admin':
       case 'admin':
         return '/admin/settings';
       default:
@@ -58,11 +54,22 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
     }
   };
 
+  // Handle sign out
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/' });
+  };
+
   // Filter navigation items based on user's role and permissions
   const filteredItems = ALL_NAV_ITEMS.filter((item) => {
     // Check if item is restricted to specific roles
     if (item.roles && !item.roles.includes(role)) {
       return false;
+    }
+
+    // Check section visibility for role
+    if (item.section) {
+      const allowedRoles = SECTION_ROLE_RESTRICTIONS[item.section];
+      if (allowedRoles && !allowedRoles.includes(role)) return false;
     }
 
     // Check permission
@@ -73,16 +80,6 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
       return { ...item, href: ROLE_DASHBOARD_ROUTES[role] };
     }
     return item;
-  });
-
-  // Group items by section
-  const sections: Record<string, NavItem[]> = {};
-  filteredItems.forEach((item) => {
-    const section = item.section || 'Other';
-    if (!sections[section]) {
-      sections[section] = [];
-    }
-    sections[section].push(item);
   });
 
   return (
@@ -100,40 +97,53 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-13rem)] px-4 py-4">
-          <nav className="space-y-6">
-            {Object.entries(sections).map(([sectionName, items]) => (
-              <div key={sectionName} className="space-y-1">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
-                  {sectionName}
-                </h3>
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+          <nav className="space-y-4">
+            {(() => {
+              // Group filtered items by section
+              const groupedItems: Record<string, NavItem[]> = {};
+              filteredItems.forEach((item) => {
+                const section = item.section || 'Other';
+                if (!groupedItems[section]) {
+                  groupedItems[section] = [];
+                }
+                groupedItems[section].push(item);
+              });
 
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onClose}
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      <span className="flex-1">{item.label}</span>
-                      {item.badge && (
-                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
+              return Object.entries(groupedItems).map(([section, items]) => (
+                <div key={section} className="space-y-1">
+                  {/* Section Label - always visible, no dropdown */}
+                  <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {section}
+                  </div>
+                  {items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onClose}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="flex-1">{item.label}</span>
+                        {item.badge && (
+                          <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ));
+            })()}
           </nav>
         </ScrollArea>
 
@@ -176,7 +186,7 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
                   <Settings className="w-4 h-4" />
                 </Link>
                 <button
-                  onClick={() => signOut(() => router.push('/'))}
+                  onClick={handleSignOut}
                   className="w-10 h-10 bg-muted hover:bg-destructive/10 transition-colors rounded-full flex items-center justify-center"
                   title="Sign Out"
                 >
@@ -229,7 +239,7 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
                 <span>Settings</span>
               </Link>
               <button
-                onClick={() => signOut(() => router.push('/'))}
+                onClick={handleSignOut}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-destructive/10 hover:bg-destructive/20 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
