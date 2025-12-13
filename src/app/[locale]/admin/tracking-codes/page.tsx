@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { logger } from '@/lib/logger';
-import { QrCode, Users, Search, ExternalLink, Copy, Filter } from 'lucide-react';
+import { QrCode, Users, Search, ExternalLink, Filter } from 'lucide-react';
+import { TrackingCodeActions } from './tracking-code-actions';
 
 export const metadata = {
   title: 'Tracking Codes Management | Tax Genius Pro',
@@ -233,24 +234,7 @@ export default async function AdminTrackingCodesPage() {
                       )}
                     </div>
 
-                    <div className="flex gap-1">
-                      <button
-                        className="p-2 hover:bg-accent rounded-md transition-colors"
-                        title="Copy tracking code"
-                        onClick={() => navigator.clipboard.writeText(tc.activeCode || '')}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                      <a
-                        href={`https://taxgeniuspro.tax?ref=${tc.activeCode}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 hover:bg-accent rounded-md transition-colors"
-                        title="View tracking URL"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </div>
+                    <TrackingCodeActions activeCode={tc.activeCode} />
                   </div>
                 </div>
               ))
