@@ -1,10 +1,10 @@
 'use client';
 
 import { Mail, CheckCircle } from 'lucide-react';
-import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AuthLogo } from '@/components/Logo';
 
 /**
  * Magic Link Verification Page
@@ -21,13 +21,7 @@ export default function VerifyRequestPage() {
         <div className="bg-background rounded-2xl shadow-2xl p-8 space-y-6">
           {/* Logo */}
           <div className="text-center">
-            <Image
-              src="/images/wordpress-assets/taxgenius-logo.png"
-              alt="Tax Genius Pro"
-              width={200}
-              height={50}
-              className="h-12 w-auto mx-auto mb-6"
-            />
+            <AuthLogo className="mb-6" />
           </div>
 
           {/* Success Icon */}

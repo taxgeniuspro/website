@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Mail, Loader2, CheckCircle, ArrowLeft } from 'lucide-react';
+import { AuthLogo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,13 +50,7 @@ export default function ForgotPasswordPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mb-6">
-            <Image
-              src="/images/wordpress-assets/taxgenius-logo.png"
-              alt="Tax Genius Pro"
-              width={180}
-              height={45}
-              className="h-12 w-auto mx-auto"
-            />
+            <AuthLogo />
           </div>
           <CardTitle className="text-2xl">Forgot Password</CardTitle>
           <CardDescription>
