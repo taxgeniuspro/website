@@ -945,10 +945,13 @@ model FileOperation {
 
 enum PaymentStatus {
   PENDING
+  APPROVED
   PROCESSING
+  PAID
   COMPLETED
   FAILED
   REFUNDED
+  CANCELLED
 }
 
 enum PaymentType {
