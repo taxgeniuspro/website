@@ -23,8 +23,21 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
+import { IntakeSummaryCard } from '@/components/client/IntakeSummaryCard';
 import Link from 'next/link';
 import { UserRole } from '@/lib/permissions';
+
+// Helper to determine current tax filing year
+const getTaxYearToFile = () => {
+  const now = new Date();
+  // Jan-Apr: file previous year, May-Dec: file current year
+  return now.getMonth() < 4 ? now.getFullYear() - 1 : now.getFullYear();
+};
+
+// Check if we're in a new tax year compared to the return
+const isNewTaxYear = (returnTaxYear: number) => {
+  return getTaxYearToFile() > returnTaxYear;
+};
 
 export default function ClientDashboard() {
   const { data: session } = useSession(); const user = session?.user;
@@ -190,49 +203,94 @@ export default function ClientDashboard() {
 
         {/* Tax Return Progress */}
         {taxReturn ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Tax Return Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">
-                    {taxReturn.status.replace('_', ' ')} - {taxReturn.progress}% Complete
-                  </span>
-                  <span className="text-muted-foreground">Tax Year {taxReturn.taxYear}</span>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Tax Return Progress</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">
+                      {taxReturn.status.replace('_', ' ')} - {taxReturn.progress}% Complete
+                    </span>
+                    <span className="text-muted-foreground">Tax Year {taxReturn.taxYear}</span>
+                  </div>
+                  <Progress value={taxReturn.progress || 0} className="h-2" />
                 </div>
-                <Progress value={taxReturn.progress || 0} className="h-2" />
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="flex items-center gap-2">
-                  {taxReturn.status === 'DRAFT' ? (
-                    <Clock className="h-4 w-4 text-blue-500" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  )}
-                  <span className="text-sm">Documents</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="flex items-center gap-2">
+                    {taxReturn.status === 'DRAFT' ? (
+                      <Clock className="h-4 w-4 text-blue-500" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    )}
+                    <span className="text-sm">Documents</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {['IN_REVIEW', 'FILED', 'ACCEPTED'].includes(taxReturn.status) ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm">Review</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {taxReturn.status === 'ACCEPTED' ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm">Filed</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {['IN_REVIEW', 'FILED', 'ACCEPTED'].includes(taxReturn.status) ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span className="text-sm">Review</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {taxReturn.status === 'ACCEPTED' ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span className="text-sm">Filed</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Documents Card - Always visible when return exists */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Documents</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {stats?.documentsCount || 0} documents for Tax Year {taxReturn.taxYear}
+                </p>
+                <Button asChild variant="outline">
+                  <Link href="/dashboard/client/documents">
+                    View Documents <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Start New Return CTA - Show when return is ACCEPTED and new tax year */}
+            {taxReturn.status === 'ACCEPTED' && isNewTaxYear(taxReturn.taxYear) && (
+              <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <CardTitle>Ready for {getTaxYearToFile()}?</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Start your new tax return for this year
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Button asChild>
+                    <Link href="/start-filing/form">
+                      Start New Return <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </>
         ) : !data?.intakeStatus?.hasCompleted ? (
           /* No intake completed - show "Complete Tax Intake" card */
           <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
@@ -258,54 +316,65 @@ export default function ClientDashboard() {
             </CardContent>
           </Card>
         ) : (
-          /* Intake completed - show preparer info + document upload */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Your Tax Preparer */}
-            {data?.assignedPreparer && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Your Tax Preparer</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={data.assignedPreparer.avatarUrl || undefined} />
-                      <AvatarFallback>
-                        <User className="h-6 w-6" />
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{data.assignedPreparer.name}</p>
-                      <p className="text-sm text-muted-foreground">{data.assignedPreparer.email}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          /* Intake completed - show intake summary, preparer info + document upload */
+          <div className="space-y-4">
+            {/* Intake Summary Card - Shows completed form data */}
+            {data?.intakeSummary && (
+              <IntakeSummaryCard
+                personalInfo={data.intakeSummary.personalInfo}
+                address={data.intakeSummary.address}
+                formData={data.intakeSummary.formData}
+              />
             )}
 
-            {/* Upload Documents */}
-            <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <Upload className="h-5 w-5 text-green-600" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Your Tax Preparer */}
+              {data?.assignedPreparer && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Your Tax Preparer</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={data.assignedPreparer.avatarUrl || undefined} />
+                        <AvatarFallback>
+                          <User className="h-6 w-6" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{data.assignedPreparer.name}</p>
+                        <p className="text-sm text-muted-foreground">{data.assignedPreparer.email}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Upload Documents */}
+              <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                      <Upload className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Upload Your Documents</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        {stats?.documentsCount || 0} documents uploaded
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">Upload Your Documents</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {stats?.documentsCount || 0} documents uploaded
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline">
-                  <Link href="/dashboard/client/documents">
-                    Go to Documents <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <Button asChild variant="outline">
+                    <Link href="/dashboard/client/documents">
+                      Go to Documents <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
 

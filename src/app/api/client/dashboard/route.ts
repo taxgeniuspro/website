@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Check for completed tax intake (by profileId or email match)
+    // Include full_form_data so client can see their intake summary
     const taxIntake = await prisma.taxIntakeLead.findFirst({
       where: {
         OR: [
@@ -39,8 +40,27 @@ export async function GET(req: NextRequest) {
         completed: true,
       },
       orderBy: { createdAt: 'desc' },
-      include: {
-        clientFolder: true,
+      select: {
+        id: true,
+        completed: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        phone: true,
+        address_line_1: true,
+        address_line_2: true,
+        city: true,
+        state: true,
+        zip_code: true,
+        full_form_data: true,
+        referrerUsername: true,
+        clientFolder: {
+          select: {
+            id: true,
+            name: true,
+            path: true,
+          },
+        },
       },
     });
 
@@ -198,6 +218,25 @@ export async function GET(req: NextRequest) {
         ? {
             id: taxIntake.clientFolder.id,
             name: taxIntake.clientFolder.name,
+          }
+        : null,
+      // Intake form summary for client to view their submitted data
+      intakeSummary: taxIntake?.completed
+        ? {
+            personalInfo: {
+              firstName: taxIntake.first_name,
+              lastName: taxIntake.last_name,
+              email: taxIntake.email,
+              phone: taxIntake.phone,
+            },
+            address: {
+              line1: taxIntake.address_line_1,
+              line2: taxIntake.address_line_2,
+              city: taxIntake.city,
+              state: taxIntake.state,
+              zipCode: taxIntake.zip_code,
+            },
+            formData: taxIntake.full_form_data as Record<string, unknown> | null,
           }
         : null,
     };
