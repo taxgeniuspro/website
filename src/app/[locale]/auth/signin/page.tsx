@@ -3,8 +3,8 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import Image from 'next/image';
 import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Eye, EyeOff, Mail } from 'lucide-react';
+import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -236,13 +236,7 @@ function SignInContent() {
       <div className="flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center mb-8">
-            <Image
-              src="/images/wordpress-assets/taxgenius-logo.png"
-              alt={t('logoAlt')}
-              width={200}
-              height={50}
-              className="h-12 w-auto mx-auto mb-6"
-            />
+            <AuthLogo className="mb-6" />
             <h2 className="text-2xl font-bold mb-2">{content.ctaText}</h2>
             <p className="text-sm text-muted-foreground">
               {content.formSubheading}
