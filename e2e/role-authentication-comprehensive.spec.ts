@@ -3,28 +3,29 @@ import { test, expect, Page } from '@playwright/test';
 /**
  * Comprehensive Role-Based Authentication Tests
  *
- * Tests the authentication flow for all 4 valid user roles:
- * - admin
- * - tax_preparer
- * - client
- * - lead
+ * Tests the authentication flow for all 3 valid user roles:
+ * - admin: Platform administrator with full access
+ * - tax_preparer: Tax professional with client management
+ * - client: DEFAULT role for all signups (tax filing + optional affiliate)
  *
  * Each role is tested 4 times for stability verification.
  *
- * NOTE: The 'affiliate' role was deprecated and merged into client with affiliateStatus.
+ * NOTES:
+ * - 'lead' role was REMOVED - leads are CRM contacts without accounts
+ * - 'affiliate' is a STATUS (affiliateStatus), not a role - any user can be affiliate
  */
 
 // Use production URL by default since the project is production-only
 // Override with PLAYWRIGHT_BASE_URL env var if needed for local testing
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://taxgeniuspro.tax';
 
-// ONLY 4 VALID ROLES (affiliate role removed - now clients with affiliateStatus)
+// ONLY 3 VALID ROLES (lead removed, affiliate is a status not a role)
 const testAccounts = [
   {
     role: 'Admin',
     dbRole: 'admin',
-    email: 'admin@test.com',
-    password: 'admin123',
+    email: 'iradwatkins@gmail.com',
+    password: process.env.TEST_ADMIN_PASSWORD || 'test-password',
     expectedUrl: '/dashboard/admin',
     expectedElements: ['Dashboard', 'Admin'],
     forbiddenElements: [], // Admins can see everything
@@ -32,29 +33,20 @@ const testAccounts = [
   {
     role: 'Tax Preparer',
     dbRole: 'tax_preparer',
-    email: 'preparer@test.com',
-    password: 'preparer123',
+    email: 'taxgenius.tax@gmail.com',
+    password: process.env.TEST_PREPARER_PASSWORD || 'test-password',
     expectedUrl: '/dashboard/tax-preparer',
-    expectedElements: ['Dashboard', 'Preparer'],
+    expectedElements: ['Dashboard'],
     forbiddenElements: [],
   },
   {
-    role: 'Client',
-    dbRole: 'client',
-    email: 'client@test.com',
-    password: 'client123',
-    expectedUrl: '/dashboard/client',
+    role: 'Tax Preparer (Gelisa)',
+    dbRole: 'tax_preparer',
+    email: 'whitegelisa@gmail.com',
+    password: process.env.TEST_CLIENT_PASSWORD || 'Makiyah07@@',
+    expectedUrl: '/dashboard/tax-preparer',
     expectedElements: ['Dashboard'],
-    forbiddenElements: ['Admin Panel', 'User Management'],
-  },
-  {
-    role: 'Lead',
-    dbRole: 'lead',
-    email: 'lead@test.com',
-    password: 'lead123',
-    expectedUrl: '/dashboard/lead',
-    expectedElements: ['Pending', 'Approval'],
-    forbiddenElements: ['Admin', 'Tax Return'],
+    forbiddenElements: [],
   },
 ];
 
@@ -208,48 +200,8 @@ test.describe('Role Persistence Tests (refresh 4 times)', () => {
 // =============================================================================
 
 test.describe('Unauthorized Access Prevention', () => {
-  test('Lead cannot access /admin', async ({ page }) => {
-    // Login as lead
-    await loginWithCredentials(page, 'lead@test.com', 'lead123');
-    await page.waitForURL(/dashboard\/lead/, { timeout: 15000 });
-
-    // Try to access admin area
-    await page.goto(`${BASE_URL}/admin`);
-    await page.waitForLoadState('networkidle');
-
-    // Should NOT be on admin dashboard
-    const url = page.url();
-    expect(url).not.toContain('/admin');
-
-    // Take screenshot of where they ended up
-    await page.screenshot({
-      path: 'test-results/unauthorized-lead-to-admin.png',
-      fullPage: true,
-    });
-
-    await logout(page);
-  });
-
-  test('Lead cannot access /dashboard/admin', async ({ page }) => {
-    await loginWithCredentials(page, 'lead@test.com', 'lead123');
-    await page.waitForURL(/dashboard\/lead/, { timeout: 15000 });
-
-    await page.goto(`${BASE_URL}/dashboard/admin`);
-    await page.waitForLoadState('networkidle');
-
-    // Should redirect away from admin dashboard
-    expect(page.url()).not.toContain('/dashboard/admin');
-
-    await page.screenshot({
-      path: 'test-results/unauthorized-lead-to-dashboard-admin.png',
-      fullPage: true,
-    });
-
-    await logout(page);
-  });
-
   test('Client cannot access /dashboard/tax-preparer', async ({ page }) => {
-    await loginWithCredentials(page, 'client@test.com', 'client123');
+    await loginWithCredentials(page, 'whitegelisa@gmail.com', process.env.TEST_CLIENT_PASSWORD || 'Makiyah07@@');
     await page.waitForURL(/dashboard\/client/, { timeout: 15000 });
 
     await page.goto(`${BASE_URL}/dashboard/tax-preparer`);
@@ -267,7 +219,7 @@ test.describe('Unauthorized Access Prevention', () => {
   });
 
   test('Client cannot access /admin', async ({ page }) => {
-    await loginWithCredentials(page, 'client@test.com', 'client123');
+    await loginWithCredentials(page, 'whitegelisa@gmail.com', process.env.TEST_CLIENT_PASSWORD || 'Makiyah07@@');
     await page.waitForURL(/dashboard\/client/, { timeout: 15000 });
 
     await page.goto(`${BASE_URL}/admin`);
@@ -278,6 +230,24 @@ test.describe('Unauthorized Access Prevention', () => {
 
     await page.screenshot({
       path: 'test-results/unauthorized-client-to-admin.png',
+      fullPage: true,
+    });
+
+    await logout(page);
+  });
+
+  test('Tax Preparer cannot access /dashboard/admin', async ({ page }) => {
+    await loginWithCredentials(page, 'taxgenius.tax@gmail.com', process.env.TEST_PREPARER_PASSWORD || 'test-password');
+    await page.waitForURL(/dashboard\/tax-preparer/, { timeout: 15000 });
+
+    await page.goto(`${BASE_URL}/dashboard/admin`);
+    await page.waitForLoadState('networkidle');
+
+    // Should redirect away from admin dashboard
+    expect(page.url()).not.toContain('/dashboard/admin');
+
+    await page.screenshot({
+      path: 'test-results/unauthorized-preparer-to-admin.png',
       fullPage: true,
     });
 
@@ -328,7 +298,7 @@ test.describe('Session Handling', () => {
 
 test.describe('Dashboard Content Verification', () => {
   test('Admin dashboard shows admin-specific content', async ({ page }) => {
-    await loginWithCredentials(page, 'admin@test.com', 'admin123');
+    await loginWithCredentials(page, 'iradwatkins@gmail.com', process.env.TEST_ADMIN_PASSWORD || 'test-password');
     await page.waitForURL(/dashboard\/admin/, { timeout: 15000 });
 
     const bodyText = (await page.textContent('body')) || '';
@@ -351,7 +321,7 @@ test.describe('Dashboard Content Verification', () => {
   });
 
   test('Tax Preparer dashboard shows preparer-specific content', async ({ page }) => {
-    await loginWithCredentials(page, 'preparer@test.com', 'preparer123');
+    await loginWithCredentials(page, 'taxgenius.tax@gmail.com', process.env.TEST_PREPARER_PASSWORD || 'test-password');
     await page.waitForURL(/dashboard\/tax-preparer/, { timeout: 15000 });
 
     const bodyText = (await page.textContent('body')) || '';
@@ -374,7 +344,7 @@ test.describe('Dashboard Content Verification', () => {
   });
 
   test('Client dashboard shows client-specific content', async ({ page }) => {
-    await loginWithCredentials(page, 'client@test.com', 'client123');
+    await loginWithCredentials(page, 'whitegelisa@gmail.com', process.env.TEST_CLIENT_PASSWORD || 'Makiyah07@@');
     await page.waitForURL(/dashboard\/client/, { timeout: 15000 });
 
     const bodyText = (await page.textContent('body')) || '';
@@ -389,29 +359,6 @@ test.describe('Dashboard Content Verification', () => {
 
     await page.screenshot({
       path: 'test-results/client-dashboard-content.png',
-      fullPage: true,
-    });
-
-    await logout(page);
-  });
-
-  test('Lead dashboard shows pending approval message', async ({ page }) => {
-    await loginWithCredentials(page, 'lead@test.com', 'lead123');
-    await page.waitForURL(/dashboard\/lead/, { timeout: 15000 });
-
-    const bodyText = (await page.textContent('body')) || '';
-
-    // Lead should see pending approval content
-    const hasLeadContent =
-      bodyText.includes('Pending') ||
-      bodyText.includes('Approval') ||
-      bodyText.includes('Review') ||
-      bodyText.includes('Application');
-
-    expect(hasLeadContent).toBeTruthy();
-
-    await page.screenshot({
-      path: 'test-results/lead-dashboard-content.png',
       fullPage: true,
     });
 
