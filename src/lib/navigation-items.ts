@@ -14,7 +14,7 @@
  *
  * SIMPLIFIED NAVIGATION (Dec 2025):
  * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools, Business
- * - Tax Preparer sections: 👥 Clients, 🛒 Store & Products
+ * - Tax Preparer sections: 👥 Clients (includes Store)
  * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 
@@ -57,7 +57,7 @@ export interface NavItem {
  *
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
- * - Tax Preparer: 👥 Clients, 🛒 Store & Products
+ * - Tax Preparer: 👥 Clients (includes Store)
  * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
@@ -189,6 +189,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/tax-preparer/calendar',
     icon: Calendar,
     permission: 'calendar',
+    section: '👥 Clients',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Store',
+    href: '/store',
+    icon: Package,
+    permission: 'store',
     section: '👥 Clients',
     roles: ['tax_preparer'],
   },
@@ -338,8 +346,8 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🛒 STORE & PRODUCTS SECTION
-  // Store access and product management (shared section for preparers + admin)
+  // 🛒 STORE & PRODUCTS SECTION (Admin only)
+  // Store access and product management
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Store',
@@ -347,7 +355,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Package,
     permission: 'store',
     section: '🛒 Store & Products',
-    roles: ['tax_preparer', 'admin'],
+    roles: ['admin'],
   },
   {
     label: 'Product Management',
@@ -425,7 +433,7 @@ export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📊 Analytics': ['admin'], // Admin analytics section
   '💰 Financials': ['admin'], // Admin financials
   '📢 Marketing': ['admin'], // Admin marketing hub
+  '🛒 Store & Products': ['admin'], // Admin store management
   '⚙️ System Controls': ['admin'], // Admin system settings
   // 👥 Clients: visible to both tax_preparer and admin (different items shown)
-  // 🛒 Store & Products: visible to both tax_preparer and admin
 };
