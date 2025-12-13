@@ -20,13 +20,12 @@ export default async function DashboardRedirect() {
   const role = (user?.role as UserRole) || 'lead';
 
   // Redirect to role-specific dashboard
-  const dashboardUrls: Record<UserRole, string> = {
-    admin: '/dashboard/admin',
+  // Valid roles: admin, tax_preparer, lead, client
+  const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
     lead: '/dashboard/lead',
     client: '/dashboard/client',
     tax_preparer: '/dashboard/tax-preparer',
-    affiliate: '/dashboard/affiliate',
   };
 
   const targetUrl = dashboardUrls[role] || '/dashboard/lead';
