@@ -82,9 +82,7 @@ function ContactPageContent() {
     }
   };
 
-  // Get contact info - preparer's if available, otherwise company default
-  const contactPhone = preparer?.phone || DEFAULT_CONTACT.phone;
-  const contactEmail = preparer?.email || DEFAULT_CONTACT.email;
+  // Get preparer display name
   const preparerName = preparer ? `${preparer.firstName} ${preparer.lastName}` : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -313,80 +311,154 @@ function ContactPageContent() {
 
             {/* Contact Information */}
             <div className="space-y-8">
-              {/* Show preparer info banner if preparer is assigned */}
-              {preparer && (
-                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-center gap-4">
-                  {preparer.avatarUrl && (
-                    <img
-                      src={preparer.avatarUrl}
-                      alt={preparerName || 'Tax Preparer'}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-primary/30"
-                    />
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Your Tax Preparer</p>
-                    <p className="font-semibold text-lg">{preparerName}</p>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h2 className="text-2xl font-bold text-foreground mb-6">{t('contactInfoTitle')}</h2>
-                <div className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <Phone className="w-6 h-6 text-primary mt-1" />
-                    <div>
-                      <h3 className="font-semibold mb-1">{t('contactPhone')}</h3>
-                      <a href={`tel:${contactPhone.replace(/[^+\d]/g, '')}`} className="text-muted-foreground hover:text-primary transition-colors">
-                        {contactPhone}
-                      </a>
+              {/* Show preparer info prominently when assigned */}
+              {preparer ? (
+                <div>
+                  {/* Preparer Card with Photo */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 mb-6">
+                    <div className="flex flex-col items-center text-center gap-4">
+                      {preparer.avatarUrl ? (
+                        <img
+                          src={preparer.avatarUrl}
+                          alt={preparerName || 'Tax Preparer'}
+                          className="w-24 h-24 rounded-full object-cover border-4 border-primary/30 shadow-lg"
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center border-4 border-primary/30">
+                          <span className="text-2xl font-bold text-primary">
+                            {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">{t('yourTaxPreparer')}</p>
+                        <p className="font-bold text-xl text-foreground">{preparerName}</p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <Mail className="w-6 h-6 text-primary mt-1" />
-                    <div>
-                      <h3 className="font-semibold mb-1">{t('contactEmail')}</h3>
-                      <a href={`mailto:${contactEmail}`} className="text-muted-foreground hover:text-primary transition-colors">
-                        {contactEmail}
-                      </a>
-                    </div>
-                  </div>
+                  <h2 className="text-2xl font-bold text-foreground mb-6">{t('contactInfoTitle')}</h2>
+                  <div className="space-y-6">
+                    {/* Preparer's Direct Phone */}
+                    {preparer.phone && (
+                      <div className="flex items-start gap-4">
+                        <Phone className="w-6 h-6 text-primary mt-1" />
+                        <div>
+                          <h3 className="font-semibold mb-1">{t('directPhone')}</h3>
+                          <a href={`tel:${preparer.phone.replace(/[^+\d]/g, '')}`} className="text-muted-foreground hover:text-primary transition-colors">
+                            {preparer.phone}
+                          </a>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="flex items-start gap-4">
-                    <MapPin className="w-6 h-6 text-primary mt-1" />
-                    <div>
-                      <h3 className="font-semibold mb-1">{t('contactLocation')}</h3>
-                      <a
-                        href="https://maps.google.com/?q=1632+Jonesboro+Rd+SE+Atlanta+GA+30315"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        1632 Jonesboro Rd SE
-                        <br />
-                        Atlanta, GA 30315
-                      </a>
-                    </div>
-                  </div>
+                    {/* Preparer's Direct Email */}
+                    {preparer.email && (
+                      <div className="flex items-start gap-4">
+                        <Mail className="w-6 h-6 text-primary mt-1" />
+                        <div>
+                          <h3 className="font-semibold mb-1">{t('directEmail')}</h3>
+                          <a href={`mailto:${preparer.email}`} className="text-muted-foreground hover:text-primary transition-colors">
+                            {preparer.email}
+                          </a>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="flex items-start gap-4">
-                    <Clock className="w-6 h-6 text-primary mt-1" />
-                    <div>
-                      <h3 className="font-semibold mb-1">{t('contactHours')}</h3>
-                      <div className="text-muted-foreground space-y-1">
-                        <p>{t('monday')}</p>
-                        <p>{t('tuesday')}</p>
-                        <p>{t('wednesday')}</p>
-                        <p>{t('thursday')}</p>
-                        <p>{t('friday')}</p>
-                        <p>{t('saturday')}</p>
-                        <p>{t('sunday')}</p>
+                    <div className="flex items-start gap-4">
+                      <MapPin className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactLocation')}</h3>
+                        <a
+                          href="https://maps.google.com/?q=1632+Jonesboro+Rd+SE+Atlanta+GA+30315"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          1632 Jonesboro Rd SE
+                          <br />
+                          Atlanta, GA 30315
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4">
+                      <Clock className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactHours')}</h3>
+                        <div className="text-muted-foreground space-y-1">
+                          <p>{t('monday')}</p>
+                          <p>{t('tuesday')}</p>
+                          <p>{t('wednesday')}</p>
+                          <p>{t('thursday')}</p>
+                          <p>{t('friday')}</p>
+                          <p>{t('saturday')}</p>
+                          <p>{t('sunday')}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* Corporate fallback when no preparer */
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-6">{t('contactInfoTitle')}</h2>
+                  <div className="space-y-6">
+                    <div className="flex items-start gap-4">
+                      <Phone className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactPhone')}</h3>
+                        <a href={`tel:${DEFAULT_CONTACT.phone.replace(/[^+\d]/g, '')}`} className="text-muted-foreground hover:text-primary transition-colors">
+                          {DEFAULT_CONTACT.phone}
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4">
+                      <Mail className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactEmail')}</h3>
+                        <a href={`mailto:${DEFAULT_CONTACT.email}`} className="text-muted-foreground hover:text-primary transition-colors">
+                          {DEFAULT_CONTACT.email}
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4">
+                      <MapPin className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactLocation')}</h3>
+                        <a
+                          href="https://maps.google.com/?q=1632+Jonesboro+Rd+SE+Atlanta+GA+30315"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          1632 Jonesboro Rd SE
+                          <br />
+                          Atlanta, GA 30315
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4">
+                      <Clock className="w-6 h-6 text-primary mt-1" />
+                      <div>
+                        <h3 className="font-semibold mb-1">{t('contactHours')}</h3>
+                        <div className="text-muted-foreground space-y-1">
+                          <p>{t('monday')}</p>
+                          <p>{t('tuesday')}</p>
+                          <p>{t('wednesday')}</p>
+                          <p>{t('thursday')}</p>
+                          <p>{t('friday')}</p>
+                          <p>{t('saturday')}</p>
+                          <p>{t('sunday')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Actions */}
               <Card>
@@ -410,7 +482,7 @@ function ContactPageContent() {
                     className="w-full justify-start"
                     asChild
                   >
-                    <a href={`sms:${contactPhone.replace(/[^+\d]/g, '')}`}>
+                    <a href={`sms:${(preparer?.phone || DEFAULT_CONTACT.phone).replace(/[^+\d]/g, '')}`}>
                       <MessageCircle className="mr-2 w-4 h-4" />
                       {t('liveChat')}
                     </a>

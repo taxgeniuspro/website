@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch preparer profile by tracking code OR short link username
+    // Include both tax_preparer and admin roles (admins may also have marketing links)
     const profile = await prisma.profile.findFirst({
       where: {
         OR: [
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
           { customTrackingCode: code },
           { shortLinkUsername: code },
         ],
-        role: 'tax_preparer',
+        role: { in: ['tax_preparer', 'admin'] },
       },
       select: {
         id: true,

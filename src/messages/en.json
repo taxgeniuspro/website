@@ -469,7 +469,10 @@
       "faqQ3": "Can I file from anywhere in the US?",
       "faqA3": "Absolutely! We serve clients in all 50 states and offer both virtual consultations and in-person meetings where available.",
       "faqQ4": "What if I'm not satisfied with your service?",
-      "faqA4": "We offer a 100% satisfaction guarantee. If you're not completely satisfied, we'll make it right or provide a full refund."
+      "faqA4": "We offer a 100% satisfaction guarantee. If you're not completely satisfied, we'll make it right or provide a full refund.",
+      "yourTaxPreparer": "Your Tax Preparer",
+      "directPhone": "Direct Phone",
+      "directEmail": "Direct Email"
     }
   },
   "home": {
