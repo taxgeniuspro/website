@@ -96,8 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only preparers and admins can create saved replies
-    const canCreate =
-      profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'admin';
+    const canCreate = profile.role === 'tax_preparer' || profile.role === 'admin';
 
     if (!canCreate) {
       return NextResponse.json(
@@ -119,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only admins can create global replies
-    const globalFlag = isGlobal && (profile.role === 'admin' || profile.role === 'admin');
+    const globalFlag = isGlobal && profile.role === 'admin';
 
     // Create saved reply
     const savedReply = await createSavedReply({

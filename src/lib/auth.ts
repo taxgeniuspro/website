@@ -330,12 +330,12 @@ export async function isSuperAdmin(): Promise<boolean> {
 }
 
 /**
- * Check if current user is an admin (includes super_admin)
- * @returns True if user is admin or super_admin
+ * Check if current user is an admin
+ * @returns True if user is admin
  */
 export async function isAdmin(): Promise<boolean> {
   const userRole = await getUserRole();
-  return userRole === 'admin' || userRole === 'admin';
+  return userRole === 'admin';
 }
 
 /**
@@ -408,11 +408,9 @@ export function getDashboardUrl(role: UserRole | string): string {
 
   const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
-    admin: '/dashboard/admin',
     lead: '/dashboard/lead',
     client: '/dashboard/client',
     tax_preparer: '/dashboard/tax-preparer',
-    affiliate: '/dashboard/affiliate',
   };
 
   return dashboardUrls[normalizedRole] || '/dashboard/lead';
@@ -420,17 +418,12 @@ export function getDashboardUrl(role: UserRole | string): string {
 
 /**
  * Check if user has access to the store
- * Tax preparers, affiliates, admins, and super admins can access the store
+ * Tax preparers and admins can access the store
  * @returns True if user has store access
  */
 export async function hasStoreAccess(): Promise<boolean> {
   const userRole = await getUserRole();
-  return (
-    userRole === 'tax_preparer' ||
-    userRole === 'affiliate' ||
-    userRole === 'admin' ||
-    userRole === 'admin'
-  );
+  return userRole === 'tax_preparer' || userRole === 'admin';
 }
 
 /**
@@ -442,7 +435,7 @@ export async function hasStoreAccess(): Promise<boolean> {
 export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
   // Verify admin permissions
   const currentUser = await requireAuth();
-  if (currentUser. currentUser.role !== 'admin') {
+  if (currentUser.role !== 'admin') {
     throw new Error('Only admins can update user roles');
   }
 

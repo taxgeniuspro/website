@@ -91,7 +91,7 @@ export async function PATCH(
     }
 
     // Check access
-    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
+    const isAdmin = profile.role === 'admin';
     const isAssignedPreparer = existingTask.lead.assignedTo === profile.id;
 
     if (!isAdmin && !isAssignedPreparer) {
@@ -219,7 +219,7 @@ export async function DELETE(
     });
 
     // Check access
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'admin';
+    const isAdmin = profile?.role === 'admin';
     const isAssignedPreparer = task.lead.assignedTo === profile?.id;
 
     if (!isAdmin && !isAssignedPreparer) {

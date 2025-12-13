@@ -14,7 +14,7 @@ export function CartIcon() {
 
   // Only show cart for admins and tax preparers
   const userRole = user?.publicMetadata?.role as string | undefined;
-  const canAccessCart = userRole === 'admin' || userRole === 'admin' || userRole === 'tax_preparer';
+  const canAccessCart = userRole === 'admin' || userRole === 'tax_preparer';
 
   if (!canAccessCart) {
     return null;

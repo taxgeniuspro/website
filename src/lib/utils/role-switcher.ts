@@ -92,7 +92,7 @@ export async function getEffectiveRole(
   userId: string
 ): Promise<EffectiveRoleInfo> {
   // Only admins can have a different viewing role
-  if (actualRole !== 'admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin') {
     return {
       actualRole,
       effectiveRole: actualRole,
@@ -133,24 +133,15 @@ export async function getEffectiveRole(
 
 /**
  * Check if user can switch to a target role
- * Admins can view as any role except super_admin (for security)
+ * Admins can view as any role
  */
 export function canSwitchToRole(actualRole: UserRole, targetRole: UserRole): boolean {
   // Only admins can switch roles
-  if (actualRole !== 'admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin') {
     return false;
   }
 
-  // Super admins can view as any role including admin
-  if (actualRole === 'admin') {
-    return true;
-  }
-
-  // Regular admins cannot view as super_admin (privilege escalation prevention)
-  if (actualRole === 'admin' && targetRole === 'admin') {
-    return false;
-  }
-
+  // Admins can view as any role
   return true;
 }
 
@@ -158,11 +149,9 @@ export function canSwitchToRole(actualRole: UserRole, targetRole: UserRole): boo
  * Format role name for display
  */
 export function formatRoleName(role: UserRole): string {
-  const roleNames: Record<UserRole, string> = {
-    super_admin: 'Super Admin',
+  const roleNames: Record<string, string> = {
     admin: 'Admin',
     tax_preparer: 'Tax Preparer',
-    affiliate: 'Affiliate',
     lead: 'Lead',
     client: 'Client',
   };
@@ -174,11 +163,9 @@ export function formatRoleName(role: UserRole): string {
  * Get role color for UI display
  */
 export function getRoleColor(role: UserRole): string {
-  const colors: Record<UserRole, string> = {
-    super_admin: 'red',
+  const colors: Record<string, string> = {
     admin: 'orange',
     tax_preparer: 'blue',
-    affiliate: 'purple',
     lead: 'green',
     client: 'gray',
   };
@@ -190,11 +177,9 @@ export function getRoleColor(role: UserRole): string {
  * Get role badge classes for UI
  */
 export function getRoleBadgeClasses(role: UserRole): string {
-  const classes: Record<UserRole, string> = {
-    super_admin: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  const classes: Record<string, string> = {
     admin: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
     tax_preparer: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    affiliate: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
     lead: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
     client: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
   };

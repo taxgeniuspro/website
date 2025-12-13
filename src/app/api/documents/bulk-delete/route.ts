@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
           if (file.profileId === profile.id) return true;
 
           // Admins can delete
-          if (profile.role === 'admin' || profile.role === 'admin') return true;
+          if (profile.role === 'admin') return true;
 
           // Tax preparers can delete if assigned (checked below)
           return profile.role === 'tax_preparer';
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
           if (folder.ownerId === profile.id) return true;
 
           // Admins can delete
-          if (profile.role === 'admin' || profile.role === 'admin') return true;
+          if (profile.role === 'admin') return true;
 
           return false;
         })

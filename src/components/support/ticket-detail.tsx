@@ -46,8 +46,7 @@ export function TicketDetail({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const isPreparer =
-    userRole === 'tax_preparer' || userRole === 'admin' || userRole === 'admin';
+  const isPreparer = userRole === 'tax_preparer' || userRole === 'admin';
 
   // Fetch ticket details
   useEffect(() => {
