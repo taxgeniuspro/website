@@ -10,10 +10,10 @@ interface LogoProps {
 }
 
 const sizeClasses = {
-  sm: 'h-6 w-6',
-  md: 'h-8 w-8',
-  lg: 'h-10 w-10',
-  xl: 'h-12 w-auto',
+  sm: 'h-6',
+  md: 'h-8',
+  lg: 'h-10',
+  xl: 'h-12',
 };
 
 const textSizeClasses = {
@@ -23,38 +23,27 @@ const textSizeClasses = {
   xl: 'text-2xl',
 };
 
-const imageSizes = {
-  sm: { width: 24, height: 24 },
-  md: { width: 32, height: 32 },
-  lg: { width: 40, height: 40 },
-  xl: { width: 200, height: 50 },
-};
-
 export function Logo({ size = 'md', showText = true, className }: LogoProps) {
-  const { width, height } = imageSizes[size];
-
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <div className={cn('relative flex-shrink-0', sizeClasses[size])}>
-        {/* Light theme logo - hidden in dark mode */}
-        <Image
-          src="/images/logo-light-theme.png"
-          alt="Tax Genius Pro"
-          width={width}
-          height={height}
-          className="object-contain dark:hidden"
-          priority
-        />
-        {/* Dark theme logo - hidden in light mode */}
-        <Image
-          src="/images/logo-dark-theme.png"
-          alt="Tax Genius Pro"
-          width={width}
-          height={height}
-          className="object-contain hidden dark:block"
-          priority
-        />
-      </div>
+      {/* Light theme logo - hidden in dark mode */}
+      <Image
+        src="/images/logo-light-theme.png"
+        alt="Tax Genius Pro"
+        width={200}
+        height={50}
+        className={cn(sizeClasses[size], 'w-auto dark:hidden')}
+        priority
+      />
+      {/* Dark theme logo - hidden in light mode */}
+      <Image
+        src="/images/logo-dark-theme.png"
+        alt="Tax Genius Pro"
+        width={200}
+        height={50}
+        className={cn(sizeClasses[size], 'w-auto hidden dark:block')}
+        priority
+      />
       {showText && (
         <span className={cn('font-semibold', textSizeClasses[size])}>Tax Genius Pro</span>
       )}
@@ -63,26 +52,24 @@ export function Logo({ size = 'md', showText = true, className }: LogoProps) {
 }
 
 export function LogoIcon({ size = 'md', className }: Omit<LogoProps, 'showText'>) {
-  const { width, height } = imageSizes[size];
-
   return (
-    <div className={cn('relative flex-shrink-0', sizeClasses[size], className)}>
+    <div className={cn('flex items-center', className)}>
       {/* Light theme logo - hidden in dark mode */}
       <Image
         src="/images/logo-light-theme.png"
         alt="Tax Genius Pro"
-        width={width}
-        height={height}
-        className="object-contain dark:hidden"
+        width={200}
+        height={50}
+        className={cn(sizeClasses[size], 'w-auto dark:hidden')}
         priority
       />
       {/* Dark theme logo - hidden in light mode */}
       <Image
         src="/images/logo-dark-theme.png"
         alt="Tax Genius Pro"
-        width={width}
-        height={height}
-        className="object-contain hidden dark:block"
+        width={200}
+        height={50}
+        className={cn(sizeClasses[size], 'w-auto hidden dark:block')}
         priority
       />
     </div>
