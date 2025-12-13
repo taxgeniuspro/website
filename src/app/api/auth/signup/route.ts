@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create user with profile in a transaction
-    const user = await prisma.$transaction(async (tx) => {
+    const { user, profile } = await prisma.$transaction(async (tx) => {
       // Create user
       const newUser = await tx.user.create({
         data: {
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Create profile for the user
-      await tx.profile.create({
+      const newProfile = await tx.profile.create({
         data: {
           userId: newUser.id,
           role: 'lead', // Default role for new signups
@@ -131,10 +132,19 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return newUser;
+      return { user: newUser, profile: newProfile };
     });
 
     logger.info('[Signup] User created successfully', { email: email.toLowerCase() });
+
+    // Assign tracking code and auto-generate referral links (after transaction commits)
+    try {
+      await assignTrackingCodeToUser(profile.id);
+      logger.info('[Signup] Assigned tracking code to new user', { userId: user.id, profileId: profile.id });
+    } catch (trackingError) {
+      // Log but don't block signup
+      logger.error('[Signup] Failed to assign tracking code', { error: trackingError, userId: user.id });
+    }
 
     // Return success (without password)
     return NextResponse.json(

@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { getAffiliateLinks, generateAffiliateStandardLinks } from '@/lib/services/affiliate-links.service';
+import { getOrCreateClientLinks } from '@/lib/services/client-links.service';
 
 /**
- * GET /api/affiliate/links
- * Fetches the two standard affiliate links with QR codes
+ * GET /api/client/links
+ * Fetches or auto-generates the two standard client referral links with QR codes.
+ * Unlike affiliates, clients don't need to finalize their tracking code -
+ * links are generated automatically on first access.
  */
 export async function GET() {
   try {
@@ -32,13 +34,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is affiliate
-    const isAffiliate = profile.role === 'affiliate';
+    // Clients can access this endpoint
+    const isClient = profile.role === 'client';
     const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
 
-    if (!isAffiliate && !isAdmin) {
+    if (!isClient && !isAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden: Only affiliates can access this endpoint' },
+        { error: 'Forbidden: Only clients can access this endpoint' },
         { status: 403 }
       );
     }
@@ -53,35 +55,20 @@ export async function GET() {
       });
     }
 
-    // Get or create affiliate links (auto-generates if they don't exist)
-    let affiliateLinks = await getAffiliateLinks(profile.id);
-
-    if (!affiliateLinks) {
-      // Auto-generate links if they don't exist
-      try {
-        affiliateLinks = await generateAffiliateStandardLinks(profile.id);
-        logger.info(`🔗 Auto-generated affiliate links for profile ${profile.id}`);
-      } catch (genError) {
-        logger.error('Error auto-generating affiliate links:', genError);
-        return NextResponse.json({
-          success: true,
-          links: [],
-          message: 'Failed to generate affiliate links. Please try again.',
-        });
-      }
-    }
+    // Get or create client links (auto-generates if they don't exist)
+    const clientLinks = await getOrCreateClientLinks(profile.id);
 
     // Transform to component-friendly format
     const links = [
       {
-        id: affiliateLinks.leadLink.id,
-        shortCode: affiliateLinks.leadLink.code,
-        shortUrl: affiliateLinks.leadLink.shortUrl,
-        fullUrl: affiliateLinks.leadLink.url,
+        id: clientLinks.leadLink.id,
+        shortCode: clientLinks.leadLink.code,
+        shortUrl: clientLinks.leadLink.shortUrl,
+        fullUrl: clientLinks.leadLink.url,
         destination: '/contact',
-        title: affiliateLinks.leadLink.title,
-        description: 'Quick contact form for potential clients to submit their information',
-        qrCodeUrl: affiliateLinks.leadLink.qrCodeDataUrl,
+        title: clientLinks.leadLink.title,
+        description: 'Share this link with friends to earn referral bonuses',
+        qrCodeUrl: clientLinks.leadLink.qrCodeDataUrl,
         clicks: 0, // Will be populated from analytics
         leads: 0,
         conversions: 0,
@@ -89,14 +76,14 @@ export async function GET() {
         type: 'lead',
       },
       {
-        id: affiliateLinks.intakeLink.id,
-        shortCode: affiliateLinks.intakeLink.code,
-        shortUrl: affiliateLinks.intakeLink.shortUrl,
-        fullUrl: affiliateLinks.intakeLink.url,
+        id: clientLinks.intakeLink.id,
+        shortCode: clientLinks.intakeLink.code,
+        shortUrl: clientLinks.intakeLink.shortUrl,
+        fullUrl: clientLinks.intakeLink.url,
         destination: '/start-filing/form',
-        title: affiliateLinks.intakeLink.title,
-        description: 'Complete tax intake form for clients ready to start their tax preparation',
-        qrCodeUrl: affiliateLinks.intakeLink.qrCodeDataUrl,
+        title: clientLinks.intakeLink.title,
+        description: 'Share this link with friends who are ready to start their taxes',
+        qrCodeUrl: clientLinks.intakeLink.qrCodeDataUrl,
         clicks: 0, // Will be populated from analytics
         leads: 0,
         conversions: 0,
@@ -133,14 +120,14 @@ export async function GET() {
       return link;
     });
 
-    logger.info(`📋 Fetched affiliate links for profile ${profile.id}`);
+    logger.info(`📋 Fetched client referral links for profile ${profile.id}`);
 
     return NextResponse.json({
       success: true,
       links: linksWithAnalytics,
     });
   } catch (error) {
-    logger.error('Error fetching affiliate links:', error);
-    return NextResponse.json({ error: 'Failed to fetch affiliate links' }, { status: 500 });
+    logger.error('Error fetching client links:', error);
+    return NextResponse.json({ error: 'Failed to fetch client links' }, { status: 500 });
   }
 }

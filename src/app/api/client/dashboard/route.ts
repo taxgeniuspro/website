@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 /**
  * GET /api/client/dashboard
@@ -29,7 +30,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check for completed tax intake (by profileId or email match)
+    // Get tax year from query param or use current filing year
+    const currentFilingYear = getCurrentFilingTaxYear();
+    const requestedYear = req.nextUrl.searchParams.get('year');
+    const taxYear = requestedYear ? parseInt(requestedYear) : currentFilingYear;
+
+    // Check for completed tax intake for this specific tax year
     // Include full_form_data so client can see their intake summary
     const taxIntake = await prisma.taxIntakeLead.findFirst({
       where: {
@@ -38,11 +44,13 @@ export async function GET(req: NextRequest) {
           { email: session.user?.email || '' },
         ],
         completed: true,
+        tax_year: taxYear,
       },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         completed: true,
+        tax_year: true,
         first_name: true,
         last_name: true,
         email: true,
@@ -88,13 +96,7 @@ export async function GET(req: NextRequest) {
       where: { profileId: profile.id },
     });
 
-    // Get current tax year
-    const currentYear = new Date().getFullYear();
-    const taxYear = req.nextUrl.searchParams.get('year')
-      ? parseInt(req.nextUrl.searchParams.get('year')!)
-      : currentYear - 1;
-
-    // Get tax return with documents
+    // Get tax return with documents (taxYear already defined above)
     const taxReturn = await prisma.taxReturn.findUnique({
       where: {
         profileId_taxYear: {
@@ -203,6 +205,8 @@ export async function GET(req: NextRequest) {
       intakeStatus: {
         hasCompleted: !!taxIntake?.completed,
         intakeId: taxIntake?.id || null,
+        taxYear: taxYear,
+        currentFilingYear: currentFilingYear,
       },
       // Assigned tax preparer info
       assignedPreparer: clientPreparer?.preparer

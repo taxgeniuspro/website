@@ -1448,9 +1448,12 @@ model TaxIntakeLead {
   first_name   String
   middle_name  String?
   last_name    String
-  email        String  @unique
+  email        String // Part of composite unique key with tax_year
   phone        String
   country_code String  @default("+1")
+
+  // Tax Year for this intake (allows repeatable yearly intakes)
+  tax_year Int @default(2024) // The tax year being filed for (e.g., 2024, 2025)
 
   // Address
   address_line_1 String?
@@ -1506,7 +1509,9 @@ model TaxIntakeLead {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@unique([email, tax_year]) // Composite unique: one intake per email per tax year
   @@index([email])
+  @@index([tax_year])
   @@index([completed])
   @@index([created_at])
   @@index([assignedPreparerId])

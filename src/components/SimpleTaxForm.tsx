@@ -28,6 +28,7 @@ import { PreparerCard } from '@/components/PreparerCard';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { useTranslations, useLocale } from 'next-intl';
+import { getCurrentFilingTaxYear, getTaxYearLabel } from '@/lib/utils/tax-year';
 
 // Tax intake form data structure
 interface TaxFormData {
@@ -131,6 +132,7 @@ export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFo
   const [isSaving, setIsSaving] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
   const [preparer, setPreparer] = useState<PreparerInfo | null>(initialPreparer as PreparerInfo | null);
+  const [taxYear] = useState(() => getCurrentFilingTaxYear());
   const [formData, setFormData] = useState<TaxFormData>({
     first_name: '',
     middle_name: '',
@@ -276,6 +278,8 @@ export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFo
           full_form_data: formData,
           // Language/Locale for email routing
           locale: locale,
+          // Tax year for the filing
+          tax_year: taxYear,
         }),
       });
 
@@ -343,6 +347,9 @@ const handleSubmit = async () => {
 
       // Add preparer code
       submitData.append('preparer_code', preparerCode);
+
+      // Add tax year
+      submitData.append('tax_year', taxYear.toString());
 
       // Submit to API
       const response = await fetch('/api/tax-intake/submit', {
@@ -603,9 +610,14 @@ const handleSubmit = async () => {
         {page > 1 && page < totalPages && (
           <CardHeader>
             <div className="flex items-center justify-between mb-2">
-              <Badge variant="secondary" className="text-sm">
-                {t('progressStep', { current: page, total: totalPages })}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-sm">
+                  {t('progressStep', { current: page, total: totalPages })}
+                </Badge>
+                <Badge variant="outline" className="text-sm bg-primary/10 text-primary border-primary/30">
+                  Tax Year {taxYear}
+                </Badge>
+              </div>
               <span className="text-sm text-muted-foreground">
                 {Math.round(((page - 1) / (totalPages - 1)) * 100)}% {tCommon('status')}
               </span>

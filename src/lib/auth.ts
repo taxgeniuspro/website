@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
+import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 
 // Extend NextAuth types to include our custom role field
 declare module 'next-auth' {
@@ -216,7 +217,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           lastName = nameParts[nameParts.length - 1];
         }
 
-        await prisma.profile.create({
+        const profile = await prisma.profile.create({
           data: {
             userId: user.id,
             role: 'client',
@@ -225,6 +226,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             lastName,
           },
         });
+
+        // Assign tracking code and auto-generate referral links
+        try {
+          await assignTrackingCodeToUser(profile.id);
+          logger.info('Assigned tracking code to new OAuth user', { userId: user.id, profileId: profile.id });
+        } catch (trackingError) {
+          // Log but don't block signup
+          logger.error('Failed to assign tracking code to OAuth user', { error: trackingError, userId: user.id });
+        }
       }
     },
   },

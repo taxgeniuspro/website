@@ -7,6 +7,7 @@ import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
 import { getEmailRecipients } from '@/config/email-routing';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
+import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,7 +49,12 @@ export async function POST(req: NextRequest) {
       full_form_data,
       // Language/Locale for email routing
       locale,
+      // Tax year for this intake (allows yearly submissions)
+      tax_year: providedTaxYear,
     } = body;
+
+    // Determine the tax year for this intake
+    const tax_year = providedTaxYear ?? getCurrentFilingTaxYear();
 
     // Validate required fields
     if (!first_name || !last_name || !email || !phone) {
@@ -162,15 +168,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if lead already exists by email
+    // Check if lead already exists for this email AND tax year (composite key)
     let lead = await prisma.taxIntakeLead.findUnique({
-      where: { email },
+      where: {
+        email_tax_year: {
+          email,
+          tax_year
+        }
+      },
     });
 
     if (lead) {
-      // Update existing lead
+      // Update existing lead for this tax year
       lead = await prisma.taxIntakeLead.update({
-        where: { email },
+        where: {
+          email_tax_year: {
+            email,
+            tax_year
+          }
+        },
         data: {
           first_name,
           middle_name,
@@ -194,7 +210,7 @@ export async function POST(req: NextRequest) {
         },
       });
     } else {
-      // Create new lead
+      // Create new lead for this tax year
       lead = await prisma.taxIntakeLead.create({
         data: {
           first_name,
@@ -208,6 +224,7 @@ export async function POST(req: NextRequest) {
           city,
           state,
           zip_code,
+          tax_year, // Include the tax year
           // EPIC 6: Attribution fields
           referrerUsername: attributionResult.attribution.referrerUsername,
           referrerType: attributionResult.attribution.referrerType,
@@ -239,12 +256,12 @@ export async function POST(req: NextRequest) {
       }
 
       if (folderOwnerId) {
-        const currentYear = new Date().getFullYear();
+        // Use the intake's tax year for the folder structure
         const folderResult = await ClientFolderService.getOrCreateClientFolder(
           folderOwnerId,
           first_name,
           last_name,
-          currentYear
+          tax_year
         );
 
         // Link folder to lead
@@ -296,7 +313,7 @@ export async function POST(req: NextRequest) {
           // Tax-specific fields from intake
           filingStatus: filing_status,
           dependents: number_of_dependents ? parseInt(number_of_dependents) : null,
-          taxYear: new Date().getFullYear(), // Current tax year
+          taxYear: tax_year, // Use the intake's tax year
         },
         update: {
           firstName: first_name,
