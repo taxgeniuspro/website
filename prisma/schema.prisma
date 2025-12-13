@@ -196,6 +196,11 @@ model Profile {
   affiliateApprovedAt DateTime?
   affiliateApprovedBy String? // Admin who approved
 
+  // Account Status (for admin deactivation)
+  isActive      Boolean   @default(true)  // False = account suspended
+  deactivatedAt DateTime?                 // When account was deactivated
+  deactivatedBy String?                   // Admin user ID who deactivated
+
   // Performance Stats (cached for dashboard)
   totalConversions Int     @default(0)
   lifetimeEarnings Decimal @default(0) @db.Decimal(12, 2)
@@ -266,6 +271,7 @@ model Profile {
   @@index([affiliateGroupId])
   @@index([affiliateStatus])
   @@index([hasFiledTaxes])
+  @@index([isActive])
   @@map("profiles")
 }
 

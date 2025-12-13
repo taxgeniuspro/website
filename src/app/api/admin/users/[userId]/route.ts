@@ -26,7 +26,7 @@ export async function PATCH(
 
     const { userId } = params;
     const body = await req.json();
-    const { email, firstName, lastName, role: newRole, permissions } = body;
+    const { email, firstName, lastName, role: newRole, permissions, isActive } = body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -79,6 +79,33 @@ export async function PATCH(
     if (newRole !== undefined) profileData.role = newRole;
     if (permissions !== undefined) profileData.customPermissions = permissions;
 
+    // Handle user activation/deactivation
+    if (isActive !== undefined) {
+      const wasActive = existingUser.profile?.isActive ?? true;
+
+      if (isActive !== wasActive) {
+        profileData.isActive = isActive;
+
+        if (!isActive) {
+          // Deactivating user
+          profileData.deactivatedAt = new Date();
+          profileData.deactivatedBy = currentUser.id;
+          logger.info('User deactivated', {
+            userId,
+            deactivatedBy: currentUser.id,
+          });
+        } else {
+          // Reactivating user
+          profileData.deactivatedAt = null;
+          profileData.deactivatedBy = null;
+          logger.info('User reactivated', {
+            userId,
+            reactivatedBy: currentUser.id,
+          });
+        }
+      }
+    }
+
     const updatedProfile = await prisma.profile.update({
       where: { userId },
       data: profileData,
@@ -93,7 +120,7 @@ export async function PATCH(
     logger.info('User updated', {
       userId,
       updatedBy: currentUser.id,
-      changes: { email, firstName, lastName, role: newRole },
+      changes: { email, firstName, lastName, role: newRole, isActive },
     });
 
     return NextResponse.json({
@@ -105,6 +132,9 @@ export async function PATCH(
         lastName: updatedUser!.profile?.lastName,
         role: updatedUser!.profile?.role,
         permissions: updatedUser!.profile?.customPermissions,
+        isActive: updatedUser!.profile?.isActive ?? true,
+        deactivatedAt: updatedUser!.profile?.deactivatedAt,
+        deactivatedBy: updatedUser!.profile?.deactivatedBy,
       },
     });
   } catch (error) {
