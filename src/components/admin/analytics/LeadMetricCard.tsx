@@ -58,25 +58,35 @@ export function LeadMetricCard({
 }: LeadMetricCardProps) {
   // Resolve icon - support both string names and direct components
   const Icon = typeof icon === 'string' ? iconMap[icon] || DollarSign : icon;
+  // Tax Genius Pro brand colors:
+  // Primary: Yellow (#f9d938)
+  // Secondary: Green (#408851)
+  // Accent: Dark blue-gray (#30394b)
   const colorClasses = {
-    blue: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 text-blue-700 dark:text-blue-300',
+    // Brand primary - Yellow
+    blue: 'from-amber-50 to-yellow-100 dark:from-amber-950/50 dark:to-yellow-900/50 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200',
+    // Brand secondary - Green
     green:
-      'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 text-green-700 dark:text-green-300',
+      'from-emerald-50 to-green-100 dark:from-emerald-950/50 dark:to-green-900/50 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200',
+    // Accent - Slate/dark blue-gray
     purple:
-      'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 text-purple-700 dark:text-purple-300',
+      'from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200',
+    // Brand primary variant - Warm yellow
     yellow:
-      'from-yellow-50 to-yellow-100 dark:from-yellow-950 dark:to-yellow-900 border-yellow-200 text-yellow-700 dark:text-yellow-300',
+      'from-yellow-50 to-amber-100 dark:from-yellow-950/50 dark:to-amber-900/50 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200',
+    // Brand secondary variant - Teal green
     orange:
-      'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border-orange-200 text-orange-700 dark:text-orange-300',
-    gray: 'from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 border-gray-200 text-gray-700 dark:text-gray-300',
+      'from-teal-50 to-emerald-100 dark:from-teal-950/50 dark:to-emerald-900/50 border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-200',
+    // Neutral
+    gray: 'from-gray-50 to-gray-100 dark:from-gray-900/50 dark:to-gray-800/50 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300',
   };
 
   const iconColorClasses = {
-    blue: 'text-blue-600 dark:text-blue-400',
+    blue: 'text-yellow-600 dark:text-yellow-400',
     green: 'text-green-600 dark:text-green-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    yellow: 'text-yellow-600 dark:text-yellow-400',
-    orange: 'text-orange-600 dark:text-orange-400',
+    purple: 'text-slate-600 dark:text-slate-400',
+    yellow: 'text-amber-600 dark:text-amber-400',
+    orange: 'text-teal-600 dark:text-teal-400',
     gray: 'text-gray-600 dark:text-gray-400',
   };
 

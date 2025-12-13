@@ -137,7 +137,7 @@ export function ConversionFunnelChart({
           <div className="mt-6 pt-6 border-t">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Overall Conversion Rate</span>
-              <span className="text-lg font-bold text-green-600 dark:text-green-400">
+              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                 {((stages[stages.length - 1].value / stages[0].value) * 100).toFixed(2)}%
               </span>
             </div>
