@@ -348,7 +348,7 @@ async function getCommissionRate(
     }
 
     // If affiliate, check for custom commission structure from bonded preparer
-    if (profile.role === 'AFFILIATE' && profile.affiliateBondedToPreparerId) {
+    if (profile.role === 'affiliate' && profile.affiliateBondedToPreparerId) {
       const bonding = await prisma.affiliateBonding.findFirst({
         where: {
           affiliateId: profile.id,

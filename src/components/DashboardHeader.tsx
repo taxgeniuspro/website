@@ -111,10 +111,10 @@ export function DashboardHeader({
         {/* Right Side Actions */}
         <div className="flex items-center gap-2">
           {/* Role Switcher - Only for admins */}
-          {(displayRealRole === 'SUPER_ADMIN' || displayRealRole === 'ADMIN') && (
+          {(displayRealRole === 'super_admin' || displayRealRole === 'admin') && (
             <RoleSwitcher
               actualRole={displayRealRole}
-              effectiveRole={displayRole || 'CLIENT'}
+              effectiveRole={displayRole || 'client'}
               isViewingAsOtherRole={isViewingAsOtherRole}
             />
           )}

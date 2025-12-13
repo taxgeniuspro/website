@@ -143,7 +143,7 @@ export async function suggestResponse(input: SuggestResponseInput) {
     const conversationContext = ticket.messages
       .map((msg) => {
         const senderName = `${msg.senderProfile.firstName} ${msg.senderProfile.lastName}`;
-        const role = msg.senderProfile.role === 'CLIENT' ? 'Client' : 'Tax Preparer';
+        const role = msg.senderProfile.role === 'client' ? 'Client' : 'Tax Preparer';
         return `${role} (${senderName}): ${msg.content}`;
       })
       .join('\n\n');
@@ -252,7 +252,7 @@ export async function analyzeSentiment(input: AnalyzeSentimentInput) {
 
     // Focus on client messages for sentiment
     const clientMessages = ticket.messages
-      .filter((msg) => msg.senderProfile.role === 'CLIENT')
+      .filter((msg) => msg.senderProfile.role === 'client')
       .map((msg) => msg.content)
       .join('\n\n');
 
@@ -359,7 +359,7 @@ export async function summarizeTicket(input: SummarizeTicketInput) {
     // Build conversation context
     const conversation = ticket.messages
       .map((msg) => {
-        const role = msg.senderProfile.role === 'CLIENT' ? 'Client' : 'Preparer';
+        const role = msg.senderProfile.role === 'client' ? 'Client' : 'Preparer';
         return `${role}: ${msg.content}`;
       })
       .join('\n\n');

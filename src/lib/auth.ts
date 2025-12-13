@@ -158,9 +158,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = session.role;
       }
 
-      // Note: Role is fetched from DB in signIn callback for OAuth providers.
-      // For credentials, role is passed directly from authorize function.
-      // Role can be updated using the 'update' trigger if needed.
+      // IMPORTANT: Always refresh role from database to catch admin role changes
+      // This ensures users see updated permissions immediately after admin changes their role
+      if (token.id) {
+        try {
+          const profile = await prisma.profile.findUnique({
+            where: { userId: token.id as string },
+            select: { role: true },
+          });
+          if (profile?.role) {
+            token.role = profile.role;
+          }
+        } catch (error) {
+          // Keep existing token.role on error
+          logger.error('Failed to refresh user role in JWT callback', { error, userId: token.id });
+        }
+      }
 
       return token;
     },
