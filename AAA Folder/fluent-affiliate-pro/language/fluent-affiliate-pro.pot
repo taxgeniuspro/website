@@ -1,0 +1,255 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: FluentAffiliate Pro\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-09-16 12:42+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: \n"
+"Language: \n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Loco https://localise.biz/\n"
+"X-Loco-Version: 2.8.0; wp-6.8.1; php-8.2.27\n"
+"X-Domain: fluent-affiliate-pro"
+
+#: app/Services/Integrations/Edd/EddCouponAffiliate.php:139
+#, php-format
+msgid "%s discount code for your audiences."
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/Connector.php:81
+msgid "Add Affiliate Dashboard in WooCommerce Account Menu"
+msgstr ""
+
+#: app/Hooks/Handlers/MultiDomainTranckerHandler.php:62
+msgid "aff_id is required."
+msgstr ""
+
+#: app/Http/Controllers/CreativeController.php:38
+msgid "Affiliate Account could not be found"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/Bootstrap.php:241
+msgid "Affiliate Dashboard"
+msgstr ""
+
+#: app/Http/Controllers/AffiliateGroupController.php:111
+msgid "affiliate group successfully created"
+msgstr ""
+
+#: app/Http/Controllers/AffiliateGroupController.php:160
+msgid "affiliate group successfully deleted"
+msgstr ""
+
+#: app/Http/Controllers/AffiliateGroupController.php:144
+msgid "Affiliate group successfully updated"
+msgstr ""
+
+#: app/Hooks/Handlers/MultiDomainTranckerHandler.php:71
+msgid "Affiliate not found or inactive."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:104
+msgid "Connect config has been generated."
+msgstr ""
+
+#: app/Http/Controllers/CreativeController.php:100
+msgid "Creative created successfully"
+msgstr ""
+
+#: app/Http/Controllers/CreativeController.php:170
+msgid "Creative deleted successfully"
+msgstr ""
+
+#: app/Http/Controllers/CreativeController.php:150
+msgid "Creative updated successfully"
+msgstr ""
+
+#: app/Services/Integrations/Edd/Connector.php:88
+msgid "Disable Referrals on Upgrades"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/Connector.php:87
+#: app/Services/Integrations/Edd/Connector.php:81
+msgid "Enable Branded Coupon Codes for affiliates"
+msgstr ""
+
+#: app/Services/Integrations/LifterLMS/Connector.php:82
+msgid "Enable custom rate for specific courses or Course Categories"
+msgstr ""
+
+#: app/Services/Integrations/Give/Connector.php:73
+msgid "Enable custom rate for specific donation forms"
+msgstr ""
+
+#: app/Services/Integrations/MemberPress/Connector.php:81
+#: app/Services/Integrations/PMP/Connector.php:76
+msgid "Enable custom rate for specific membership or categories"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/Connector.php:96
+#: app/Services/Integrations/Edd/Connector.php:97
+msgid "Enable custom rate for specific product or categories"
+msgstr ""
+
+#: app/Services/Integrations/SureCart/Connector.php:109
+#: app/Services/Integrations/Voxel/Connector.php:73
+msgid "Enable custom rate for specific products"
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:158
+msgid "Failed to remove manager"
+msgstr ""
+
+#: app/Hooks/Handlers/CoreDepenedencyHandler.php:11
+#: app/Hooks/Handlers/CoreDepenedencyHandler.php:12
+msgid "FluentAffiliate"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/CouponMeta.php:60
+msgid "FluentAffiliate Coupon?"
+msgstr ""
+
+#. Name of the plugin
+msgid "FluentAffiliate Pro"
+msgstr ""
+
+#. Description of the plugin
+msgid "FluentAffiliate Pro Package"
+msgstr ""
+
+#: app/Services/Integrations/Give/Connector.php:72
+msgid "GiveWP Forms"
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:32
+msgid "Global status updated successfully."
+msgstr ""
+
+#. URI of the plugin
+#. Author URI of the plugin
+msgid "https://fluentaffiliates.com"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/CouponMeta.php:61
+#: app/Services/Integrations/Edd/EddCouponAffiliate.php:74
+msgid ""
+"If you want to attach this coupon for an affiliate, you may select it here. "
+"Whenever someone use this coupon, The selected affiliate will get the "
+"commission."
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:120
+msgid "Invalid permissions"
+msgstr ""
+
+#: app/Hooks/Handlers/CoreDepenedencyHandler.php:92
+msgid "Invalid plugin or file mods are disabled."
+msgstr ""
+
+#: app/Hooks/Handlers/MultiDomainTranckerHandler.php:53
+msgid "Invalid site ID or server token."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:50
+msgid "Invalid site URL."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:44
+msgid "Invalid token."
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:129
+msgid "Manager Added Successfully"
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:163
+msgid "Manager removed successfully"
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:134
+msgid "Manager Updated Successfully"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/CouponMeta.php:42
+msgid "None"
+msgstr ""
+
+#: app/Http/Controllers/AffiliateGroupController.php:184
+msgid "Referrals"
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:39
+msgid "Registration fields updated successfully"
+msgstr ""
+
+#: app/Services/Integrations/LifterLMS/Connector.php:80
+msgid "Select Courses"
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:166
+msgid "Site config updated successfully."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:130
+msgid "Site disconnected successfully."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:141
+msgid "Site ID and config are required."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:116
+msgid "Site ID is required."
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:122
+#: app/Http/Controllers/DomainController.php:149
+msgid "Site not found."
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:113
+msgid "This is an admin user. You can not change permissions"
+msgstr ""
+
+#: app/Http/Controllers/DomainController.php:60
+msgid "This site is already connected."
+msgstr ""
+
+#: app/Http/Controllers/ProSettingController.php:107
+msgid "User not found"
+msgstr ""
+
+#: app/Http/Controllers/AffiliateGroupController.php:188
+msgid "Visits"
+msgstr ""
+
+#: app/Services/Integrations/Voxel/Connector.php:72
+msgid "Voxel products"
+msgstr ""
+
+#: app/Services/Integrations/Edd/Connector.php:89
+msgid "When enabled, No referrals will be added on purchased upgrades"
+msgstr ""
+
+#: app/Services/Integrations/Edd/Connector.php:82
+msgid ""
+"When enabled, you can offer branded coupon codes for affiliates. This allows "
+"them to promote products with unique discount codes. You can find the option "
+"in Discount Codes editor in EDD"
+msgstr ""
+
+#: app/Services/Integrations/WooCommerce/Connector.php:88
+msgid ""
+"When enabled, you can offer branded coupon codes for affiliates. This allows "
+"them to promote products with unique discount codes. You can find the option "
+"in Discount Codes editor in WooCommerce"
+msgstr ""
+
+#. Author of the plugin
+msgid "WPManageNinja LLC"
+msgstr ""
