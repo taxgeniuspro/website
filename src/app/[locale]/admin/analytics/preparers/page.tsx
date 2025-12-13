@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { getUserPermissions, UserPermissions } from '@/lib/permissions';
+import { getUserPermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -43,21 +43,15 @@ export const metadata = {
 };
 
 async function checkAdminAccess() {
-  try {
-    const session = await auth();
-    const user = session?.user;
-    if (!user) return { hasAccess: false, permissions: undefined };
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false };
 
-    const role = user?.role as string;
-    const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
-    const permissions = getUserPermissions(role as any, customPermissions);
-    const hasAccess = role === 'admin' && permissions.analytics;
+  const role = user?.role as string;
+  const permissions = getUserPermissions(role as any, undefined);
+  const hasAccess = role === 'admin' && permissions.analytics;
 
-    return { hasAccess, permissions };
-  } catch (error) {
-    console.error('Auth check error:', error);
-    return { hasAccess: false, permissions: undefined };
-  }
+  return { hasAccess, permissions };
 }
 
 export default async function AdminPreparersAnalyticsPage({
@@ -74,14 +68,8 @@ export default async function AdminPreparersAnalyticsPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch preparer performance data with error handling
-  let preparers: Awaited<ReturnType<typeof getAllPreparersLeadPerformance>> = [];
-
-  try {
-    preparers = await getAllPreparersLeadPerformance(period);
-  } catch (error) {
-    console.error('Preparer analytics data fetch error:', error);
-  }
+  // Fetch preparer performance data
+  const preparers = await getAllPreparersLeadPerformance(period);
 
   // Calculate aggregates
   const totalLeads = preparers.reduce((sum, p) => sum + p.leads, 0);

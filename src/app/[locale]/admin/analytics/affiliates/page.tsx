@@ -12,7 +12,7 @@
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { getUserPermissions, UserPermissions } from '@/lib/permissions';
+import { getUserPermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -51,21 +51,15 @@ export const metadata = {
 };
 
 async function checkAdminAccess() {
-  try {
-    const session = await auth();
-    const user = session?.user;
-    if (!user) return { hasAccess: false, permissions: undefined };
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { hasAccess: false };
 
-    const role = user?.role as string;
-    const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
-    const permissions = getUserPermissions(role as any, customPermissions);
-    const hasAccess = role === 'admin' && permissions.analytics;
+  const role = user?.role as string;
+  const permissions = getUserPermissions(role as any, undefined);
+  const hasAccess = role === 'admin' && permissions.analytics;
 
-    return { hasAccess, permissions };
-  } catch (error) {
-    console.error('Auth check error:', error);
-    return { hasAccess: false, permissions: undefined };
-  }
+  return { hasAccess, permissions };
 }
 
 export default async function AdminAffiliatesAnalyticsPage({
@@ -82,23 +76,11 @@ export default async function AdminAffiliatesAnalyticsPage({
   const params = await searchParams;
   const period = (params.period as Period) || '30d';
 
-  // Fetch affiliate performance and commission data with error handling
-  let affiliates: Awaited<ReturnType<typeof getAllAffiliatesLeadPerformance>> = [];
-  let commissions: Awaited<ReturnType<typeof getCommissionSummary>> = {
-    total: { amount: 0, count: 0 },
-    pending: { amount: 0, count: 0 },
-    approved: { amount: 0, count: 0 },
-    paid: { amount: 0, count: 0 },
-  };
-
-  try {
-    [affiliates, commissions] = await Promise.all([
-      getAllAffiliatesLeadPerformance(period),
-      getCommissionSummary(period),
-    ]);
-  } catch (error) {
-    console.error('Affiliate analytics data fetch error:', error);
-  }
+  // Fetch affiliate performance and commission data
+  const [affiliates, commissions] = await Promise.all([
+    getAllAffiliatesLeadPerformance(period),
+    getCommissionSummary(period),
+  ]);
 
   // Calculate aggregates
   const totalLeads = affiliates.reduce((sum, a) => sum + a.leads, 0);
