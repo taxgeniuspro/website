@@ -201,7 +201,7 @@ export default function ClientDashboard() {
           </Card>
         </div>
 
-        {/* Tax Return Progress */}
+        {/* Tax Return Progress - STATE 3: Has tax return */}
         {taxReturn ? (
           <>
             <Card>
@@ -292,7 +292,7 @@ export default function ClientDashboard() {
             )}
           </>
         ) : !data?.intakeStatus?.hasCompleted ? (
-          /* No intake completed - show "Complete Tax Intake" card */
+          /* STATE 1: No intake completed - show "Complete Tax Intake" card */
           <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -316,7 +316,7 @@ export default function ClientDashboard() {
             </CardContent>
           </Card>
         ) : (
-          /* Intake completed - show intake summary, preparer info + document upload */
+          /* STATE 2: Intake completed - show intake summary, preparer info + document upload */
           <div className="space-y-4">
             {/* Intake Summary Card - Shows completed form data */}
             {data?.intakeSummary && (
