@@ -40,6 +40,7 @@ import {
   Image,
   Gift,
   GraduationCap,
+  UserPlus,
 } from 'lucide-react';
 import { UserRole, Permission } from '@/lib/permissions';
 
@@ -198,6 +199,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/tax-preparer/documents',
     icon: FolderOpen,
     permission: 'documents',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'My Leads',
+    href: '/dashboard/tax-preparer/leads',
+    icon: UserPlus,
+    permission: 'dashboard',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },

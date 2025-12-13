@@ -65,6 +65,7 @@ export interface FileManagerFile {
 
 export interface FileManagerProps {
   clientId?: string; // For admin/preparer viewing specific client
+  folderId?: string; // Initial folder to open (for deep linking)
   viewMode?: 'grid' | 'list';
   showTree?: boolean;
   allowUpload?: boolean;
@@ -76,6 +77,7 @@ export interface FileManagerProps {
 
 export function FileManager({
   clientId,
+  folderId,
   viewMode: initialViewMode = 'grid',
   showTree = true,
   allowUpload = true,
@@ -88,7 +90,7 @@ export function FileManager({
 
   // UI State
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(initialViewMode);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderId || null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +99,13 @@ export function FileManager({
   const [previewFile, setPreviewFile] = useState<FileManagerFile | null>(null);
   const [isCreateUploadLinkOpen, setIsCreateUploadLinkOpen] = useState(false);
   const [shareUploadLink, setShareUploadLink] = useState<any>(null);
+
+  // Update currentFolderId when folderId prop changes (for deep linking)
+  useEffect(() => {
+    if (folderId !== undefined) {
+      setCurrentFolderId(folderId || null);
+    }
+  }, [folderId]);
 
   // Fetch folders
   const { data: foldersData, isLoading: foldersLoading } = useQuery({
