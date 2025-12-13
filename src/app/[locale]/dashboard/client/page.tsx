@@ -16,7 +16,12 @@ import {
   TrendingUp,
   Users,
   Gift,
+  ArrowRight,
+  Upload,
+  User,
 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
 import Link from 'next/link';
 import { UserRole } from '@/lib/permissions';
@@ -228,15 +233,80 @@ export default function ClientDashboard() {
               </div>
             </CardContent>
           </Card>
+        ) : !data?.intakeStatus?.hasCompleted ? (
+          /* No intake completed - show "Complete Tax Intake" card */
+          <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                  <FileText className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <CardTitle>Complete Your Tax Intake</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Start your 2024 tax filing by completing the intake form
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/start-filing/form">
+                  Start Tax Intake <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          <Alert>
-            <TrendingUp className="h-4 w-4" />
-            <AlertTitle>Get Started with Your Tax Return</AlertTitle>
-            <AlertDescription>
-              You haven't started your tax filing yet. Use the sidebar to navigate and begin your
-              tax filing process, or start earning by referring friends and family.
-            </AlertDescription>
-          </Alert>
+          /* Intake completed - show preparer info + document upload */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Your Tax Preparer */}
+            {data?.assignedPreparer && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Your Tax Preparer</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={data.assignedPreparer.avatarUrl || undefined} />
+                      <AvatarFallback>
+                        <User className="h-6 w-6" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{data.assignedPreparer.name}</p>
+                      <p className="text-sm text-muted-foreground">{data.assignedPreparer.email}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Upload Documents */}
+            <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                    <Upload className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Upload Your Documents</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {stats?.documentsCount || 0} documents uploaded
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline">
+                  <Link href="/dashboard/client/documents">
+                    Go to Documents <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Recent Activity */}
