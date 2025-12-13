@@ -60,6 +60,19 @@ export function isTaxSeason(): boolean {
 }
 
 /**
+ * Check if we're in early filing season (Jan 1 - Apr 15)
+ * During this time, most people are filing for the previous year
+ *
+ * @returns true if currently in early filing season
+ */
+export function isEarlyFilingSeason(): boolean {
+  const now = new Date();
+  const month = now.getMonth();
+  const day = now.getDate();
+  return month < 3 || (month === 3 && day <= 15);
+}
+
+/**
  * Check if a tax year is valid for filing
  * We allow filing for the last 3 years (current year - 1, - 2, - 3)
  * Example: In 2025, can file for 2024, 2023, 2022
@@ -68,7 +81,6 @@ export function isTaxSeason(): boolean {
  * @returns true if valid for filing
  */
 export function isValidFilingYear(taxYear: number): boolean {
-  const currentYear = new Date().getFullYear();
   const defaultYear = getCurrentFilingTaxYear(); // current year - 1
 
   // Allow filing for 3 years back from the default year
