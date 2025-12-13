@@ -36,6 +36,9 @@ interface User {
   role: string;
   permissions?: Record<string, boolean>;
   createdAt: string;
+  isActive?: boolean;
+  deactivatedAt?: string | null;
+  deactivatedBy?: string | null;
 }
 
 interface UserManagementClientProps {
@@ -53,6 +56,7 @@ export function UserManagementClient({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const router = useRouter();
 
   const handleEditUser = (user: User) => {
@@ -67,6 +71,7 @@ export function UserManagementClient({
     lastName?: string;
     role: UserRole;
     permissions: Partial<UserPermissions>;
+    isActive?: boolean;
   }) => {
     try {
       const response = await fetch(`/api/admin/users/${userData.userId}`, {
@@ -80,6 +85,7 @@ export function UserManagementClient({
           lastName: userData.lastName,
           role: userData.role,
           permissions: userData.permissions,
+          isActive: userData.isActive,
         }),
       });
 
@@ -101,6 +107,9 @@ export function UserManagementClient({
                 lastName: data.user.lastName || user.lastName,
                 role: data.user.role,
                 permissions: data.user.permissions,
+                isActive: data.user.isActive,
+                deactivatedAt: data.user.deactivatedAt,
+                deactivatedBy: data.user.deactivatedBy,
               }
             : user
         )
@@ -141,7 +150,7 @@ export function UserManagementClient({
       .join(' ');
   };
 
-  // Filter users based on search and role
+  // Filter users based on search, role, and status
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       searchQuery === '' ||
@@ -150,7 +159,13 @@ export function UserManagementClient({
 
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
 
-    return matchesSearch && matchesRole;
+    const userIsActive = user.isActive ?? true;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && userIsActive) ||
+      (statusFilter === 'inactive' && !userIsActive);
+
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   return (
@@ -181,11 +196,20 @@ export function UserManagementClient({
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
                 <SelectItem value="lead">Lead (Pending)</SelectItem>
                 <SelectItem value="affiliate">Affiliate</SelectItem>
                 <SelectItem value="client">Client</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline">
@@ -241,12 +265,21 @@ export function UserManagementClient({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className="bg-green-50 text-green-700 border-green-200"
-                        >
-                          Active
-                        </Badge>
+                        {(user.isActive ?? true) ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200"
+                          >
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-red-50 text-red-700 border-red-200"
+                          >
+                            Inactive
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{createdAt}</TableCell>
                       <TableCell className="text-right">
@@ -287,6 +320,9 @@ export function UserManagementClient({
             lastName: selectedUser.lastName,
             role: selectedUser.role as UserRole,
             permissions: selectedUser.permissions as Partial<UserPermissions>,
+            isActive: selectedUser.isActive,
+            deactivatedAt: selectedUser.deactivatedAt,
+            deactivatedBy: selectedUser.deactivatedBy,
           }}
           onSave={handleSaveUser}
           isSuperAdmin={isSuperAdmin}

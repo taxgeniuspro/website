@@ -65,6 +65,9 @@ export default async function AdminUsersPage() {
     role: user.profile?.role ? String(user.profile.role) : 'CLIENT',
     permissions: user.profile?.customPermissions as Record<string, boolean> | undefined,
     createdAt: user.createdAt.toISOString(),
+    isActive: user.profile?.isActive ?? true,
+    deactivatedAt: user.profile?.deactivatedAt?.toISOString() || null,
+    deactivatedBy: user.profile?.deactivatedBy || null,
   }));
 
   // Count users by role

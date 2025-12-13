@@ -27,11 +27,13 @@ declare module 'next-auth' {
       email: string;
       name?: string | null;
       image?: string | null;
+      isActive?: boolean;
     } & DefaultSession['user'];
   }
 
   interface User {
     role: UserRole;
+    isActive?: boolean;
   }
 }
 
@@ -39,6 +41,7 @@ declare module '@auth/core/jwt' {
   interface JWT {
     id: string;
     role: UserRole;
+    isActive?: boolean;
   }
 }
 
@@ -112,6 +115,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error('Invalid email or password');
         }
 
+        // Check if user is deactivated
+        if (user.profile?.isActive === false) {
+          throw new Error('Account suspended');
+        }
+
         // Return user with role from profile
         return {
           id: user.id,
@@ -119,30 +127,48 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           image: user.image,
           role: user.profile?.role || 'lead', // Default to lead if no profile
-        } as NextAuthUser & { role: UserRole };
+          isActive: user.profile?.isActive ?? true,
+        } as NextAuthUser & { role: UserRole; isActive?: boolean };
       },
     }),
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For OAuth providers (Google), fetch role from database and attach to user
-      if (account?.provider === 'google' && user?.id) {
+      // Check if user is deactivated (for all login types)
+      if (user?.id) {
         try {
           const profile = await prisma.profile.findUnique({
             where: { userId: user.id },
-            select: { role: true },
+            select: { role: true, isActive: true },
           });
-          if (profile?.role) {
-            // Attach role to user object so JWT callback can access it
-            (user as NextAuthUser & { role: UserRole }).role = profile.role;
-          } else {
-            // Default to 'lead' if no profile exists yet (new users)
-            (user as NextAuthUser & { role: UserRole }).role = 'lead';
+
+          // Block deactivated users from signing in
+          if (profile && profile.isActive === false) {
+            logger.warn('Deactivated user attempted to sign in', { userId: user.id, email: user.email });
+            // Return false to block sign-in, or redirect to suspended page
+            // NextAuth will redirect to error page with error=AccessDenied
+            return '/suspended';
+          }
+
+          // For OAuth providers (Google), fetch role from database and attach to user
+          if (account?.provider === 'google') {
+            if (profile?.role) {
+              // Attach role to user object so JWT callback can access it
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = profile.role;
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = profile.isActive ?? true;
+            } else {
+              // Default to 'lead' if no profile exists yet (new users)
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'lead';
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
+            }
           }
         } catch (error) {
-          logger.error('Failed to fetch user role during OAuth sign-in', { error, userId: user.id });
-          // Default to 'lead' on error
-          (user as NextAuthUser & { role: UserRole }).role = 'lead';
+          logger.error('Failed to fetch user profile during sign-in', { error, userId: user.id });
+          // Default to 'lead' on error for OAuth
+          if (account?.provider === 'google') {
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'lead';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
+          }
         }
       }
       return true;
@@ -152,37 +178,45 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = user.role || 'lead'; // Default to 'lead' if role not set
+        token.isActive = user.isActive ?? true;
       }
 
       // Handle session updates (when user.update() is called)
       if (trigger === 'update' && session) {
         token.role = session.role;
+        if (session.isActive !== undefined) {
+          token.isActive = session.isActive;
+        }
       }
 
-      // IMPORTANT: Always refresh role from database to catch admin role changes
+      // IMPORTANT: Always refresh role and isActive from database to catch admin changes
       // This ensures users see updated permissions immediately after admin changes their role
+      // and deactivated users get blocked on their next request
       if (token.id) {
         try {
           const profile = await prisma.profile.findUnique({
             where: { userId: token.id as string },
-            select: { role: true },
+            select: { role: true, isActive: true },
           });
           if (profile?.role) {
             token.role = profile.role;
           }
+          // Update isActive status - this will catch admin deactivations
+          token.isActive = profile?.isActive ?? true;
         } catch (error) {
-          // Keep existing token.role on error
-          logger.error('Failed to refresh user role in JWT callback', { error, userId: token.id });
+          // Keep existing token values on error
+          logger.error('Failed to refresh user profile in JWT callback', { error, userId: token.id });
         }
       }
 
       return token;
     },
     async session({ session, token }) {
-      // Add user ID and role to session
+      // Add user ID, role, and isActive status to session
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
+        session.user.isActive = token.isActive ?? true;
       }
 
       return session;

@@ -42,6 +42,9 @@ interface EditUserModalProps {
     lastName?: string;
     role: UserRole;
     permissions?: Partial<UserPermissions>;
+    isActive?: boolean;
+    deactivatedAt?: string | Date | null;
+    deactivatedBy?: string | null;
   };
   onSave: (userData: {
     userId: string;
@@ -50,6 +53,7 @@ interface EditUserModalProps {
     lastName?: string;
     role: UserRole;
     permissions: Partial<UserPermissions>;
+    isActive?: boolean;
   }) => Promise<void>;
   isSuperAdmin?: boolean;
 }
@@ -68,6 +72,7 @@ export function EditUserModal({
   const [permissions, setPermissions] = useState<Partial<UserPermissions>>(
     user.permissions || DEFAULT_PERMISSIONS[user.role] || {}
   );
+  const [isActive, setIsActive] = useState(user.isActive ?? true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +103,7 @@ export function EditUserModal({
         lastName: lastName !== user.lastName ? lastName : undefined,
         role: selectedRole,
         permissions,
+        isActive: isActive !== (user.isActive ?? true) ? isActive : undefined,
       });
 
       onOpenChange(false);
@@ -203,6 +209,46 @@ export function EditUserModal({
 
           {/* Permissions Tab */}
           <TabsContent value="permissions" className="space-y-4 mt-4">
+            {/* Account Status */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Account Status</Label>
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label htmlFor="accountStatus" className="text-sm font-medium cursor-pointer">
+                      Account Active
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isActive
+                        ? 'User can sign in and access the platform'
+                        : 'User is blocked from signing in'}
+                    </p>
+                  </div>
+                  <Switch
+                    id="accountStatus"
+                    checked={isActive}
+                    onCheckedChange={setIsActive}
+                  />
+                </div>
+
+                {!isActive && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      This user will be immediately logged out and unable to sign in until reactivated.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {user.deactivatedAt && !isActive && (
+                  <div className="text-xs text-muted-foreground border-t pt-2">
+                    Deactivated on: {new Date(user.deactivatedAt).toLocaleString()}
+                    {user.deactivatedBy && <span className="block">By admin ID: {user.deactivatedBy}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Role Selection */}
             <div className="space-y-2">
               <Label htmlFor="role" className="text-sm font-medium">
