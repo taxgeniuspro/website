@@ -1,0 +1,383 @@
+/**
+ * Tax Preparer - My Clients Page
+ *
+ * Shows all clients assigned to the logged-in tax preparer.
+ * Includes client status, tax returns, and quick actions.
+ */
+
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { auth } from '@/lib/auth';
+import { getUserPermissions } from '@/lib/permissions';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Users,
+  Mail,
+  Phone,
+  FileText,
+  CheckCircle,
+  Clock,
+  TrendingUp,
+  AlertCircle,
+  Calendar,
+  ExternalLink,
+} from 'lucide-react';
+import { prisma } from '@/lib/prisma';
+
+export const metadata = {
+  title: 'My Clients - Tax Preparer | Tax Genius Pro',
+  description: 'View and manage your assigned clients',
+};
+
+// Status badge variants
+const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  DRAFT: 'secondary',
+  IN_REVIEW: 'default',
+  FILED: 'default',
+  ACCEPTED: 'default',
+  REJECTED: 'destructive',
+  AMENDED: 'secondary',
+};
+
+const statusLabels: Record<string, string> = {
+  DRAFT: 'Draft',
+  IN_REVIEW: 'In Review',
+  FILED: 'Filed',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Rejected',
+  AMENDED: 'Amended',
+};
+
+export default async function MyClientsPage() {
+  const session = await auth();
+  const user = session?.user;
+
+  if (!user) {
+    redirect('/auth/signin');
+  }
+
+  const role = user?.role as string;
+  const permissions = getUserPermissions(role as any, undefined);
+
+  // Only tax preparers can access this page
+  if (role !== 'tax_preparer' || !permissions.clients) {
+    redirect('/forbidden');
+  }
+
+  // Get preparer's profile
+  const preparerProfile = await prisma.profile.findFirst({
+    where: { userId: user.id },
+    select: { id: true, displayName: true, firstName: true, lastName: true },
+  });
+
+  if (!preparerProfile) {
+    redirect('/dashboard/tax-preparer');
+  }
+
+  // Fetch clients assigned to this preparer
+  const clientRelationships = await prisma.clientPreparer.findMany({
+    where: {
+      preparerId: preparerProfile.id,
+      isActive: true,
+    },
+    include: {
+      client: {
+        include: {
+          taxReturns: {
+            orderBy: { taxYear: 'desc' },
+            take: 1,
+          },
+          user: {
+            select: { email: true },
+          },
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  const clients = clientRelationships.map((rel) => ({
+    ...rel.client,
+    assignedAt: rel.createdAt,
+  }));
+
+  // Calculate statistics
+  const totalClients = clients.length;
+  const activeClients = clients.filter((c) => c.taxReturns.length > 0).length;
+  const pendingReviews = clients.filter(
+    (c) => c.taxReturns[0]?.status === 'IN_REVIEW'
+  ).length;
+  const completedReturns = clients.filter(
+    (c) => c.taxReturns[0]?.status === 'FILED' || c.taxReturns[0]?.status === 'ACCEPTED'
+  ).length;
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="w-8 h-8" />
+            My Clients
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage and track your assigned clients
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/dashboard/tax-preparer/leads">
+            <Button variant="outline">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              View Leads
+            </Button>
+          </Link>
+          <Link href="/dashboard/tax-preparer/calendar">
+            <Button variant="outline">
+              <Calendar className="w-4 h-4 mr-2" />
+              Calendar
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalClients}</div>
+            <p className="text-xs text-muted-foreground">Assigned to you</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Returns</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeClients}</div>
+            <p className="text-xs text-muted-foreground">With tax returns</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{pendingReviews}</div>
+            <p className="text-xs text-muted-foreground">Awaiting your review</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Completed</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{completedReturns}</div>
+            <p className="text-xs text-muted-foreground">Returns filed</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Clients Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Client List</CardTitle>
+          <CardDescription>
+            All clients currently assigned to you
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {clients.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-medium mb-2">No Clients Yet</h3>
+              <p className="text-muted-foreground mb-4">
+                You don&apos;t have any clients assigned to you yet.
+              </p>
+              <Link href="/dashboard/tax-preparer/leads">
+                <Button>
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  View Your Leads
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Tax Year</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Assigned</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clients.map((client) => {
+                    const currentReturn = client.taxReturns[0];
+                    const initials = `${client.firstName?.[0] || ''}${client.lastName?.[0] || ''}`.toUpperCase() || '?';
+
+                    return (
+                      <TableRow key={client.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={client.avatarUrl || undefined} />
+                              <AvatarFallback>{initials}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">
+                                {client.firstName} {client.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {client.user?.email || 'No email'}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {client.phone && (
+                              <p className="text-sm flex items-center gap-1">
+                                <Phone className="w-3 h-3" />
+                                {client.phone}
+                              </p>
+                            )}
+                            {client.user?.email && (
+                              <p className="text-sm flex items-center gap-1 text-muted-foreground">
+                                <Mail className="w-3 h-3" />
+                                <span className="truncate max-w-[150px]">
+                                  {client.user.email}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {currentReturn ? (
+                            <Badge variant="outline">{currentReturn.taxYear}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {currentReturn ? (
+                            <Badge variant={statusColors[currentReturn.status] || 'secondary'}>
+                              {statusLabels[currentReturn.status] || currentReturn.status}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              No Return
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm">
+                            {new Date(client.assignedAt).toLocaleDateString()}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" asChild>
+                              <Link href={`/dashboard/tax-preparer/clients/${client.id}`}>
+                                <FileText className="w-3 h-3 mr-1" />
+                                View
+                              </Link>
+                            </Button>
+                            {client.user?.email && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                asChild
+                              >
+                                <a href={`mailto:${client.user.email}`}>
+                                  <Mail className="w-3 h-3" />
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      {clients.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
+            <Link href="/dashboard/tax-preparer/calendar">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  Schedule Appointments
+                </CardTitle>
+                <CardDescription>
+                  Book meetings with your clients
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+
+          <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
+            <Link href="/admin/file-center">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Client Documents
+                </CardTitle>
+                <CardDescription>
+                  Access client files and tax documents
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+
+          <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
+            <Link href="/dashboard/tax-preparer/tickets">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-primary" />
+                  Support Tickets
+                </CardTitle>
+                <CardDescription>
+                  View and respond to client inquiries
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
