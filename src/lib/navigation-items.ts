@@ -151,7 +151,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 📊 TAX PREPARER DASHBOARD SECTION
-  // Order: Analytics, Share & Earn, Dashboard, Calendar, File Center, Tax Forms, Training, Store
+  // Order: Analytics, Share & Earn, Dashboard, Clients, Calendar, File Center, Tax Forms, Training, Store
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Analytics',
@@ -174,6 +174,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/tax-preparer',
     icon: Home,
     permission: 'dashboard',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'My Clients',
+    href: '/dashboard/tax-preparer/clients',
+    icon: Users,
+    permission: 'clients',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
