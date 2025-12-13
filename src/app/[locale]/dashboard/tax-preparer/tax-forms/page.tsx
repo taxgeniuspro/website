@@ -11,10 +11,11 @@ import {
   Search,
   Share2,
   FileText,
-  Filter,
   Package,
   Calendar,
   UserPlus,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import {
   Select,
@@ -291,71 +292,68 @@ export default function TaxPreparerFormsPage() {
       form.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const renderFormCard = (form: TaxForm) => (
-    <Card
+  const renderFormRow = (form: TaxForm) => (
+    <div
       key={form.id}
-      className={`hover:shadow-lg transition-shadow cursor-pointer ${
-        selectedForms.has(form.id) ? 'border-primary border-2' : ''
+      className={`flex items-center gap-4 p-4 border-b hover:bg-muted/50 transition-colors cursor-pointer ${
+        selectedForms.has(form.id) ? 'bg-primary/10' : ''
       }`}
       onClick={() => toggleFormSelection(form.id)}
     >
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              {form.formNumber}
-            </CardTitle>
-            <CardDescription className="mt-1">{form.title}</CardDescription>
-          </div>
-          <Badge variant="outline" className="ml-2">
+      {/* Checkbox */}
+      <div className="flex-shrink-0">
+        {selectedForms.has(form.id) ? (
+          <CheckSquare className="h-5 w-5 text-primary" />
+        ) : (
+          <Square className="h-5 w-5 text-muted-foreground" />
+        )}
+      </div>
+
+      {/* Form Icon */}
+      <div className="flex-shrink-0">
+        <FileText className="h-8 w-8 text-primary" />
+      </div>
+
+      {/* Form Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-base">{form.formNumber}</span>
+          <Badge variant="outline" className="text-xs">
             {form.taxYear}
           </Badge>
         </div>
-      </CardHeader>
-      <CardContent>
-        {form.description && (
-          <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{form.description}</p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="default"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownload(form.id, form.fileName);
-            }}
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Download
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenAssignDialog(form);
-            }}
-          >
-            <UserPlus className="h-4 w-4 mr-1" />
-            Assign
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFormSelection(form.id);
-            }}
-          >
-            {selectedForms.has(form.id) ? 'Deselect' : 'Select'}
-          </Button>
-        </div>
-        <div className="mt-3 text-xs text-muted-foreground">
-          Downloads: {form.downloadCount} • {(form.fileSize / 1024).toFixed(0)} KB
-        </div>
-      </CardContent>
-    </Card>
+        <p className="text-sm text-muted-foreground truncate">{form.title}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {form.downloadCount} downloads • {(form.fileSize / 1024).toFixed(0)} KB
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex-shrink-0 flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="default"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDownload(form.id, form.fileName);
+          }}
+        >
+          <Download className="h-4 w-4 mr-1" />
+          Download
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenAssignDialog(form);
+          }}
+        >
+          <UserPlus className="h-4 w-4 mr-1" />
+          Assign
+        </Button>
+      </div>
+    </div>
   );
 
   if (loading) {
@@ -446,24 +444,51 @@ export default function TaxPreparerFormsPage() {
 
         {/* All Forms */}
         <TabsContent value="all" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(search ? filteredForms : forms).map(renderFormCard)}
-          </div>
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {(search ? filteredForms : forms).map(renderFormRow)}
+              </div>
+              {(search ? filteredForms : forms).length === 0 && (
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No forms found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Category-specific tabs */}
         {Object.entries(groupedForms).map(([category, categoryForms]) => (
           <TabsContent key={category} value={category} className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(search
-                ? categoryForms?.filter(
-                    (form) =>
-                      form.formNumber.toLowerCase().includes(search.toLowerCase()) ||
-                      form.title.toLowerCase().includes(search.toLowerCase())
-                  )
-                : categoryForms
-              )?.map(renderFormCard)}
-            </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {(search
+                    ? categoryForms?.filter(
+                        (form) =>
+                          form.formNumber.toLowerCase().includes(search.toLowerCase()) ||
+                          form.title.toLowerCase().includes(search.toLowerCase())
+                      )
+                    : categoryForms
+                  )?.map(renderFormRow)}
+                </div>
+                {(search
+                  ? categoryForms?.filter(
+                      (form) =>
+                        form.formNumber.toLowerCase().includes(search.toLowerCase()) ||
+                        form.title.toLowerCase().includes(search.toLowerCase())
+                    )
+                  : categoryForms
+                )?.length === 0 && (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No forms found in this category</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         ))}
       </Tabs>
