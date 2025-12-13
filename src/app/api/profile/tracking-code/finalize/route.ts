@@ -30,7 +30,7 @@ export async function POST() {
       update: {}, // No updates if exists
       create: {
         userId: userId,
-        role: 'lead', // Default role, user will select proper role later
+        role: 'client', // Default role for registered users
       },
       select: { id: true, role: true },
     });
@@ -46,8 +46,14 @@ export async function POST() {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // Auto-generate affiliate links if user is an affiliate
-    if (profile.role === 'affiliate') {
+    // Auto-generate affiliate links for approved affiliates (any role can be affiliate)
+    // Note: affiliateStatus is checked, not role - affiliate is a feature, not a role
+    const fullProfile = await prisma.profile.findUnique({
+      where: { id: profile.id },
+      select: { affiliateStatus: true },
+    });
+
+    if (fullProfile?.affiliateStatus === 'APPROVED') {
       try {
         logger.info('🎯 Generating affiliate standard links after finalization', {
           profileId: profile.id,

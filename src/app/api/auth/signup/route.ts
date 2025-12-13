@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       const newProfile = await tx.profile.create({
         data: {
           userId: newUser.id,
-          role: 'lead', // Default role for new signups
+          role: 'client', // Default role for new signups (client = registered user)
           firstName,
           middleName,
           lastName,

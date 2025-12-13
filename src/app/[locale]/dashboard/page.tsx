@@ -17,17 +17,16 @@ export default async function DashboardRedirect() {
   }
 
   // Get user role from metadata
-  const role = (user?.role as UserRole) || 'lead';
+  const role = (user?.role as UserRole) || 'client';
 
   // Redirect to role-specific dashboard
-  // Valid roles: admin, tax_preparer, lead, client
+  // Valid roles: admin, tax_preparer, client (3 roles only)
   const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
-    lead: '/dashboard/lead',
     client: '/dashboard/client',
     tax_preparer: '/dashboard/tax-preparer',
   };
 
-  const targetUrl = dashboardUrls[role] || '/dashboard/lead';
+  const targetUrl = dashboardUrls[role] || '/dashboard/client';
   redirect(targetUrl);
 }

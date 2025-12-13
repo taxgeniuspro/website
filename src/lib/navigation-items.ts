@@ -56,7 +56,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Home,
     permission: 'dashboard',
     section: '📱 My Dashboard',
-    roles: ['client', 'lead'],
+    roles: ['client'],
   },
   // Tax Filing Features (conditional on hasFiledTaxes)
   {
@@ -81,7 +81,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Gift,
     permission: 'dashboard',
     section: '📱 My Dashboard',
-    roles: ['client', 'lead'],
+    roles: ['client'],
   },
   // Affiliate Features (conditional on affiliateStatus === 'APPROVED')
   {
@@ -446,7 +446,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     icon: Share2,
     permission: 'dashboard', // All users with dashboard access can share
     section: '🔗 Quick Share Tools',
-    roles: ['tax_preparer', 'client', 'lead'], // Admin removed - they don't have personal tracking codes
+    roles: ['tax_preparer', 'client'], // Admin removed - they don't have personal tracking codes
   },
   // NOTE: Admin Quick Share removed - admin doesn't generate personal links
   // If admin wants QR codes/links, they need a separate tax preparer account
@@ -488,11 +488,12 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
 /**
  * Dashboard routes by role (for redirecting generic /dashboard to role-specific dashboard)
- * NOTE: 'affiliate' role removed - affiliates are now clients with affiliateStatus=APPROVED
+ * NOTE: Only 3 roles exist: admin, client, tax_preparer
+ * 'affiliate' is now a status (affiliateStatus), not a role
+ * 'lead' removed - leads are CRM contacts without accounts, clients are the default signed-up role
  */
-export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
+export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
   admin: '/dashboard/admin',
-  lead: '/dashboard/lead',
   tax_preparer: '/dashboard/tax-preparer',
   client: '/dashboard/client',
 };

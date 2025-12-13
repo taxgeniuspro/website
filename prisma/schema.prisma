@@ -96,9 +96,10 @@ model MagicLink {
 
 enum UserRole {
   admin // Administrator with full system access
-  lead // Default role for new signups (pending admin approval)
-  client // User who has completed tax preparation with Tax Genius
-  tax_preparer // Tax professional
+  client // DEFAULT role for all signups (can have tax filing + affiliate features)
+  tax_preparer // Tax professional (auto has affiliate features)
+  // NOTE: 'lead' REMOVED - leads are CRM contacts without accounts, not users
+  // NOTE: 'affiliate' REMOVED - affiliate is now a status (affiliateStatus), not a role
 }
 
 model Profile {

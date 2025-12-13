@@ -196,10 +196,16 @@ export const SECTION_PERMISSIONS: Record<SectionPermission, Permission[]> = {
 export type UserPermissions = Record<Permission, boolean>;
 
 // TypeScript best practice: lowercase with underscores (matches Prisma enum)
-// NOTE: 'affiliate' role has been REMOVED - affiliate features are now controlled by
-// affiliateStatus field on Profile (NONE | PENDING | APPROVED | SUSPENDED)
-// NOTE: 'admin' role has been REMOVED - merged into 'admin' role
-export type UserRole = 'admin' | 'tax_preparer' | 'lead' | 'client';
+// NOTE: Only 3 roles exist:
+// - admin: Platform administrator
+// - tax_preparer: Tax professional (auto has affiliate features)
+// - client: DEFAULT for all signups (tax filing + optional affiliate features via affiliateStatus)
+//
+// REMOVED ROLES:
+// - 'affiliate': merged into client with affiliateStatus field
+// - 'super_admin': merged into 'admin' role
+// - 'lead': removed - leads are CRM contacts without accounts, signups become 'client'
+export type UserRole = 'admin' | 'tax_preparer' | 'client';
 
 /**
  * Default permissions for each role
@@ -417,50 +423,9 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     marketing_download: true,
     marketing_delete: true,
   },
-  // NOTE: 'affiliate' role has been REMOVED
-  // Affiliate features are now accessed by clients with affiliateStatus === 'APPROVED'
-  // Tax preparers automatically have all affiliate features (no status check needed)
-  lead: {
-    // Leads are NEW SIGNUPS pending admin approval
-    // ❌ NO MICRO-TOGGLES - NO ACCESS until admin changes role
-    dashboard: false, // Shows pending approval page instead
-    settings: false, // No access until approved
-    // ❌ ALL MICRO-TOGGLES EXPLICITLY DISABLED
-    calendar_view: false,
-    calendar_create: false,
-    calendar_edit: false,
-    calendar_delete: false,
-    contacts_view: false,
-    contacts_create: false,
-    contacts_edit: false,
-    contacts_delete: false,
-    contacts_export: false,
-    files_view: false,
-    files_upload: false,
-    files_download: false,
-    files_delete: false,
-    files_share: false,
-    academy_view: false,
-    academy_enroll: false,
-    academy_complete: false,
-    taxforms_view: false,
-    taxforms_download: false,
-    taxforms_assign: false,
-    taxforms_upload: false,
-    analytics_view: false,
-    analytics_export: false,
-    analytics_detailed: false,
-    tracking_view: false,
-    tracking_edit: false,
-    tracking_analytics: false,
-    store_view: false,
-    store_purchase: false,
-    store_cart: false,
-    marketing_view: false,
-    marketing_upload: false,
-    marketing_download: false,
-    marketing_delete: false,
-  },
+  // NOTE: 'lead' role has been REMOVED
+  // Leads are now CRM contacts without accounts - they don't have a user role
+  // When they sign up, they become 'client' by default
   client: {
     // CLIENT is the base role for all general users
     // Feature access is controlled by TWO flags:
@@ -858,11 +823,7 @@ export function getEditablePermissions(role: UserRole): Permission[] {
 
     // NOTE: 'affiliate' case removed - affiliate features are now part of client role
     // controlled by affiliateStatus field
-
-    case 'lead':
-      // ❌ Leads have NO permissions until approved by admin
-      // ❌ NO MICRO-TOGGLES - explicitly excluded
-      return [];
+    // NOTE: 'lead' case removed - leads are CRM contacts, not users with accounts
 
     case 'client':
       // Client now includes all affiliate features (controlled by affiliateStatus)
@@ -978,21 +939,21 @@ export async function getRolePermissionTemplate(role: UserRole): Promise<Partial
 /**
  * Get role display names for UI
  * Note: Display 'Member' instead of 'Client' in user-facing contexts
+ * Only 3 roles: admin, tax_preparer, client
  */
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   admin: 'Admin',
   tax_preparer: 'Tax Preparer',
-  lead: 'Lead',
   client: 'Member', // Display as 'Member' to users
 };
 
 /**
  * Get role descriptions for UI
+ * Only 3 roles: admin, tax_preparer, client
  */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: 'Full system control - Database, Permissions, All Client Files',
   tax_preparer: 'Independent tax professional - Manages clients, auto has affiliate features',
-  lead: 'New signup pending approval - No access until role changed',
   client: 'General member - Tax filing (if hasFiledTaxes), affiliate features (if approved)',
 };
 

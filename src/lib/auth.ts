@@ -126,7 +126,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           image: user.image,
-          role: user.profile?.role || 'lead', // Default to lead if no profile
+          role: user.profile?.role || 'client', // Default to client if no profile
           isActive: user.profile?.isActive ?? true,
         } as NextAuthUser & { role: UserRole; isActive?: boolean };
       },
@@ -157,16 +157,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = profile.role;
               (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = profile.isActive ?? true;
             } else {
-              // Default to 'lead' if no profile exists yet (new users)
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'lead';
+              // Default to 'client' if no profile exists yet (new users)
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
               (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
             }
           }
         } catch (error) {
           logger.error('Failed to fetch user profile during sign-in', { error, userId: user.id });
-          // Default to 'lead' on error for OAuth
+          // Default to 'client' on error for OAuth
           if (account?.provider === 'google') {
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'lead';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
             (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
           }
         }
@@ -177,7 +177,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Initial sign in - add user data to token
       if (user) {
         token.id = user.id;
-        token.role = user.role || 'lead'; // Default to 'lead' if role not set
+        token.role = user.role || 'client'; // Default to 'client' if role not set
         token.isActive = user.isActive ?? true;
       }
 
@@ -406,14 +406,14 @@ export async function validateRequest() {
 export function getDashboardUrl(role: UserRole | string): string {
   const normalizedRole = typeof role === 'string' ? role.toLowerCase() : role;
 
+  // Only 3 valid roles: admin, client, tax_preparer
   const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
-    lead: '/dashboard/lead',
     client: '/dashboard/client',
     tax_preparer: '/dashboard/tax-preparer',
   };
 
-  return dashboardUrls[normalizedRole] || '/dashboard/lead';
+  return dashboardUrls[normalizedRole] || '/dashboard/client';
 }
 
 /**
