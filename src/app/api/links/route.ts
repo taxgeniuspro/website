@@ -24,7 +24,7 @@ export async function GET() {
       update: {}, // No updates if exists
       create: {
         userId: userId,
-        role: 'lead', // Default role, user will select proper role later
+        role: 'client', // Default role for registered users
       },
       select: { id: true, role: true },
     });

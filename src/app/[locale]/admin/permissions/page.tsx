@@ -56,13 +56,11 @@ export default async function PermissionsPage() {
   }
 
   // Count users for each role using Prisma
+  // Only 3 valid roles: admin, client, tax_preparer
   const userCountsByRole: Record<string, number> = {
-    SUPER_ADMIN: 0,
-    ADMIN: 0,
-    TAX_PREPARER: 0,
-    AFFILIATE: 0,
-    LEAD: 0,
-    CLIENT: 0,
+    admin: 0,
+    tax_preparer: 0,
+    client: 0,
   };
 
   try {
@@ -80,8 +78,8 @@ export default async function PermissionsPage() {
     logger.error('Error counting users by role:', error);
   }
 
-  // All roles to display in tabs
-  const roles: UserRole[] = ['admin', 'admin', 'tax_preparer', 'affiliate', 'lead', 'client'];
+  // All roles to display in tabs - only 3 valid roles
+  const roles: UserRole[] = ['admin', 'tax_preparer', 'client'];
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,9 +129,9 @@ export default async function PermissionsPage() {
               <CardContent>
                 {/* Nested tabs for each role */}
                 <Tabs defaultValue="admin" className="w-full">
-                  <TabsList className="grid w-full grid-cols-6">
+                  <TabsList className="grid w-full grid-cols-3">
                     {roles.map((roleKey) => (
-                      <TabsTrigger key={roleKey} value={roleKey} className="text-xs">
+                      <TabsTrigger key={roleKey} value={roleKey} className="text-sm">
                         {ROLE_DISPLAY_NAMES[roleKey]}
                       </TabsTrigger>
                     ))}

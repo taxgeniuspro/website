@@ -80,13 +80,11 @@ export default function SelectRolePage() {
       }
 
       // Redirect to role-specific dashboard
-      const dashboardUrls: Record<UserRole, string> = {
+      // Only 3 valid roles: admin, client, tax_preparer
+      const dashboardUrls: Record<string, string> = {
         admin: '/dashboard/admin',
-        admin: '/dashboard/admin',
-        lead: '/dashboard/lead',
         client: '/dashboard/client',
         tax_preparer: '/dashboard/tax-preparer',
-        affiliate: '/dashboard/affiliate',
       };
 
       router.push(dashboardUrls[selectedRole]);

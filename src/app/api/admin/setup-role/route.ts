@@ -35,13 +35,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const roleInput = body.role?.toUpperCase() || 'admin'; // Default to ADMIN
 
-    // Validate role
-    const validRoles: UserRole[] = ['admin', 'admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
+    // Validate role - only 3 valid roles: admin, client, tax_preparer
+    const validRoles: UserRole[] = ['admin', 'client', 'tax_preparer'];
     if (!validRoles.includes(roleInput as UserRole)) {
       return NextResponse.json(
         {
-          error:
-            'Invalid role. Must be: SUPER_ADMIN, ADMIN, LEAD, CLIENT, TAX_PREPARER, or AFFILIATE',
+          error: 'Invalid role. Must be: ADMIN, CLIENT, or TAX_PREPARER',
         },
         { status: 400 }
       );
@@ -109,7 +108,7 @@ export async function GET() {
       },
     });
 
-    const currentRole = profile?.role || 'lead';
+    const currentRole = profile?.role || 'client';
 
     return NextResponse.json({
       userId: userId,

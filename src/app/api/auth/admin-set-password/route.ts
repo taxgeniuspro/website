@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       keysMatch: isAdminKey,
     });
 
-    if (!isAdminKey && (!currentUser || !['admin', 'admin'].includes(currentUser.role as string))) {
+    if (!isAdminKey && (!currentUser || currentUser.role !== 'admin')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       await prisma.profile.create({
         data: {
           userId: user.id,
-          role: 'lead',
+          role: 'client', // Default role for new profiles
           firstName,
           lastName,
           email: user.email?.toLowerCase() || email.toLowerCase(),
