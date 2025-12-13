@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin or super_admin
-    if (session.user.role !== 'admin' && session.user.role !== 'super_admin') {
+    if (session.user.role !== 'admin' && session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

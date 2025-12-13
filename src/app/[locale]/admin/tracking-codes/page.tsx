@@ -17,7 +17,7 @@ async function checkAdminAccess() {
   if (!user) return { hasAccess: false };
 
   const role = user?.role as string;
-  const hasAccess = role === 'admin' || role === 'super_admin';
+  const hasAccess = role === 'admin' ;
 
   return { hasAccess, userId: user.id };
 }

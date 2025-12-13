@@ -75,7 +75,7 @@ export default function AffiliateApplicationsPage() {
   const { toast } = useToast();
 
   // Check permissions
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'admin';
 
   // Redirect if no access
   useEffect(() => {

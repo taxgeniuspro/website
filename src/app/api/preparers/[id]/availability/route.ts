@@ -29,7 +29,7 @@ export async function GET(
     const isAuthorized =
       userProfile?.id === preparerId ||
       userProfile?.role === 'admin' ||
-      userProfile?.role === 'super_admin';
+      userProfile?.role === 'admin';
 
     if (!isAuthorized) {
       return NextResponse.json(
@@ -112,7 +112,7 @@ export async function PUT(
     const isAuthorized =
       userProfile?.id === preparerId ||
       userProfile?.role === 'admin' ||
-      userProfile?.role === 'super_admin';
+      userProfile?.role === 'admin';
 
     if (!isAuthorized) {
       return NextResponse.json(

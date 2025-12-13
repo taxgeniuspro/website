@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const envKey = process.env.ADMIN_SETUP_KEY;
     const isAdminKey = adminKey && envKey && adminKey === envKey;
 
-    if (!isAdminKey && (!currentUser || !['admin', 'super_admin'].includes(currentUser.role as string))) {
+    if (!isAdminKey && (!currentUser || !['admin', 'admin'].includes(currentUser.role as string))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

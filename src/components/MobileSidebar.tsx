@@ -51,7 +51,7 @@ export function MobileSidebar({ role, permissions, isOpen, onClose }: MobileSide
       case 'lead':
         return '/dashboard/client/settings';
       case 'admin':
-      case 'super_admin':
+      case 'admin':
         return '/admin/settings';
       default:
         return '/dashboard/settings';

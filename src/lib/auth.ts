@@ -292,7 +292,7 @@ export async function hasRole(role: UserRole | string): Promise<boolean> {
  */
 export async function isSuperAdmin(): Promise<boolean> {
   const userRole = await getUserRole();
-  return userRole === 'super_admin';
+  return userRole === 'admin';
 }
 
 /**
@@ -301,7 +301,7 @@ export async function isSuperAdmin(): Promise<boolean> {
  */
 export async function isAdmin(): Promise<boolean> {
   const userRole = await getUserRole();
-  return userRole === 'admin' || userRole === 'super_admin';
+  return userRole === 'admin' || userRole === 'admin';
 }
 
 /**
@@ -373,7 +373,7 @@ export function getDashboardUrl(role: UserRole | string): string {
   const normalizedRole = typeof role === 'string' ? role.toLowerCase() : role;
 
   const dashboardUrls: Record<string, string> = {
-    super_admin: '/dashboard/admin',
+    admin: '/dashboard/admin',
     admin: '/dashboard/admin',
     lead: '/dashboard/lead',
     client: '/dashboard/client',
@@ -395,7 +395,7 @@ export async function hasStoreAccess(): Promise<boolean> {
     userRole === 'tax_preparer' ||
     userRole === 'affiliate' ||
     userRole === 'admin' ||
-    userRole === 'super_admin'
+    userRole === 'admin'
   );
 }
 
@@ -408,7 +408,7 @@ export async function hasStoreAccess(): Promise<boolean> {
 export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
   // Verify admin permissions
   const currentUser = await requireAuth();
-  if (currentUser.role !== 'super_admin' && currentUser.role !== 'admin') {
+  if (currentUser. currentUser.role !== 'admin') {
     throw new Error('Only admins can update user roles');
   }
 

@@ -132,9 +132,9 @@ export function RoleSwitcher({
 
   // Get available roles based on actual role permissions
   const getAvailableRoles = (): UserRole[] => {
-    if (actualRole === 'super_admin') {
+    if (actualRole === 'admin') {
       // Super admins can view as any role (including admin and themselves)
-      return ['super_admin', 'admin', ...VIEWABLE_ROLES];
+      return ['admin', 'admin', ...VIEWABLE_ROLES];
     } else if (actualRole === 'admin') {
       // Regular admins can view as limited roles (no super_admin, no self)
       // VIEWABLE_ROLES already excludes admin to prevent self-switching
@@ -147,7 +147,7 @@ export function RoleSwitcher({
   const availableRoles = getAvailableRoles();
 
   // Don't show role switcher if user is not admin/super_admin
-  if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin' && actualRole !== 'admin') {
     return null;
   }
 
@@ -183,7 +183,7 @@ export function RoleSwitcher({
           const roleConfig: RoleDisplayInfo = ROLE_DISPLAY_CONFIG[role];
           const isCurrentRole = role === currentEffectiveRole;
           const isActualRole = role === actualRole;
-          const isSuperAdminOnly = role === 'super_admin' && actualRole !== 'super_admin';
+          const isSuperAdminOnly = role === 'admin' && actualRole !== 'admin';
 
           return (
             <DropdownMenuItem

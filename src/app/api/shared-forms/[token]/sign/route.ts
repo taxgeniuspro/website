@@ -71,7 +71,7 @@ export async function POST(
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
       currentUserProfile.role === 'admin' ||
-      currentUserProfile.role === 'super_admin';
+      currentUserProfile.role === 'admin';
 
     if (!canSign) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to sign this form' }, { status: 403 });

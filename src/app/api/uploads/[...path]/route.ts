@@ -87,7 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: { path: string
           hasAccess = true;
         }
         // Check if user is admin
-        else if (profile.role === 'admin' || profile.role === 'super_admin') {
+        else if (profile.role === 'admin' || profile.role === 'admin') {
           hasAccess = true;
         }
         // Check if tax preparer has access to this client

@@ -31,7 +31,7 @@ export async function GET() {
       profile.role === 'affiliate' ||
       profile.role === 'tax_preparer' ||
       profile.role === 'admin' ||
-      profile.role === 'super_admin';
+      profile.role === 'admin';
 
     if (!isAffiliate) {
       return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });

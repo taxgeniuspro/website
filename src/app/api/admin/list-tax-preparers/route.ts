@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     // Also allow if requesting own user data (for debugging)
     const debugMode = req.nextUrl.searchParams.get('debug') === 'true';
 
-    if (!debugMode && !isAdminKey && (!currentUser || !['admin', 'super_admin'].includes(currentUser.role as string))) {
+    if (!debugMode && !isAdminKey && (!currentUser || !['admin', 'admin'].includes(currentUser.role as string))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

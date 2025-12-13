@@ -47,7 +47,7 @@ export function TicketDetail({
   const { toast } = useToast();
 
   const isPreparer =
-    userRole === 'tax_preparer' || userRole === 'admin' || userRole === 'super_admin';
+    userRole === 'tax_preparer' || userRole === 'admin' || userRole === 'admin';
 
   // Fetch ticket details
   useEffect(() => {

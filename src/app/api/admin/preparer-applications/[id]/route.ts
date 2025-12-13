@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if user is admin or super_admin
-    if (session.user.role !== 'admin' && session.user.role !== 'super_admin') {
+    if (session.user.role !== 'admin' && session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -56,7 +56,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if user is admin or super_admin
-    if (session.user.role !== 'admin' && session.user.role !== 'super_admin') {
+    if (session.user.role !== 'admin' && session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -212,7 +212,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if user is super_admin
-    if (session.user.role !== 'super_admin') {
+    if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
     }
 

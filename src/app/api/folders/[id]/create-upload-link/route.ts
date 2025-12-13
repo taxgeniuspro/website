@@ -49,7 +49,7 @@ export async function POST(
     if (
       preparer.role !== 'tax_preparer' &&
       preparer.role !== 'admin' &&
-      preparer.role !== 'super_admin'
+      preparer.role !== 'admin'
     ) {
       return NextResponse.json(
         { error: 'Only tax preparers can create upload links' },

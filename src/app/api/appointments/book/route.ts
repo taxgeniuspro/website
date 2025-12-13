@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     if (!preparerProfileId) {
       const defaultPreparer = await prisma.profile.findFirst({
         where: {
-          OR: [{ role: 'super_admin' }, { role: 'admin' }, { role: 'tax_preparer' }],
+          OR: [{ role: 'admin' }, { role: 'admin' }, { role: 'tax_preparer' }],
           bookingEnabled: true, // Only assign to preparers who accept bookings
         },
         orderBy: { createdAt: 'asc' },

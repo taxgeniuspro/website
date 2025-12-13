@@ -94,7 +94,7 @@ export async function GET(
       currentUserProfile?.id === clientTaxForm.clientId || // Client who was assigned
       currentUserProfile?.id === clientTaxForm.assignedBy || // Preparer who assigned
       currentUserProfile?.role === 'admin' || // Admin
-      currentUserProfile?.role === 'super_admin'; // Super admin
+      currentUserProfile?.role === 'admin'; // Super admin
 
     // Update access tracking on first access
     if (share.accessCount === 0) {
@@ -237,7 +237,7 @@ export async function PATCH(
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
       currentUserProfile.role === 'admin' ||
-      currentUserProfile.role === 'super_admin';
+      currentUserProfile.role === 'admin';
 
     if (!canEdit) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to edit this form' }, { status: 403 });

@@ -12,7 +12,7 @@ async function isSuperAdmin() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
   const role = user?.role as string;
-  return role === 'super_admin';
+  return role === 'admin';
 }
 
 export default async function AdminDatabasePage() {

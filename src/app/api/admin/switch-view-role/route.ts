@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const actualRole = user?.role as UserRole | undefined;
 
     // Verify user is admin or super_admin
-    if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+    if (actualRole !== 'admin' && actualRole !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden - Only admins can switch viewing roles' },
         { status: 403 }
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     // Validate target role
     const validRoles: UserRole[] = [
-      'super_admin',
+      'admin',
       'admin',
       'lead',
       'tax_preparer',
@@ -123,7 +123,7 @@ export async function DELETE(request: NextRequest) {
     const actualRole = user?.role as UserRole | undefined;
 
     // Verify user is admin or super_admin
-    if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+    if (actualRole !== 'admin' && actualRole !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden - Only admins can clear viewing roles' },
         { status: 403 }
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
     const actualRole = user?.role as UserRole | undefined;
 
     // Verify user is admin or super_admin
-    if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+    if (actualRole !== 'admin' && actualRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

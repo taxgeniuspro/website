@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const canUseAI =
-      profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'super_admin';
+      profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'admin';
 
     if (!canUseAI) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

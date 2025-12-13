@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       // Only admins and tax preparers can view other users' folders
       if (
         profile.role !== 'admin' &&
-        profile.role !== 'super_admin' &&
+        profile.
         profile.role !== 'tax_preparer'
       ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
       // Only admins and tax preparers can create folders for other users
       if (
         profile.role !== 'admin' &&
-        profile.role !== 'super_admin' &&
+        profile.
         profile.role !== 'tax_preparer'
       ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

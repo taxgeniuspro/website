@@ -298,7 +298,7 @@ export default function ContentRestrictionsPage() {
                   id="allowedRoles"
                   value={formData.allowedRoles}
                   onChange={(e) => setFormData({ ...formData, allowedRoles: e.target.value })}
-                  placeholder="admin, super_admin, tax_preparer"
+                  placeholder="admin, tax_preparer"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   Comma-separated. Leave empty to allow all authenticated users

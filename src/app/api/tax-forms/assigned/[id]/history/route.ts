@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       hasAccess = true;
     }
     // Admin can view any history
-    else if (['admin', 'super_admin'].includes(profile.role)) {
+    else if (['admin', 'admin'].includes(profile.role)) {
       hasAccess = true;
     }
     // Tax preparer can view if they're assigned to this client

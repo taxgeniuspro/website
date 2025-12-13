@@ -85,7 +85,7 @@ export default function CalendarPage() {
   const canView = permissions.calendar_view ?? permissions.calendar;
   const canCreate = permissions.calendar_create ?? false;
   const canEdit = permissions.calendar_edit ?? false;
-  const canConfirm = role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
+  const canConfirm = role === 'tax_preparer' || role === 'admin' ;
 
   // Fetch appointments
   useEffect(() => {

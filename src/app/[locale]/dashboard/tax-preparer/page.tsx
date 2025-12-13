@@ -45,7 +45,7 @@ async function isTaxPreparer() {
   const user = session?.user;
   if (!user) return false;
   const role = user?.role as string;
-  return role === 'tax_preparer' || role === 'super_admin';
+  return role === 'tax_preparer' ;
 }
 
 export default async function PreparerDashboard() {

@@ -309,7 +309,7 @@ export default function CRMContactsPage() {
   }
 
   const roleDisplay = role === 'tax_preparer' ? 'Tax Preparer' : 'Admin';
-  const canSeeAll = role === 'admin' || role === 'super_admin';
+  const canSeeAll = role === 'admin' ;
 
   // Helper to get stage badge styling
   const getStageBadgeClass = (stage: string) => {

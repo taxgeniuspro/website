@@ -166,18 +166,18 @@ export function PermissionManager({
   return (
     <>
       {/* Warning banner for super_admin or read-only mode */}
-      {(targetRole === 'super_admin' || readOnly) && (
+      {(targetRole === 'admin' || readOnly) && (
         <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div>
               <p className="font-medium text-amber-900 dark:text-amber-200">
-                {targetRole === 'super_admin'
+                {targetRole === 'admin'
                   ? 'Caution: Super Admin Permissions'
                   : 'Read-Only Mode'}
               </p>
               <p className="text-sm text-amber-800 dark:text-amber-300 mt-1">
-                {targetRole === 'super_admin'
+                {targetRole === 'admin'
                   ? 'Modifying super_admin permissions affects system security. Changes will apply to ALL super admin users immediately.'
                   : 'These permissions are in read-only mode and cannot be modified.'}
               </p>

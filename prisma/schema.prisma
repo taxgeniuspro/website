@@ -95,12 +95,10 @@ model MagicLink {
 // ============ User Profiles ============
 
 enum UserRole {
-  super_admin // Super administrator with full system access
-  admin // Administrator with limited system access
+  admin // Administrator with full system access
   lead // Default role for new signups (pending admin approval)
   client // User who has completed tax preparation with Tax Genius
   tax_preparer // Tax professional
-  affiliate // Referrer working for Tax Genius (hasn't done taxes with us)
 }
 
 model Profile {

@@ -66,8 +66,8 @@ export interface RoleDisplayInfo {
  * Role switcher configuration
  */
 export const ROLE_DISPLAY_CONFIG: Record<UserRole, RoleDisplayInfo> = {
-  super_admin: {
-    value: 'super_admin',
+  admin: {
+    value: 'admin',
     label: 'Super Admin',
     description: 'Full system access',
     color: 'red',

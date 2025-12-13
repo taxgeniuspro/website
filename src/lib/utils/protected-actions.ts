@@ -46,7 +46,7 @@ export async function requireActualAdminRole(operation: ProtectedOperation): Pro
     user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress || 'unknown';
 
   // Check if user is actually an admin
-  if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+  if (actualRole !== 'admin' && actualRole !== 'admin') {
     throw new Error('Forbidden - Admin privileges required');
   }
 
@@ -117,7 +117,7 @@ export async function getViewingStatus(): Promise<{
     if (!user) return null;
 
     const actualRole = user?.role as UserRole;
-    if (actualRole !== 'super_admin' && actualRole !== 'admin') {
+    if (actualRole !== 'admin' && actualRole !== 'admin') {
       return null;
     }
 

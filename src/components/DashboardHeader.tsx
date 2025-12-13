@@ -111,7 +111,7 @@ export function DashboardHeader({
         {/* Right Side Actions */}
         <div className="flex items-center gap-2">
           {/* Role Switcher - Only for admins */}
-          {(displayRealRole === 'super_admin' || displayRealRole === 'admin') && (
+          {(displayRealRole === 'admin' || displayRealRole === 'admin') && (
             <RoleSwitcher
               actualRole={displayRealRole}
               effectiveRole={displayRole || 'client'}

@@ -16,7 +16,7 @@ async function hasAcademyAccess() {
   const role = user?.role as string;
 
   // Tax preparers, admins, and super_admins have academy access
-  return role === 'tax_preparer' || role === 'admin' || role === 'super_admin';
+  return role === 'tax_preparer' || role === 'admin' ;
 }
 
 export default async function AcademyLayout({ children }: { children: React.ReactNode }) {

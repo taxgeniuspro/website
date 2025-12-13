@@ -40,7 +40,7 @@ const createContactSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Auth check
-    const { user, role } = await requireOneOfRoles(['super_admin', 'admin', 'tax_preparer']);
+    const { user, role } = await requireOneOfRoles(['admin', 'admin', 'tax_preparer']);
 
     logger.info('[CRM API] Listing contacts', { userId: user.id, role });
 
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Auth check
-    const { user, role } = await requireOneOfRoles(['super_admin', 'admin', 'tax_preparer']);
+    const { user, role } = await requireOneOfRoles(['admin', 'admin', 'tax_preparer']);
 
     logger.info('[CRM API] Creating contact', { userId: user.id, role });
 

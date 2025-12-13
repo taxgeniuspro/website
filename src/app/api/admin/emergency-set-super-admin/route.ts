@@ -50,7 +50,7 @@ export async function GET() {
         await prisma.profile.create({
           data: {
             userId: user.id,
-            role: 'super_admin',
+            role: 'admin',
             firstName: user.name?.split(' ')[0] || 'Admin',
             lastName: user.name?.split(' ').slice(1).join(' ') || '',
           },
@@ -59,7 +59,7 @@ export async function GET() {
       } else {
         await prisma.profile.update({
           where: { id: profile.id },
-          data: { role: 'super_admin' },
+          data: { role: 'admin' },
         });
         logger.info('Profile updated to super_admin role');
       }
@@ -80,7 +80,7 @@ export async function GET() {
       user: {
         id: user.id,
         email: email,
-        role: 'super_admin',
+        role: 'admin',
       },
     });
   } catch (error) {

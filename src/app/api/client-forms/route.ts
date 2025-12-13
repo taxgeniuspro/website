@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       } else {
         where.assignedBy = currentUserProfile.id;
       }
-    } else if (currentUserProfile.role === 'admin' || currentUserProfile.role === 'super_admin') {
+    } else if (currentUserProfile.role === 'admin' || currentUserProfile.role === 'admin') {
       // Admins see all forms, optionally filtered by clientId
       if (clientId) {
         where.clientId = clientId;

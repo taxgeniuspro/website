@@ -43,7 +43,7 @@ async function checkAdminAccess() {
   const role = user?.role as string;
   const customPermissions = user?.permissions as Partial<UserPermissions> | undefined;
   const permissions = getUserPermissions(role as any, customPermissions);
-  const hasAccess = (role === 'admin' || role === 'super_admin') && permissions.analytics;
+  const hasAccess = (role === 'admin' ) && permissions.analytics;
 
   return { hasAccess, userId: user.id, role, permissions };
 }

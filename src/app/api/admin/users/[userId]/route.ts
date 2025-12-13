@@ -17,7 +17,7 @@ export async function PATCH(
     }
 
     const role = currentUser?.role as string;
-    const isSuperAdmin = role === 'super_admin';
+    const isSuperAdmin = role === 'admin';
     const isAdmin = role === 'admin' || isSuperAdmin;
 
     if (!isAdmin) {
@@ -40,13 +40,13 @@ export async function PATCH(
 
     // Prevent non-super-admins from editing super admins or creating super admins
     if (!isSuperAdmin) {
-      if (existingUser.profile?.role === 'super_admin') {
+      if (existingUser.profile?.role === 'admin') {
         return NextResponse.json(
           { error: 'Only super admins can edit super admin accounts' },
           { status: 403 }
         );
       }
-      if (newRole === 'super_admin') {
+      if (newRole === 'admin') {
         return NextResponse.json(
           { error: 'Only super admins can create super admin accounts' },
           { status: 403 }

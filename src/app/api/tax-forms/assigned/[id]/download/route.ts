@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       hasAccess = true;
     }
     // Admin can download any form
-    else if (['admin', 'super_admin'].includes(profile.role)) {
+    else if (['admin', 'admin'].includes(profile.role)) {
       hasAccess = true;
     }
     // Tax preparer can download if assigned to this client

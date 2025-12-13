@@ -57,7 +57,7 @@ export function DashboardLayoutClient({
 
   // Fetch quick links for tax preparers
   useEffect(() => {
-    if (effectiveRole === 'tax_preparer' || effectiveRole === 'admin' || effectiveRole === 'super_admin') {
+    if (effectiveRole === 'tax_preparer' || effectiveRole === 'admin' || effectiveRole === 'admin') {
       // TODO: Replace with actual API call to get preparer's links
       // For now, using empty array - will be populated from API
     }
@@ -114,7 +114,7 @@ export function DashboardLayoutClient({
       {/* Tax Assistant Widget - Only for Tax Preparers and Admins */}
       {(actualRole === 'tax_preparer' ||
         actualRole === 'admin' ||
-        actualRole === 'super_admin') && <TaxAssistantWidget />}
+        actualRole === 'admin') && <TaxAssistantWidget />}
 
       {/* Mobile Bottom Navigation - Shows on mobile devices */}
       <MobileBottomNav

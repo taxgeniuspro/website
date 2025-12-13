@@ -44,7 +44,7 @@ async function isAdmin() {
   const session = await auth(); const user = session?.user;
   if (!user) return false;
   const role = user?.role as string;
-  return role === 'admin' || role === 'super_admin';
+  return role === 'admin' ;
 }
 
 export default async function AdminEarningsPage() {
@@ -55,7 +55,7 @@ export default async function AdminEarningsPage() {
   }
 
   const currentUserData = await auth();
-  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'super_admin';
+  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'admin';
 
   // Fetch real data from database
   const platformStats = await getAdminEarningsStats();

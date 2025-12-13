@@ -75,7 +75,7 @@ export async function GET(
     });
 
     // Check access
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+    const isAdmin = profile?.role === 'admin' || profile?.role === 'admin';
     const isAssignedPreparer = lead.assignedTo === profile?.id;
 
     if (!isAdmin && !isAssignedPreparer) {
@@ -204,7 +204,7 @@ export async function POST(
     }
 
     // Check access
-    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
     const isAssignedPreparer = lead.assignedTo === profile.id;
 
     if (!isAdmin && !isAssignedPreparer) {

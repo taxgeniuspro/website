@@ -198,11 +198,12 @@ export type UserPermissions = Record<Permission, boolean>;
 // TypeScript best practice: lowercase with underscores (matches Prisma enum)
 // NOTE: 'affiliate' role has been REMOVED - affiliate features are now controlled by
 // affiliateStatus field on Profile (NONE | PENDING | APPROVED | SUSPENDED)
-export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'lead' | 'client';
+// NOTE: 'admin' role has been REMOVED - merged into 'admin' role
+export type UserRole = 'admin' | 'tax_preparer' | 'lead' | 'client';
 
 /**
  * Default permissions for each role
- * These are the baseline permissions that can be customized by super_admin
+ * These are the baseline permissions that can be customized by admin
  *
  * ==================================================================================
  * QUICK REFERENCE: WHAT MAKES EACH ROLE UNIQUE
@@ -253,7 +254,7 @@ export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'lead' | 'clie
  *    - CANNOT access sensitive client files (clientFileCenter: false)
  *    - CANNOT access Google Analytics (googleAnalytics: false)
  *    - Phone alerts DISABLED by default (alerts: false)
- *    - Can be customized by super_admin to grant additional permissions
+ *    - Can be customized by admin to grant additional permissions
  *
  * 3. TAX_PREPARER (Independent Tax Professional)
  *    - Manages THEIR OWN assigned clients only
@@ -275,8 +276,8 @@ export type UserRole = 'super_admin' | 'admin' | 'tax_preparer' | 'lead' | 'clie
  *    - Can apply to become affiliate (status: NONE → PENDING → APPROVED)
  */
 export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
-  super_admin: {
-    // Super admin has ALL permissions - Full system control
+  admin: {
+    // Admin has ALL permissions - Full system control
     dashboard: true,
     users: true,
     payouts: true,
@@ -352,89 +353,6 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     marketing_upload: true,
     marketing_download: true,
     marketing_delete: true,
-  },
-  admin: {
-    // Admin has limited features by default, super_admin can grant more
-    // KEY RESTRICTIONS compared to super_admin:
-    // ❌ adminManagement (cannot manage permissions)
-    // ❌ database (no database access)
-    // ❌ googleAnalytics (no GA integration)
-    // ❌ alerts (phone alerts disabled)
-    // ⚠️ Some delete operations restricted for safety
-    dashboard: true,
-    alerts: false,
-    users: true,
-    payouts: true,
-    contentGenerator: true,
-    analytics: true,
-    adminManagement: false,
-    database: false,
-    settings: true,
-    trackingCode: true,
-    clientsStatus: true,
-    clients: false,
-    clientFileCenter: true,
-    taxForms: true,
-    documents: false,
-    uploadDocuments: false,
-    emails: true,
-    calendar: true,
-    addressBook: true,
-    googleAnalytics: false,
-    referralsAnalytics: true,
-    referralsStatus: true,
-    contest: false,
-    quickShareLinks: false,
-    learningCenter: false,
-    academy: true,
-    marketingHub: true,
-    marketing: true,
-    marketingAssets: true,
-    earnings: false,
-    store: true,
-    // 🎛️ Calendar Micro-Toggles (ALL ENABLED)
-    calendar_view: true,
-    calendar_create: true,
-    calendar_edit: true,
-    calendar_delete: true, // ✅ Admin can delete appointments
-    // 🎛️ Contacts Micro-Toggles (ALL ENABLED)
-    contacts_view: true,
-    contacts_create: true,
-    contacts_edit: true,
-    contacts_delete: false, // ⚠️ RESTRICTED: Prevent accidental contact deletion
-    contacts_export: true,
-    // 🎛️ Files Micro-Toggles (MOSTLY ENABLED)
-    files_view: true,
-    files_upload: true,
-    files_download: true,
-    files_delete: false, // ⚠️ RESTRICTED: Prevent accidental file deletion
-    files_share: true,
-    // 🎛️ Academy Micro-Toggles (ALL ENABLED)
-    academy_view: true,
-    academy_enroll: true,
-    academy_complete: true,
-    // 🎛️ Tax Forms Micro-Toggles (VIEW/DOWNLOAD ONLY)
-    taxforms_view: true,
-    taxforms_download: true,
-    taxforms_assign: true, // ✅ Can assign forms to clients
-    taxforms_upload: false, // ⚠️ RESTRICTED: Only super_admin can upload
-    // 🎛️ Analytics Micro-Toggles (ALL ENABLED)
-    analytics_view: true,
-    analytics_export: true,
-    analytics_detailed: true,
-    // 🎛️ Tracking Micro-Toggles (VIEW ONLY)
-    tracking_view: true,
-    tracking_edit: false, // ⚠️ RESTRICTED: Can't modify tracking codes
-    tracking_analytics: true,
-    // 🎛️ Store Micro-Toggles (ALL ENABLED)
-    store_view: true,
-    store_purchase: true,
-    store_cart: true,
-    // 🎛️ Marketing Assets Micro-Toggles (MOSTLY ENABLED)
-    marketing_view: true,
-    marketing_upload: true,
-    marketing_download: true,
-    marketing_delete: false, // ⚠️ RESTRICTED: Prevent accidental asset deletion
   },
   tax_preparer: {
     // Tax preparers are independent contractors who prepare taxes for THEIR assigned clients
@@ -874,79 +792,8 @@ export function canDeleteMarketing(permissions: Partial<UserPermissions>): boole
  */
 export function getEditablePermissions(role: UserRole): Permission[] {
   switch (role) {
-    case 'super_admin':
-      return Object.keys(DEFAULT_PERMISSIONS.super_admin) as Permission[];
-
     case 'admin':
-      // Admins can be granted these permissions
-      return [
-        'dashboard',
-        'users',
-        'payouts',
-        'contentGenerator',
-        'analytics',
-        'adminManagement',
-        'database',
-        'settings',
-        'trackingCode',
-        'clientsStatus',
-        'referralsStatus',
-        'emails',
-        'calendar',
-        'addressBook',
-        'clientFileCenter',
-        'taxForms',
-        'googleAnalytics',
-        'referralsAnalytics',
-        'marketingHub',
-        'marketing',
-        'marketingAssets',
-        'academy',
-        'store',
-        // 🎛️ Calendar Micro-Toggles
-        'calendar_view',
-        'calendar_create',
-        'calendar_edit',
-        'calendar_delete',
-        // 🎛️ Contacts Micro-Toggles
-        'contacts_view',
-        'contacts_create',
-        'contacts_edit',
-        'contacts_delete',
-        'contacts_export',
-        // 🎛️ Files Micro-Toggles
-        'files_view',
-        'files_upload',
-        'files_download',
-        'files_delete',
-        'files_share',
-        // 🎛️ Academy Micro-Toggles
-        'academy_view',
-        'academy_enroll',
-        'academy_complete',
-        // 🎛️ Tax Forms Micro-Toggles
-        'taxforms_view',
-        'taxforms_download',
-        'taxforms_assign',
-        'taxforms_upload',
-        // 🎛️ Analytics Micro-Toggles
-        'analytics_view',
-        'analytics_export',
-        'analytics_detailed',
-        // 🎛️ Tracking Micro-Toggles
-        'tracking_view',
-        'tracking_edit',
-        'tracking_analytics',
-        // 🎛️ Store Micro-Toggles
-        'store_view',
-        'store_purchase',
-        'store_cart',
-        // 🎛️ Marketing Assets Micro-Toggles
-        'marketing_view',
-        'marketing_upload',
-        'marketing_download',
-        'marketing_delete',
-      ];
+      return Object.keys(DEFAULT_PERMISSIONS.admin) as Permission[];
 
     case 'tax_preparer':
       // Tax preparers have these fixed features (scoped to their assigned clients)
@@ -1133,7 +980,6 @@ export async function getRolePermissionTemplate(role: UserRole): Promise<Partial
  * Note: Display 'Member' instead of 'Client' in user-facing contexts
  */
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
-  super_admin: 'Super Admin',
   admin: 'Admin',
   tax_preparer: 'Tax Preparer',
   lead: 'Lead',
@@ -1144,8 +990,7 @@ export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
  * Get role descriptions for UI
  */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  super_admin: 'Full system control - Database, Permissions, All Client Files',
-  admin: 'Limited admin access - User Management, Payouts, Analytics',
+  admin: 'Full system control - Database, Permissions, All Client Files',
   tax_preparer: 'Independent tax professional - Manages clients, auto has affiliate features',
   lead: 'New signup pending approval - No access until role changed',
   client: 'General member - Tax filing (if hasFiledTaxes), affiliate features (if approved)',
@@ -1177,7 +1022,7 @@ export function hasAffiliateAccess(
   }
 
   // Admins don't typically use affiliate features but can view
-  if (role === 'super_admin' || role === 'admin') {
+  if (role === 'admin') {
     return true;
   }
 

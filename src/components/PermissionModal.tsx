@@ -126,7 +126,7 @@ export function PermissionModal({
                 <SelectItem value="affiliate">Affiliate</SelectItem>
                 <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-                {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
+                {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -137,7 +137,7 @@ export function PermissionModal({
           {/* Role Badge */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Current Role:</span>
-            <Badge variant={selectedRole === 'super_admin' ? 'default' : 'secondary'}>
+            <Badge variant={selectedRole === 'admin' ? 'default' : 'secondary'}>
               {selectedRole.replace('_', ' ').toUpperCase()}
             </Badge>
           </div>
@@ -178,14 +178,14 @@ export function PermissionModal({
                       id={permission}
                       checked={isEnabled}
                       onCheckedChange={() => handlePermissionToggle(permission)}
-                      disabled={selectedRole === 'super_admin'} // Super admin always has all permissions
+                      disabled={selectedRole === 'admin'} // Super admin always has all permissions
                     />
                   </div>
                 );
               })}
             </div>
 
-            {selectedRole === 'super_admin' && (
+            {selectedRole === 'admin' && (
               <Alert>
                 <AlertDescription className="text-xs">
                   Super Admins have all permissions enabled by default and cannot be restricted.

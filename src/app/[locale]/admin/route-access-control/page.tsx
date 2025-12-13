@@ -541,7 +541,7 @@ export default function RouteAccessControlPage() {
                 <Label htmlFor="allowedRoles">Allowed Roles (comma-separated)</Label>
                 <Input
                   id="allowedRoles"
-                  placeholder="super_admin, admin"
+                  placeholder="admin"
                   value={formData.allowedRoles}
                   onChange={(e) => setFormData({ ...formData, allowedRoles: e.target.value })}
                 />
@@ -693,7 +693,7 @@ export default function RouteAccessControlPage() {
                 <Label htmlFor="editAllowedRoles">Allowed Roles (comma-separated)</Label>
                 <Input
                   id="editAllowedRoles"
-                  placeholder="super_admin, admin"
+                  placeholder="admin"
                   value={formData.allowedRoles}
                   onChange={(e) => setFormData({ ...formData, allowedRoles: e.target.value })}
                 />
@@ -881,7 +881,7 @@ export default function RouteAccessControlPage() {
                 value={testData.role}
                 onChange={(e) => setTestData({ ...testData, role: e.target.value })}
               >
-                <option value="super_admin">Super Admin</option>
+                <option value="admin">Admin</option>
                 <option value="admin">Admin</option>
                 <option value="tax_preparer">Tax Preparer</option>
                 <option value="affiliate">Affiliate</option>

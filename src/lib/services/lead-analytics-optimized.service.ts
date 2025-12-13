@@ -267,7 +267,7 @@ async function checkAnalyticsPermission(
   requestingUserId: string,
   requestingRole: UserRole
 ): Promise<boolean> {
-  if (requestingRole === 'super_admin') return true;
+  if (requestingRole === 'admin') return true;
   if (requestingRole === 'admin') return true;
   return false;
 }
@@ -416,7 +416,7 @@ export async function getMyPreparerAnalyticsOptimized(
   }
 
   // Reuse the optimized batch function for a single preparer
-  const results = await getPreparersAnalyticsOptimized('system', 'super_admin', preparerId);
+  const results = await getPreparersAnalyticsOptimized('system', 'admin', preparerId);
 
   if (results.length === 0) {
     return {

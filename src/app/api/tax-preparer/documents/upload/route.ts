@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'tax_preparer' && role !== 'admin' && role !== 'super_admin') {
+    if (role !== 'tax_preparer' && role !== 'admin' ) {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
