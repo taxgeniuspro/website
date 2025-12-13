@@ -88,14 +88,14 @@ export function TaxPreparerAnalyticsClient({ data }: Props) {
         <ExportButton data={[exportData]} filename="my-lead-analytics" variant="default" />
       </div>
 
-      {/* Key Metrics */}
+      {/* Key Metrics - Using Tax Genius Pro brand colors */}
       <MetricsGrid
         metrics={[
           {
             title: 'Marketing Links',
             value: myData.marketingLinksCount,
             icon: Link2,
-            color: 'blue',
+            color: 'blue', // Brand primary (yellow)
             format: 'number',
             subtitle: 'Active links',
           },
@@ -103,21 +103,21 @@ export function TaxPreparerAnalyticsClient({ data }: Props) {
             title: 'Total Clicks',
             value: myData.clicks,
             icon: MousePointerClick,
-            color: 'purple',
+            color: 'purple', // Slate accent
             format: 'number',
           },
           {
             title: 'Leads Generated',
             value: myData.leads,
             icon: UserPlus,
-            color: 'green',
+            color: 'green', // Brand secondary (green)
             format: 'number',
           },
           {
             title: 'Total Revenue',
             value: myData.revenue,
             icon: DollarSign,
-            color: 'yellow',
+            color: 'yellow', // Amber variant
             format: 'currency',
           },
         ]}
@@ -130,28 +130,28 @@ export function TaxPreparerAnalyticsClient({ data }: Props) {
             title: 'Conversions',
             value: myData.conversions,
             icon: FileCheck,
-            color: 'green',
+            color: 'green', // Brand secondary
             format: 'number',
           },
           {
             title: 'Returns Filed',
             value: myData.returnsFiled,
             icon: TrendingUp,
-            color: 'blue',
+            color: 'blue', // Brand primary
             format: 'number',
           },
           {
             title: 'Conversion Rate',
             value: myData.conversionRate.toFixed(1),
             icon: TrendingUp,
-            color: 'purple',
+            color: 'purple', // Slate accent
             format: 'percent',
           },
           {
             title: 'Revenue per Lead',
             value: myData.leads > 0 ? myData.revenue / myData.leads : 0,
             icon: DollarSign,
-            color: 'orange',
+            color: 'orange', // Teal variant
             format: 'currency',
           },
         ]}
@@ -186,25 +186,25 @@ export function TaxPreparerAnalyticsClient({ data }: Props) {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-2 bg-blue-50 dark:bg-blue-950 rounded">
-                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                    <div className="text-center p-2 bg-amber-50 dark:bg-amber-950/50 rounded border border-amber-200 dark:border-amber-800">
+                      <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">
                         {link.clicks}
                       </p>
                       <p className="text-xs text-muted-foreground">Clicks</p>
                     </div>
-                    <div className="text-center p-2 bg-purple-50 dark:bg-purple-950 rounded">
-                      <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                    <div className="text-center p-2 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-slate-700">
+                      <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">
                         {link.leads}
                       </p>
                       <p className="text-xs text-muted-foreground">Leads</p>
                     </div>
-                    <div className="text-center p-2 bg-green-50 dark:bg-green-950 rounded">
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    <div className="text-center p-2 bg-emerald-50 dark:bg-emerald-950/50 rounded border border-emerald-200 dark:border-emerald-800">
+                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
                         {link.conversions}
                       </p>
                       <p className="text-xs text-muted-foreground">Conversions</p>
                     </div>
-                    <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-950 rounded">
+                    <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-950/50 rounded border border-yellow-200 dark:border-yellow-800">
                       <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
                         ${link.revenue.toLocaleString()}
                       </p>
@@ -239,11 +239,11 @@ export function TaxPreparerAnalyticsClient({ data }: Props) {
                   <div className="text-right ml-4">
                     <div className="flex items-center gap-2">
                       {lead.status === 'CONVERTED' ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
                           ✓ Converted
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                           In Progress
                         </span>
                       )}

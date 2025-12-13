@@ -21,30 +21,34 @@ export function createFunnelStages(
 ): FunnelStage[] {
   const total = clicks || 1;
 
+  // Tax Genius Pro brand colors:
+  // Primary: Yellow (#f9d938)
+  // Secondary: Green (#408851)
+  // Accent: Dark blue-gray (#30394b)
   return [
     {
       name: 'Clicks',
       value: clicks,
       percentage: 100,
-      color: '#3b82f6', // blue
+      color: '#f9d938', // Brand primary yellow
     },
     {
       name: 'Leads',
       value: leads,
       percentage: (leads / total) * 100,
-      color: '#8b5cf6', // purple
+      color: '#30394b', // Brand accent dark blue-gray
     },
     {
       name: 'Conversions',
       value: conversions,
       percentage: (conversions / total) * 100,
-      color: '#10b981', // green
+      color: '#408851', // Brand secondary green
     },
     {
       name: 'Returns Filed',
       value: returnsFiled,
       percentage: (returnsFiled / total) * 100,
-      color: '#f59e0b', // yellow
+      color: '#d97706', // Amber-600 (warm gold variant)
     },
   ];
 }
