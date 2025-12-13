@@ -25,8 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const canUseAI =
-      profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'admin';
+    const canUseAI = profile.role === 'tax_preparer' || profile.role === 'admin';
 
     if (!canUseAI) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

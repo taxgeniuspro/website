@@ -74,7 +74,7 @@ export async function GET(
     });
 
     // Only admins or assigned preparer can view activities
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'admin';
+    const isAdmin = profile?.role === 'admin';
     const isAssignedPreparer = lead.assignedTo === profile?.id;
 
     if (!isAdmin && !isAssignedPreparer) {
@@ -190,7 +190,7 @@ export async function POST(
     }
 
     // Check access
-    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
+    const isAdmin = profile.role === 'admin';
     const isAssignedPreparer = lead.assignedTo === profile.id;
 
     if (!isAdmin && !isAssignedPreparer) {

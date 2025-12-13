@@ -24,13 +24,11 @@ interface DashboardLayoutClientProps {
 
 // Convert UserRole to MobileNav role format
 function convertToMobileNavRole(role: UserRole): MobileNavRole {
-  const roleMap: Record<UserRole, MobileNavRole> = {
+  const roleMap: Record<string, MobileNavRole> = {
     tax_preparer: 'TAX_PREPARER',
-    affiliate: 'AFFILIATE',
     client: 'CLIENT',
     lead: 'CLIENT', // Leads use the same mobile nav as clients
     admin: 'ADMIN',
-    super_admin: 'ADMIN', // Super admins use the same mobile nav as admins
   };
   return roleMap[role] || 'CLIENT';
 }
@@ -57,7 +55,7 @@ export function DashboardLayoutClient({
 
   // Fetch quick links for tax preparers
   useEffect(() => {
-    if (effectiveRole === 'tax_preparer' || effectiveRole === 'admin' || effectiveRole === 'admin') {
+    if (effectiveRole === 'tax_preparer' || effectiveRole === 'admin') {
       // TODO: Replace with actual API call to get preparer's links
       // For now, using empty array - will be populated from API
     }
@@ -112,9 +110,7 @@ export function DashboardLayoutClient({
       </SidebarInset>
 
       {/* Tax Assistant Widget - Only for Tax Preparers and Admins */}
-      {(actualRole === 'tax_preparer' ||
-        actualRole === 'admin' ||
-        actualRole === 'admin') && <TaxAssistantWidget />}
+      {(actualRole === 'tax_preparer' || actualRole === 'admin') && <TaxAssistantWidget />}
 
       {/* Mobile Bottom Navigation - Shows on mobile devices */}
       <MobileBottomNav

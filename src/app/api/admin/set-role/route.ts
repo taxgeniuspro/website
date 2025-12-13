@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
     }
 
-    const validRoles = ['admin', 'admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
+    const validRoles = ['admin', 'lead', 'client', 'tax_preparer'];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },

@@ -22,9 +22,7 @@ export default function LeadDashboard() {
         // Role was changed, redirect to appropriate dashboard
         const dashboardMap: Record<string, string> = {
           client: '/dashboard/client',
-          affiliate: '/dashboard/affiliate',
           tax_preparer: '/dashboard/tax-preparer',
-          admin: '/dashboard/admin',
           admin: '/dashboard/admin',
         };
         router.push(dashboardMap[normalizedRole] || '/dashboard');

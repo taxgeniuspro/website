@@ -35,7 +35,7 @@ export async function GET() {
 
     // Check if user is tax preparer
     const isTaxPreparer = profile.role === 'tax_preparer';
-    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
+    const isAdmin = profile.role === 'admin';
 
     if (!isTaxPreparer && !isAdmin) {
       return NextResponse.json(

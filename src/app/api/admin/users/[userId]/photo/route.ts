@@ -29,7 +29,7 @@ export async function POST(
       select: { role: true },
     });
 
-    if (!adminProfile || !['admin', 'admin'].includes(adminProfile.role)) {
+    if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
 

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     }
 
     const isAffiliate = profile.role === 'affiliate';
-    const isAdmin = profile.role === 'admin' || profile.role === 'admin';
+    const isAdmin = profile.role === 'admin';
 
     if (!isAffiliate && !isAdmin) {
       return NextResponse.json(
