@@ -28,7 +28,7 @@ import { PreparerCard } from '@/components/PreparerCard';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { useTranslations, useLocale } from 'next-intl';
-import { getCurrentFilingTaxYear, getTaxYearLabel } from '@/lib/utils/tax-year';
+import { getCurrentFilingTaxYear, getAvailableTaxYears } from '@/lib/utils/tax-year';
 
 // Tax intake form data structure
 interface TaxFormData {
@@ -132,7 +132,8 @@ export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFo
   const [isSaving, setIsSaving] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
   const [preparer, setPreparer] = useState<PreparerInfo | null>(initialPreparer as PreparerInfo | null);
-  const [taxYear] = useState(() => getCurrentFilingTaxYear());
+  const [taxYear, setTaxYear] = useState(() => getCurrentFilingTaxYear());
+  const availableTaxYears = getAvailableTaxYears();
   const [formData, setFormData] = useState<TaxFormData>({
     first_name: '',
     middle_name: '',
@@ -476,7 +477,15 @@ const handleSubmit = async () => {
       // Desktop pages (grouped)
       switch (page) {
         case 1:
-          return <WelcomePage onNext={handleNext} preparer={preparer} />;
+          return (
+            <WelcomePage
+              onNext={handleNext}
+              preparer={preparer}
+              taxYear={taxYear}
+              setTaxYear={setTaxYear}
+              availableTaxYears={availableTaxYears}
+            />
+          );
         case 2:
           return (
             <PersonalAndAddressPage
@@ -532,7 +541,15 @@ const handleSubmit = async () => {
       // Mobile pages (individual)
       switch (page) {
         case 1:
-          return <WelcomePage onNext={handleNext} preparer={preparer} />;
+          return (
+            <WelcomePage
+              onNext={handleNext}
+              preparer={preparer}
+              taxYear={taxYear}
+              setTaxYear={setTaxYear}
+              availableTaxYears={availableTaxYears}
+            />
+          );
         case 2:
           return (
             <PersonalInfoPage
@@ -701,7 +718,15 @@ function ThankYouPage() {
   );
 }
 
-function WelcomePage({ onNext, preparer }: { onNext: () => void; preparer?: PreparerInfo | null }) {
+interface WelcomePageProps {
+  onNext: () => void;
+  preparer?: PreparerInfo | null;
+  taxYear: number;
+  setTaxYear: (year: number) => void;
+  availableTaxYears: number[];
+}
+
+function WelcomePage({ onNext, preparer, taxYear, setTaxYear, availableTaxYears }: WelcomePageProps) {
   const t = useTranslations('forms.taxIntake.page1');
   const preparerName = preparer
     ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim()
@@ -759,6 +784,29 @@ function WelcomePage({ onNext, preparer }: { onNext: () => void; preparer?: Prep
           <p className="text-lg">{t('description')}</p>
         </div>
       </div>
+
+      {/* Tax Year Selector */}
+      <div className="max-w-xs mx-auto pt-4">
+        <Label htmlFor="tax-year-select" className="block text-sm font-medium text-muted-foreground mb-2">
+          Which tax year are you filing for?
+        </Label>
+        <Select value={taxYear.toString()} onValueChange={(value) => setTaxYear(parseInt(value))}>
+          <SelectTrigger id="tax-year-select" className="w-full">
+            <SelectValue placeholder="Select tax year" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableTaxYears.map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                Tax Year {year} {year === availableTaxYears[0] ? '(Current)' : '(Prior Year)'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-2">
+          Most people are filing for {availableTaxYears[0]}. Select a different year if you need to file for a prior year.
+        </p>
+      </div>
+
       <Button size="lg" onClick={onNext} className="mt-8">
         {t('startButton')}
         <ArrowRight className="ml-2 w-5 h-5" />
