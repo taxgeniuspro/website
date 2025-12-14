@@ -1,30 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if the current user is a super admin
-    const session = await auth(); const user = session?.user;
+    // Check if the current user is an admin
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isSuperAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin';
 
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden: Only super admins can manage permissions' },
+        { error: 'Forbidden: Only admins can manage permissions' },
         { status: 403 }
       );
     }
 
     // Get request body
     const body = await request.json();
-    const { userId, role, permissions } = body as {
-      userId: string;
+    const { userId, profileId, role, permissions } = body as {
+      userId?: string;
+      profileId?: string;
       role: UserRole;
       permissions: Partial<UserPermissions>;
     };
@@ -33,16 +36,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required field: role' }, { status: 400 });
     }
 
-    // Handle default permissions update (for all admin users)
-    if (userId === 'default') {
-      // Update all admin users with the new default permissions
-      const adminProfiles = await prisma.profile.findMany({
-        where: { role: 'admin' },
-        take: 100,
+    // Handle default permissions update (for all users of a role)
+    if (userId === 'default' || profileId === 'default') {
+      // Update all users with this role
+      const profiles = await prisma.profile.findMany({
+        where: { role },
+        select: { id: true },
       });
 
       await prisma.profile.updateMany({
-        where: { role: 'admin' },
+        where: { role },
         data: {
           customPermissions: permissions as any,
         },
@@ -50,18 +53,22 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `Updated permissions for ${adminProfiles.length} admin users`,
-        affectedUsers: adminProfiles.length,
+        message: `Updated permissions for ${profiles.length} ${role} users`,
+        affectedUsers: profiles.length,
       });
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing required field: userId' }, { status: 400 });
+    // Either userId or profileId is required for individual updates
+    const targetId = profileId || userId;
+    if (!targetId) {
+      return NextResponse.json(
+        { error: 'Missing required field: userId or profileId' },
+        { status: 400 }
+      );
     }
 
     // Validate role
     const validRoles: UserRole[] = [
-      'admin',
       'admin',
       'lead',
       'tax_preparer',
@@ -72,34 +79,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid role specified' }, { status: 400 });
     }
 
-    // Prevent super admin from demoting themselves
-    if (userId === user.id ) {
+    // Find the target profile
+    const targetProfile = await prisma.profile.findFirst({
+      where: profileId ? { id: profileId } : { userId: targetId },
+      include: {
+        user: {
+          select: { email: true },
+        },
+      },
+    });
+
+    if (!targetProfile) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Prevent admin from demoting themselves
+    if (targetProfile.userId === user.id && role !== 'admin') {
       return NextResponse.json(
-        { error: 'You cannot change your own role from super admin' },
+        { error: 'You cannot change your own role from admin' },
         { status: 400 }
       );
     }
 
-    // Update role and permissions in Clerk
-    await client.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        role: role,
-        permissions: permissions,
+    // Update role and permissions in database
+    const updatedProfile = await prisma.profile.update({
+      where: { id: targetProfile.id },
+      data: {
+        role,
+        customPermissions: permissions as any,
+      },
+      include: {
+        user: {
+          select: { email: true },
+        },
       },
     });
-
-    // Get updated user info for response
-    const targetUser = await client.users.getUser(userId);
 
     return NextResponse.json({
       success: true,
       user: {
-        id: targetUser.id,
-        email: targetUser.emailAddresses[0]?.emailAddress,
-        firstName: targetUser.firstName,
-        lastName: targetUser.lastName,
-        role: targetUser.publicMetadata?.role,
-        permissions: targetUser.publicMetadata?.permissions,
+        id: updatedProfile.id,
+        userId: updatedProfile.userId,
+        email: updatedProfile.user.email,
+        firstName: updatedProfile.firstName,
+        lastName: updatedProfile.lastName,
+        role: updatedProfile.role,
+        permissions: updatedProfile.customPermissions,
       },
     });
   } catch (error) {
@@ -110,33 +135,35 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Check if the current user is a super admin
-    const session = await auth(); const user = session?.user;
+    // Check if the current user is an admin
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isSuperAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin';
 
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden: Only super admins can view permissions' },
+        { error: 'Forbidden: Only admins can view permissions' },
         { status: 403 }
       );
     }
 
-    // Get userId from query params
+    // Get userId or profileId from query params
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+    const profileId = searchParams.get('profileId');
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    if (!userId && !profileId) {
+      return NextResponse.json({ error: 'User ID or Profile ID is required' }, { status: 400 });
     }
 
     // Get user profile from database
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    const profile = await prisma.profile.findFirst({
+      where: profileId ? { id: profileId } : { userId: userId! },
       include: {
         user: {
           select: {
@@ -154,7 +181,8 @@ export async function GET(request: NextRequest) {
     // Return user's current role and permissions
     return NextResponse.json({
       user: {
-        id: userId,
+        id: profile.id,
+        userId: profile.userId,
         email: profile.user.email,
         firstName: profile.firstName,
         lastName: profile.lastName,
