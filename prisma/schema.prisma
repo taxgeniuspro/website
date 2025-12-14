@@ -149,6 +149,12 @@ model Profile {
   // QR Code Branding (For Tax Preparers - Epic 6)
   usePhotoInQRCodes Boolean @default(false) // Use profile photo in QR codes instead of Tax Genius logo
 
+  // Commission Settings (For Tax Preparers - Referral Program)
+  // Tax Preparers manage commission rates for their referrers (clients + affiliates)
+  // Company defaults: Tier1 (1-5) $50, Tier2 (6-10) $75, Tier3 (11+) $100
+  useCompanyCommissionDefaults Boolean @default(true) // Use Tax Genius default tiers
+  customTierStructure          Json?                  // Override tiers: {"tier1": {"max": 5, "rate": 50}, "tier2": {"max": 10, "rate": 75}, "tier3": {"rate": 100}}
+
   // Marketing Materials Contact Info (For Tax Preparers - Epic 7)
   professionalTitle String? // e.g., "Licensed Tax Preparer", "CPA", "EA"
   website           String? // Public website URL for marketing materials

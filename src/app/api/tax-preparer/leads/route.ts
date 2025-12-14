@@ -116,6 +116,8 @@ export async function GET(req: NextRequest) {
 
     // Determine lead status and filter
     const getLeadStatus = (lead: any): string => {
+      // Complete = has convertedAt timestamp (return filed)
+      if (lead.convertedToClient && lead.convertedAt) return 'complete';
       if (lead.convertedToClient) return 'converted';
       if (lead.contactNotes && lead.lastContactedAt) return 'qualified';
       if (lead.lastContactedAt) return 'contacted';
@@ -140,6 +142,7 @@ export async function GET(req: NextRequest) {
       contacted: leadsWithStatus.filter(l => l.status === 'contacted').length,
       qualified: leadsWithStatus.filter(l => l.status === 'qualified').length,
       converted: leadsWithStatus.filter(l => l.status === 'converted').length,
+      complete: leadsWithStatus.filter(l => l.status === 'complete').length,
     };
 
     logger.info(`📋 Fetched ${filteredLeads.length} leads for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`);

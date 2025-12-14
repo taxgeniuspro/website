@@ -450,6 +450,49 @@ export async function createEnhancedCommission(
   clientEmail?: string
 ): Promise<EnhancedCommissionRecord | null> {
   try {
+    // IDEMPOTENCY CHECK: Prevent duplicate commissions for the same source
+    const existingCommission = await prisma.commission.findFirst({
+      where: {
+        referrerId: referrerProfileId,
+        sourceType,
+        sourceId,
+      },
+    });
+
+    if (existingCommission) {
+      logger.info('Commission already exists for this source, returning existing', {
+        commissionId: existingCommission.id,
+        referrerId: referrerProfileId,
+        sourceType,
+        sourceId,
+      });
+
+      // Return the existing commission in the expected format
+      const profile = await prisma.profile.findUnique({
+        where: { id: referrerProfileId },
+        select: { firstName: true, lastName: true },
+      });
+
+      return {
+        id: existingCommission.id,
+        referrerId: existingCommission.referrerId,
+        referrerName: `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim(),
+        amount: Number(existingCommission.amount),
+        status: existingCommission.status,
+        sourceType: existingCommission.sourceType || undefined,
+        sourceId: existingCommission.sourceId || undefined,
+        clientName: existingCommission.clientName || undefined,
+        clientEmail: existingCommission.clientEmail || undefined,
+        commissionType: existingCommission.commissionType || undefined,
+        commissionRate: existingCommission.commissionRate?.toNumber(),
+        rateSource: existingCommission.rateSource || undefined,
+        groupId: existingCommission.groupIdAtCreation || undefined,
+        createdAt: existingCommission.createdAt,
+        approvedAt: existingCommission.approvedAt,
+        paidAt: existingCommission.paidAt,
+      };
+    }
+
     // Get effective commission rate using the hierarchy
     const effectiveRate = await getEffectiveCommissionRate(referrerProfileId);
 
