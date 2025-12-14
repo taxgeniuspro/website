@@ -90,10 +90,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     // Fetch associated tax intake lead by email for full form data + client folder
+    // Use findFirst instead of findUnique since TaxIntakeLead has composite key (email + tax_year)
     let taxIntakeLead = null;
     if (contact.email) {
-      taxIntakeLead = await prisma.taxIntakeLead.findUnique({
+      taxIntakeLead = await prisma.taxIntakeLead.findFirst({
         where: { email: contact.email.toLowerCase() },
+        orderBy: { created_at: 'desc' }, // Get most recent intake for this email
         select: {
           id: true,
           first_name: true,
