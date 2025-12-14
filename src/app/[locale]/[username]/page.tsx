@@ -56,11 +56,26 @@ const RESERVED_ROUTES = [
   'manifest.json',
 ];
 
+// Mapping for reserved routes that should redirect elsewhere
+const REDIRECT_MAP: Record<string, string> = {
+  signin: '/auth/signin',
+  signup: '/auth/register',
+  login: '/auth/signin',
+  register: '/auth/register',
+  logout: '/api/auth/signout',
+};
+
 export default async function VanityUrlPage({ params }: PageProps) {
   const { username } = params;
+  const lowerUsername = username.toLowerCase();
+
+  // Check if this should redirect to a specific page
+  if (REDIRECT_MAP[lowerUsername]) {
+    redirect(REDIRECT_MAP[lowerUsername]);
+  }
 
   // Check if this is a reserved route
-  if (RESERVED_ROUTES.includes(username.toLowerCase())) {
+  if (RESERVED_ROUTES.includes(lowerUsername)) {
     redirect('/404');
   }
 
