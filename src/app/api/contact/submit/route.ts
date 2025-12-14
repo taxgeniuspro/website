@@ -12,8 +12,9 @@ import { getEmailRecipients } from '@/config/email-routing';
  * This endpoint:
  * 1. Validates the form data
  * 2. Saves submission to CRMContact database
- * 3. Sends email notification to taxgenius.taxes@gmail.com (Ray) with CC to taxgenius.tax@gmail.com (Owliver)
- * 4. Returns success/error response
+ * 3. If ref parameter is provided, sends email to assigned tax preparer + CC to Owliver
+ * 4. Otherwise, sends to language-based recipient (Ray/Ale) + CC to Owliver
+ * 5. Returns success/error response
  */
 export async function POST(req: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, email, phone, service, message, locale } = body;
+    const { name, email, phone, service, message, locale, ref } = body;
 
     // Validate required fields
     if (!name || !email || !service || !message) {
@@ -65,6 +66,41 @@ export async function POST(req: NextRequest) {
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(' ') || firstName;
 
+    // ========================================
+    // PREPARER ATTRIBUTION: Look up preparer from ref parameter
+    // ========================================
+    let assignedPreparerId: string | null = null;
+    let preparerProfile: { id: string; role: string; userId: string } | null = null;
+
+    if (ref) {
+      // Look up the preparer by tracking code
+      preparerProfile = await prisma.profile.findFirst({
+        where: {
+          OR: [
+            { trackingCode: ref },
+            { customTrackingCode: ref },
+            { shortLinkUsername: ref },
+          ],
+          role: 'tax_preparer',
+        },
+        select: {
+          id: true,
+          role: true,
+          userId: true,
+        },
+      });
+
+      if (preparerProfile) {
+        assignedPreparerId = preparerProfile.userId;
+        logger.info('Contact form attributed to preparer', {
+          ref,
+          preparerId: assignedPreparerId,
+        });
+      } else {
+        logger.warn('Contact form ref parameter did not match any preparer', { ref });
+      }
+    }
+
     // Check if CRMContact already exists
     let crmContact = await prisma.cRMContact.findUnique({
       where: { email: email.toLowerCase() },
@@ -79,10 +115,13 @@ export async function POST(req: NextRequest) {
           lastName,
           phone: phone || crmContact.phone,
           lastContactedAt: new Date(),
+          // Update preparer assignment if ref was provided
+          ...(assignedPreparerId && { assignedPreparerId }),
+          ...(ref && { referrerUsername: ref, referrerType: 'tax_preparer', attributionMethod: 'ref_param' }),
         },
       });
 
-      logger.info('Updated existing CRM contact', { contactId: crmContact.id, email });
+      logger.info('Updated existing CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     } else {
       // Create new CRM contact
       crmContact = await prisma.cRMContact.create({
@@ -95,10 +134,15 @@ export async function POST(req: NextRequest) {
           source: 'contact_form',
           stage: 'NEW',
           lastContactedAt: new Date(),
+          // Set preparer assignment if ref was provided
+          assignedPreparerId,
+          referrerUsername: ref || null,
+          referrerType: ref ? 'tax_preparer' : null,
+          attributionMethod: ref ? 'ref_param' : null,
         },
       });
 
-      logger.info('Created new CRM contact', { contactId: crmContact.id, email });
+      logger.info('Created new CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     }
 
     // ========================================
@@ -121,7 +165,9 @@ ${message}
 - Email: ${email}
 - Phone: ${phone || 'Not provided'}
 
-**Source:** Contact form submission`,
+**Attribution:**
+- Source: Contact form submission
+${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
           occurredAt: new Date(),
         },
       });
@@ -138,23 +184,63 @@ ${message}
       });
     }
 
-    // Send email notification to business
-    // Language-based routing using centralized config:
-    // Spanish → Goldenprotaxes@gmail.com (Ale Hamilton) + CC to taxgenius.tax@gmail.com (Owliver Owl)
-    // English → taxgenius.taxes@gmail.com (Ray Hamilton) + CC to taxgenius.tax@gmail.com (Owliver Owl)
+    // ========================================
+    // EMAIL NOTIFICATION ROUTING
+    // If preparer is assigned (ref parameter), send to preparer + CC Owliver
+    // Otherwise, use language-based routing (Ray/Ale) + CC Owliver
+    // ========================================
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax';
     const recipients = getEmailRecipients((locale as 'en' | 'es') || 'en');
 
-    logger.info('Contact form language-based routing', {
-      locale: locale || 'en',
-      primary: recipients.primary,
-      cc: recipients.cc,
-    });
+    // Determine email recipient based on preparer assignment
+    let primaryRecipient: string;
+    let recipientName: string;
+
+    if (assignedPreparerId) {
+      // Get preparer's email address
+      const preparer = await prisma.user.findUnique({
+        where: { id: assignedPreparerId },
+        select: {
+          email: true,
+          profile: {
+            select: {
+              firstName: true,
+              professionalEmails: {
+                where: { isPrimary: true, status: 'ACTIVE' },
+                select: { emailAddress: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      });
+
+      // Use professional email if available, otherwise use signup email
+      primaryRecipient = preparer?.profile?.professionalEmails?.[0]?.emailAddress || preparer?.email || recipients.primary;
+      recipientName = preparer?.profile?.firstName || 'Tax Preparer';
+
+      logger.info('Contact form routed to assigned preparer', {
+        ref,
+        preparerId: assignedPreparerId,
+        preparerEmail: primaryRecipient,
+        preparerName: recipientName,
+      });
+    } else {
+      // No preparer assigned - use language-based routing
+      primaryRecipient = recipients.primary;
+      recipientName = recipients.recipientName;
+
+      logger.info('Contact form using language-based routing', {
+        locale: locale || 'en',
+        primary: primaryRecipient,
+        cc: recipients.cc,
+      });
+    }
 
     try {
       if (process.env.NODE_ENV === 'development') {
         logger.info('Contact form email (Dev Mode)', {
-          to: recipients.primary,
+          to: primaryRecipient,
           cc: recipients.cc,
           from: fromEmail,
           name,
@@ -162,11 +248,12 @@ ${message}
           phone,
           service,
           message,
+          assignedPreparer: assignedPreparerId ? 'Yes' : 'No',
         });
       } else {
         const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
-          to: [recipients.primary],
+          to: [primaryRecipient],
           cc: [recipients.cc],
           subject: `🌐 New Contact Form: ${service} - ${name}`,
           react: ContactFormNotification({
@@ -176,8 +263,8 @@ ${message}
             service,
             message,
             submittedAt: new Date(),
-            locale: (locale as 'en' | 'es') || 'en', // Pass locale for email translations
-            recipientName: recipients.recipientName, // Pass recipient name for personalized greeting
+            locale: (locale as 'en' | 'es') || 'en',
+            recipientName: recipientName,
           }),
         });
 
@@ -185,7 +272,12 @@ ${message}
           logger.error('Failed to send contact form email', error);
           // Don't fail the request if email fails - we still saved to database
         } else {
-          logger.info('Contact form email sent', { emailId: data?.id, to: recipients.primary, cc: recipients.cc });
+          logger.info('Contact form email sent', {
+            emailId: data?.id,
+            to: primaryRecipient,
+            cc: recipients.cc,
+            assignedPreparer: assignedPreparerId ? 'Yes' : 'No',
+          });
         }
       }
     } catch (emailError) {
