@@ -75,6 +75,11 @@ export class CRMService {
     accessContext: CRMAccessContext
   ): Promise<CRMContactWithRelations> {
     try {
+      logger.info('[CRMService] getContactById starting', {
+        contactId: id,
+        accessContext: JSON.stringify(accessContext),
+      });
+
       // SIMPLIFIED QUERY - Removed tags, tasks, emailActivities to fix 500 error
       // These relations aren't displayed on the contact detail page and may cause issues
       const contact = await prisma.cRMContact.findUnique({
@@ -111,8 +116,15 @@ export class CRMService {
       });
 
       if (!contact) {
+        logger.warn('[CRMService] Contact not found', { contactId: id });
         throw new Error('Contact not found');
       }
+
+      logger.info('[CRMService] Contact found', {
+        contactId: id,
+        contactEmail: contact.email,
+        assignedPreparerId: contact.assignedPreparerId,
+      });
 
       // Row-level security: tax preparers can only see their assigned contacts
       // Note: assignedPreparerId stores the User ID (not Profile ID)

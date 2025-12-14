@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Auth check
     logger.info('[CRM API] Starting GET contact request', { contactId });
 
-    const { user, role } = await requireOneOfRoles(['admin', 'admin', 'tax_preparer']);
+    const { user, role } = await requireOneOfRoles(['admin', 'tax_preparer']);
 
     logger.info('[CRM API] Auth passed', {
       contactId,
@@ -178,7 +178,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     // Auth check
-    const { user, role } = await requireOneOfRoles(['admin', 'admin', 'tax_preparer']);
+    const { user, role } = await requireOneOfRoles(['admin', 'tax_preparer']);
 
     logger.info('[CRM API] Updating contact', { contactId, userId: user.id, role });
 
@@ -254,7 +254,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     // Auth check - only admins can delete
-    const { user, role } = await requireOneOfRoles(['admin', 'admin']);
+    const { user, role } = await requireOneOfRoles(['admin']);
 
     logger.info('[CRM API] Deleting contact', { contactId, userId: user.id, role });
 
