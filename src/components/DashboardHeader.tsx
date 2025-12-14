@@ -99,7 +99,7 @@ export function DashboardHeader({
         <Separator orientation="vertical" className="mr-2 h-4" />
 
         {/* Logo/Brand */}
-        <Logo size="md" showText className="hidden md:flex" />
+        <Logo size="md" showText={false} className="hidden md:flex" />
         <Logo size="md" showText={false} className="md:hidden" />
 
         {/* Spacer */}

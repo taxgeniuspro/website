@@ -124,7 +124,7 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
           {isCollapsed ? (
             <LogoIcon size="md" />
           ) : (
-            <Logo size="md" showText />
+            <Logo size="md" showText={false} />
           )}
         </div>
       </SidebarHeader>
