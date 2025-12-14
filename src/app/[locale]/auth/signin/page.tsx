@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Eye, EyeOff, Mail } from 'lucide-react';
+import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -195,20 +196,26 @@ function SignInContent() {
             <p className="text-xl text-muted-foreground">{content.subheading}</p>
           </div>
 
-          {/* Image Placeholder */}
+          {/* Owliver Mascot */}
           <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-white/50 dark:bg-black/20 backdrop-blur">
-            <div className="aspect-video flex items-center justify-center p-12">
+            <div className="aspect-video flex items-center justify-center p-8">
               <div className="text-center">
-                <div
-                  className={`w-32 h-32 bg-white/80 dark:bg-black/40 rounded-full mx-auto mb-6 flex items-center justify-center`}
-                >
-                  <IconComponent className={`w-16 h-16 ${content.accentColor}`} />
+                <div className="w-40 h-40 mx-auto mb-4 flex items-center justify-center">
+                  <Image
+                    src="/images/owliver-owl-icon.png"
+                    alt="Owliver - Tax Genius Mascot"
+                    width={160}
+                    height={160}
+                    className="w-full h-full object-contain drop-shadow-lg"
+                    priority
+                  />
                 </div>
-                <p className="text-sm font-semibold text-muted-foreground mb-2">
-                  {t('imagePlaceholder.replaceWith')}
+                <p className="text-sm font-semibold text-foreground">
+                  {t('mascot.greeting', { defaultValue: 'Meet Owliver, your tax guide!' })}
                 </p>
-                <p className="text-xs text-muted-foreground">{content.imageSuggestion}</p>
-                <p className="text-xs text-muted-foreground mt-1">{t('imagePlaceholder.recommended')}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('mascot.tagline', { defaultValue: 'Smart, reliable, always here to help' })}
+                </p>
               </div>
             </div>
           </div>
