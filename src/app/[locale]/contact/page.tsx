@@ -99,6 +99,7 @@ function ContactPageContent() {
         body: JSON.stringify({
           ...formData,
           locale: locale, // Pass locale for language-based email routing
+          ref: refCode, // Pass ref code for preparer attribution
         }),
       });
 
