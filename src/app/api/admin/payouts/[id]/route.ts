@@ -14,27 +14,16 @@ import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        user: {
-          email: user.emailAddresses[0]?.emailAddress,
-        },
-      },
-    });
-
-    if (!profile) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
-    }
-
-    // Only admins can access payout management
-    if (profile.role !== 'admin') {
+    // Check if user is admin via session role
+    const userRole = user.role as string;
+    if (userRole !== 'admin') {
       return NextResponse.json(
         { error: 'Only administrators can access payout management' },
         { status: 403 }
