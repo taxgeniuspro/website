@@ -251,6 +251,10 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
           assignedPreparer: assignedPreparerId ? 'Yes' : 'No',
         });
       } else {
+        // Build referral code for email - if ref provided, use it as the code
+        const referralCode = ref ? `${ref}-lead` : undefined;
+        const referralSource = ref ? `taxgeniuspro.tax/go/${ref}-lead` : undefined;
+
         const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
           to: [primaryRecipient],
@@ -265,6 +269,8 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
             submittedAt: new Date(),
             locale: (locale as 'en' | 'es') || 'en',
             recipientName: recipientName,
+            referralCode: referralCode,
+            referralSource: referralSource,
           }),
         });
 

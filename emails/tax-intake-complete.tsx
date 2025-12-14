@@ -301,14 +301,24 @@ export function TaxIntakeComplete(props: TaxIntakeCompleteProps) {
             </Section>
 
             {/* Attribution */}
-            {referrerUsername && (
-              <Section style={metaBox}>
+            <Section style={metaBox}>
+              <Text style={metaText}>
+                <strong>{t(commonTranslations.source, locale)}:</strong> {source || 'direct'}
+              </Text>
+              {referrerUsername && (
                 <Text style={metaText}>
-                  <strong>{t(commonTranslations.source, locale)}:</strong> {source} |{' '}
-                  <strong>{t(taxIntakeTranslations.referrer, locale)}:</strong> {referrerUsername}
+                  <strong>🔗 {locale === 'es' ? 'Referido por' : 'Referred by'}:</strong> {referrerUsername}
                 </Text>
-              </Section>
-            )}
+              )}
+              {referrerUsername && (
+                <Text style={metaText}>
+                  <strong>📎 {locale === 'es' ? 'Enlace de Marketing' : 'Marketing Link'}:</strong>{' '}
+                  <a href={`https://taxgeniuspro.tax/go/${referrerUsername}-intake`} style={link}>
+                    taxgeniuspro.tax/go/{referrerUsername}-intake
+                  </a>
+                </Text>
+              )}
+            </Section>
 
             {/* Action Buttons */}
             <Section style={actionBox}>

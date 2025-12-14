@@ -21,6 +21,9 @@ interface ContactFormNotificationProps {
   submittedAt: Date;
   locale?: Locale;
   recipientName?: string;
+  // Referral/Attribution tracking
+  referralCode?: string; // e.g., "sw-lead"
+  referralSource?: string; // e.g., "taxgeniuspro.tax/go/sw-lead"
 }
 
 export function ContactFormNotification({
@@ -32,6 +35,8 @@ export function ContactFormNotification({
   submittedAt,
   locale = 'en',
   recipientName = 'there',
+  referralCode,
+  referralSource,
 }: ContactFormNotificationProps) {
   const serviceEmoji: Record<string, string> = {
     individual: '👤',
@@ -147,8 +152,25 @@ export function ContactFormNotification({
               </Text>
               <Text style={metaText}>
                 <strong>{t(contactFormTranslations.sourceLabel, locale)}:</strong>{' '}
-                {t(contactFormTranslations.sourcePage, locale)}
+                {referralCode ? (
+                  <>
+                    {referralCode}
+                    {referralSource && (
+                      <span style={{ color: '#6b7280' }}> (via {referralSource})</span>
+                    )}
+                  </>
+                ) : (
+                  t(contactFormTranslations.sourcePage, locale)
+                )}
               </Text>
+              {referralCode && (
+                <Text style={metaText}>
+                  <strong>🔗 {locale === 'es' ? 'Enlace de Marketing' : 'Marketing Link'}:</strong>{' '}
+                  <a href={`https://${referralSource || `taxgeniuspro.tax/go/${referralCode}`}`} style={link}>
+                    {referralSource || `taxgeniuspro.tax/go/${referralCode}`}
+                  </a>
+                </Text>
+              )}
             </Section>
 
             <Section style={actionBox}>

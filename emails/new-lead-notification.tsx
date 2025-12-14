@@ -23,6 +23,9 @@ interface NewLeadNotificationProps {
   dashboardUrl: string;
   leadId: string;
   locale?: Locale;
+  // Referral/Attribution tracking
+  referrerUsername?: string; // e.g., "sw"
+  referralCode?: string; // e.g., "sw-intake"
 }
 
 export function NewLeadNotification({
@@ -36,6 +39,8 @@ export function NewLeadNotification({
   dashboardUrl,
   leadId,
   locale = 'en',
+  referrerUsername,
+  referralCode,
 }: NewLeadNotificationProps) {
   // Get translated service label
   const getServiceLabel = (svc: string) => {
@@ -103,6 +108,19 @@ export function NewLeadNotification({
               <Text style={detail}>
                 <strong>{t(commonTranslations.source, locale)}:</strong> {source}
               </Text>
+              {referrerUsername && (
+                <Text style={detail}>
+                  <strong>🔗 {locale === 'es' ? 'Referido por' : 'Referred by'}:</strong> {referrerUsername}
+                </Text>
+              )}
+              {referralCode && (
+                <Text style={detail}>
+                  <strong>📎 {locale === 'es' ? 'Enlace de Marketing' : 'Marketing Link'}:</strong>{' '}
+                  <a href={`https://taxgeniuspro.tax/go/${referralCode}`} style={link}>
+                    taxgeniuspro.tax/go/{referralCode}
+                  </a>
+                </Text>
+              )}
             </Section>
 
             {message && (
