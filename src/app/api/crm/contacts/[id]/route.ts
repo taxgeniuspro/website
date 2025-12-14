@@ -158,7 +158,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Contact not found' }, { status: 404 });
     }
 
-    if (error.message?.includes('Access denied') || error.message?.includes('Unauthorized')) {
+    if (error.message?.includes('Access denied') || error.message?.includes('Unauthorized') || error.message?.includes('Insufficient permissions')) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
@@ -227,7 +227,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Contact not found' }, { status: 404 });
     }
 
-    if (error.message.includes('Access denied') || error.message.includes('Unauthorized')) {
+    if (error.message.includes('Access denied') || error.message.includes('Unauthorized') || error.message.includes('Insufficient permissions')) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
@@ -283,7 +283,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Contact not found' }, { status: 404 });
     }
 
-    if (error.message.includes('Access denied') || error.message.includes('Unauthorized')) {
+    if (error.message.includes('Access denied') || error.message.includes('Unauthorized') || error.message.includes('Insufficient permissions')) {
       return NextResponse.json(
         { success: false, error: 'Only admins can delete contacts' },
         { status: 403 }
