@@ -23,19 +23,16 @@ const MINIMUM_PAYOUT_AMOUNT = Number(process.env.MINIMUM_PAYOUT_AMOUNT) || 50;
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find user profile
+    // Find user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: {
-          email: user.emailAddresses[0]?.emailAddress,
-        },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {
@@ -132,19 +129,17 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find user profile
+    // Find user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: {
-          email: user.emailAddresses[0]?.emailAddress,
-        },
-      },
+      where: { userId: user.id },
+      include: { user: true },
     });
 
     if (!profile) {

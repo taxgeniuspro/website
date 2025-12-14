@@ -41,7 +41,8 @@ function calculateCommissionAmount(packageType: string): number {
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,13 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     }
 
-    // Find user profile
+    // Find user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: {
-          email: user.emailAddresses[0]?.emailAddress,
-        },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {
@@ -308,7 +305,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -316,13 +314,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
 
-    // Find user profile
+    // Find user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: {
-          email: user.emailAddresses[0]?.emailAddress,
-        },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {

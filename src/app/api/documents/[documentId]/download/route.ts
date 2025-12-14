@@ -51,11 +51,9 @@ export async function GET(req: NextRequest, { params }: { params: { documentId: 
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile
+    // Get user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {
