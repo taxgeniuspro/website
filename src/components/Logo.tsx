@@ -26,18 +26,18 @@ const textSizeClasses = {
 export function Logo({ size = 'md', showText = true, className }: LogoProps) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      {/* Dark logo for light theme (better contrast) */}
+      {/* Dark/black logo for light theme (better contrast) */}
       <Image
-        src="/images/logo-dark-theme.png"
+        src="/images/logo-light-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
         className={cn(sizeClasses[size], 'w-auto dark:hidden')}
         priority
       />
-      {/* Light logo for dark theme (better contrast) */}
+      {/* White logo for dark theme (better contrast) */}
       <Image
-        src="/images/logo-light-theme.png"
+        src="/images/logo-dark-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
@@ -54,18 +54,18 @@ export function Logo({ size = 'md', showText = true, className }: LogoProps) {
 export function LogoIcon({ size = 'md', className }: Omit<LogoProps, 'showText'>) {
   return (
     <div className={cn('flex items-center', className)}>
-      {/* Dark logo for light theme (better contrast) */}
+      {/* Dark/black logo for light theme (better contrast) */}
       <Image
-        src="/images/logo-dark-theme.png"
+        src="/images/logo-light-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
         className={cn(sizeClasses[size], 'w-auto dark:hidden')}
         priority
       />
-      {/* Light logo for dark theme (better contrast) */}
+      {/* White logo for dark theme (better contrast) */}
       <Image
-        src="/images/logo-light-theme.png"
+        src="/images/logo-dark-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
@@ -79,22 +79,24 @@ export function LogoIcon({ size = 'md', className }: Omit<LogoProps, 'showText'>
 /**
  * Full logo with both light and dark versions for auth pages
  * Uses CSS to switch between them based on dark mode
+ * - logo-light-theme.png = dark/black logo (for light backgrounds)
+ * - logo-dark-theme.png = white logo (for dark backgrounds)
  */
 export function AuthLogo({ className }: { className?: string }) {
   return (
     <div className={cn('flex justify-center', className)}>
-      {/* Dark logo for light theme (better contrast) */}
+      {/* Dark/black logo for light theme (better contrast) */}
       <Image
-        src="/images/logo-dark-theme.png"
+        src="/images/logo-light-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
         className="h-12 w-auto dark:hidden"
         priority
       />
-      {/* Light logo for dark theme (better contrast) */}
+      {/* White logo for dark theme (better contrast) */}
       <Image
-        src="/images/logo-light-theme.png"
+        src="/images/logo-dark-theme.png"
         alt="Tax Genius Pro"
         width={200}
         height={50}
