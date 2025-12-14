@@ -1612,6 +1612,10 @@
       "imagePlaceholder": {
         "replaceWith": "[Replace with image]",
         "recommended": "Recommended: 800x450px"
+      },
+      "mascot": {
+        "greeting": "Meet Owliver, your tax guide!",
+        "tagline": "Smart, reliable, always here to help"
       }
     },
     "signup": {
