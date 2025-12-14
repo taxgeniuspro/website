@@ -5,40 +5,49 @@ import { logger } from '@/lib/logger';
 
 /**
  * GET /api/preparers/leads
- * Fetches all leads (users with role=LEAD) assigned to the authenticated preparer
+ * Fetches all leads (users with role=lead) from the database
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const role = user?.role as string;
-    if (role !== 'tax_preparer' && role !== 'admin' ) {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden: Only tax preparers and admins can access this endpoint' },
         { status: 403 }
       );
     }
 
-    // Fetch all Clerk users with role = LEAD
-    const { data: allUsers } = await clerk.users.getUserList({
-      limit: 500, // Adjust as needed
+    // Fetch all profiles with role = 'lead'
+    const leadProfiles = await prisma.profile.findMany({
+      where: { role: 'lead' },
+      include: {
+        user: {
+          select: {
+            email: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    // Filter for LEAD users
-    const leadUsers = allUsers.filter((u) => u.publicMetadata?.role === 'lead');
-
     // Format response
-    const leads = leadUsers.map((leadUser) => ({
-      id: leadUser.id,
-      email: leadUser.emailAddresses[0]?.emailAddress || '',
-      firstName: leadUser.firstName || '',
-      lastName: leadUser.lastName || '',
+    const leads = leadProfiles.map((profile) => ({
+      id: profile.id,
+      visitorId: profile.visitorId,
+      email: profile.user.email,
+      firstName: profile.firstName || '',
+      lastName: profile.lastName || '',
+      phone: profile.phone || '',
       role: 'lead',
-      createdAt: new Date(leadUser.createdAt).toISOString(),
+      createdAt: profile.createdAt.toISOString(),
     }));
 
     return NextResponse.json({
@@ -56,18 +65,19 @@ export async function GET(req: NextRequest) {
  * PATCH /api/preparers/leads
  * Changes a lead's role to CLIENT (tax preparers can only promote LEAD → CLIENT)
  *
- * Body: { userId: string, newRole: 'client' }
+ * Body: { visitorId: string, newRole: 'client' }
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const role = user?.role as string;
-    if (role !== 'tax_preparer' && role !== 'admin' ) {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden: Only tax preparers and admins can change lead roles' },
         { status: 403 }
@@ -75,10 +85,15 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { userId, newRole } = body;
+    const { visitorId, profileId, newRole } = body;
 
-    if (!userId || !newRole) {
-      return NextResponse.json({ error: 'Missing userId or newRole' }, { status: 400 });
+    // Accept either visitorId or profileId
+    const identifier = profileId || visitorId;
+    if (!identifier || !newRole) {
+      return NextResponse.json(
+        { error: 'Missing visitorId/profileId or newRole' },
+        { status: 400 }
+      );
     }
 
     // Tax preparers can ONLY change LEAD → CLIENT
@@ -89,38 +104,47 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // Verify the target user is currently a LEAD
-    const targetUser = await clerk.users.getUser(userId);
+    // Find the profile
+    const targetProfile = await prisma.profile.findFirst({
+      where: profileId ? { id: profileId } : { visitorId: identifier },
+      include: {
+        user: {
+          select: { email: true },
+        },
+      },
+    });
 
-    if (!targetUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!targetProfile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const currentRole = targetUser.publicMetadata?.role as string;
-    if (currentRole !== 'lead') {
+    if (targetProfile.role !== 'lead') {
       return NextResponse.json({ error: 'User is not a lead' }, { status: 400 });
     }
 
-    // Update the user's role
-    await clerk.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        ...targetUser.publicMetadata,
-        role: newRole,
+    // Update the profile's role
+    const updatedProfile = await prisma.profile.update({
+      where: { id: targetProfile.id },
+      data: { role: newRole },
+      include: {
+        user: {
+          select: { email: true },
+        },
       },
     });
 
     logger.info(
-      `🔄 Role changed: ${userId} from LEAD to ${newRole.toUpperCase()} by ${user.id} (${role})`
+      `🔄 Role changed: ${targetProfile.id} from LEAD to ${newRole.toUpperCase()} by ${user.id} (${role})`
     );
 
     return NextResponse.json({
       success: true,
       message: `User role changed from LEAD to ${newRole.toUpperCase()}`,
       user: {
-        id: userId,
-        email: targetUser.emailAddresses[0]?.emailAddress,
-        firstName: targetUser.firstName,
-        lastName: targetUser.lastName,
+        id: updatedProfile.id,
+        email: updatedProfile.user.email,
+        firstName: updatedProfile.firstName,
+        lastName: updatedProfile.lastName,
         role: newRole,
       },
     });

@@ -2,7 +2,7 @@
  * Role Permission Templates API
  *
  * Manages default permissions for each user role.
- * Only super_admin can access this API.
+ * Only admin can access this API.
  *
  * GET    /api/admin/role-permissions - Get all role permission templates
  * PUT    /api/admin/role-permissions - Update a role's permission template
@@ -10,11 +10,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { UserRole, UserPermissions, DEFAULT_PERMISSIONS } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
-
-const prisma = new PrismaClient();
 
 // GET - Fetch all role permission templates
 export async function GET(request: NextRequest) {
@@ -25,11 +23,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only super_admin can access
+    // Only admin can access
     const role = session?.user?.role;
 
     if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
+      return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
     }
 
     // Fetch all templates from database
@@ -67,11 +65,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only super_admin can access
+    // Only admin can access
     const role = session?.user?.role;
 
     if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
+      return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -86,7 +84,6 @@ export async function PUT(request: NextRequest) {
 
     // Validate role
     const validRoles: UserRole[] = [
-      'admin',
       'admin',
       'tax_preparer',
       'affiliate',
@@ -116,52 +113,30 @@ export async function PUT(request: NextRequest) {
     // If requested, update all existing users with this role
     if (updateExistingUsers) {
       try {
-        // Get all users with this role from Clerk
-        const users = await clerk.users.getUserList({
-          limit: 500, // Max limit
+        // Get all profiles with this role
+        const profilesWithRole = await prisma.profile.findMany({
+          where: { role: targetRole },
+          select: { id: true },
         });
 
-        // Filter users by role
-        const usersWithRole = users.data.filter((u) => {
-          const userRole = u.publicMetadata?.role as string | undefined;
-          return userRole === targetRole;
-        });
-
-        // Update each user's permissions
-        const updatePromises = usersWithRole.map((u) =>
-          clerk.users.updateUserMetadata(u.id, {
-            publicMetadata: {
-              ...u.publicMetadata,
-              permissions: permissions,
+        // Update each profile's custom permissions
+        if (profilesWithRole.length > 0) {
+          await prisma.profile.updateMany({
+            where: { role: targetRole },
+            data: {
+              customPermissions: permissions as any,
             },
-          })
-        );
-
-        await Promise.all(updatePromises);
+          });
+        }
 
         return NextResponse.json({
           success: true,
           template,
-          usersUpdated: usersWithRole.length,
-          message: `Successfully updated permissions for ${usersWithRole.length} ${targetRole} users`,
+          usersUpdated: profilesWithRole.length,
+          message: `Successfully updated permissions for ${profilesWithRole.length} ${targetRole} users`,
         });
-      } catch (clerkError: any) {
-        // Handle Clerk rate limiting gracefully
-        if (clerkError?.status === 429 || clerkError?.errors?.[0]?.code === 'rate_limit_exceeded') {
-          logger.warn('⚠️  Clerk rate limit hit - template saved but user updates skipped');
-          return NextResponse.json(
-            {
-              success: true,
-              template,
-              usersUpdated: 0,
-              warning:
-                'Template saved successfully. User updates will be applied when they next log in.',
-            },
-            { status: 200 }
-          );
-        }
-
-        logger.error('Error updating users in Clerk:', clerkError);
+      } catch (updateError) {
+        logger.error('Error updating user permissions:', updateError);
         // Template updated but user update failed
         return NextResponse.json(
           {
