@@ -42,6 +42,7 @@ import {
   GraduationCap,
   UserPlus,
   Settings,
+  Wallet,
 } from 'lucide-react';
 import { UserRole, Permission } from '@/lib/permissions';
 
@@ -269,6 +270,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     label: 'Commission Settings',
     href: '/dashboard/tax-preparer/commission-settings',
     icon: Settings,
+    permission: 'trackingCode',
+    section: '💰 Referral Management',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Payout Obligations',
+    href: '/dashboard/tax-preparer/payout-obligations',
+    icon: Wallet,
     permission: 'trackingCode',
     section: '💰 Referral Management',
     roles: ['tax_preparer'],

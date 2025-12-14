@@ -1032,8 +1032,9 @@ model Commission {
   payoutRequestId String?
   payoutRequest   PayoutRequest? @relation("PayoutCommissions", fields: [payoutRequestId], references: [id])
 
-  paymentRef String? // Reference to payment transaction
-  createdAt  DateTime @default(now())
+  paymentMethod String? // CASH, CHECK, ZELLE, VENMO, CASHAPP, PAYPAL, BANK_TRANSFER
+  paymentRef    String? // Reference to payment transaction
+  createdAt     DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([referrerId])
