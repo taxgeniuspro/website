@@ -471,7 +471,15 @@ async function testCareerForms(browser: Browser, results: TestResult[]): Promise
       const screenshot = await takeScreenshot(page, `career-${testData.city}-${testData.locale}`);
 
       // Look for application form or CTA button
-      const ctaButton = await page.$('a[href*="/preparer/start"], button:has-text("Apply"), a:has-text("Apply")');
+      // Note: :has-text() is Playwright syntax, not valid CSS. Use XPath or evaluate for text matching.
+      let ctaButton = await page.$('a[href*="/preparer/start"]');
+      if (!ctaButton) {
+        // Fallback: find button/link containing "Apply" text using evaluate
+        ctaButton = await page.evaluateHandle(() => {
+          const elements = [...document.querySelectorAll('button, a')];
+          return elements.find(el => el.textContent?.includes('Apply')) || null;
+        }) as any;
+      }
 
       if (ctaButton) {
         await ctaButton.click();
