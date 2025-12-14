@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       logger.error('Error incrementing click count:', err);
     });
 
-    // Create link click record for analytics
+    // Create link click record for analytics (including UTM parameters)
     try {
       const userAgent = request.headers.get('user-agent') || undefined;
       const referer = request.headers.get('referer') || undefined;
@@ -53,6 +53,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         request.headers.get('x-real-ip') ||
         undefined;
 
+      // Extract UTM parameters from the request URL
+      const searchParams = new URL(request.url).searchParams;
+      const utmSource = searchParams.get('utm_source') || undefined;
+      const utmMedium = searchParams.get('utm_medium') || undefined;
+      const utmCampaign = searchParams.get('utm_campaign') || undefined;
+      const utmContent = searchParams.get('utm_content') || undefined;
+      const utmTerm = searchParams.get('utm_term') || undefined;
+
       await prisma.linkClick.create({
         data: {
           linkId: link.id,
@@ -60,7 +68,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           userAgent,
           referrer: referer,
           clickedAt: new Date(),
+          // UTM tracking for source attribution
+          utmSource,
+          utmMedium,
+          utmCampaign,
+          utmContent,
+          utmTerm,
         },
+      });
+
+      logger.info('Link click recorded', {
+        code,
+        utmSource,
+        utmMedium,
+        utmCampaign,
       });
     } catch (err) {
       logger.error('Error creating link click record:', err);
