@@ -105,7 +105,7 @@ export default async function PreparerReferralsPage() {
     // Total commissions from referrals
     prisma.commission.aggregate({
       where: {
-        profileId: profile.id,
+        referrerId: profile.id,
         status: 'PAID',
       },
       _sum: {

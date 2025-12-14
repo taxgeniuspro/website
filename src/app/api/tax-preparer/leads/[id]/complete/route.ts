@@ -12,6 +12,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { calculateReferrerCommission } from '@/lib/services/tiered-commission.service';
+import { PaymentStatus } from '@prisma/client';
 
 export async function POST(
   req: NextRequest,
@@ -119,7 +120,7 @@ export async function POST(
           where: {
             referrerId: referrerProfile.id,
             sourceType: 'RETURN_FILED',
-            status: { in: ['APPROVED', 'PAID'] },
+            status: { in: [PaymentStatus.APPROVED, PaymentStatus.PAID] },
           },
         });
 
@@ -130,7 +131,8 @@ export async function POST(
           completedReferralsCount + 1 // This is the next referral
         );
 
-        // Create commission record
+        // Create commission record - APPROVED status means ready for payout
+        // Tax preparer will mark as PAID once they pay the affiliate
         await prisma.commission.create({
           data: {
             referrerId: referrerProfile.id,
@@ -142,7 +144,8 @@ export async function POST(
             commissionType: 'FLAT',
             commissionRate: commissionResult.rate,
             rateSource: commissionResult.source,
-            status: 'PENDING',
+            status: PaymentStatus.APPROVED,
+            approvedAt: new Date(),
           },
         });
 
