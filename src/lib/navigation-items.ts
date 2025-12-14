@@ -14,7 +14,7 @@
  *
  * SIMPLIFIED NAVIGATION (Dec 2025):
  * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools, Business
- * - Tax Preparer sections: 👥 Clients (includes Store)
+ * - Tax Preparer sections: 📊 Dashboard, 💰 Referral Management
  * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 
@@ -41,6 +41,7 @@ import {
   Gift,
   GraduationCap,
   UserPlus,
+  Settings,
 } from 'lucide-react';
 import { UserRole, Permission } from '@/lib/permissions';
 
@@ -59,7 +60,7 @@ export interface NavItem {
  *
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
- * - Tax Preparer: 👥 Clients (includes Store)
+ * - Tax Preparer: 📊 Dashboard, 💰 Referral Management
  * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
@@ -234,6 +235,45 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 💰 TAX PREPARER REFERRAL MANAGEMENT SECTION
+  // Manage referrers (clients + affiliates) and their commission rates
+  // Tax Preparers do NOT earn commissions - they manage rates for their referrers
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'My Referrals',
+    href: '/dashboard/tax-preparer/referrals',
+    icon: Share2,
+    permission: 'trackingCode',
+    section: '💰 Referral Management',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'My Links & QR',
+    href: '/dashboard/tax-preparer/tracking',
+    icon: QrCode,
+    permission: 'trackingCode',
+    section: '💰 Referral Management',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Bonded Affiliates',
+    href: '/dashboard/tax-preparer/bonded-affiliates',
+    icon: Users,
+    permission: 'trackingCode',
+    section: '💰 Referral Management',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Commission Settings',
+    href: '/dashboard/tax-preparer/commission-settings',
+    icon: Settings,
+    permission: 'trackingCode',
+    section: '💰 Referral Management',
+    roles: ['tax_preparer'],
+  },
+
   {
     label: 'Clients Status',
     href: '/admin/clients-status',
@@ -464,6 +504,8 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📱 My Dashboard': ['client'], // Client dashboard items
+  '📊 Dashboard': ['tax_preparer'], // Tax preparer dashboard section
+  '💰 Referral Management': ['tax_preparer'], // Tax preparer referral tracking
   '📊 Analytics': ['admin'], // Admin analytics section
   '💰 Financials': ['admin'], // Admin financials
   '📢 Marketing': ['admin'], // Admin marketing hub

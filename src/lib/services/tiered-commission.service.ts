@@ -15,6 +15,31 @@ import { Decimal } from '@prisma/client/runtime/library';
 const DEFAULT_COMMISSION_RATE = 10; // 10%
 const DEFAULT_COMMISSION_TYPE = CommissionType.PERCENTAGE;
 
+// Tax Genius Company Default Tiers
+// These are the built-in tiers that apply when a preparer uses company defaults
+export const COMPANY_DEFAULT_TIERS = {
+  tier1: { max: 5, rate: 50 },   // Referrals 1-5: $50 each
+  tier2: { max: 10, rate: 75 },  // Referrals 6-10: $75 each
+  tier3: { rate: 100 },          // Referrals 11+: $100 each
+};
+
+// Calculate commission from tier structure based on completed referral count
+export function calculateTierCommission(
+  tierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } },
+  completedReferralCount: number
+): number {
+  const { tier1, tier2, tier3 } = tierStructure;
+
+  // Determine which tier applies based on count
+  if (tier3 && completedReferralCount > (tier2?.max ?? tier1?.max ?? 5)) {
+    return tier3.rate;
+  }
+  if (tier2 && completedReferralCount > (tier1?.max ?? 5)) {
+    return tier2.rate;
+  }
+  return tier1?.rate ?? 50;
+}
+
 // Tier configuration interface
 export interface TierConfig {
   minConversions: number;
@@ -443,4 +468,269 @@ export async function updateGroupStats(groupId: string): Promise<void> {
       totalEarnings: stats._sum.lifetimeEarnings ?? new Decimal(0),
     },
   });
+}
+
+/**
+ * Calculate commission for a referrer based on the tax preparer's commission settings
+ *
+ * Commission Hierarchy:
+ * 1. VIP Rate - Individual rate set for this specific referrer in AffiliateBonding.commissionStructure
+ * 2. Preparer's Custom Tiers - If preparer has useCompanyCommissionDefaults=false and customTierStructure set
+ * 3. Company Default Tiers - $50 (1-5), $75 (6-10), $100 (11+)
+ *
+ * @param preparerId - The tax preparer's profile ID
+ * @param referrerId - The referrer's profile ID (client or affiliate)
+ * @param completedReferralCount - How many completed referrals this referrer has made
+ * @returns Commission amount in dollars (flat rate)
+ */
+export async function calculateReferrerCommission(
+  preparerId: string,
+  referrerId: string,
+  completedReferralCount: number
+): Promise<{
+  amount: number;
+  tier: string;
+  rate: number;
+  source: 'VIP' | 'PREPARER_CUSTOM' | 'COMPANY_DEFAULT';
+}> {
+  // 1. Check for VIP rate (individual rate for this specific referrer)
+  const bonding = await prisma.affiliateBonding.findUnique({
+    where: {
+      affiliateId_preparerId: {
+        affiliateId: referrerId,
+        preparerId: preparerId,
+      },
+    },
+  });
+
+  if (bonding?.commissionStructure) {
+    const structure = bonding.commissionStructure as {
+      vipRate?: number;
+      flatRate?: number;
+      rate?: number;
+    };
+
+    // Check for VIP flat rate
+    const vipRate = structure.vipRate ?? structure.flatRate ?? structure.rate;
+    if (vipRate) {
+      return {
+        amount: vipRate,
+        tier: 'VIP',
+        rate: vipRate,
+        source: 'VIP',
+      };
+    }
+  }
+
+  // 2. Check preparer's custom tier settings
+  const preparer = await prisma.profile.findUnique({
+    where: { id: preparerId },
+    select: {
+      useCompanyCommissionDefaults: true,
+      customTierStructure: true,
+    },
+  });
+
+  // Use custom tiers if preparer has them configured
+  if (preparer && !preparer.useCompanyCommissionDefaults && preparer.customTierStructure) {
+    const customTiers = preparer.customTierStructure as {
+      tier1?: { max: number; rate: number };
+      tier2?: { max: number; rate: number };
+      tier3?: { rate: number };
+    };
+
+    const rate = calculateTierCommission(customTiers, completedReferralCount);
+    const tierName = getTierNameFromCount(completedReferralCount, customTiers);
+
+    return {
+      amount: rate,
+      tier: tierName,
+      rate,
+      source: 'PREPARER_CUSTOM',
+    };
+  }
+
+  // 3. Use Company Default Tiers
+  const rate = calculateTierCommission(COMPANY_DEFAULT_TIERS, completedReferralCount);
+  const tierName = getTierNameFromCount(completedReferralCount, COMPANY_DEFAULT_TIERS);
+
+  return {
+    amount: rate,
+    tier: tierName,
+    rate,
+    source: 'COMPANY_DEFAULT',
+  };
+}
+
+/**
+ * Get tier name based on referral count
+ */
+function getTierNameFromCount(
+  count: number,
+  tierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } }
+): string {
+  const { tier1, tier2 } = tierStructure;
+  const tier1Max = tier1?.max ?? 5;
+  const tier2Max = tier2?.max ?? 10;
+
+  if (count > tier2Max) return 'Tier 3';
+  if (count > tier1Max) return 'Tier 2';
+  return 'Tier 1';
+}
+
+/**
+ * Get preparer's commission settings
+ */
+export async function getPreparerCommissionSettings(preparerId: string): Promise<{
+  useCompanyDefaults: boolean;
+  customTierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } } | null;
+  companyDefaultTiers: typeof COMPANY_DEFAULT_TIERS;
+}> {
+  const preparer = await prisma.profile.findUnique({
+    where: { id: preparerId },
+    select: {
+      useCompanyCommissionDefaults: true,
+      customTierStructure: true,
+    },
+  });
+
+  return {
+    useCompanyDefaults: preparer?.useCompanyCommissionDefaults ?? true,
+    customTierStructure: preparer?.customTierStructure as { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } } | null,
+    companyDefaultTiers: COMPANY_DEFAULT_TIERS,
+  };
+}
+
+/**
+ * Update preparer's commission settings
+ */
+export async function updatePreparerCommissionSettings(
+  preparerId: string,
+  settings: {
+    useCompanyDefaults: boolean;
+    customTierStructure?: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } };
+  }
+): Promise<void> {
+  await prisma.profile.update({
+    where: { id: preparerId },
+    data: {
+      useCompanyCommissionDefaults: settings.useCompanyDefaults,
+      customTierStructure: settings.useCompanyDefaults ? null : settings.customTierStructure,
+    },
+  });
+}
+
+/**
+ * Set VIP rate for a specific referrer
+ */
+export async function setReferrerVIPRate(
+  preparerId: string,
+  referrerId: string,
+  vipRate: number | null
+): Promise<void> {
+  // Find or create bonding record
+  const existingBonding = await prisma.affiliateBonding.findUnique({
+    where: {
+      affiliateId_preparerId: {
+        affiliateId: referrerId,
+        preparerId: preparerId,
+      },
+    },
+  });
+
+  if (existingBonding) {
+    // Update existing bonding
+    const currentStructure = (existingBonding.commissionStructure as Record<string, unknown>) || {};
+    await prisma.affiliateBonding.update({
+      where: { id: existingBonding.id },
+      data: {
+        commissionStructure: vipRate === null
+          ? null
+          : { ...currentStructure, vipRate },
+      },
+    });
+  } else if (vipRate !== null) {
+    // Create new bonding with VIP rate
+    await prisma.affiliateBonding.create({
+      data: {
+        affiliateId: referrerId,
+        preparerId: preparerId,
+        commissionStructure: { vipRate },
+        isActive: true,
+      },
+    });
+  }
+}
+
+/**
+ * Get all referrers for a preparer with their commission info
+ */
+export async function getPreparerReferrersWithRates(preparerId: string): Promise<Array<{
+  referrerId: string;
+  referrerName: string;
+  referrerEmail: string;
+  completedReferrals: number;
+  currentTier: string;
+  currentRate: number;
+  vipRate: number | null;
+  totalEarnings: number;
+}>> {
+  // Get bonded affiliates
+  const bondings = await prisma.affiliateBonding.findMany({
+    where: { preparerId, isActive: true },
+    include: {
+      affiliate: {
+        include: {
+          user: { select: { email: true } },
+        },
+      },
+    },
+  });
+
+  // Get preparer's settings for calculating rates
+  const preparerSettings = await getPreparerCommissionSettings(preparerId);
+
+  const results = await Promise.all(
+    bondings.map(async (bonding) => {
+      const affiliate = bonding.affiliate;
+
+      // Get completed referral count for this referrer
+      const completedReferrals = await prisma.taxIntakeLead.count({
+        where: {
+          taxPreparerId: preparerId,
+          referrerCode: affiliate.customTrackingCode ?? undefined,
+          status: { in: ['FILED', 'CONVERTED'] },
+        },
+      });
+
+      // Calculate what rate they would get
+      const rateInfo = await calculateReferrerCommission(preparerId, affiliate.id, completedReferrals);
+
+      // Get VIP rate if set
+      const bondingStructure = bonding.commissionStructure as { vipRate?: number } | null;
+      const vipRate = bondingStructure?.vipRate ?? null;
+
+      // Get total earnings
+      const earnings = await prisma.commission.aggregate({
+        where: {
+          referrerId: affiliate.id,
+          status: 'PAID',
+        },
+        _sum: { amount: true },
+      });
+
+      return {
+        referrerId: affiliate.id,
+        referrerName: `${affiliate.firstName || ''} ${affiliate.lastName || ''}`.trim() || affiliate.user.email,
+        referrerEmail: affiliate.user.email,
+        completedReferrals,
+        currentTier: rateInfo.tier,
+        currentRate: rateInfo.rate,
+        vipRate,
+        totalEarnings: earnings._sum.amount?.toNumber() ?? 0,
+      };
+    })
+  );
+
+  return results;
 }

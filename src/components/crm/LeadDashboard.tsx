@@ -81,6 +81,7 @@ interface TaxIntakeLead {
   lastContactedAt?: string | null;
   contactNotes?: string | null;
   convertedToClient: boolean;
+  convertedAt?: string | null; // When return was filed / marked complete
   created_at: string;
   updated_at: string;
   full_form_data?: any;
@@ -94,6 +95,7 @@ interface LeadStats {
   contacted: number;
   qualified: number;
   converted: number;
+  complete: number;
 }
 
 interface LeadDashboardProps {
@@ -106,6 +108,7 @@ const LEAD_STATUSES = [
   { value: 'contacted', label: 'Contacted', color: 'bg-yellow-500', icon: PhoneCall },
   { value: 'qualified', label: 'Qualified', color: 'bg-green-500', icon: CheckCircle },
   { value: 'converted', label: 'Converted', color: 'bg-purple-500', icon: UserCheck },
+  { value: 'complete', label: 'Complete', color: 'bg-emerald-600', icon: CheckCircle },
 ];
 
 export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProps) {
@@ -120,6 +123,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
     contacted: 0,
     qualified: 0,
     converted: 0,
+    complete: 0,
   });
 
   // Contact dialog state
@@ -175,6 +179,8 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
   };
 
   const getLeadStatus = (lead: TaxIntakeLead): string => {
+    // Complete = converted AND has convertedAt timestamp (return filed)
+    if (lead.convertedToClient && lead.convertedAt) return 'complete';
     if (lead.convertedToClient) return 'converted';
     if (lead.contactNotes && lead.lastContactedAt) return 'qualified';
     if (lead.lastContactedAt) return 'contacted';
@@ -301,6 +307,41 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
     }
   };
 
+  const handleMarkComplete = async (leadId: string, leadName: string, hasReferrer: boolean) => {
+    const confirmMessage = hasReferrer
+      ? `Mark ${leadName}'s return as filed? This will credit the referrer's commission.`
+      : `Mark ${leadName}'s return as filed?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tax-preparer/leads/${leadId}/complete`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to complete lead');
+      }
+
+      if (data.commission) {
+        alert(
+          `Return filed successfully!\n\nCommission of $${data.commission.amount} credited to ${data.commission.referrerName} (${data.commission.tier}).`
+        );
+      } else {
+        alert('Return filed successfully!');
+      }
+
+      await fetchLeads();
+    } catch (err: any) {
+      logger.error('Error completing lead:', err);
+      alert(err.message || 'Failed to complete lead. Please try again.');
+    }
+  };
+
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
       searchTerm === '' ||
@@ -409,6 +450,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                   <SelectItem value="contacted">Contacted</SelectItem>
                   <SelectItem value="qualified">Qualified</SelectItem>
                   <SelectItem value="converted">Converted</SelectItem>
+                  <SelectItem value="complete">Complete</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -630,10 +672,33 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                             </Button>
                           )}
 
-                          {lead.convertedToClient && (
-                            <Badge className="w-full justify-center bg-purple-600">
+                          {/* Mark Complete - Available for leads that haven't been marked complete yet */}
+                          {!lead.convertedAt && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() =>
+                                handleMarkComplete(
+                                  lead.id,
+                                  `${lead.first_name} ${lead.last_name}`,
+                                  !!lead.referrerUsername
+                                )
+                              }
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Mark Complete
+                              {lead.referrerUsername && (
+                                <span className="ml-1 text-xs opacity-80">(+$)</span>
+                              )}
+                            </Button>
+                          )}
+
+                          {/* Show Complete badge when lead has been marked complete */}
+                          {lead.convertedAt && (
+                            <Badge className="w-full justify-center bg-emerald-600">
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Converted
+                              Complete
                             </Badge>
                           )}
                         </div>
