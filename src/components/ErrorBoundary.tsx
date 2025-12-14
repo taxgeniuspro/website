@@ -17,6 +17,7 @@ interface ErrorBoundaryState {
   hasError: boolean;
   error?: Error;
   errorInfo?: React.ErrorInfo;
+  hydrationRetried?: boolean;
 }
 
 interface ErrorBoundaryProps {
@@ -28,10 +29,10 @@ interface ErrorBoundaryProps {
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, hydrationRetried: false };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return {
       hasError: true,
       error,
@@ -39,6 +40,32 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Check if this is a hydration error (caused by browser extensions like Google Translate)
+    const isHydrationError =
+      error.message.includes('removeChild') ||
+      error.message.includes('insertBefore') ||
+      error.message.includes('Hydration') ||
+      error.message.includes('hydration') ||
+      error.message.includes('Text content does not match');
+
+    // For hydration errors, try to recover by forcing a client-side re-render
+    if (isHydrationError && !this.state.hydrationRetried) {
+      logger.warn('Hydration error detected, attempting recovery...', {
+        error: error.message,
+      });
+
+      // Reset the error state after a brief delay to allow DOM to stabilize
+      setTimeout(() => {
+        this.setState({
+          hasError: false,
+          error: undefined,
+          errorInfo: undefined,
+          hydrationRetried: true
+        });
+      }, 100);
+      return;
+    }
+
     logger.error('Error caught by boundary:', error, errorInfo);
 
     this.setState({
@@ -58,8 +85,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         stack: error.stack,
         componentStack: errorInfo.componentStack,
         timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        url: typeof window !== 'undefined' ? window.location.href : 'unknown',
       });
     }
   }
@@ -79,6 +106,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         return <FallbackComponent error={this.state.error!} reset={this.handleReset} />;
       }
 
+      // Check if this is a hydration error
+      const isHydrationError = this.state.error && (
+        this.state.error.message.includes('removeChild') ||
+        this.state.error.message.includes('insertBefore') ||
+        this.state.error.message.includes('Hydration') ||
+        this.state.error.message.includes('hydration')
+      );
+
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-900">
           <Card className="w-full max-w-md">
@@ -90,27 +125,28 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 Something went wrong
               </CardTitle>
               <CardDescription className="text-gray-600 dark:text-gray-400">
-                We encountered an unexpected error while loading this page.
+                We encountered an unexpected error
+                {isHydrationError && (
+                  <span className="block mt-2 text-sm">
+                    This may be caused by a browser extension (like Google Translate or Grammarly).
+                    Try disabling extensions or refreshing the page.
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {process.env.NODE_ENV === 'development' && this.state.error && (
-                <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
-                  <p className="text-sm font-mono text-red-600 dark:text-red-400">
-                    {this.state.error.message}
-                  </p>
-                  {this.state.error.stack && (
-                    <pre className="mt-2 text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-32">
-                      {this.state.error.stack}
-                    </pre>
-                  )}
-                </div>
-              )}
+              <p className="text-sm text-muted-foreground mb-4">
+                {this.state.error?.message}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This error has been logged. Please try again or return to the home page.
+                If the problem persists, please contact support.
+              </p>
             </CardContent>
             <CardFooter className="flex flex-col space-y-2">
               <Button onClick={this.handleReset} className="w-full" variant="default">
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Try Again
+                Try again
               </Button>
               <Button onClick={this.handleGoHome} variant="outline" className="w-full">
                 <Home className="w-4 h-4 mr-2" />
