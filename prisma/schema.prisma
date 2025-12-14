@@ -1517,6 +1517,12 @@ model TaxIntakeLead {
   taxReturn         TaxReturn? @relation(fields: [taxReturnId], references: [id], onDelete: SetNull)
   convertedAt       DateTime? // When conversion happened
 
+  // Unqualified Lead Tracking (cannot help this lead)
+  unqualified       Boolean   @default(false) // Lead marked as unqualified (we can't help them)
+  unqualifiedReason String?   // "wrong_state", "no_income", "already_filed", "unresponsive", "other"
+  unqualifiedAt     DateTime? // When marked as unqualified
+  unqualifiedNotes  String?   @db.Text // Additional notes about why unqualified
+
   // Lead Scoring & Urgency (CRM Enhancement)
   leadScore          Int?        @default(0) // 0-100 calculated score
   leadScoreUpdatedAt DateTime? // Last score calculation
@@ -1554,6 +1560,7 @@ model TaxIntakeLead {
   @@index([urgency])
   @@index([lastViewedAt])
   @@index([clientFolderId])
+  @@index([unqualified])
   @@map("tax_intake_leads")
 }
 
