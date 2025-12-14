@@ -12,7 +12,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ContactType, PipelineStage, UserRole, type Prisma } from '@prisma/client';
+import { ContactType, PipelineStage, type Prisma } from '@prisma/client';
 import type {
   CRMContactInput,
   CRMContactUpdate,
@@ -128,10 +128,19 @@ export class CRMService {
 
       // Row-level security: tax preparers can only see their assigned contacts
       // Note: assignedPreparerId stores the User ID (not Profile ID)
-      if (accessContext.userRole === UserRole.tax_preparer) {
+      // Use string comparison to avoid enum vs string type mismatch
+      const normalizedRole = String(accessContext.userRole).toLowerCase();
+      if (normalizedRole === 'tax_preparer') {
         if (!accessContext.userId) {
           throw new Error('User ID not found for tax preparer user');
         }
+
+        logger.info('[CRMService] Checking row-level security', {
+          normalizedRole,
+          contactAssignedPreparerId: contact.assignedPreparerId,
+          accessUserId: accessContext.userId,
+          match: contact.assignedPreparerId === accessContext.userId,
+        });
 
         if (contact.assignedPreparerId !== accessContext.userId) {
           throw new Error('Access denied: Contact not assigned to you');
@@ -198,10 +207,9 @@ export class CRMService {
   ): Promise<{ deleted: boolean }> {
     try {
       // Only admins can delete
-      if (
-        accessContext.userRole !== UserRole.admin &&
-        accessContext.userRole !== UserRole.super_admin
-      ) {
+      // Use string comparison to avoid enum vs string type mismatch
+      const normalizedDeleteRole = String(accessContext.userRole).toLowerCase();
+      if (normalizedDeleteRole !== 'admin') {
         throw new Error('Access denied: Only admins can delete contacts');
       }
 
@@ -266,7 +274,9 @@ export class CRMService {
 
       // Row-level security: tax preparers see only their assigned contacts
       // Note: assignedPreparerId stores the User ID (not Profile ID)
-      if (accessContext.userRole === UserRole.tax_preparer) {
+      // Use string comparison to avoid enum vs string type mismatch
+      const normalizedListRole = String(accessContext.userRole).toLowerCase();
+      if (normalizedListRole === 'tax_preparer') {
         if (!accessContext.userId) {
           throw new Error('User ID not found for tax preparer user');
         }
@@ -324,10 +334,9 @@ export class CRMService {
   ): Promise<CRMContactWithRelations> {
     try {
       // Only admins can assign contacts
-      if (
-        accessContext.userRole !== UserRole.admin &&
-        accessContext.userRole !== UserRole.super_admin
-      ) {
+      // Use string comparison to avoid enum vs string type mismatch
+      const normalizedAssignRole = String(accessContext.userRole).toLowerCase();
+      if (normalizedAssignRole !== 'admin') {
         throw new Error('Access denied: Only admins can assign contacts');
       }
 
