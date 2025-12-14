@@ -31,7 +31,8 @@ export default function TaxPreparerLeadsPage() {
         const response = await fetch('/api/profile');
         if (response.ok) {
           const data = await response.json();
-          setPreparerId(data.profile?.id || null);
+          // Profile is returned at root level, not nested under 'profile' key
+          setPreparerId(data.id || null);
         } else {
           logger.error('Failed to fetch preparer profile');
         }
