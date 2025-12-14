@@ -60,7 +60,7 @@ export function ContactFormNotification({
     ? t(contactFormTranslations.atPhone, locale).replace('{phone}', phone)
     : t(contactFormTranslations.thisWeek, locale);
 
-  const quickReply = t(contactFormTranslations.quickReplyTemplate, locale)
+  const quickReplyContent = t(contactFormTranslations.quickReplyTemplate, locale)
     .replace('{firstName}', firstName)
     .replace('{service}', serviceLabel.toLowerCase())
     .replace('{phoneText}', phoneText);
@@ -203,9 +203,9 @@ export function ContactFormNotification({
               )}
             </Section>
 
-            <Section style={quickReply}>
+            <Section style={quickReplySection}>
               <Text style={quickReplyTitle}>{t(contactFormTranslations.quickReplyTitle, locale)}</Text>
-              <Text style={quickReplyText}>{quickReply}</Text>
+              <Text style={quickReplyText}>{quickReplyContent}</Text>
             </Section>
           </Section>
 
@@ -433,7 +433,7 @@ const buttonSecondary = {
   margin: '0 8px',
 };
 
-const quickReply = {
+const quickReplySection = {
   backgroundColor: '#f0fdf4',
   padding: '15px',
   borderRadius: '6px',
