@@ -28,7 +28,7 @@ import {
 import { ShieldCheck, Settings } from 'lucide-react';
 import { PWASidebarInstall } from '@/components/PWASidebarInstall';
 import { RestartTourButton } from '@/components/RestartTourButton';
-import { Logo, LogoIcon } from '@/components/Logo';
+import Image from 'next/image';
 import type { AffiliateStatus } from '@prisma/client';
 
 interface DashboardSidebarProps {
@@ -121,11 +121,14 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
       {/* Sidebar Header */}
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
-          {isCollapsed ? (
-            <LogoIcon size="md" />
-          ) : (
-            <Logo size="md" showText={false} />
-          )}
+          <Image
+            src="/images/owliver-owl-icon.png"
+            alt="Tax Genius Pro"
+            width={40}
+            height={40}
+            className="h-8 w-8 object-contain"
+            priority
+          />
         </div>
       </SidebarHeader>
 
