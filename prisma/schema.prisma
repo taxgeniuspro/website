@@ -198,7 +198,8 @@ model Profile {
   firstFilingDate DateTime? // Date of first completed tax filing
 
   // Affiliate Status & Approval (status-based, not role-based)
-  affiliateStatus     AffiliateStatus @default(NONE) // NONE for new users, APPROVED for active affiliates
+  // All users are auto-approved as affiliates so they can refer others immediately
+  affiliateStatus     AffiliateStatus @default(APPROVED) // Auto-approved on signup
   affiliateAppliedAt  DateTime? // When user applied to become affiliate
   affiliateApprovedAt DateTime?
   affiliateApprovedBy String? // Admin who approved
@@ -3692,13 +3693,13 @@ enum CreativeType {
   BUSINESS_CARD
 }
 
-// Affiliate status for approval workflow
+// Affiliate status - All users are auto-approved on signup
 enum AffiliateStatus {
-  NONE // Not an affiliate (default for new users)
-  PENDING // Applied, awaiting approval
-  APPROVED // Approved affiliate with full features
-  SUSPENDED // Temporarily suspended
-  INACTIVE // Permanently deactivated
+  NONE // Legacy - no longer used for new users
+  PENDING // Legacy - no approval workflow needed anymore
+  APPROVED // Default for all new users - can refer others immediately
+  SUSPENDED // Temporarily suspended by admin
+  INACTIVE // Permanently deactivated by admin
 }
 
 // Affiliate Groups - Organize affiliates with shared commission rates

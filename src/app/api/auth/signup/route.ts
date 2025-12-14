@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Create profile for the user
+      // All users are auto-approved as affiliates so they can refer others immediately
       const newProfile = await tx.profile.create({
         data: {
           userId: newUser.id,
@@ -129,6 +130,8 @@ export async function POST(req: NextRequest) {
           middleName,
           lastName,
           email: email.toLowerCase(),
+          affiliateStatus: 'APPROVED', // Auto-approve all users as affiliates
+          affiliateApprovedAt: new Date(),
         },
       });
 
