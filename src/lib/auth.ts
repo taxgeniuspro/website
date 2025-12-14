@@ -366,13 +366,16 @@ export async function requireAuth() {
 export async function requireRole(requiredRole: UserRole | string) {
   const user = await requireAuth();
   const normalizedRequired = typeof requiredRole === 'string' ? requiredRole.toLowerCase() : requiredRole;
-  const normalizedUserRole = user.role.toString().toLowerCase();
+
+  // Defensive check - if role is not set, default to 'client'
+  const userRole = user.role || 'client';
+  const normalizedUserRole = userRole.toString().toLowerCase();
 
   if (normalizedUserRole !== normalizedRequired) {
     throw new Error('Insufficient permissions');
   }
 
-  return { user, role: user.role };
+  return { user, role: userRole };
 }
 
 /**
@@ -382,7 +385,10 @@ export async function requireRole(requiredRole: UserRole | string) {
  */
 export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
   const user = await requireAuth();
-  const normalizedUserRole = user.role.toString().toLowerCase();
+
+  // Defensive check - if role is not set, default to 'client'
+  const userRole = user.role || 'client';
+  const normalizedUserRole = userRole.toString().toLowerCase();
   const normalizedAllowedRoles = allowedRoles.map(r =>
     typeof r === 'string' ? r.toLowerCase() : r
   );
@@ -391,7 +397,7 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
     throw new Error('Insufficient permissions');
   }
 
-  return { user, role: user.role, profile: { id: user.id } };
+  return { user, role: userRole, profile: { id: user.id } };
 }
 
 /**
