@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     username: string;
-  };
+  }>;
 }
 
 // Reserved routes that should not be treated as usernames
@@ -66,7 +66,7 @@ const REDIRECT_MAP: Record<string, string> = {
 };
 
 export default async function VanityUrlPage({ params }: PageProps) {
-  const { username } = params;
+  const { username } = await params;
   const lowerUsername = username.toLowerCase();
 
   // Check if this should redirect to a specific page
