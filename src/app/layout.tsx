@@ -81,7 +81,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
         <GoogleAnalytics />
       </head>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
+      <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
         <OrganizationSchema />
         <ThemeProvider
           attribute="class"
