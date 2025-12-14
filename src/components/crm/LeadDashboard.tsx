@@ -87,6 +87,11 @@ interface TaxIntakeLead {
   full_form_data?: any;
   crmContactId?: string | null;
   clientFolderId?: string | null;
+  // Unqualified status fields
+  unqualified?: boolean;
+  unqualifiedReason?: string | null;
+  unqualifiedAt?: string | null;
+  unqualifiedNotes?: string | null;
 }
 
 interface LeadStats {
@@ -96,6 +101,7 @@ interface LeadStats {
   qualified: number;
   converted: number;
   complete: number;
+  unqualified: number;
 }
 
 interface LeadDashboardProps {
@@ -109,6 +115,16 @@ const LEAD_STATUSES = [
   { value: 'qualified', label: 'Qualified', color: 'bg-green-500', icon: CheckCircle },
   { value: 'converted', label: 'Converted', color: 'bg-purple-500', icon: UserCheck },
   { value: 'complete', label: 'Complete', color: 'bg-emerald-600', icon: CheckCircle },
+  { value: 'unqualified', label: 'Unqualified', color: 'bg-gray-500', icon: XCircle },
+];
+
+const UNQUALIFIED_REASONS = [
+  { value: 'wrong_state', label: 'Wrong State (Cannot File)' },
+  { value: 'no_income', label: 'No Taxable Income' },
+  { value: 'already_filed', label: 'Already Filed Elsewhere' },
+  { value: 'unresponsive', label: 'Unresponsive (No Contact)' },
+  { value: 'not_interested', label: 'Not Interested' },
+  { value: 'other', label: 'Other (Specify in Notes)' },
 ];
 
 export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProps) {
@@ -124,6 +140,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
     qualified: 0,
     converted: 0,
     complete: 0,
+    unqualified: 0,
   });
 
   // Contact dialog state
@@ -139,6 +156,12 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
   // Folder creation state
   const [creatingFolderId, setCreatingFolderId] = useState<string | null>(null);
+
+  // Unqualified dialog state
+  const [unqualifiedDialogOpen, setUnqualifiedDialogOpen] = useState(false);
+  const [unqualifiedLead, setUnqualifiedLead] = useState<TaxIntakeLead | null>(null);
+  const [unqualifiedReason, setUnqualifiedReason] = useState<string>('');
+  const [unqualifiedNotes, setUnqualifiedNotes] = useState('');
 
   // Fetch leads
   useEffect(() => {
@@ -179,6 +202,8 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
   };
 
   const getLeadStatus = (lead: TaxIntakeLead): string => {
+    // Unqualified takes precedence - we can't help this lead
+    if (lead.unqualified) return 'unqualified';
     // Complete = converted AND has convertedAt timestamp (return filed)
     if (lead.convertedToClient && lead.convertedAt) return 'complete';
     if (lead.convertedToClient) return 'converted';
@@ -342,6 +367,76 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
     }
   };
 
+  const handleOpenUnqualifyDialog = (lead: TaxIntakeLead) => {
+    setUnqualifiedLead(lead);
+    setUnqualifiedReason('');
+    setUnqualifiedNotes('');
+    setUnqualifiedDialogOpen(true);
+  };
+
+  const handleSubmitUnqualify = async () => {
+    if (!unqualifiedLead || !unqualifiedReason) return;
+    if (unqualifiedReason === 'other' && !unqualifiedNotes.trim()) {
+      alert('Please provide notes explaining why this lead is unqualified.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const response = await fetch(`/api/tax-preparer/leads/${unqualifiedLead.id}/unqualify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: unqualifiedReason,
+          notes: unqualifiedNotes || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to mark lead as unqualified');
+      }
+
+      alert('Lead marked as unqualified.');
+      setUnqualifiedDialogOpen(false);
+      setUnqualifiedLead(null);
+      await fetchLeads();
+    } catch (err: any) {
+      logger.error('Error marking lead as unqualified:', err);
+      alert(err.message || 'Failed to mark lead as unqualified. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReopenLead = async (leadId: string, leadName: string) => {
+    if (!confirm(`Reopen ${leadName}? This will allow you to work with them again.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tax-preparer/leads/${leadId}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reopen lead');
+      }
+
+      alert('Lead reopened successfully!');
+      await fetchLeads();
+    } catch (err: any) {
+      logger.error('Error reopening lead:', err);
+      alert(err.message || 'Failed to reopen lead. Please try again.');
+    }
+  };
+
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
       searchTerm === '' ||
@@ -451,6 +546,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                   <SelectItem value="qualified">Qualified</SelectItem>
                   <SelectItem value="converted">Converted</SelectItem>
                   <SelectItem value="complete">Complete</SelectItem>
+                  <SelectItem value="unqualified">Unqualified</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -623,71 +719,122 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                             </Button>
                           )}
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => handleAddContact(lead)}
-                            disabled={lead.convertedToClient}
-                          >
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            Add Note
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            asChild
-                            disabled={lead.convertedToClient}
-                          >
-                            <a href={`tel:${lead.country_code}${lead.phone}`}>
-                              <PhoneCall className="h-4 w-4 mr-2" />
-                              Call Lead
-                            </a>
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            asChild
-                            disabled={lead.convertedToClient}
-                          >
-                            <a href={`mailto:${lead.email}`}>
-                              <Mail className="h-4 w-4 mr-2" />
-                              Email Lead
-                            </a>
-                          </Button>
-
-                          {/* Mark Complete - Always visible for non-complete leads */}
-                          {!lead.convertedAt && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="w-full bg-emerald-600 hover:bg-emerald-700"
-                              onClick={() =>
-                                handleMarkComplete(
-                                  lead.id,
-                                  `${lead.first_name} ${lead.last_name}`,
-                                  !!lead.referrerUsername
-                                )
-                              }
-                            >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Mark Complete
-                              {lead.referrerUsername && (
-                                <span className="ml-1 text-xs opacity-80">(+$)</span>
+                          {/* For UNQUALIFIED leads - show Reopen button */}
+                          {status === 'unqualified' ? (
+                            <>
+                              <div className="bg-gray-100 p-2 rounded text-xs text-center">
+                                <span className="font-medium">Reason:</span>{' '}
+                                {UNQUALIFIED_REASONS.find(r => r.value === lead.unqualifiedReason)?.label || lead.unqualifiedReason}
+                              </div>
+                              {lead.unqualifiedNotes && (
+                                <div className="bg-muted p-2 rounded-md text-xs">
+                                  <p className="text-muted-foreground">{lead.unqualifiedNotes}</p>
+                                </div>
                               )}
-                            </Button>
-                          )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => handleReopenLead(lead.id, `${lead.first_name} ${lead.last_name}`)}
+                              >
+                                <UserPlus className="h-4 w-4 mr-2" />
+                                Reopen Lead
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              {/* For active leads - show standard actions */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => handleAddContact(lead)}
+                                disabled={lead.convertedToClient}
+                              >
+                                <MessageSquare className="h-4 w-4 mr-2" />
+                                Add Note
+                              </Button>
 
-                          {/* Show Complete badge when lead has been marked complete */}
-                          {lead.convertedAt && (
-                            <Badge className="w-full justify-center bg-emerald-600">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Complete
-                            </Badge>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                asChild
+                              >
+                                <a href={`tel:${lead.country_code}${lead.phone}`}>
+                                  <PhoneCall className="h-4 w-4 mr-2" />
+                                  Call Lead
+                                </a>
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                asChild
+                              >
+                                <a href={`mailto:${lead.email}`}>
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Email Lead
+                                </a>
+                              </Button>
+
+                              {/* Convert to Client - for new/contacted/qualified leads */}
+                              {!lead.convertedToClient && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="w-full bg-purple-600 hover:bg-purple-700"
+                                  onClick={() => handleConvertToClient(lead.id)}
+                                >
+                                  <UserCheck className="h-4 w-4 mr-2" />
+                                  Convert to Client
+                                </Button>
+                              )}
+
+                              {/* Mark Unqualified - for non-converted leads */}
+                              {!lead.convertedToClient && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full text-gray-600 hover:bg-gray-100"
+                                  onClick={() => handleOpenUnqualifyDialog(lead)}
+                                >
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  Mark Unqualified
+                                </Button>
+                              )}
+
+                              {/* Mark Complete - only for converted clients */}
+                              {lead.convertedToClient && !lead.convertedAt && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() =>
+                                    handleMarkComplete(
+                                      lead.id,
+                                      `${lead.first_name} ${lead.last_name}`,
+                                      !!lead.referrerUsername
+                                    )
+                                  }
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Mark Complete
+                                  {lead.referrerUsername && (
+                                    <span className="ml-1 text-xs opacity-80">(+$)</span>
+                                  )}
+                                </Button>
+                              )}
+
+                              {/* Show Complete badge when lead has been marked complete */}
+                              {lead.convertedAt && (
+                                <Badge className="w-full justify-center bg-emerald-600">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Complete
+                                </Badge>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -1054,6 +1201,73 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
           <DialogFooter>
             <Button onClick={() => setTaxDetailsDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unqualified Dialog */}
+      <Dialog open={unqualifiedDialogOpen} onOpenChange={setUnqualifiedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Lead as Unqualified</DialogTitle>
+            <DialogDescription>
+              Indicate why{' '}
+              {unqualifiedLead && `${unqualifiedLead.first_name} ${unqualifiedLead.last_name}`} cannot be helped.
+              This will remove them from the active leads list.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Reason</Label>
+              <Select value={unqualifiedReason} onValueChange={setUnqualifiedReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNQUALIFIED_REASONS.map((reason) => (
+                    <SelectItem key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>
+                Notes {unqualifiedReason === 'other' && <span className="text-red-500">*</span>}
+              </Label>
+              <Textarea
+                placeholder="Additional details about why this lead is unqualified..."
+                value={unqualifiedNotes}
+                onChange={(e) => setUnqualifiedNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnqualifiedDialogOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitUnqualify}
+              disabled={!unqualifiedReason || (unqualifiedReason === 'other' && !unqualifiedNotes.trim()) || submitting}
+              className="bg-gray-600 hover:bg-gray-700"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Mark Unqualified
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

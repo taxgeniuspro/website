@@ -116,6 +116,8 @@ export async function GET(req: NextRequest) {
 
     // Determine lead status and filter
     const getLeadStatus = (lead: any): string => {
+      // Unqualified takes precedence - we can't help this lead
+      if (lead.unqualified) return 'unqualified';
       // Complete = has convertedAt timestamp (return filed)
       if (lead.convertedToClient && lead.convertedAt) return 'complete';
       if (lead.convertedToClient) return 'converted';
@@ -143,6 +145,7 @@ export async function GET(req: NextRequest) {
       qualified: leadsWithStatus.filter(l => l.status === 'qualified').length,
       converted: leadsWithStatus.filter(l => l.status === 'converted').length,
       complete: leadsWithStatus.filter(l => l.status === 'complete').length,
+      unqualified: leadsWithStatus.filter(l => l.status === 'unqualified').length,
     };
 
     logger.info(`📋 Fetched ${filteredLeads.length} leads for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`);
