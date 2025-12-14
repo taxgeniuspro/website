@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       const crmContact = await prisma.cRMContact.upsert({
         where: { email: validatedData.email.toLowerCase() },
         create: {
-          contactType: 'affiliate',
+          contactType: 'AFFILIATE',
           firstName: validatedData.firstName,
           lastName: validatedData.lastName,
           email: validatedData.email.toLowerCase(),

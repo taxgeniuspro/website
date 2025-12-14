@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       // Create new CRM contact
       crmContact = await prisma.cRMContact.create({
         data: {
-          contactType: 'lead',
+          contactType: 'LEAD',
           firstName,
           lastName,
           email: email.toLowerCase(),
