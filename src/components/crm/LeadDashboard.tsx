@@ -660,19 +660,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                             </a>
                           </Button>
 
-                          {!lead.convertedToClient && status === 'qualified' && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="w-full bg-green-600 hover:bg-green-700"
-                              onClick={() => handleConvertToClient(lead.id)}
-                            >
-                              <UserCheck className="h-4 w-4 mr-2" />
-                              Convert to Client
-                            </Button>
-                          )}
-
-                          {/* Mark Complete - Available for leads that haven't been marked complete yet */}
+                          {/* Mark Complete - Always visible for non-complete leads */}
                           {!lead.convertedAt && (
                             <Button
                               variant="default"
