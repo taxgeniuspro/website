@@ -436,12 +436,19 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                                 {lead.first_name} {lead.middle_name ? lead.middle_name + ' ' : ''}
                                 {lead.last_name}
                               </h3>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {getStatusBadge(status)}
                                 {lead.referrerUsername && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Ref: {lead.referrerUsername}
-                                  </Badge>
+                                  <a
+                                    href={`https://taxgeniuspro.tax/go/${lead.referrerUsername}-intake`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <Badge variant="outline" className="text-xs hover:bg-accent cursor-pointer">
+                                      🔗 {lead.referrerUsername}-intake
+                                    </Badge>
+                                  </a>
                                 )}
                               </div>
                             </div>
@@ -957,6 +964,38 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Lead Source / Attribution */}
+              {taxDetailsLead.referrerUsername && (
+                <Card className="border-purple-200 bg-purple-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wide text-purple-700">
+                      🔗 Lead Source
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Referrer Code</p>
+                      <p className="font-medium">{taxDetailsLead.referrerUsername}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Source Type</p>
+                      <p className="font-medium capitalize">{taxDetailsLead.referrerType?.replace(/_/g, ' ') || 'Direct'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-muted-foreground">Marketing Link</p>
+                      <a
+                        href={`https://taxgeniuspro.tax/go/${taxDetailsLead.referrerUsername}-intake`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-purple-600 hover:underline"
+                      >
+                        taxgeniuspro.tax/go/{taxDetailsLead.referrerUsername}-intake
+                      </a>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
