@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar, FileText, ChevronDown } from 'lucide-react';
+import { Calendar, FileText, ChevronDown, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 
 interface StartTaxReturnButtonProps {
@@ -57,6 +57,24 @@ export function StartTaxReturnButton({
               </div>
             </div>
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="cursor-pointer py-4">
+          <a
+            href="https://www.mytaxoffice.com/main/pro/TaxGenius_login.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-start gap-3"
+          >
+            <div className="rounded-lg bg-blue-100 dark:bg-blue-900/30 p-2">
+              <Briefcase className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <div className="font-semibold mb-1">Preparers Portal</div>
+              <div className="text-sm text-muted-foreground">
+                Tax preparer login and tools
+              </div>
+            </div>
+          </a>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
