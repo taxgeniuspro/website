@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileManager } from '@/components/file-manager/FileManager';
+import { EasyUpload } from '@/components/documents/EasyUpload';
 import {
   AlertCircle,
   Users,
@@ -25,10 +26,13 @@ import {
   Search,
   UserPlus,
   Files,
+  FolderPlus,
+  Upload,
 } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { EmptyState } from '@/components/EmptyState';
 import Link from 'next/link';
+import { ClientFolderSetupDialog } from '@/components/documents/ClientFolderSetupDialog';
 
 interface TaxPreparerFileCenterProps {
   initialFolderId?: string;
@@ -59,10 +63,13 @@ interface LeadFolder {
 }
 
 export function TaxPreparerFileCenter({ initialFolderId }: TaxPreparerFileCenterProps) {
+  const queryClient = useQueryClient();
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId || null);
-  const [activeTab, setActiveTab] = useState<string>(initialFolderId ? 'leads' : 'clients');
+  const [activeTab, setActiveTab] = useState<string>(initialFolderId ? 'leads' : 'quick-upload');
   const [leadSearch, setLeadSearch] = useState('');
+  const [folderSetupDialogOpen, setFolderSetupDialogOpen] = useState(false);
+  const [quickUploadClientId, setQuickUploadClientId] = useState<string | null>(null);
 
   // Update selected folder when initialFolderId changes
   useEffect(() => {
@@ -180,9 +187,13 @@ export function TaxPreparerFileCenter({ initialFolderId }: TaxPreparerFileCenter
         </Card>
       </div>
 
-      {/* Tabs for Leads vs Clients */}
+      {/* Tabs for Quick Upload, Leads, and Clients */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="quick-upload" className="gap-2">
+            <Upload className="h-4 w-4" />
+            Quick Upload
+          </TabsTrigger>
           <TabsTrigger value="leads" className="gap-2">
             <UserPlus className="h-4 w-4" />
             Intake Leads
@@ -202,6 +213,168 @@ export function TaxPreparerFileCenter({ initialFolderId }: TaxPreparerFileCenter
             )}
           </TabsTrigger>
         </TabsList>
+
+        {/* Quick Upload Tab */}
+        <TabsContent value="quick-upload" className="space-y-4">
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* Client Selection and Upload */}
+            <div className="lg:col-span-2 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-primary" />
+                    Quick Upload for Client
+                  </CardTitle>
+                  <CardDescription>
+                    Select a client or lead, then drag & drop files to upload to their folder.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Combined client/lead selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Select Client or Lead</label>
+                    <Select
+                      value={quickUploadClientId || ''}
+                      onValueChange={setQuickUploadClientId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a client or lead..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* Clients Section */}
+                        {clients.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
+                              Converted Clients
+                            </div>
+                            {clients.map((client: any) => (
+                              <SelectItem
+                                key={`client-${client.id}`}
+                                value={`client:${client.id}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Users className="w-4 h-4 text-green-500" />
+                                  <span>
+                                    {client.firstName} {client.lastName}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {client.email}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+
+                        {/* Leads Section */}
+                        {leadFolders.filter((lf) => lf.folder).length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted mt-1">
+                              Intake Leads (with folders)
+                            </div>
+                            {leadFolders
+                              .filter((lf) => lf.folder)
+                              .map((lf) => (
+                                <SelectItem
+                                  key={`lead-${lf.lead.id}`}
+                                  value={`lead:${lf.folder!.id}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <UserPlus className="w-4 h-4 text-blue-500" />
+                                    <span>
+                                      {lf.lead.firstName} {lf.lead.lastName}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {lf.lead.email}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </>
+                        )}
+
+                        {clients.length === 0 &&
+                          leadFolders.filter((lf) => lf.folder).length === 0 && (
+                            <div className="p-4 text-sm text-muted-foreground text-center">
+                              No clients or leads with folders yet
+                            </div>
+                          )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Upload Zone - only show when client selected */}
+              {quickUploadClientId ? (
+                <EasyUpload
+                  clientId={
+                    quickUploadClientId.startsWith('client:')
+                      ? quickUploadClientId.replace('client:', '')
+                      : undefined
+                  }
+                  onUploadComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ['file-manager-files'] });
+                    queryClient.invalidateQueries({ queryKey: ['tax-preparer-lead-folders'] });
+                  }}
+                  showFolderPicker={true}
+                />
+              ) : (
+                <Card className="border-dashed border-2">
+                  <CardContent className="py-12">
+                    <EmptyState
+                      icon={Upload}
+                      title="Select a client first"
+                      description="Choose a client or lead from the dropdown above to start uploading documents to their folder."
+                      size="sm"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Quick Tips */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary" />
+                    Quick Tips
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">1.</strong> Select a client or lead from the
+                    dropdown
+                  </p>
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">2.</strong> Choose the folder to upload to
+                    (or root folder)
+                  </p>
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">3.</strong> Drag & drop files or click to
+                    browse
+                  </p>
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">4.</strong> Files are automatically
+                    organized by category
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-primary/5 border-primary/20">
+                <CardContent className="pt-4">
+                  <p className="text-sm">
+                    <strong>Need more options?</strong> Use the{' '}
+                    <span className="font-medium">Intake Leads</span> or{' '}
+                    <span className="font-medium">Clients</span> tabs for full file management with
+                    folder navigation.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
 
         {/* Leads Tab */}
         <TabsContent value="leads" className="space-y-4">
@@ -369,13 +542,26 @@ export function TaxPreparerFileCenter({ initialFolderId }: TaxPreparerFileCenter
 
               {selectedClient && (
                 <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm font-medium">
-                    Viewing files for: {selectedClient.firstName} {selectedClient.lastName}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {selectedClient.email} • Client since{' '}
-                    {new Date(selectedClient.createdAt).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        Viewing files for: {selectedClient.firstName} {selectedClient.lastName}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedClient.email} • Client since{' '}
+                        {new Date(selectedClient.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFolderSetupDialogOpen(true)}
+                      className="gap-2"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      Set Up Folders
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -415,6 +601,19 @@ export function TaxPreparerFileCenter({ initialFolderId }: TaxPreparerFileCenter
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Client Folder Setup Dialog */}
+      {selectedClient && (
+        <ClientFolderSetupDialog
+          open={folderSetupDialogOpen}
+          onOpenChange={setFolderSetupDialogOpen}
+          client={{
+            id: selectedClient.id,
+            firstName: selectedClient.firstName || '',
+            lastName: selectedClient.lastName || '',
+          }}
+        />
+      )}
     </div>
   );
 }
