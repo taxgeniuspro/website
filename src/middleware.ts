@@ -19,6 +19,7 @@ const intlMiddleware = createMiddleware({
   locales,
   defaultLocale,
   localePrefix: 'always',
+  localeDetection: false, // Disable Accept-Language header detection - always use defaultLocale for unprefixed routes
 });
 
 export async function middleware(req: NextRequest) {
