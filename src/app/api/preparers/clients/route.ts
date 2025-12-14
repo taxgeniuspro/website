@@ -11,17 +11,18 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get preparer profile
+    // Get preparer profile using session user ID
     const preparerProfile = await prisma.profile.findFirst({
       where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-        role: 'PREPARER',
+        userId: user.id,
+        role: 'tax_preparer',
       },
     });
 
@@ -97,17 +98,18 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get preparer profile
+    // Get preparer profile using session user ID
     const preparerProfile = await prisma.profile.findFirst({
       where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-        role: 'PREPARER',
+        userId: user.id,
+        role: 'tax_preparer',
       },
     });
 

@@ -12,17 +12,18 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(req: NextRequest, { params }: { params: { clientId: string } }) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get preparer profile
+    // Get preparer profile using session user ID
     const preparerProfile = await prisma.profile.findFirst({
       where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-        role: 'PREPARER',
+        userId: user.id,
+        role: 'tax_preparer',
       },
     });
 

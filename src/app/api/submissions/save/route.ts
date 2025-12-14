@@ -11,17 +11,16 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile
+    // Get user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {
@@ -98,7 +97,8 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -111,11 +111,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing taxYear parameter' }, { status: 400 });
     }
 
-    // Get user profile
+    // Get user profile using session user ID
     const profile = await prisma.profile.findFirst({
-      where: {
-        user: { email: user.emailAddresses[0]?.emailAddress },
-      },
+      where: { userId: user.id },
     });
 
     if (!profile) {
