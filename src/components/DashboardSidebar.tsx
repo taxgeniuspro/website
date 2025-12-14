@@ -27,7 +27,6 @@ import {
 } from '@/components/ui/sidebar';
 import { ShieldCheck, Settings } from 'lucide-react';
 import { PWASidebarInstall } from '@/components/PWASidebarInstall';
-import { RestartTourButton } from '@/components/RestartTourButton';
 import Image from 'next/image';
 import type { AffiliateStatus } from '@prisma/client';
 
@@ -178,13 +177,10 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
         })()}
       </SidebarContent>
 
-      {/* Footer with PWA Install, Restart Tour & Role Badge */}
+      {/* Footer with PWA Install & Role Badge */}
       <SidebarFooter>
         {/* PWA Install Prompt */}
         <PWASidebarInstall />
-
-        {/* Restart Tour Button */}
-        <RestartTourButton role={role} />
 
         {/* Settings Link - Single location to avoid duplicates */}
         <SidebarMenuButton asChild tooltip="Settings">
