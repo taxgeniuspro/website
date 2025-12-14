@@ -1614,6 +1614,10 @@
       "imagePlaceholder": {
         "replaceWith": "[Reemplazar con imagen]",
         "recommended": "Recomendado: 800x450px"
+      },
+      "mascot": {
+        "greeting": "¡Conoce a Owliver, tu guía de impuestos!",
+        "tagline": "Inteligente, confiable, siempre aquí para ayudarte"
       }
     },
     "signup": {
