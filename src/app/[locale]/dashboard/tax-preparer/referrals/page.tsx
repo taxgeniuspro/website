@@ -63,39 +63,48 @@ export default async function PreparerReferralsPage() {
     bondedAffiliates,
     totalCommissions,
   ] = await Promise.all([
-    // Total referrals (clients who came through preparer's links)
+    // Total referrals (leads assigned to this preparer with a referrer)
     prisma.taxIntakeLead.count({
-      where: { taxPreparerId: profile.id },
+      where: {
+        assignedPreparerId: profile.id,
+        referrerUsername: { not: null },
+      },
     }),
     // Converted referrals
     prisma.taxIntakeLead.count({
       where: {
-        taxPreparerId: profile.id,
-        status: { in: ['CONVERTED', 'FILED'] },
+        assignedPreparerId: profile.id,
+        referrerUsername: { not: null },
+        convertedToClient: true,
       },
     }),
-    // Pending referrals
+    // Pending referrals (not yet converted)
     prisma.taxIntakeLead.count({
       where: {
-        taxPreparerId: profile.id,
-        status: { in: ['NEW', 'IN_PROGRESS', 'PENDING'] },
+        assignedPreparerId: profile.id,
+        referrerUsername: { not: null },
+        convertedToClient: false,
       },
     }),
     // Recent referrals
     prisma.taxIntakeLead.findMany({
-      where: { taxPreparerId: profile.id },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        assignedPreparerId: profile.id,
+        referrerUsername: { not: null },
+      },
+      orderBy: { created_at: 'desc' },
       take: 10,
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
+        first_name: true,
+        last_name: true,
         email: true,
         phone: true,
-        status: true,
-        createdAt: true,
-        referrerCode: true,
-        intakeType: true,
+        completed: true,
+        convertedToClient: true,
+        created_at: true,
+        referrerUsername: true,
+        referrerType: true,
       },
     }),
     // Bonded affiliates
@@ -126,20 +135,14 @@ export default async function PreparerReferralsPage() {
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'CONVERTED':
-      case 'FILED':
-        return 'bg-green-100 text-green-800 border-green-300';
-      case 'IN_PROGRESS':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'NEW':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'PENDING':
-        return 'bg-orange-100 text-orange-800 border-orange-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-300';
+  const getStatusInfo = (referral: { completed: boolean; convertedToClient: boolean }) => {
+    if (referral.convertedToClient) {
+      return { label: 'CONVERTED', color: 'bg-green-100 text-green-800 border-green-300' };
     }
+    if (referral.completed) {
+      return { label: 'COMPLETED', color: 'bg-blue-100 text-blue-800 border-blue-300' };
+    }
+    return { label: 'PENDING', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' };
   };
 
   return (
@@ -314,49 +317,52 @@ export default async function PreparerReferralsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {recentReferrals.map((referral) => (
-                  <div
-                    key={referral.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {referral.firstName} {referral.lastName}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{referral.email}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {referral.intakeType || 'Direct'}
-                          </Badge>
-                          {referral.referrerCode && (
+                {recentReferrals.map((referral) => {
+                  const statusInfo = getStatusInfo(referral);
+                  return (
+                    <div
+                      key={referral.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {referral.first_name} {referral.last_name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{referral.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
                             <Badge variant="outline" className="text-xs">
-                              via {referral.referrerCode}
+                              {referral.referrerType || 'Direct'}
                             </Badge>
-                          )}
+                            {referral.referrerUsername && (
+                              <Badge variant="outline" className="text-xs">
+                                via {referral.referrerUsername}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <Badge className={`${getStatusColor(referral.status)} border`}>
-                          {referral.status}
-                        </Badge>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDate(referral.createdAt)}
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <Badge className={`${statusInfo.color} border`}>
+                            {statusInfo.label}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatDate(referral.created_at)}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/tax-preparer/leads?id=${referral.id}`}>
+                            View
+                          </Link>
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/dashboard/tax-preparer/leads?id=${referral.id}`}>
-                          View
-                        </Link>
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
