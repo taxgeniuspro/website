@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Menu, ArrowRight, ChevronDown } from 'lucide-react';
+import { Menu, ChevronDown, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -24,6 +24,9 @@ export function Header() {
   const t = useTranslations('navigation');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [joinUsOpen, setJoinUsOpen] = useState(false);
   const pathname = usePathname();
 
   // Auto-close mobile menu on navigation
@@ -222,127 +225,152 @@ export function Header() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <nav className="lg:hidden mt-4 pb-4 space-y-1 animate-in slide-in-from-top border-t pt-4">
-            {/* Services Section */}
-            <div className="px-2 py-2">
-              <p className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {t('services')}
-              </p>
-              <Link
-                href="/personal-tax-filing"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+            {/* Services Collapsible */}
+            <div className="px-2">
+              <button
+                onClick={() => setServicesOpen(!servicesOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
               >
-                {t('servicesMenu.personalTaxFiling')}
-              </Link>
-              <Link
-                href="/business-tax"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('servicesMenu.businessTaxServices')}
-              </Link>
-              <Link
-                href="/tax-planning"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('servicesMenu.taxPlanningAdvisory')}
-              </Link>
-              <Link
-                href="/audit-protection"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('servicesMenu.auditProtection')}
-              </Link>
-              <Link
-                href="/irs-resolution"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('servicesMenu.irsResolutionServices')}
-              </Link>
-              <Link
-                href="/services"
-                className="block px-4 py-2 text-sm text-primary font-semibold hover:bg-muted/50 rounded-md"
-              >
-                {t('servicesMenu.viewAllServices')} →
-              </Link>
+                <span>{t('services')}</span>
+                <ChevronRight className={cn('w-5 h-5 transition-transform', servicesOpen && 'rotate-90')} />
+              </button>
+              {servicesOpen && (
+                <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
+                  <Link
+                    href="/personal-tax-filing"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.personalTaxFiling')}
+                  </Link>
+                  <Link
+                    href="/business-tax"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.businessTaxServices')}
+                  </Link>
+                  <Link
+                    href="/tax-planning"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.taxPlanningAdvisory')}
+                  </Link>
+                  <Link
+                    href="/audit-protection"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.auditProtection')}
+                  </Link>
+                  <Link
+                    href="/irs-resolution"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.irsResolutionServices')}
+                  </Link>
+                  <Link
+                    href="/services"
+                    className="block px-3 py-2 text-sm text-primary font-semibold hover:bg-muted/50 rounded-md"
+                  >
+                    {t('servicesMenu.viewAllServices')} →
+                  </Link>
+                </div>
+              )}
             </div>
 
-            {/* Resources Section */}
-            <div className="px-2 py-2">
-              <p className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {t('resources')}
-              </p>
-              <Link
-                href="/tax-guide"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+            {/* Resources Collapsible */}
+            <div className="px-2">
+              <button
+                onClick={() => setResourcesOpen(!resourcesOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
               >
-                {t('resourcesMenu.taxGuide2024')}
-              </Link>
-              <Link
-                href="/blog"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('resourcesMenu.taxBlogTips')}
-              </Link>
-              <Link
-                href="/help"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('resourcesMenu.helpCenter')}
-              </Link>
-              <Link
-                href="/tax-calculator"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('resourcesMenu.taxCalculator')}
-              </Link>
-              <Link
-                href="/find-a-refund"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('resourcesMenu.findMyRefund')}
-              </Link>
+                <span>{t('resources')}</span>
+                <ChevronRight className={cn('w-5 h-5 transition-transform', resourcesOpen && 'rotate-90')} />
+              </button>
+              {resourcesOpen && (
+                <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
+                  <Link
+                    href="/tax-guide"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('resourcesMenu.taxGuide2024')}
+                  </Link>
+                  <Link
+                    href="/blog"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('resourcesMenu.taxBlogTips')}
+                  </Link>
+                  <Link
+                    href="/help"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('resourcesMenu.helpCenter')}
+                  </Link>
+                  <Link
+                    href="/tax-calculator"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('resourcesMenu.taxCalculator')}
+                  </Link>
+                  <Link
+                    href="/find-a-refund"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('resourcesMenu.findMyRefund')}
+                  </Link>
+                </div>
+              )}
             </div>
 
-            {/* Main Links */}
-            <div className="border-t pt-2">
+            {/* Join Us Collapsible */}
+            <div className="px-2">
+              <button
+                onClick={() => setJoinUsOpen(!joinUsOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
+              >
+                <span>{t('joinUs')}</span>
+                <ChevronRight className={cn('w-5 h-5 transition-transform', joinUsOpen && 'rotate-90')} />
+              </button>
+              {joinUsOpen && (
+                <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
+                  <Link
+                    href="/preparer/start"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('joinUsMenu.becomeTaxPreparer')}
+                  </Link>
+                  <Link
+                    href="/affiliate/apply"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('joinUsMenu.joinAsAffiliate')}
+                  </Link>
+                  <Link
+                    href="/referral"
+                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                  >
+                    {t('joinUsMenu.referralProgram')}
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Direct Links */}
+            <div className="px-2 border-t pt-2 mt-2">
               <Link
                 href="/about"
-                className="block px-4 py-2 text-foreground/80 hover:bg-muted/50 rounded-md"
+                className="block px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md"
               >
                 {t('about')}
               </Link>
               <Link
                 href="/contact"
-                className="block px-4 py-2 text-foreground/80 hover:bg-muted/50 rounded-md"
+                className="block px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md"
               >
                 {t('contact')}
               </Link>
             </div>
 
-            {/* Join Us Mobile Section */}
-            <div className="px-2 py-2 border-t">
-              <p className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {t('joinUs')}
-              </p>
-              <Link
-                href="/preparer/start"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('joinUsMenu.becomeTaxPreparer')}
-              </Link>
-              <Link
-                href="/affiliate/apply"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('joinUsMenu.joinAsAffiliate')}
-              </Link>
-              <Link
-                href="/referral"
-                className="block px-4 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
-              >
-                {t('joinUsMenu.referralProgram')}
-              </Link>
-            </div>
-
+            {/* Theme & Cart */}
             <div className="flex items-center justify-center gap-4 py-3 border-t">
               <CartIcon />
               <ThemeToggle />
@@ -356,7 +384,8 @@ export function Header() {
               <MobileLocaleSwitcher />
             </div>
 
-            <div className="pt-3 space-y-2">
+            {/* Action Buttons */}
+            <div className="px-2 pt-3 space-y-2 border-t">
               <Button variant="outline" className="w-full" size="sm" asChild>
                 <Link href="/auth/signin">{t('login')}</Link>
               </Button>
