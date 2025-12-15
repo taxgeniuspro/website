@@ -150,6 +150,8 @@ async function createProfileFromLead(lead: TaxIntakeLead, userId: string): Promi
       firstName: lead.first_name,
       lastName: lead.last_name,
       phone: lead.phone,
+      affiliateStatus: 'APPROVED',
+      affiliateApprovedAt: new Date(),
       // Store address in encrypted JSON format
       address: lead.address_line_1
         ? {

@@ -266,6 +266,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             firstName,
             middleName,
             lastName,
+            affiliateStatus: 'APPROVED',
+            affiliateApprovedAt: new Date(),
           },
         });
 

@@ -85,6 +85,8 @@ export async function POST(request: NextRequest) {
               phone: phone || null,
               role: 'client',
               userId: `imported_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: new Date(),
             },
           });
         }
