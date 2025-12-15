@@ -76,36 +76,23 @@ interface ReferralImageSetWithImages {
 }
 
 /**
- * Get the appropriate image set for a client based on current date and preparer
- * Priority: preparer-custom > tax-season > preseason-loans
+ * Get the appropriate image set for a preparer
+ *
+ * Logic:
+ * 1. If preparer has custom images in their folder → use those
+ * 2. Otherwise → use Tax Genius Default images
  */
 export async function getCurrentImageSet(
   preparerId?: string
 ): Promise<ReferralImageSetWithImages | null> {
-  const now = new Date();
-
   try {
-    // First, try to get preparer-specific images
+    // First, try to get preparer-specific images (if preparerId provided)
     if (preparerId) {
       const preparerSet = await prisma.referralImageSet.findFirst({
         where: {
           preparerId,
+          category: 'preparer',
           isActive: true,
-          OR: [
-            { validFrom: null, validUntil: null },
-            {
-              validFrom: { lte: now },
-              validUntil: { gte: now },
-            },
-            {
-              validFrom: { lte: now },
-              validUntil: null,
-            },
-            {
-              validFrom: null,
-              validUntil: { gte: now },
-            },
-          ],
         },
         include: {
           images: {
@@ -115,6 +102,7 @@ export async function getCurrentImageSet(
         },
       });
 
+      // Only use preparer folder if it has images
       if (preparerSet && preparerSet.images.length > 0) {
         return {
           id: preparerSet.id,
@@ -131,59 +119,11 @@ export async function getCurrentImageSet(
       }
     }
 
-    // Determine if we're in preseason (before Jan 15) or tax season
-    const jan15 = new Date(now.getFullYear(), 0, 15); // January 15
-    const isPreseason = now < jan15;
-    const category = isPreseason ? 'preseason-loans' : 'tax-season';
-
-    // Get the appropriate seasonal set
-    const seasonalSet = await prisma.referralImageSet.findFirst({
+    // Fallback to default Tax Genius folder
+    const defaultSet = await prisma.referralImageSet.findFirst({
       where: {
-        category,
-        preparerId: null, // Company-wide
-        isActive: true,
-        OR: [
-          { validFrom: null, validUntil: null },
-          {
-            validFrom: { lte: now },
-            validUntil: { gte: now },
-          },
-          {
-            validFrom: { lte: now },
-            validUntil: null,
-          },
-          {
-            validFrom: null,
-            validUntil: { gte: now },
-          },
-        ],
-      },
-      include: {
-        images: {
-          orderBy: { sortOrder: 'asc' },
-          take: 4,
-        },
-      },
-    });
-
-    if (seasonalSet && seasonalSet.images.length > 0) {
-      return {
-        id: seasonalSet.id,
-        name: seasonalSet.name,
-        category: seasonalSet.category,
-        images: seasonalSet.images.map((img) => ({
-          id: img.id,
-          url: img.imageUrl,
-          thumbnailUrl: img.thumbnailUrl,
-          alt: img.altText,
-          platform: img.platform,
-        })),
-      };
-    }
-
-    // Fallback to any active set
-    const fallbackSet = await prisma.referralImageSet.findFirst({
-      where: {
+        category: 'default',
+        preparerId: null,
         isActive: true,
       },
       include: {
@@ -194,12 +134,12 @@ export async function getCurrentImageSet(
       },
     });
 
-    if (fallbackSet && fallbackSet.images.length > 0) {
+    if (defaultSet && defaultSet.images.length > 0) {
       return {
-        id: fallbackSet.id,
-        name: fallbackSet.name,
-        category: fallbackSet.category,
-        images: fallbackSet.images.map((img) => ({
+        id: defaultSet.id,
+        name: defaultSet.name,
+        category: defaultSet.category,
+        images: defaultSet.images.map((img) => ({
           id: img.id,
           url: img.imageUrl,
           thumbnailUrl: img.thumbnailUrl,
