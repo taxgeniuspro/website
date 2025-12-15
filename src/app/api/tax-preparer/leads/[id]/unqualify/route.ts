@@ -137,8 +137,9 @@ export async function POST(
     await prisma.leadActivity.create({
       data: {
         leadId,
-        type: 'STATUS_CHANGED',
-        description: `Lead marked as UNQUALIFIED - Reason: ${reason}`,
+        activityType: 'STATUS_CHANGED',
+        title: `Lead marked as UNQUALIFIED`,
+        description: `Reason: ${reason}${notes ? ` - ${notes}` : ''}`,
         metadata: {
           previousStatus: 'active',
           newStatus: 'unqualified',
