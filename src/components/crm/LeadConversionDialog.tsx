@@ -150,7 +150,7 @@ export function LeadConversionDialog({
             <span className="font-semibold">
               {lead?.first_name} {lead?.last_name}
             </span>{' '}
-            to a client, affiliate, or tax preparer.
+            to a client or affiliate client with special pricing.
           </DialogDescription>
         </DialogHeader>
 
