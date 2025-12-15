@@ -3,7 +3,9 @@
   "framework": "nextjs",
   "buildCommand": "npx prisma generate && npm run build",
   "installCommand": "npm install",
-  "regions": ["iad1"],
+  "regions": [
+    "iad1"
+  ],
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 30
@@ -12,11 +14,5 @@
   "env": {
     "SKIP_ENV_VALIDATION": "true",
     "BUILD_TIMESTAMP": "1733331600"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/cleanup-expired-leads",
-      "schedule": "0 3 * * *"
-    }
-  ]
+  }
 }
