@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,10 +58,10 @@ interface ActionDialog {
 
 export default function AffiliateApplicationsPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const user = session?.user;
   const isLoaded = status !== 'loading';
   const [applications, setApplications] = useState<AffiliateApplication[]>([]);
-  const [filteredApplications, setFilteredApplications] = useState<AffiliateApplication[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -77,48 +77,15 @@ export default function AffiliateApplicationsPage() {
   // Check permissions
   const isAdmin = user?.role === 'admin';
 
-  // Redirect if no access
-  useEffect(() => {
-    if (isLoaded && (!user || !isAdmin)) {
-      redirect('/forbidden');
-    }
-  }, [isLoaded, user, isAdmin]);
-
-  // Show loading skeleton while checking auth
-  if (!isLoaded || !isAdmin) {
-    return (
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="space-y-2">
-          <div className="h-8 w-64 rounded-md bg-muted animate-pulse" />
-          <div className="h-5 w-96 rounded-md bg-muted animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-        <TableSkeleton rows={10} columns={7} />
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    fetchApplications();
-  }, []);
-
-  useEffect(() => {
-    filterApplications();
-  }, [search, statusFilter, applications]);
-
-  const fetchApplications = async () => {
+  // Fetch applications function - defined with useCallback before useEffect
+  const fetchApplications = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/affiliate-applications');
       const data = await response.json();
 
       if (response.ok) {
-        setApplications(data.applications);
+        setApplications(data.applications || []);
       } else {
         toast({
           title: 'Error',
@@ -136,9 +103,10 @@ export default function AffiliateApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const filterApplications = () => {
+  // Compute filtered applications using useMemo instead of useEffect + state
+  const filteredApplications = useMemo(() => {
     let filtered = applications;
 
     // Filter by status
@@ -158,10 +126,19 @@ export default function AffiliateApplicationsPage() {
       );
     }
 
-    setFilteredApplications(filtered);
-  };
+    return filtered;
+  }, [applications, search, statusFilter]);
 
-  const handleAction = async () => {
+  // Compute stats using useMemo
+  const statusStats = useMemo(() => ({
+    total: applications.length,
+    pending: applications.filter((a) => a.status === 'NEW').length,
+    approved: applications.filter((a) => a.status === 'CONTACTED' || a.status === 'QUALIFIED').length,
+    rejected: applications.filter((a) => a.status === 'LOST').length,
+  }), [applications]);
+
+  // Handle action function
+  const handleAction = useCallback(async () => {
     if (!actionDialog.application || !actionDialog.action) return;
 
     try {
@@ -210,19 +187,45 @@ export default function AffiliateApplicationsPage() {
     } finally {
       setActionLoading(false);
     }
-  };
+  }, [actionDialog, notes, toast, fetchApplications]);
 
-  const openActionDialog = (application: AffiliateApplication, action: 'approve' | 'reject') => {
+  const openActionDialog = useCallback((application: AffiliateApplication, action: 'approve' | 'reject') => {
     setActionDialog({ open: true, application, action });
     setNotes(application.message || '');
-  };
+  }, []);
 
-  const statusStats = {
-    total: applications.length,
-    pending: applications.filter((a) => a.status === 'NEW').length,
-    approved: applications.filter((a) => a.status === 'CONTACTED' || a.status === 'QUALIFIED').length,
-    rejected: applications.filter((a) => a.status === 'LOST').length,
-  };
+  // Redirect if no access - use router.push instead of redirect()
+  useEffect(() => {
+    if (isLoaded && (!user || !isAdmin)) {
+      router.push('/forbidden');
+    }
+  }, [isLoaded, user, isAdmin, router]);
+
+  // Fetch applications on mount
+  useEffect(() => {
+    if (isLoaded && isAdmin) {
+      fetchApplications();
+    }
+  }, [isLoaded, isAdmin, fetchApplications]);
+
+  // Show loading skeleton while checking auth
+  if (!isLoaded || !isAdmin) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-64 rounded-md bg-muted animate-pulse" />
+          <div className="h-5 w-96 rounded-md bg-muted animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <TableSkeleton rows={10} columns={7} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

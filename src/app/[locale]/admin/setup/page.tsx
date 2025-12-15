@@ -8,12 +8,13 @@ import { useRouter } from 'next/navigation';
 import { Shield } from 'lucide-react';
 
 export default function AdminSetupPage() {
-  const { data: session } = useSession(); const user = session?.user;
+  const { data: session } = useSession();
+  const user = session?.user;
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const userEmail = user?.emailAddresses[0]?.emailAddress;
+  const userEmail = user?.email;
   const isAllowed = userEmail === 'support@taxgeniuspro.tax';
 
   const handleSetupSuperAdmin = async () => {
