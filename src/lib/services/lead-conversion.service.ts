@@ -27,11 +27,13 @@ interface ConversionResult {
 
 /**
  * Find TaxIntakeLead by email
+ * Returns the most recent lead for this email (highest tax_year)
  */
 export async function findLeadByEmail(email: string): Promise<TaxIntakeLead | null> {
   try {
-    const lead = await prisma.taxIntakeLead.findUnique({
+    const lead = await prisma.taxIntakeLead.findFirst({
       where: { email: email.toLowerCase() },
+      orderBy: { tax_year: 'desc' },
     });
 
     return lead;
@@ -146,7 +148,7 @@ async function createProfileFromLead(lead: TaxIntakeLead, userId: string): Promi
   const profile = await prisma.profile.create({
     data: {
       userId,
-      role: 'CLIENT',
+      role: 'client',
       firstName: lead.first_name,
       lastName: lead.last_name,
       phone: lead.phone,
@@ -383,6 +385,13 @@ interface PreparerApplicationResult {
   error?: string;
 }
 
+interface RejectedPreparerConversionResult {
+  success: boolean;
+  profileId?: string;
+  error?: string;
+  requiresSignup?: boolean;
+}
+
 /**
  * Create Tax Preparer Application from TaxIntakeLead
  * Pre-fills application with lead's info and routes to admin for approval
@@ -423,16 +432,12 @@ export async function createPreparerApplicationFromLead(
         lastName: lead.last_name,
         email: lead.email.toLowerCase(),
         phone: lead.phone,
+        languages: 'English', // Default - admin can update during review
         status: 'PENDING',
         stage: 'NEW',
         notes: notes
-          ? `Converted from tax intake lead.\n\nConversion Notes: ${notes}`
-          : 'Converted from tax intake lead.',
-        // Store original lead ID for reference
-        metadata: {
-          sourceLeadId: leadId,
-          convertedAt: new Date().toISOString(),
-        },
+          ? `Converted from tax intake lead (ID: ${leadId}).\n\nConversion Notes: ${notes}`
+          : `Converted from tax intake lead (ID: ${leadId}).`,
       },
     });
 
@@ -469,6 +474,195 @@ export async function createPreparerApplicationFromLead(
     };
   } catch (error) {
     logger.error('Error creating preparer application from lead:', { leadId, error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Convert a rejected preparer application to Client or Affiliate Client
+ * Used when admin rejects a preparer application but wants to keep them as a customer
+ *
+ * @param applicationId - PreparerApplication ID
+ * @param conversionType - 'client' (standard) or 'affiliate' (special pricing + referral links)
+ */
+export async function convertRejectedPreparerToClient(
+  applicationId: string,
+  conversionType: 'client' | 'affiliate'
+): Promise<RejectedPreparerConversionResult> {
+  try {
+    logger.info(`Converting rejected preparer application ${applicationId} to ${conversionType}`);
+
+    // 1. Get the preparer application
+    const application = await prisma.preparerApplication.findUnique({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      return { success: false, error: 'Application not found' };
+    }
+
+    // 2. Check if user already exists with this email
+    const existingUser = await prisma.user.findUnique({
+      where: { email: application.email.toLowerCase() },
+      include: { profile: true },
+    });
+
+    if (existingUser && existingUser.profile) {
+      // User already exists - update their profile if needed
+      if (conversionType === 'affiliate' && existingUser.profile.affiliateStatus !== 'APPROVED') {
+        await prisma.profile.update({
+          where: { id: existingUser.profile.id },
+          data: {
+            affiliateStatus: 'APPROVED',
+            affiliateApprovedAt: existingUser.profile.affiliateApprovedAt || new Date(),
+          },
+        });
+
+        // Assign tracking code if affiliate and doesn't have one
+        if (!existingUser.profile.customTrackingCode) {
+          await assignTrackingCodeToUser(
+            existingUser.profile.id,
+            process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'
+          );
+        }
+
+        logger.info(`Updated existing profile ${existingUser.profile.id} to affiliate status`);
+      }
+
+      // Update application with converted profile reference
+      await prisma.preparerApplication.update({
+        where: { id: applicationId },
+        data: {
+          notes: application.notes
+            ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but converted to ${conversionType}. Profile ID: ${existingUser.profile.id}`
+            : `[${new Date().toISOString()}] Rejected but converted to ${conversionType}. Profile ID: ${existingUser.profile.id}`,
+        },
+      });
+
+      return {
+        success: true,
+        profileId: existingUser.profile.id,
+      };
+    }
+
+    // 3. User doesn't exist - they need to sign up first
+    // Store the conversion intent in application notes
+    await prisma.preparerApplication.update({
+      where: { id: applicationId },
+      data: {
+        notes: application.notes
+          ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]`
+          : `[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]`,
+      },
+    });
+
+    logger.info(`Marked application ${applicationId} for ${conversionType} conversion - awaiting signup`);
+
+    return {
+      success: true,
+      requiresSignup: true,
+    };
+  } catch (error) {
+    logger.error('Error converting rejected preparer to client:', { applicationId, error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Create Client profile directly from preparer application data
+ * Used when we have the userId (after user signs up)
+ */
+export async function createClientFromPreparerApplication(
+  applicationId: string,
+  userId: string,
+  conversionType: 'client' | 'affiliate'
+): Promise<RejectedPreparerConversionResult> {
+  try {
+    logger.info(`Creating ${conversionType} profile from preparer application ${applicationId}`);
+
+    // 1. Get the preparer application
+    const application = await prisma.preparerApplication.findUnique({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      return { success: false, error: 'Application not found' };
+    }
+
+    // 2. Check if profile already exists
+    const existingProfile = await prisma.profile.findUnique({
+      where: { userId },
+    });
+
+    if (existingProfile) {
+      // Update existing profile if converting to affiliate
+      if (conversionType === 'affiliate' && existingProfile.affiliateStatus !== 'APPROVED') {
+        await prisma.profile.update({
+          where: { id: existingProfile.id },
+          data: {
+            affiliateStatus: 'APPROVED',
+            affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date(),
+          },
+        });
+
+        if (!existingProfile.customTrackingCode) {
+          await assignTrackingCodeToUser(
+            existingProfile.id,
+            process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'
+          );
+        }
+      }
+
+      return {
+        success: true,
+        profileId: existingProfile.id,
+      };
+    }
+
+    // 3. Create new profile
+    const profile = await prisma.profile.create({
+      data: {
+        userId,
+        role: 'client',
+        firstName: application.firstName,
+        lastName: application.lastName,
+        phone: application.phone,
+        affiliateStatus: conversionType === 'affiliate' ? 'APPROVED' : 'APPROVED',
+        affiliateApprovedAt: new Date(),
+      },
+    });
+
+    logger.info(`Created ${conversionType} profile ${profile.id} from application ${applicationId}`);
+
+    // 4. Assign tracking code (for both client and affiliate - all clients get tracking)
+    await assignTrackingCodeToUser(
+      profile.id,
+      process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'
+    );
+    logger.info(`Assigned tracking code to profile ${profile.id}`);
+
+    // 5. Update application with profile reference
+    await prisma.preparerApplication.update({
+      where: { id: applicationId },
+      data: {
+        notes: application.notes
+          ? `${application.notes}\n\n[${new Date().toISOString()}] Profile created: ${profile.id} as ${conversionType}`
+          : `[${new Date().toISOString()}] Profile created: ${profile.id} as ${conversionType}`,
+      },
+    });
+
+    return {
+      success: true,
+      profileId: profile.id,
+    };
+  } catch (error) {
+    logger.error('Error creating client from preparer application:', { applicationId, error });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

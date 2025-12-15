@@ -354,9 +354,17 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
-    label: 'Tax Preparer Leads',
+    label: 'Tax Preparer Applications',
     href: '/admin/applications/preparers',
     icon: Users,
+    permission: 'users',
+    section: '👥 Clients',
+    roles: ['admin'],
+  },
+  {
+    label: 'Tax Intake Leads',
+    href: '/admin/leads',
+    icon: UserPlus,
     permission: 'users',
     section: '👥 Clients',
     roles: ['admin'],

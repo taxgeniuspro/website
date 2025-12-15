@@ -47,6 +47,8 @@ import {
   Briefcase,
   ArrowRight,
   Clock,
+  DollarSign,
+  Gift,
 } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { useToast } from '@/hooks/use-toast';
@@ -117,6 +119,7 @@ export default function PreparerApplicationsPage() {
   const [interviewDate, setInterviewDate] = useState<string>('');
   const [interviewNotes, setInterviewNotes] = useState<string>('');
   const [viewMode, setViewMode] = useState<'table' | 'pipeline'>('table');
+  const [rejectConvertTo, setRejectConvertTo] = useState<'none' | 'client' | 'affiliate'>('none');
   const { toast } = useToast();
 
   // Check permissions
@@ -250,24 +253,38 @@ export default function PreparerApplicationsPage() {
     try {
       setActionLoading(true);
 
+      const requestBody: Record<string, unknown> = {
+        action: 'reject',
+        notes: notes || undefined,
+      };
+
+      // Add conversion option if selected
+      if (rejectConvertTo !== 'none') {
+        requestBody.convertTo = rejectConvertTo;
+      }
+
       const response = await fetch(
         `/api/admin/preparer-applications/${actionDialog.application.id}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'reject',
-            notes: notes || undefined,
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
       const data = await response.json();
 
       if (response.ok) {
+        let successMessage = 'Application rejected';
+        if (rejectConvertTo === 'client') {
+          successMessage = 'Application rejected and converted to Client';
+        } else if (rejectConvertTo === 'affiliate') {
+          successMessage = 'Application rejected and converted to Affiliate Client with special pricing';
+        }
+
         toast({
           title: 'Success',
-          description: 'Application rejected',
+          description: data.message || successMessage,
         });
 
         fetchApplications();
@@ -358,6 +375,7 @@ export default function PreparerApplicationsPage() {
     setNewStage('');
     setInterviewDate('');
     setInterviewNotes('');
+    setRejectConvertTo('none');
   };
 
   const moveToNextStage = async (application: PreparerApplication) => {
@@ -871,19 +889,94 @@ export default function PreparerApplicationsPage() {
                 </div>
               )}
 
-              {/* Notes (for approve/reject) */}
-              {(actionDialog.action === 'approve' || actionDialog.action === 'reject') && (
+              {/* Rejection with Conversion Options */}
+              {actionDialog.action === 'reject' && (
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Rejection Options:</Label>
+                    <RadioGroup
+                      value={rejectConvertTo}
+                      onValueChange={(v) => setRejectConvertTo(v as 'none' | 'client' | 'affiliate')}
+                      className="space-y-2"
+                    >
+                      <div
+                        className={`flex items-start space-x-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          rejectConvertTo === 'none' ? 'border-destructive bg-destructive/5' : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => setRejectConvertTo('none')}
+                      >
+                        <RadioGroupItem value="none" id="reject-none" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="reject-none" className="font-medium cursor-pointer">
+                            <XCircle className="h-4 w-4 inline mr-2 text-destructive" />
+                            Just Reject
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Mark as rejected. No account will be created.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex items-start space-x-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          rejectConvertTo === 'client' ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => setRejectConvertTo('client')}
+                      >
+                        <RadioGroupItem value="client" id="reject-client" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="reject-client" className="font-medium cursor-pointer">
+                            <UserCheck className="h-4 w-4 inline mr-2 text-purple-600" />
+                            Reject & Convert to Client
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Not qualified as preparer, but they can still get their taxes done with standard pricing.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex items-start space-x-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          rejectConvertTo === 'affiliate' ? 'border-green-600 bg-green-50' : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => setRejectConvertTo('affiliate')}
+                      >
+                        <RadioGroupItem value="affiliate" id="reject-affiliate" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="reject-affiliate" className="font-medium cursor-pointer">
+                            <Gift className="h-4 w-4 inline mr-2 text-green-600" />
+                            Reject & Convert to Affiliate Client
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Client with special affiliate pricing + personal referral links + commission on referrals.
+                          </p>
+                        </div>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="reject-notes">Reason for Rejection (optional)</Label>
+                    <Textarea
+                      id="reject-notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Add reason for rejection..."
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Notes (for approve only) */}
+              {actionDialog.action === 'approve' && (
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notes (optional)</Label>
                   <Textarea
                     id="notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder={
-                      actionDialog.action === 'approve'
-                        ? 'Add any notes about this approval...'
-                        : 'Add reason for rejection...'
-                    }
+                    placeholder="Add any notes about this approval..."
                     rows={3}
                   />
                 </div>
@@ -902,9 +995,16 @@ export default function PreparerApplicationsPage() {
               </Button>
             )}
             {actionDialog.action === 'reject' && (
-              <Button variant="destructive" onClick={handleRejection} disabled={actionLoading}>
+              <Button
+                variant={rejectConvertTo === 'none' ? 'destructive' : 'default'}
+                onClick={handleRejection}
+                disabled={actionLoading}
+                className={rejectConvertTo === 'affiliate' ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
                 {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Reject Application
+                {rejectConvertTo === 'none' && 'Reject Application'}
+                {rejectConvertTo === 'client' && 'Reject & Convert to Client'}
+                {rejectConvertTo === 'affiliate' && 'Reject & Convert to Affiliate'}
               </Button>
             )}
             {actionDialog.action === 'stage' && (
