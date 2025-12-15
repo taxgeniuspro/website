@@ -5,21 +5,21 @@ import { logger } from '@/lib/logger';
 import {
   convertLeadToClient,
   convertLeadToAffiliateClient,
-  createPreparerApplicationFromLead,
 } from '@/lib/services/lead-conversion.service';
 
-type ConversionType = 'client' | 'affiliate' | 'preparer';
+type ConversionType = 'client' | 'affiliate';
 
 /**
  * POST /api/tax-preparer/leads/:id/convert
- * Converts a lead to one of three types:
- * - client: Standard client who gets taxes prepared
- * - affiliate: Client with affiliate status and referral links
- * - preparer: Creates tax preparer application for admin approval
+ * Converts a tax intake lead to a client:
+ * - client: Standard client who gets taxes prepared (regular pricing)
+ * - affiliate: Client with affiliate status, special pricing, and referral links
+ *
+ * Note: Tax preparer applications are handled separately via /admin/applications/preparers
  *
  * Request body:
  * {
- *   conversionType: 'client' | 'affiliate' | 'preparer',
+ *   conversionType: 'client' | 'affiliate',
  *   notes?: string
  * }
  */
@@ -61,9 +61,9 @@ export async function POST(
     }
 
     // Validate conversion type
-    if (!['client', 'affiliate', 'preparer'].includes(conversionType)) {
+    if (!['client', 'affiliate'].includes(conversionType)) {
       return NextResponse.json(
-        { error: 'Invalid conversionType. Must be: client, affiliate, or preparer' },
+        { error: 'Invalid conversionType. Must be: client or affiliate' },
         { status: 400 }
       );
     }
@@ -88,8 +88,8 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    // For client/affiliate conversion, check if already converted
-    if (conversionType !== 'preparer' && lead.convertedToClient) {
+    // Check if already converted
+    if (lead.convertedToClient) {
       return NextResponse.json(
         {
           error: 'Lead has already been converted to a client',
@@ -119,33 +119,6 @@ export async function POST(
           { status: 403 }
         );
       }
-    }
-
-    // Handle PREPARER conversion (doesn't require user signup)
-    if (conversionType === 'preparer') {
-      logger.info(`Converting lead ${leadId} to preparer application`);
-
-      const result = await createPreparerApplicationFromLead(leadId, notes);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error || 'Failed to create preparer application' },
-          { status: 400 }
-        );
-      }
-
-      logger.info(
-        `✅ Lead ${leadId} converted to preparer application by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
-      );
-
-      return NextResponse.json({
-        success: true,
-        conversionType: 'preparer',
-        message: 'Tax preparer application created. Awaiting admin approval.',
-        applicationId: result.applicationId,
-        leadName: `${lead.first_name} ${lead.last_name}`,
-        leadEmail: lead.email,
-      });
     }
 
     // Handle CLIENT or AFFILIATE conversion
