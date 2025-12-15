@@ -2,32 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { convertLeadToClient } from '@/lib/services/lead-conversion.service';
+import {
+  convertLeadToClient,
+  convertLeadToAffiliateClient,
+  createPreparerApplicationFromLead,
+} from '@/lib/services/lead-conversion.service';
+
+type ConversionType = 'client' | 'affiliate' | 'preparer';
 
 /**
  * POST /api/tax-preparer/leads/:id/convert
- * Manually converts a qualified lead to a client
+ * Converts a lead to one of three types:
+ * - client: Standard client who gets taxes prepared
+ * - affiliate: Client with affiliate status and referral links
+ * - preparer: Creates tax preparer application for admin approval
  *
- * Flow:
- * 1. If lead has already signed up (has profileId) → Use existing conversion service
- * 2. If lead hasn't signed up yet → Send invitation email and mark as ready to convert
- *
- * For now, we'll focus on case #1 (lead has signed up)
- * Case #2 requires email invitation setup (future enhancement)
+ * Request body:
+ * {
+ *   conversionType: 'client' | 'affiliate' | 'preparer',
+ *   notes?: string
+ * }
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' ;
+    const isAdmin = role === 'admin';
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {
@@ -38,6 +47,26 @@ export async function POST(
     }
 
     const { id: leadId } = await params;
+
+    // Parse request body
+    let conversionType: ConversionType = 'client';
+    let notes: string | undefined;
+
+    try {
+      const body = await req.json();
+      conversionType = body.conversionType || 'client';
+      notes = body.notes;
+    } catch {
+      // If no body, default to client conversion (backwards compatible)
+    }
+
+    // Validate conversion type
+    if (!['client', 'affiliate', 'preparer'].includes(conversionType)) {
+      return NextResponse.json(
+        { error: 'Invalid conversionType. Must be: client, affiliate, or preparer' },
+        { status: 400 }
+      );
+    }
 
     // Fetch the lead with profile relation
     const lead = await prisma.taxIntakeLead.findUnique({
@@ -59,8 +88,8 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    // Check if already converted
-    if (lead.convertedToClient) {
+    // For client/affiliate conversion, check if already converted
+    if (conversionType !== 'preparer' && lead.convertedToClient) {
       return NextResponse.json(
         {
           error: 'Lead has already been converted to a client',
@@ -92,11 +121,47 @@ export async function POST(
       }
     }
 
-    // Case 1: Lead has already signed up (has userId in profile)
-    if (lead.profile && lead.profile.userId) {
-      logger.info(`Lead ${leadId} has Clerk account, using automatic conversion service`);
+    // Handle PREPARER conversion (doesn't require user signup)
+    if (conversionType === 'preparer') {
+      logger.info(`Converting lead ${leadId} to preparer application`);
 
-      const conversionResult = await convertLeadToClient(leadId, lead.profile.userId);
+      const result = await createPreparerApplicationFromLead(leadId, notes);
+
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to create preparer application' },
+          { status: 400 }
+        );
+      }
+
+      logger.info(
+        `✅ Lead ${leadId} converted to preparer application by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
+      );
+
+      return NextResponse.json({
+        success: true,
+        conversionType: 'preparer',
+        message: 'Tax preparer application created. Awaiting admin approval.',
+        applicationId: result.applicationId,
+        leadName: `${lead.first_name} ${lead.last_name}`,
+        leadEmail: lead.email,
+      });
+    }
+
+    // Handle CLIENT or AFFILIATE conversion
+    // These require the lead to have signed up first
+
+    if (lead.profile && lead.profile.userId) {
+      // Lead has signed up - proceed with conversion
+      logger.info(`Lead ${leadId} has account, converting to ${conversionType}`);
+
+      let conversionResult;
+
+      if (conversionType === 'affiliate') {
+        conversionResult = await convertLeadToAffiliateClient(leadId, lead.profile.userId);
+      } else {
+        conversionResult = await convertLeadToClient(leadId, lead.profile.userId);
+      }
 
       if (!conversionResult.success) {
         return NextResponse.json(
@@ -111,33 +176,33 @@ export async function POST(
           where: { id: lead.profile.id },
           data: { role: 'client' },
         });
-
-        logger.info(`Updated profile ${lead.profile.id} role from ${lead.profile.role} to CLIENT`);
+        logger.info(`Updated profile ${lead.profile.id} role to client`);
       }
 
       logger.info(
-        `✅ Lead ${leadId} converted to client by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
+        `✅ Lead ${leadId} converted to ${conversionType} by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
       );
 
       return NextResponse.json({
         success: true,
-        message: 'Lead successfully converted to client',
+        conversionType,
+        message: conversionType === 'affiliate'
+          ? 'Lead converted to affiliate client with referral benefits!'
+          : 'Lead successfully converted to client',
         profileId: conversionResult.profileId,
         taxReturnId: conversionResult.taxReturnId,
       });
     }
 
-    // Case 2: Lead hasn't signed up yet
-    // For now, we'll mark them as "ready to convert" and require admin to send invitation
-    // TODO: Implement automatic email invitation with Clerk
-    logger.info(`Lead ${leadId} has not signed up yet, marking as ready to convert`);
+    // Lead hasn't signed up yet - mark as ready to convert
+    logger.info(`Lead ${leadId} has not signed up yet, marking as ready to convert to ${conversionType}`);
 
     await prisma.taxIntakeLead.update({
       where: { id: leadId },
       data: {
         contactNotes: lead.contactNotes
-          ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Marked as ready to convert - awaiting signup`
-          : `[${new Date().toISOString()}] Marked as ready to convert - awaiting signup`,
+          ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`
+          : `[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`,
         updated_at: new Date(),
       },
     });
@@ -145,15 +210,15 @@ export async function POST(
     return NextResponse.json({
       success: false,
       requiresSignup: true,
-      message:
-        'This lead has not created an account yet. Please send them a signup invitation email first.',
+      conversionType,
+      message: `This lead has not created an account yet. Please send them a signup invitation email first. They will be converted to ${conversionType === 'affiliate' ? 'an affiliate client' : 'a client'} after signing up.`,
       leadEmail: lead.email,
       leadName: `${lead.first_name} ${lead.last_name}`,
     });
   } catch (error) {
-    logger.error('Error converting lead to client:', error);
+    logger.error('Error converting lead:', error);
     return NextResponse.json(
-      { error: 'Failed to convert lead to client' },
+      { error: 'Failed to convert lead' },
       { status: 500 }
     );
   }

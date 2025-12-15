@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, differenceInDays, isBefore } from 'date-fns';
+import { LeadConversionDialog } from './LeadConversionDialog';
 
 interface TaxIntakeLead {
   id: string;
@@ -186,6 +187,10 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
   const [unqualifiedLead, setUnqualifiedLead] = useState<TaxIntakeLead | null>(null);
   const [unqualifiedReason, setUnqualifiedReason] = useState<string>('');
   const [unqualifiedNotes, setUnqualifiedNotes] = useState('');
+
+  // Conversion dialog state
+  const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
+  const [conversionLead, setConversionLead] = useState<TaxIntakeLead | null>(null);
 
   // Fetch leads
   useEffect(() => {
@@ -820,16 +825,19 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                                 </a>
                               </Button>
 
-                              {/* Convert to Client - for new/contacted/qualified leads */}
+                              {/* Convert Lead - opens dialog with 3 options */}
                               {!lead.convertedToClient && (
                                 <Button
                                   variant="default"
                                   size="sm"
                                   className="w-full bg-purple-600 hover:bg-purple-700"
-                                  onClick={() => handleConvertToClient(lead.id)}
+                                  onClick={() => {
+                                    setConversionLead(lead);
+                                    setConversionDialogOpen(true);
+                                  }}
                                 >
                                   <UserCheck className="h-4 w-4 mr-2" />
-                                  Convert to Client
+                                  Convert Lead
                                 </Button>
                               )}
 
@@ -1312,6 +1320,17 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lead Conversion Dialog */}
+      <LeadConversionDialog
+        open={conversionDialogOpen}
+        onOpenChange={setConversionDialogOpen}
+        lead={conversionLead}
+        onConversionComplete={() => {
+          fetchLeads();
+          setConversionLead(null);
+        }}
+      />
     </div>
   );
 }
