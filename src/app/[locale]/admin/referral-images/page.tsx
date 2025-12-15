@@ -82,7 +82,7 @@ export default function AdminReferralImagesPage() {
   const { data: preparersData } = useQuery({
     queryKey: ['preparers-list'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/tax-preparers');
+      const response = await fetch('/api/admin/preparers');
       if (!response.ok) throw new Error('Failed to fetch preparers');
       return response.json();
     },
@@ -283,9 +283,9 @@ export default function AdminReferralImagesPage() {
                       <SelectValue placeholder="Select a preparer..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {preparers.map((preparer: { id: string; firstName: string; lastName: string; trackingCode: string }) => (
+                      {preparers.map((preparer: { id: string; firstName: string; lastName: string; customTrackingCode?: string }) => (
                         <SelectItem key={preparer.id} value={preparer.id}>
-                          {preparer.firstName} {preparer.lastName} ({preparer.trackingCode})
+                          {preparer.firstName} {preparer.lastName}{preparer.customTrackingCode ? ` (${preparer.customTrackingCode})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>

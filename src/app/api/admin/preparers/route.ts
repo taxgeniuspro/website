@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
         companyName: true,
         phone: true,
         userId: true,
+        customTrackingCode: true,
         // Include booking settings if requested
         ...(includeBookingSettings && {
           bookingEnabled: true,
