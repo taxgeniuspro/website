@@ -6,6 +6,7 @@ import { hash } from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { convertRejectedPreparerToClient } from '@/lib/services/lead-conversion.service';
+import { EmailService } from '@/lib/services/email.service';
 
 // Generate random password
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 16);
@@ -159,7 +160,50 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           role: role,
         });
 
-        // TODO: Send welcome email with temporary password or magic link
+        // Send welcome email with magic link for password setup
+        try {
+          // Create magic link token (valid for 24 hours)
+          const magicLinkToken = nanoid();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+          await prisma.magicLink.create({
+            data: {
+              token: magicLinkToken,
+              userId: newUser.id,
+              expiresAt,
+            },
+          });
+
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
+          const magicLinkUrl = `${appUrl}/auth/verify?token=${magicLinkToken}`;
+
+          // Get tracking code if assigned
+          const profileWithCode = await prisma.profile.findUnique({
+            where: { id: profile.id },
+            select: { customTrackingCode: true },
+          });
+
+          await EmailService.sendTaxPreparerWelcomeEmail(
+            application.email,
+            fullName,
+            application.email,
+            profileWithCode?.customTrackingCode || 'pending',
+            magicLinkUrl,
+            '24 hours'
+          );
+
+          logger.info('Welcome email sent to new preparer', {
+            email: application.email,
+            profileId: profile.id,
+          });
+        } catch (emailError) {
+          // Log but don't fail the approval
+          logger.error('Failed to send welcome email', {
+            error: emailError,
+            email: application.email,
+            profileId: profile.id,
+          });
+        }
       }
 
       // For tax_preparer role, set up tracking code + referral links
@@ -178,9 +222,39 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             profileId: profile.id,
           });
         }
+
+        // Create referral image folder for new preparer
+        try {
+          const existingFolder = await prisma.referralImageSet.findFirst({
+            where: { preparerId: profile.id, category: 'preparer' },
+          });
+
+          if (!existingFolder) {
+            const fullName = [application.firstName, application.lastName].filter(Boolean).join(' ');
+            await prisma.referralImageSet.create({
+              data: {
+                category: 'preparer',
+                preparerId: profile.id,
+                name: fullName,
+                description: `Custom referral images for ${fullName}`,
+                isActive: true,
+              },
+            });
+            logger.info('Created referral image folder for new preparer', {
+              profileId: profile.id,
+              name: fullName,
+            });
+          }
+        } catch (folderError) {
+          // Log but don't fail the approval
+          logger.error('Failed to create referral image folder', {
+            error: folderError,
+            profileId: profile.id,
+          });
+        }
       }
 
-      // Update application status to APPROVED with conversion tracking
+      // Update application status to APPROVED with conversion tracking and audit fields
       const updatedApplication = await prisma.preparerApplication.update({
         where: { id },
         data: {
@@ -190,6 +264,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           convertedToRole: role,
           convertedProfileId: profile.id,
           convertedAt: new Date(),
+          // Audit fields
+          reviewedBy: session.user.id,
+          reviewedAt: new Date(),
+          lastModifiedBy: session.user.id,
+          lastModifiedAt: new Date(),
         },
       });
 
@@ -210,12 +289,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         },
       });
     } else if (action === 'reject') {
-      // Update application status to REJECTED
+      // Update application status to REJECTED with audit fields
       const updatedApplication = await prisma.preparerApplication.update({
         where: { id },
         data: {
           status: 'REJECTED',
           notes: notes || application.notes,
+          // Audit fields
+          reviewedBy: session.user.id,
+          reviewedAt: new Date(),
+          lastModifiedBy: session.user.id,
+          lastModifiedAt: new Date(),
         },
       });
 
@@ -240,6 +324,26 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             profileId: conversionResult.profileId,
             requiresSignup: conversionResult.requiresSignup,
           });
+
+          // Send rejection email with conversion info
+          try {
+            await EmailService.sendPreparerRejectionEmail(
+              application.email,
+              application.firstName,
+              notes || undefined,
+              convertTo,
+              'en'
+            );
+            logger.info('Rejection email sent with conversion info', {
+              email: application.email,
+              convertTo,
+            });
+          } catch (emailError) {
+            logger.error('Failed to send rejection email', {
+              error: emailError,
+              email: application.email,
+            });
+          }
 
           return NextResponse.json({
             success: true,
@@ -268,7 +372,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      // TODO: Send rejection email to applicant
+      // Send rejection email to applicant
+      try {
+        await EmailService.sendPreparerRejectionEmail(
+          application.email,
+          application.firstName,
+          notes || undefined,
+          null,
+          'en'
+        );
+        logger.info('Rejection email sent', {
+          email: application.email,
+        });
+      } catch (emailError) {
+        logger.error('Failed to send rejection email', {
+          error: emailError,
+          email: application.email,
+        });
+      }
 
       return NextResponse.json({
         success: true,

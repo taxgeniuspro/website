@@ -3849,17 +3849,18 @@ model CreativeUsage {
 
 // ============ Client Referral Program ============
 
-// Referral Image Sets - Collections of promotional images organized by season/preparer
+// Referral Image Folders - One per preparer + one default company folder
+// - "default" folder (preparerId = null): Company-wide Tax Genius images
+// - Preparer folders (preparerId set): Custom images for that preparer
+// If preparer folder is empty, fallback to default folder images
 model ReferralImageSet {
   id          String  @id @default(cuid())
-  category    String // preseason-loans, tax-season, preparer-custom
-  preparerId  String? // For preparer-specific sets (null = company-wide)
+  category    String  @default("preparer") // "default" or "preparer"
+  preparerId  String? @unique // null = default company folder, otherwise one folder per preparer
   preparer    Profile? @relation("PreparerImageSets", fields: [preparerId], references: [id], onDelete: Cascade)
 
-  name        String // Display name (e.g., "Preseason Loans 2025")
+  name        String // Display name (e.g., "Tax Genius Default" or "Gelisa White")
   description String?
-  validFrom   DateTime? // When images become active
-  validUntil  DateTime? // When images expire
   isActive    Boolean @default(true)
 
   // Relations
@@ -3870,8 +3871,7 @@ model ReferralImageSet {
   updatedAt   DateTime @updatedAt
 
   @@index([category])
-  @@index([preparerId])
-  @@index([isActive, validFrom, validUntil])
+  @@index([isActive])
   @@map("referral_image_sets")
 }
 
