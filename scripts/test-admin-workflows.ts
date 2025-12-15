@@ -767,69 +767,58 @@ async function test8_DisqualifyLead(): Promise<TestResult> {
   }
 }
 
-async function test9_ConvertLeadToPreparer(): Promise<TestResult> {
+async function test9_ReassignLeadToDifferentPreparer(): Promise<TestResult> {
   const start = Date.now();
   const testId = 'B9';
-  const testName = 'Convert Lead to Tax Preparer Application';
+  const testName = 'Reassign Lead to Different Preparer';
 
   try {
     log('🧪', `[${testId}] ${testName}`);
 
-    // Find a lead to convert to preparer application
-    const leadsResponse = await apiCall('/api/tax-preparer/leads?taxYear=all');
-    if (!leadsResponse.ok) throw new Error('Cannot fetch leads');
+    // Navigate to admin leads page
+    await ctx.page.goto(`${BASE_URL}/en/admin/leads`, { waitUntil: 'networkidle2', timeout: 30000 });
+    await sleep(3000);
 
-    const leadsData = await leadsResponse.json();
-    const testLeads = leadsData.leads?.filter((l: { email?: string; unqualified?: boolean; convertedToClient?: boolean }) =>
-      l.email?.includes(TEST_EMAIL_DOMAIN) && !l.unqualified && !l.convertedToClient
-    );
+    const screenshot = await takeScreenshot(ctx.page, 'lead-reassignment-check');
 
-    // Pick LeadFour if available (different from LeadThree used for disqualify)
-    const leadToConvert = testLeads?.find((l: { email: string }) => l.email.includes('leadfour')) || testLeads?.[0];
+    // Check if lead reassignment UI exists in the page
+    // Look for: preparer dropdown/select, assign button, or reassign action
+    const hasReassignDropdown = await ctx.page.$('select[name*="preparer" i], [data-testid="assign-preparer"], button:has-text("Reassign"), button:has-text("Assign to")') !== null;
 
-    if (!leadToConvert) {
-      return {
-        id: testId,
-        name: testName,
-        category: 'B',
-        status: 'SKIP',
-        duration: Date.now() - start,
-        data: { reason: 'No leads available to convert to preparer' },
-      };
-    }
+    // Also check if admin view has any preparer assignment UI in lead cards
+    const hasAssignInCard = await ctx.page.$('[class*="card"] select, [class*="card"] [data-testid*="assign"]') !== null;
 
-    logVerbose('📋', `Converting lead to preparer: ${leadToConvert.id}`);
-    logVerbose('📋', `Lead: ${leadToConvert.first_name} ${leadToConvert.last_name} (${leadToConvert.email})`);
+    const hasReassignUI = hasReassignDropdown || hasAssignInCard;
 
-    // Convert lead to preparer application
-    const convertResponse = await apiCall(`/api/tax-preparer/leads/${leadToConvert.id}/convert`, {
-      method: 'POST',
-      body: JSON.stringify({
-        conversionType: 'preparer',
-        notes: `[E2E Test ${TEST_RUN_ID}] Converting lead to tax preparer application for testing`,
-      }),
-    });
-
-    const convertData = await convertResponse.json();
-    logVerbose('📋', `Convert response: ${JSON.stringify(convertData)}`);
-
-    if (convertResponse.ok && convertData.success) {
-      log('✅', `Lead converted to preparer application (ID: ${convertData.applicationId})`);
-      ctx.createdData.applications.push(convertData.applicationId);
+    if (hasReassignUI) {
+      log('✅', 'Lead reassignment UI found in admin dashboard');
       return {
         id: testId,
         name: testName,
         category: 'B',
         status: 'PASS',
         duration: Date.now() - start,
-        data: {
-          leadId: leadToConvert.id,
-          applicationId: convertData.applicationId,
-          conversionType: 'preparer',
-        },
+        screenshot,
+        data: { hasReassignUI: true },
       };
     } else {
-      throw new Error(convertData.error || `Failed to convert lead (status: ${convertResponse.status})`);
+      // FEATURE NOT IMPLEMENTED - this is a real finding
+      // The admin leads page does NOT have preparer reassignment functionality
+      log('⚠️', 'Lead reassignment feature NOT IMPLEMENTED in admin UI');
+      return {
+        id: testId,
+        name: testName,
+        category: 'B',
+        status: 'FAIL',
+        duration: Date.now() - start,
+        screenshot,
+        error: 'FEATURE MISSING: Admin leads page has no preparer reassignment UI. Leads can only be assigned during creation via referrer tracking code.',
+        data: {
+          hasReassignUI: false,
+          featureRequest: 'Add preparer reassignment dropdown to admin lead management',
+          workaround: 'Currently leads are auto-assigned based on referrer tracking code at creation time'
+        },
+      };
     }
   } catch (error) {
     return {
@@ -1525,7 +1514,7 @@ async function runAllTests(): Promise<void> {
       { category: 'B', fn: test6_UpdateLeadStatusToContacted },
       { category: 'B', fn: test7_UpdateLeadStatusToQualified },
       { category: 'B', fn: test8_DisqualifyLead },
-      { category: 'B', fn: test9_ConvertLeadToPreparer },
+      { category: 'B', fn: test9_ReassignLeadToDifferentPreparer },
       { category: 'B', fn: test10_ConvertLeadToClient },
 
       // Category C: Tax Preparer Application & Approval (Tests 11-14)
