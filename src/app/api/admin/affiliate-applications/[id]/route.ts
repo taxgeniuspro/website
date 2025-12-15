@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { hash } from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
+import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 
 // Generate random password
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 16);
@@ -15,7 +16,7 @@ interface RouteParams {
 }
 
 // GET: Get single affiliate application (admin only)
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const session = await auth();
 
@@ -23,8 +24,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin or super_admin
-    if (session.user.role !== 'admin' && session.user.role !== 'admin') {
+    // Check if user is admin
+    if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -54,8 +55,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin or super_admin
-    if (session.user.role !== 'admin' && session.user.role !== 'admin') {
+    // Check if user is admin
+    if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -72,50 +73,96 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     if (action === 'approve') {
-      // Check if user already exists with this email
-      let profile = await prisma.profile.findFirst({
+      // Check if user already exists with this email (look up User, not Profile)
+      const existingUser = await prisma.user.findUnique({
         where: { email: application.email.toLowerCase() },
+        include: { profile: true },
       });
 
+      let profile = existingUser?.profile || null;
+      const isNewProfile = !profile;
+
       if (profile) {
-        // User exists, update their role to affiliate
+        // User exists, ensure affiliate status is approved
+        // Note: 'affiliate' is not a role - it's a status (affiliateStatus)
         profile = await prisma.profile.update({
           where: { id: profile.id },
           data: {
-            role: 'affiliate',
+            affiliateStatus: 'APPROVED',
+            affiliateApprovedAt: profile.affiliateApprovedAt || new Date(),
+            // Update name/phone if not already set
+            firstName: profile.firstName || application.firstName,
+            lastName: profile.lastName || application.lastName,
+            phone: profile.phone || application.phone,
           },
         });
 
-        logger.info('Existing user upgraded to affiliate', {
+        logger.info('Existing user approved as affiliate', {
           profileId: profile.id,
           email: application.email,
           leadId: application.id,
         });
       } else {
-        // Create new user account with affiliate role
+        // Create new user account with affiliate status
+        // Profile requires a User, so we must create both in a transaction
         const tempPassword = nanoid();
         const hashedPassword = await hash(tempPassword, 10);
+        const fullName = [application.firstName, application.lastName].filter(Boolean).join(' ');
 
-        profile = await prisma.profile.create({
-          data: {
-            email: application.email.toLowerCase(),
-            firstName: application.firstName,
-            lastName: application.lastName,
-            phone: application.phone,
-            role: 'affiliate',
-            password: hashedPassword,
-            emailVerified: new Date(), // Auto-verify since admin approved
-          },
+        const { user: newUser, profile: newProfile } = await prisma.$transaction(async (tx) => {
+          // First create the User (required for Profile)
+          const createdUser = await tx.user.create({
+            data: {
+              name: fullName,
+              email: application.email.toLowerCase(),
+              hashedPassword,
+              emailVerified: new Date(), // Auto-verify since admin approved
+            },
+          });
+
+          // Then create the Profile linked to the User
+          // Note: Profile doesn't have an 'email' field - email is on User
+          // Note: 'affiliate' is not a role - use affiliateStatus instead
+          const createdProfile = await tx.profile.create({
+            data: {
+              userId: createdUser.id,
+              firstName: application.firstName,
+              lastName: application.lastName,
+              phone: application.phone,
+              role: 'client', // Default role (affiliate is a status, not a role)
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: new Date(),
+            },
+          });
+
+          return { user: createdUser, profile: createdProfile };
         });
 
-        logger.info('New affiliate profile created', {
+        profile = newProfile;
+
+        logger.info('New user created with affiliate status', {
+          userId: newUser.id,
           profileId: profile.id,
           email: application.email,
           leadId: application.id,
         });
 
         // TODO: Send welcome email with temporary password or magic link
-        // TODO: Generate affiliate link
+      }
+
+      // Assign tracking code for affiliate referrals
+      try {
+        await assignTrackingCodeToUser(profile.id);
+        logger.info('Assigned tracking code to affiliate', {
+          profileId: profile.id,
+          email: application.email,
+        });
+      } catch (trackingError) {
+        // Log but don't fail the approval
+        logger.error('Failed to assign tracking code', {
+          error: trackingError,
+          profileId: profile.id,
+        });
       }
 
       // Update lead status to CONTACTED (or create custom status for affiliates)
@@ -127,14 +174,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         },
       });
 
+      // Get email from the user relation for response
+      const userWithEmail = await prisma.user.findUnique({
+        where: { id: profile.userId },
+        select: { email: true },
+      });
+
       return NextResponse.json({
         success: true,
-        message: 'Application approved successfully',
+        message: `Application approved - ${isNewProfile ? 'Created new' : 'Updated existing'} user with affiliate status`,
         application: updatedApplication,
         profile: {
           id: profile.id,
-          email: profile.email,
+          email: userWithEmail?.email || application.email,
           role: profile.role,
+          affiliateStatus: profile.affiliateStatus,
         },
       });
     } else if (action === 'reject') {
@@ -169,7 +223,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE: Delete affiliate application (admin only)
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const session = await auth();
 
@@ -177,9 +231,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is super_admin
+    // Check if user is admin
     if (session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 });
+      return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
     }
 
     const { id } = await params;

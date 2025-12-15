@@ -83,13 +83,15 @@ export async function POST(req: NextRequest) {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
 
+      // Note: Profile doesn't have an 'email' field - email is stored on User
       await prisma.profile.create({
         data: {
           userId: user.id,
           role: 'client', // Default role for new profiles
           firstName,
           lastName,
-          email: user.email?.toLowerCase() || email.toLowerCase(),
+          affiliateStatus: 'APPROVED', // Auto-approve as affiliate
+          affiliateApprovedAt: new Date(),
         },
       });
 
