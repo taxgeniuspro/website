@@ -36,9 +36,11 @@ interface DashboardSidebarProps {
   // Status-based access control (for clients)
   affiliateStatus?: AffiliateStatus | null;
   hasFiledTaxes?: boolean | null;
+  // User preference to hide referral program features
+  hideReferralProgram?: boolean | null;
 }
 
-export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledTaxes }: DashboardSidebarProps) {
+export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledTaxes, hideReferralProgram }: DashboardSidebarProps) {
   const pathname = usePathname();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
@@ -47,7 +49,10 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
   const canAccessAffiliateFeatures = hasAffiliateAccess(role, affiliateStatus);
   const canAccessTaxFilingFeatures = hasTaxFilingAccess(role, hasFiledTaxes);
 
-  // List of affiliate-feature paths (only shown if affiliateStatus === 'APPROVED' for clients)
+  // User has opted out of referral program visibility
+  const userHidesReferralProgram = hideReferralProgram === true;
+
+  // List of affiliate/referral-feature paths (hidden if user opts out)
   const affiliateFeaturePaths = [
     '/dashboard/client/tracking',
     '/dashboard/client/leads',
@@ -55,6 +60,7 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
     '/dashboard/client/creatives',
     '/dashboard/client/earnings',
     '/dashboard/client/referrals',
+    '/dashboard/client/share-earn',
   ];
 
   // List of tax-filing paths (only shown if hasFiledTaxes for clients)
@@ -83,7 +89,8 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
     if (role === 'client') {
       // Check if this is an affiliate feature path
       if (affiliateFeaturePaths.some(path => item.href.startsWith(path))) {
-        if (!canAccessAffiliateFeatures) return false;
+        // Hide if user opted out of referral program OR doesn't have affiliate access
+        if (userHidesReferralProgram || !canAccessAffiliateFeatures) return false;
       }
 
       // Check if this is a tax-filing feature path

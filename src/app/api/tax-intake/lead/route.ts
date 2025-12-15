@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { getEmailRecipients } from '@/config/email-routing';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
+import { addMonths } from 'date-fns';
 
 export async function POST(req: NextRequest) {
   try {
@@ -211,6 +212,9 @@ export async function POST(req: NextRequest) {
       });
     } else {
       // Create new lead for this tax year
+      // Lead expires in 6 months if not converted to client
+      const expiresAt = addMonths(new Date(), 6);
+
       lead = await prisma.taxIntakeLead.create({
         data: {
           first_name,
@@ -233,6 +237,8 @@ export async function POST(req: NextRequest) {
           assignedPreparerId: assignedPreparerId,
           // Store complete tax intake data if provided
           full_form_data: full_form_data,
+          // Lead expiration: auto-delete in 6 months if not converted
+          expiresAt,
         },
       });
     }

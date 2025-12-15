@@ -26,6 +26,7 @@ import {
   Save,
   Upload,
 } from 'lucide-react';
+import { ReferralProgramToggle } from '@/components/settings/ReferralProgramToggle';
 
 export const metadata = {
   title: 'Settings | Tax Genius Pro',
@@ -248,6 +249,9 @@ export default async function ClientSettingsPage() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Referral Program Settings */}
+      <ReferralProgramToggle />
 
       {/* Security Settings */}
       <Card>

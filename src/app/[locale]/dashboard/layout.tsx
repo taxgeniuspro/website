@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { DashboardLayoutClient } from '@/components/DashboardLayoutClient';
 import { getUserPermissions, UserRole, UserPermissions } from '@/lib/permissions';
 import { getEffectiveRole } from '@/lib/utils/role-switcher';
+import { prisma } from '@/lib/prisma';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Get real authenticated user from Clerk
@@ -28,6 +29,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
     | undefined;
   const permissions = getUserPermissions(effectiveRole, customPermissions);
 
+  // Fetch user profile for status-based access control (clients only)
+  let affiliateStatus = null;
+  let hasFiledTaxes = null;
+  let hideReferralProgram = null;
+
+  if (effectiveRole === 'client') {
+    const profile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: {
+        affiliateStatus: true,
+        hasFiledTaxes: true,
+        hideReferralProgram: true,
+      },
+    });
+    if (profile) {
+      affiliateStatus = profile.affiliateStatus;
+      hasFiledTaxes = profile.hasFiledTaxes;
+      hideReferralProgram = profile.hideReferralProgram;
+    }
+  }
+
   return (
     <DashboardLayoutClient
       actualRole={actualRole}
@@ -35,6 +57,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       isViewingAsOtherRole={isViewingAsOtherRole}
       viewingRoleName={viewingRoleName}
       permissions={permissions}
+      affiliateStatus={affiliateStatus}
+      hasFiledTaxes={hasFiledTaxes}
+      hideReferralProgram={hideReferralProgram}
     >
       {children}
     </DashboardLayoutClient>

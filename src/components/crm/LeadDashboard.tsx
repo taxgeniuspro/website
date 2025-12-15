@@ -48,6 +48,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   UserCheck,
   PhoneCall,
@@ -59,7 +60,7 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import Link from 'next/link';
-import { format } from 'date-fns';
+import { format, differenceInDays, isBefore } from 'date-fns';
 
 interface TaxIntakeLead {
   id: string;
@@ -92,6 +93,8 @@ interface TaxIntakeLead {
   unqualifiedReason?: string | null;
   unqualifiedAt?: string | null;
   unqualifiedNotes?: string | null;
+  // Lead expiration (auto-delete after 6 months if not converted)
+  expiresAt?: string | null;
 }
 
 interface LeadStats {
@@ -126,6 +129,27 @@ const UNQUALIFIED_REASONS = [
   { value: 'not_interested', label: 'Not Interested' },
   { value: 'other', label: 'Other (Specify in Notes)' },
 ];
+
+// Helper to check if lead is expiring soon (within 30 days) or already expired
+function getExpirationInfo(expiresAt: string | null | undefined) {
+  if (!expiresAt) return null;
+
+  const expirationDate = new Date(expiresAt);
+  const now = new Date();
+  const daysUntilExpiration = differenceInDays(expirationDate, now);
+
+  if (daysUntilExpiration < 0) {
+    return { status: 'expired', daysUntilExpiration: 0, message: 'Expired' };
+  }
+  if (daysUntilExpiration <= 30) {
+    return {
+      status: 'expiring',
+      daysUntilExpiration,
+      message: daysUntilExpiration === 0 ? 'Expires today' : `Expires in ${daysUntilExpiration} days`
+    };
+  }
+  return null;
+}
 
 export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProps) {
   const [leads, setLeads] = useState<TaxIntakeLead[]>([]);
@@ -562,6 +586,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
             <div className="space-y-4">
               {filteredLeads.map((lead) => {
                 const status = getLeadStatus(lead);
+                const expirationInfo = !lead.convertedToClient ? getExpirationInfo(lead.expiresAt) : null;
                 return (
                   <Card key={lead.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="pt-6">
@@ -587,6 +612,22 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
                                       🔗 {lead.referrerUsername}-intake
                                     </Badge>
                                   </a>
+                                )}
+                                {/* Expiration warning badge - show when lead is within 30 days of deletion */}
+                                {expirationInfo && (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'text-xs',
+                                      expirationInfo.status === 'expired'
+                                        ? 'bg-red-100 text-red-700 border-red-300'
+                                        : 'bg-orange-100 text-orange-700 border-orange-300'
+                                    )}
+                                    title="Leads are automatically deleted 6 months after creation if not converted to a client"
+                                  >
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    {expirationInfo.message}
+                                  </Badge>
                                 )}
                               </div>
                             </div>

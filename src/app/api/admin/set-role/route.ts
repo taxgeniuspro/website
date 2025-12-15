@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { logger } from '@/lib/logger';
+import { nanoid } from 'nanoid';
 
 // Authorized emails that can upgrade users to tax_preparer or affiliate
 const AUTHORIZED_ADMIN_EMAILS = [
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
     }
 
-    const validRoles = ['admin', 'lead', 'client', 'tax_preparer'];
+    const validRoles = ['admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
@@ -81,17 +83,75 @@ export async function POST(request: NextRequest) {
     const currentRole = user.profile?.role;
     logger.info(`📋 Current role: ${currentRole || 'none'}`);
 
-    // Update role in profile
-    await prisma.profile.update({
-      where: { userId: user.id },
-      data: { role: role as any },
-    });
+    // SPECIAL CASE: Client → Tax Preparer conversion requires account reset
+    const isClientToPreparerConversion = currentRole === 'client' && role === 'tax_preparer';
+    let resetDetails: string[] = [];
+
+    if (isClientToPreparerConversion) {
+      // Generate new tracking code for the preparer
+      const firstName = user.profile?.firstName || 'User';
+      const lastName = user.profile?.lastName || '';
+      const initials = `${firstName[0] || 'u'}${lastName[0] || 'p'}`.toLowerCase();
+      const newTrackingCode = `${initials}-${nanoid(6)}`;
+      const newShortLinkUsername = initials;
+
+      // Reset client data and set up as tax preparer
+      await prisma.profile.update({
+        where: { userId: user.id },
+        data: {
+          role: 'tax_preparer',
+          // Reset client affiliate fields
+          affiliateStatus: 'APPROVED', // Tax preparers auto-approved
+          affiliateBondedToPreparerId: null, // Clear client bonding
+          affiliateGroupId: null,
+          customCommissionType: null,
+          customCommissionRate: null,
+          customFlatAmount: null,
+          // Reset client tax filing status
+          hasFiledTaxes: false,
+          firstFilingDate: null,
+          // Generate new preparer tracking code
+          trackingCode: newTrackingCode,
+          customTrackingCode: null,
+          trackingCodeFinalized: false,
+          shortLinkUsername: newShortLinkUsername,
+          shortLinkUsernameChanged: false,
+          // Reset performance stats (will rebuild as preparer)
+          totalConversions: 0,
+          lifetimeEarnings: new Prisma.Decimal(0),
+          currentTier: null,
+          // Reset referral program opt-out (preparers use different system)
+          hideReferralProgram: false,
+        },
+      });
+
+      resetDetails = [
+        'Client data has been reset',
+        `New tracking code assigned: ${newTrackingCode}`,
+        'Affiliate status set to APPROVED',
+        'Performance stats reset to 0',
+        'Historical commissions are preserved',
+      ];
+
+      logger.info(`🔄 Client ${email} converted to tax_preparer with account reset`, {
+        newTrackingCode,
+        resetDetails,
+      });
+    } else {
+      // Standard role update (no reset)
+      await prisma.profile.update({
+        where: { userId: user.id },
+        data: { role: role as any },
+      });
+    }
 
     logger.info(`✅ Successfully set ${role} role for ${email}`);
 
     return NextResponse.json({
       success: true,
-      message: `Successfully set ${role} role for ${email}. User must sign out and sign back in for changes to take effect.`,
+      message: isClientToPreparerConversion
+        ? `Successfully converted ${email} from client to tax_preparer. Account has been reset.`
+        : `Successfully set ${role} role for ${email}. User must sign out and sign back in for changes to take effect.`,
       user: {
         id: user.id,
         email: user.email,
@@ -99,12 +159,24 @@ export async function POST(request: NextRequest) {
         previousRole: currentRole,
         newRole: role,
       },
-      instructions: [
-        'Role has been updated in the database',
-        'User must completely sign out (not just close browser)',
-        'Sign back in to get a fresh session with the new role',
-        'Or use an incognito/private window to test immediately',
-      ],
+      // Include reset details for client→preparer conversion
+      accountReset: isClientToPreparerConversion ? {
+        wasReset: true,
+        details: resetDetails,
+      } : undefined,
+      instructions: isClientToPreparerConversion
+        ? [
+            'Account has been reset for tax preparer role',
+            'New tracking code has been assigned',
+            'User must sign out and sign back in',
+            'Historical commissions are preserved',
+          ]
+        : [
+            'Role has been updated in the database',
+            'User must completely sign out (not just close browser)',
+            'Sign back in to get a fresh session with the new role',
+            'Or use an incognito/private window to test immediately',
+          ],
     });
   } catch (error) {
     logger.error('❌ Error setting role:', error);
