@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { hash } from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
+import { convertRejectedPreparerToClient } from '@/lib/services/lead-conversion.service';
 
 // Generate random password
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 16);
@@ -62,9 +63,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { action, notes, targetRole } = body;
+    const { action, notes, targetRole, convertTo } = body;
     // targetRole: 'client' | 'tax_preparer' (default: 'tax_preparer')
     // Note: 'affiliate' is not a role - it's a status (affiliateStatus) on Profile
+    // convertTo: 'client' | 'affiliate' - for reject action, optionally convert to client/affiliate
 
     const application = await prisma.preparerApplication.findUnique({
       where: { id },
@@ -220,7 +222,51 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       logger.info('Preparer application rejected', {
         applicationId: id,
         email: application.email,
+        convertTo: convertTo || 'none',
       });
+
+      // Handle conversion to client/affiliate if requested
+      if (convertTo === 'client' || convertTo === 'affiliate') {
+        const conversionResult = await convertRejectedPreparerToClient(id, convertTo);
+
+        if (conversionResult.success) {
+          const conversionMessage = conversionResult.requiresSignup
+            ? `Application rejected. Marked for ${convertTo} conversion - they will be converted when they sign up.`
+            : `Application rejected and converted to ${convertTo === 'affiliate' ? 'Affiliate Client' : 'Client'}.`;
+
+          logger.info('Rejected application converted', {
+            applicationId: id,
+            convertTo,
+            profileId: conversionResult.profileId,
+            requiresSignup: conversionResult.requiresSignup,
+          });
+
+          return NextResponse.json({
+            success: true,
+            message: conversionMessage,
+            application: updatedApplication,
+            conversion: {
+              type: convertTo,
+              profileId: conversionResult.profileId,
+              requiresSignup: conversionResult.requiresSignup,
+            },
+          });
+        } else {
+          // Conversion failed but rejection succeeded
+          logger.error('Failed to convert rejected application', {
+            applicationId: id,
+            convertTo,
+            error: conversionResult.error,
+          });
+
+          return NextResponse.json({
+            success: true,
+            message: `Application rejected, but conversion to ${convertTo} failed: ${conversionResult.error}`,
+            application: updatedApplication,
+            conversionError: conversionResult.error,
+          });
+        }
+      }
 
       // TODO: Send rejection email to applicant
 
