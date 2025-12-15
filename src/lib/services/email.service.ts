@@ -13,6 +13,7 @@ import { TaxPreparerWelcomeEmail } from '../../../emails/TaxPreparerWelcomeEmail
 import { NewLeadNotification } from '../../../emails/new-lead-notification';
 import { TaxIntakeComplete } from '../../../emails/tax-intake-complete';
 import { AppointmentNotificationPreparer } from '../../../emails/appointment-notification-preparer';
+import { PreparerApplicationRejected } from '../../../emails/preparer-application-rejected';
 import { logger } from '@/lib/logger';
 
 // Lazy-initialize Resend to avoid build-time errors when API key is not set
@@ -229,6 +230,61 @@ export class EmailService {
       return true;
     } catch (error) {
       logger.error('Error sending tax preparer welcome email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send preparer application rejection email
+   */
+  static async sendPreparerRejectionEmail(
+    to: string,
+    firstName: string,
+    rejectionReason?: string,
+    convertedTo?: 'client' | 'affiliate' | null,
+    locale: 'en' | 'es' = 'en'
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Preparer Rejection Email (Dev Mode):', {
+          to,
+          firstName,
+          rejectionReason,
+          convertedTo,
+          locale,
+        });
+        return true;
+      }
+
+      const subjectEn = 'Tax Genius Pro - Application Update';
+      const subjectEs = 'Tax Genius Pro - Actualización de Solicitud';
+      const subject = locale === 'es' ? subjectEs : subjectEn;
+
+      const { data, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject,
+        react: PreparerApplicationRejected({
+          firstName,
+          rejectionReason,
+          convertedTo,
+          locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending preparer rejection email:', error);
+        return false;
+      }
+
+      logger.info('Preparer rejection email sent:', {
+        emailId: data?.id,
+        to,
+        convertedTo,
+      });
+      return true;
+    } catch (error) {
+      logger.error('Error sending preparer rejection email:', error);
       return false;
     }
   }
@@ -1528,5 +1584,59 @@ export class EmailService {
       },
       86400
     ); // Keep for 24 hours
+  }
+
+  /**
+   * Send client referral invitation email after tax filing is complete
+   */
+  static async sendClientReferralInvitation(
+    to: string,
+    clientName: string,
+    preparerName: string,
+    taxYear: number,
+    referralLink: string,
+    referralCode: string,
+    options?: {
+      refundAmount?: number;
+      socialMediaCopy?: string;
+      images?: Array<{ url: string; alt: string }>;
+    }
+  ): Promise<{ success: boolean; emailId?: string }> {
+    try {
+      const resend = getResendClient();
+
+      const { data, error } = await resend.emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `${clientName}, Earn Cash by Sharing Tax Genius! 💰`,
+        react: ReferralInvitationEmail({
+          clientName,
+          preparerName,
+          taxYear,
+          refundAmount: options?.refundAmount,
+          referralLink,
+          referralCode,
+          socialMediaCopy: options?.socialMediaCopy,
+          images: options?.images,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending client referral invitation email:', error);
+        return { success: false };
+      }
+
+      logger.info('Client referral invitation email sent:', {
+        emailId: data?.id,
+        to,
+        clientName,
+        referralCode,
+      });
+
+      return { success: true, emailId: data?.id };
+    } catch (error) {
+      logger.error('Error sending client referral invitation email:', error);
+      return { success: false };
+    }
   }
 }

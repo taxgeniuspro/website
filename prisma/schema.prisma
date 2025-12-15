@@ -273,6 +273,11 @@ model Profile {
   generatedImages GeneratedImage[] @relation("GeneratedImages")
   acceptedImages  GeneratedImage[] @relation("AcceptedImages")
 
+  // Client Referral Program
+  referralImageSets           ReferralImageSet[]           @relation("PreparerImageSets")
+  clientReferralInvitations   ClientReferralInvitation[]   @relation("ClientReferralInvitations")
+  preparerReferralInvitations ClientReferralInvitation[]   @relation("PreparerReferralInvitations")
+
   @@index([role])
   @@index([vanitySlug])
   @@index([trackingCode])
@@ -526,6 +531,12 @@ model PreparerApplication {
 
   // CRM integration
   crmContactId String? // Link to CRMContact record
+
+  // Audit trail
+  reviewedBy     String?   // Admin user ID who made the decision
+  reviewedAt     DateTime? // When the decision was made
+  lastModifiedBy String?   // Admin who last updated the record
+  lastModifiedAt DateTime? // When last updated
 
   @@index([email])
   @@index([status])
@@ -3834,4 +3845,90 @@ model CreativeUsage {
   @@index([usedAt])
   @@index([action])
   @@map("creative_usage")
+}
+
+// ============ Client Referral Program ============
+
+// Referral Image Sets - Collections of promotional images organized by season/preparer
+model ReferralImageSet {
+  id          String  @id @default(cuid())
+  category    String // preseason-loans, tax-season, preparer-custom
+  preparerId  String? // For preparer-specific sets (null = company-wide)
+  preparer    Profile? @relation("PreparerImageSets", fields: [preparerId], references: [id], onDelete: Cascade)
+
+  name        String // Display name (e.g., "Preseason Loans 2025")
+  description String?
+  validFrom   DateTime? // When images become active
+  validUntil  DateTime? // When images expire
+  isActive    Boolean @default(true)
+
+  // Relations
+  images      ReferralImage[]
+  invitations ClientReferralInvitation[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([preparerId])
+  @@index([isActive, validFrom, validUntil])
+  @@map("referral_image_sets")
+}
+
+// Referral Images - Individual promotional images
+model ReferralImage {
+  id           String           @id @default(cuid())
+  setId        String
+  set          ReferralImageSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  imageUrl     String // Cloudinary URL
+  thumbnailUrl String? // Smaller preview for email
+  fileName     String
+  altText      String
+  sortOrder    Int     @default(0)
+
+  // Social media dimensions
+  platform     String? // instagram, facebook, twitter, story
+  width        Int?
+  height       Int?
+
+  downloadCount Int @default(0)
+
+  createdAt    DateTime @default(now())
+
+  @@index([setId, sortOrder])
+  @@map("referral_images")
+}
+
+// Client Referral Invitations - Track referral emails sent to clients after filing
+model ClientReferralInvitation {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Profile  @relation("ClientReferralInvitations", fields: [clientId], references: [id], onDelete: Cascade)
+  preparerId   String
+  preparer     Profile  @relation("PreparerReferralInvitations", fields: [preparerId], references: [id], onDelete: Cascade)
+
+  taxYear      Int
+  referralCode String   @unique // Unique code for this client (e.g., "Fw8jWm9")
+  referralLink String   // Full referral link
+
+  // Email Tracking
+  sentAt       DateTime?
+  emailId      String?  // Resend email ID for tracking
+  opened       Boolean  @default(false)
+  openedAt     DateTime?
+  clicked      Boolean  @default(false)
+  clickedAt    DateTime?
+
+  // Image set used (determines which images were included)
+  imageSetId   String?
+  imageSet     ReferralImageSet? @relation(fields: [imageSetId], references: [id])
+
+  createdAt    DateTime @default(now())
+
+  @@unique([clientId, taxYear])
+  @@index([preparerId])
+  @@index([referralCode])
+  @@index([sentAt])
+  @@map("client_referral_invitations")
 }
