@@ -28,6 +28,8 @@ export default async function AdminAffiliatesPage() {
   const user = await getAuthenticatedUser();
 
   // Fetch affiliate statistics
+  // Note: 'affiliate' role was removed - affiliates are now users with affiliateStatus='APPROVED'
+  // We query for tax_preparers (who auto-have affiliate features) OR any user with affiliateStatus
   const [
     totalAffiliates,
     pendingAffiliates,
@@ -37,8 +39,14 @@ export default async function AdminAffiliatesPage() {
     recentAffiliates,
     affiliateStats,
   ] = await Promise.all([
+    // Count all users who are either tax_preparers or have affiliate status set
     prisma.profile.count({
-      where: { role: { in: ['affiliate', 'tax_preparer'] } },
+      where: {
+        OR: [
+          { role: 'tax_preparer' },
+          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
+        ],
+      },
     }),
     prisma.profile.count({
       where: { affiliateStatus: 'PENDING' },
@@ -49,7 +57,12 @@ export default async function AdminAffiliatesPage() {
     prisma.affiliateGroup.count(),
     prisma.affiliateCreative.count(),
     prisma.profile.findMany({
-      where: { role: { in: ['affiliate', 'tax_preparer'] } },
+      where: {
+        OR: [
+          { role: 'tax_preparer' },
+          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       take: 10,
       select: {
@@ -70,7 +83,12 @@ export default async function AdminAffiliatesPage() {
       },
     }),
     prisma.profile.aggregate({
-      where: { role: { in: ['affiliate', 'tax_preparer'] } },
+      where: {
+        OR: [
+          { role: 'tax_preparer' },
+          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
+        ],
+      },
       _sum: {
         totalConversions: true,
         lifetimeEarnings: true,

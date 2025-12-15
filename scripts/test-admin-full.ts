@@ -159,41 +159,76 @@ async function login(page: Page): Promise<boolean> {
     const maxAttempts = 20; // 20 seconds max
     while (attempts < maxAttempts) {
       await sleep(1000);
-      const currentUrl = page.url();
 
-      // Check if we're on the dashboard
-      if (currentUrl.includes('dashboard')) {
-        log('✅', 'Login successful!');
-        // Wait a bit more for page to fully load
-        await sleep(2000);
-        return true;
-      }
+      try {
+        const currentUrl = page.url();
 
-      // Check for error message (more comprehensive selectors)
-      const errorElement = await page.$('.text-red-500, .text-destructive, [role="alert"], .bg-destructive, .error-message');
-      if (errorElement) {
-        const errorText = await page.evaluate(el => el?.textContent, errorElement);
-        if (errorText && errorText.trim()) {
-          log('❌', `Login failed: ${errorText}`);
-          await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'login-error.png'), fullPage: true });
-          return false;
+        // Check if we're on the dashboard
+        if (currentUrl.includes('dashboard')) {
+          log('✅', 'Login successful!');
+          // Wait a bit more for page to fully load
+          await sleep(2000);
+          return true;
         }
-      }
 
-      // Take a screenshot every 5 seconds to help debug
-      if (attempts % 5 === 0 && attempts > 0) {
-        await page.screenshot({ path: path.join(SCREENSHOT_DIR, `login-waiting-${attempts}s.png`), fullPage: true });
-        log('📸', `Screenshot at ${attempts}s: ${currentUrl}`);
+        // Check for error message (more comprehensive selectors)
+        const errorElement = await page.$('.text-red-500, .text-destructive, [role="alert"], .bg-destructive, .error-message');
+        if (errorElement) {
+          const errorText = await page.evaluate(el => el?.textContent, errorElement);
+          if (errorText && errorText.trim()) {
+            log('❌', `Login failed: ${errorText}`);
+            await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'login-error.png'), fullPage: true });
+            return false;
+          }
+        }
+
+        // Take a screenshot every 5 seconds to help debug
+        if (attempts % 5 === 0 && attempts > 0) {
+          await page.screenshot({ path: path.join(SCREENSHOT_DIR, `login-waiting-${attempts}s.png`), fullPage: true });
+          log('📸', `Screenshot at ${attempts}s: ${currentUrl}`);
+        }
+      } catch (navError) {
+        // Context was destroyed due to navigation - this is actually good, means we're redirecting
+        log('⏳', 'Navigation detected, waiting for page to settle...');
+        await sleep(2000);
+        try {
+          const currentUrl = page.url();
+          if (currentUrl.includes('dashboard')) {
+            log('✅', 'Login successful after navigation!');
+            await sleep(2000);
+            return true;
+          }
+        } catch {
+          // Still navigating, continue waiting
+        }
       }
 
       attempts++;
     }
 
-    const finalUrl = page.url();
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'login-timeout.png'), fullPage: true });
-    log('⚠️', `Login timed out. Final URL: ${finalUrl}`);
+    try {
+      const finalUrl = page.url();
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'login-timeout.png'), fullPage: true });
+      log('⚠️', `Login timed out. Final URL: ${finalUrl}`);
+    } catch {
+      log('⚠️', 'Login timed out and page is still navigating');
+    }
     return false;
   } catch (error) {
+    // Check if the error is due to navigation (which means login worked)
+    if (String(error).includes('context was destroyed') || String(error).includes('navigation')) {
+      log('⏳', 'Navigation detected during login, checking result...');
+      await sleep(3000);
+      try {
+        const currentUrl = page.url();
+        if (currentUrl.includes('dashboard')) {
+          log('✅', 'Login successful after navigation!');
+          return true;
+        }
+      } catch {
+        // Page still navigating
+      }
+    }
     log('❌', `Login error: ${error}`);
     return false;
   }
