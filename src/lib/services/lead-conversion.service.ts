@@ -248,3 +248,230 @@ export async function hasUnconvertedLead(email: string): Promise<{
     return { hasLead: false };
   }
 }
+
+/**
+ * Convert TaxIntakeLead to AFFILIATE CLIENT
+ * Same as client but with affiliate status and referral links
+ */
+export async function convertLeadToAffiliateClient(
+  leadId: string,
+  userId: string
+): Promise<ConversionResult> {
+  try {
+    logger.info(`Starting lead-to-affiliate-client conversion for lead ${leadId}`);
+
+    // 1. Get the lead
+    const lead = await prisma.taxIntakeLead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead) {
+      return { success: false, error: 'Lead not found' };
+    }
+
+    if (lead.convertedToClient) {
+      logger.warn(`Lead ${leadId} already converted`);
+      return {
+        success: true,
+        profileId: lead.profileId || undefined,
+        taxReturnId: lead.taxReturnId || undefined,
+      };
+    }
+
+    // 2. Create CLIENT profile with APPROVED affiliate status
+    const profile = await createAffiliateProfileFromLead(lead, userId);
+    logger.info(`Created AFFILIATE CLIENT profile ${profile.id} for lead ${leadId}`);
+
+    // 3. Assign tracking code and generate referral links
+    await assignTrackingCodeToUser(
+      profile.id,
+      process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'
+    );
+    logger.info(`Assigned tracking code and referral links to affiliate profile ${profile.id}`);
+
+    // 4. Auto-assign to preparer
+    const preparerId = lead.assignedPreparerId || process.env.TAX_GENIUS_PREPARER_ID;
+    if (preparerId) {
+      try {
+        await prisma.clientPreparer.create({
+          data: {
+            clientId: profile.id,
+            preparerId: preparerId,
+            isActive: true,
+          },
+        });
+        logger.info(`Auto-assigned affiliate client ${profile.id} to preparer ${preparerId}`);
+      } catch (error) {
+        logger.error(`Failed to auto-assign affiliate client to preparer:`, error);
+      }
+    }
+
+    // 5. Create TaxReturn from lead data
+    const taxReturn = await createTaxReturnFromLead(lead, profile.id);
+    logger.info(`Created TaxReturn ${taxReturn.id} for affiliate profile ${profile.id}`);
+
+    // 6. Link lead to profile and tax return
+    await linkLeadToProfile(leadId, profile.id, taxReturn.id);
+    logger.info(`Linked lead ${leadId} to affiliate profile ${profile.id}`);
+
+    logger.info(`✅ Successfully converted lead ${leadId} to AFFILIATE CLIENT`);
+
+    return {
+      success: true,
+      profileId: profile.id,
+      taxReturnId: taxReturn.id,
+    };
+  } catch (error) {
+    logger.error('Error converting lead to affiliate client:', { leadId, error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Create AFFILIATE CLIENT profile from TaxIntakeLead
+ * Includes affiliate status APPROVED and will get referral links
+ */
+async function createAffiliateProfileFromLead(lead: TaxIntakeLead, userId: string): Promise<Profile> {
+  // Check if profile already exists
+  const existingProfile = await prisma.profile.findUnique({
+    where: { userId },
+  });
+
+  if (existingProfile) {
+    // Update existing profile to have affiliate status
+    const updatedProfile = await prisma.profile.update({
+      where: { id: existingProfile.id },
+      data: {
+        affiliateStatus: 'APPROVED',
+        affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date(),
+      },
+    });
+    logger.info(`Updated existing profile ${userId} to affiliate status`);
+    return updatedProfile;
+  }
+
+  const profile = await prisma.profile.create({
+    data: {
+      userId,
+      role: 'client',
+      firstName: lead.first_name,
+      lastName: lead.last_name,
+      phone: lead.phone,
+      affiliateStatus: 'APPROVED',
+      affiliateApprovedAt: new Date(),
+      address: lead.address_line_1
+        ? {
+            line1: lead.address_line_1,
+            line2: lead.address_line_2 || undefined,
+            city: lead.city,
+            state: lead.state,
+            zipCode: lead.zip_code,
+          }
+        : undefined,
+    },
+  });
+
+  return profile;
+}
+
+interface PreparerApplicationResult {
+  success: boolean;
+  applicationId?: string;
+  error?: string;
+}
+
+/**
+ * Create Tax Preparer Application from TaxIntakeLead
+ * Pre-fills application with lead's info and routes to admin for approval
+ */
+export async function createPreparerApplicationFromLead(
+  leadId: string,
+  notes?: string
+): Promise<PreparerApplicationResult> {
+  try {
+    logger.info(`Creating preparer application from lead ${leadId}`);
+
+    // 1. Get the lead
+    const lead = await prisma.taxIntakeLead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead) {
+      return { success: false, error: 'Lead not found' };
+    }
+
+    // 2. Check if application already exists for this email
+    const existingApp = await prisma.preparerApplication.findFirst({
+      where: { email: lead.email.toLowerCase() },
+    });
+
+    if (existingApp) {
+      return {
+        success: false,
+        error: `A preparer application already exists for ${lead.email} (Status: ${existingApp.status})`,
+      };
+    }
+
+    // 3. Create preparer application with lead data
+    const application = await prisma.preparerApplication.create({
+      data: {
+        firstName: lead.first_name,
+        middleName: lead.middle_name,
+        lastName: lead.last_name,
+        email: lead.email.toLowerCase(),
+        phone: lead.phone,
+        status: 'PENDING',
+        stage: 'NEW',
+        notes: notes
+          ? `Converted from tax intake lead.\n\nConversion Notes: ${notes}`
+          : 'Converted from tax intake lead.',
+        // Store original lead ID for reference
+        metadata: {
+          sourceLeadId: leadId,
+          convertedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    // 4. Update lead with conversion info (but don't mark as convertedToClient since they're becoming a preparer)
+    await prisma.taxIntakeLead.update({
+      where: { id: leadId },
+      data: {
+        contactNotes: lead.contactNotes
+          ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Converted to preparer application (ID: ${application.id})`
+          : `[${new Date().toISOString()}] Converted to preparer application (ID: ${application.id})`,
+        updated_at: new Date(),
+      },
+    });
+
+    // 5. Create lead activity
+    await prisma.leadActivity.create({
+      data: {
+        leadId,
+        activityType: 'STATUS_CHANGED',
+        title: 'Lead converted to Tax Preparer Application',
+        description: `Created preparer application ${application.id}. Awaiting admin approval.`,
+        metadata: {
+          applicationId: application.id,
+          conversionType: 'preparer',
+        },
+      },
+    });
+
+    logger.info(`✅ Created preparer application ${application.id} from lead ${leadId}`);
+
+    return {
+      success: true,
+      applicationId: application.id,
+    };
+  } catch (error) {
+    logger.error('Error creating preparer application from lead:', { leadId, error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
