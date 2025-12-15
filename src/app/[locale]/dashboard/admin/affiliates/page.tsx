@@ -69,7 +69,9 @@ export default async function AdminAffiliatesPage() {
         id: true,
         firstName: true,
         lastName: true,
-        email: true,
+        user: {
+          select: { email: true },
+        },
         avatarUrl: true,
         role: true,
         affiliateStatus: true,
@@ -270,7 +272,7 @@ export default async function AdminAffiliatesPage() {
                       <p className="font-medium">
                         {affiliate.firstName} {affiliate.lastName}
                       </p>
-                      <p className="text-sm text-muted-foreground">{affiliate.email}</p>
+                      <p className="text-sm text-muted-foreground">{affiliate.user?.email}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-xs">
                           {affiliate.role}
