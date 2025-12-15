@@ -18,6 +18,83 @@ import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from './tracking-code.service';
 import type { TaxIntakeLead, Profile, TaxReturn } from '@prisma/client';
 
+/**
+ * Get Owliver's Profile ID
+ * Owliver Owl (taxgenius.tax@gmail.com) is the default preparer for rejected preparer applicants
+ * who are converted to clients/affiliates.
+ *
+ * @returns Owliver's profile ID or null if not found
+ */
+async function getOwliverProfileId(): Promise<string | null> {
+  // Check environment variable first
+  if (process.env.OWLIVER_PROFILE_ID) {
+    return process.env.OWLIVER_PROFILE_ID;
+  }
+
+  // Fall back to dynamic lookup by tracking code
+  const owliver = await prisma.profile.findFirst({
+    where: { customTrackingCode: 'ow' },
+    select: { id: true },
+  });
+
+  if (owliver) {
+    return owliver.id;
+  }
+
+  // Last resort: lookup by email
+  const owliverUser = await prisma.user.findUnique({
+    where: { email: 'taxgenius.tax@gmail.com' },
+    include: { profile: { select: { id: true } } },
+  });
+
+  return owliverUser?.profile?.id || null;
+}
+
+/**
+ * Assign a client to Owliver Owl as their managing preparer
+ * Creates a ClientPreparer relationship
+ */
+async function assignClientToOwliver(clientProfileId: string, clientEmail: string): Promise<boolean> {
+  try {
+    const owliverProfileId = await getOwliverProfileId();
+
+    if (!owliverProfileId) {
+      logger.warn(`⚠️ Could not find Owliver's profile ID - skipping client assignment for ${clientEmail}`);
+      return false;
+    }
+
+    // Check if assignment already exists
+    const existingAssignment = await prisma.clientPreparer.findUnique({
+      where: {
+        clientId_preparerId: {
+          clientId: clientProfileId,
+          preparerId: owliverProfileId,
+        },
+      },
+    });
+
+    if (existingAssignment) {
+      logger.info(`Client ${clientEmail} already assigned to Owliver`);
+      return true;
+    }
+
+    // Create new assignment
+    await prisma.clientPreparer.create({
+      data: {
+        clientId: clientProfileId,
+        preparerId: owliverProfileId,
+        isActive: true,
+      },
+    });
+
+    logger.info(`✅ Assigned rejected preparer ${clientEmail} to Owliver as client`);
+    return true;
+  } catch (error) {
+    logger.error(`Failed to assign client ${clientEmail} to Owliver:`, error);
+    return false;
+  }
+}
+
 interface ConversionResult {
   success: boolean;
   profileId?: string;
@@ -542,6 +619,9 @@ export async function convertRejectedPreparerToClient(
         },
       });
 
+      // Assign to Owliver as their managing preparer
+      await assignClientToOwliver(existingUser.profile.id, application.email);
+
       return {
         success: true,
         profileId: existingUser.profile.id,
@@ -550,16 +630,17 @@ export async function convertRejectedPreparerToClient(
 
     // 3. User doesn't exist - they need to sign up first
     // Store the conversion intent in application notes
+    // Also mark for Owliver assignment when they sign up
     await prisma.preparerApplication.update({
       where: { id: applicationId },
       data: {
         notes: application.notes
-          ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]`
-          : `[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]`,
+          ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]\n[ASSIGN_TO_OWLIVER]`
+          : `[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]\n[ASSIGN_TO_OWLIVER]`,
       },
     });
 
-    logger.info(`Marked application ${applicationId} for ${conversionType} conversion - awaiting signup`);
+    logger.info(`Marked application ${applicationId} for ${conversionType} conversion + Owliver assignment - awaiting signup`);
 
     return {
       success: true,
@@ -619,6 +700,11 @@ export async function createClientFromPreparerApplication(
         }
       }
 
+      // Assign to Owliver as their managing preparer (for rejected preparer applicants)
+      if (application.notes?.includes('[ASSIGN_TO_OWLIVER]')) {
+        await assignClientToOwliver(existingProfile.id, application.email);
+      }
+
       return {
         success: true,
         profileId: existingProfile.id,
@@ -647,7 +733,12 @@ export async function createClientFromPreparerApplication(
     );
     logger.info(`Assigned tracking code to profile ${profile.id}`);
 
-    // 5. Update application with profile reference
+    // 5. Assign to Owliver as their managing preparer (for rejected preparer applicants)
+    if (application.notes?.includes('[ASSIGN_TO_OWLIVER]')) {
+      await assignClientToOwliver(profile.id, application.email);
+    }
+
+    // 6. Update application with profile reference
     await prisma.preparerApplication.update({
       where: { id: applicationId },
       data: {
