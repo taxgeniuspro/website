@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Create Profile record
+    // Note: Tax preparers don't need affiliateStatus - they HAVE affiliates, they are not affiliates themselves
     const newProfile = await prisma.profile.create({
       data: {
         userId: newUser.id,
