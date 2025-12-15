@@ -160,7 +160,7 @@ export default async function AdminAffiliatesPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${affiliateStats._sum.lifetimeEarnings?.toNumber().toLocaleString() || 0}
+                ${affiliateStats._sum.lifetimeEarnings ? Number(affiliateStats._sum.lifetimeEarnings).toLocaleString() : 0}
               </div>
               <p className="text-xs text-muted-foreground">All-time payouts</p>
             </CardContent>
@@ -276,7 +276,7 @@ export default async function AdminAffiliatesPage() {
                         {affiliate.totalConversions} conversions
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        ${affiliate.lifetimeEarnings?.toNumber().toFixed(2) || '0.00'} earned
+                        ${affiliate.lifetimeEarnings ? Number(affiliate.lifetimeEarnings).toFixed(2) : '0.00'} earned
                       </p>
                     </div>
                     <Badge
