@@ -9,19 +9,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
   UserCheck,
   Users,
   Briefcase,
   DollarSign,
-  Link2,
   FileText,
 } from 'lucide-react';
 
@@ -43,38 +47,41 @@ interface LeadConversionDialogProps {
 
 type ConversionType = 'client' | 'affiliate' | 'preparer';
 
-const CONVERSION_OPTIONS = [
+const CONVERSION_OPTIONS: {
+  value: ConversionType;
+  label: string;
+  shortLabel: string;
+  description: string;
+  icon: typeof UserCheck;
+  color: string;
+  bgColor: string;
+}[] = [
   {
-    value: 'client' as ConversionType,
-    label: 'Convert to Client',
-    description: 'Standard client - gets their taxes prepared',
+    value: 'client',
+    label: 'Client (Standard)',
+    shortLabel: 'Client',
+    description: 'Standard client - gets their taxes prepared with regular pricing',
     icon: UserCheck,
-    color: 'bg-purple-600',
-    benefits: ['Full tax preparation service', 'Standard pricing', 'Assigned to your workload'],
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-600',
   },
   {
-    value: 'affiliate' as ConversionType,
-    label: 'Convert to Affiliate Client',
-    description: 'Client with referral benefits',
+    value: 'affiliate',
+    label: 'Client/Affiliate (Special Pricing)',
+    shortLabel: 'Affiliate Client',
+    description: 'Client with affiliate discount and referral benefits',
     icon: Users,
-    color: 'bg-green-600',
-    benefits: [
-      'Tax preparation with affiliate discount',
-      'Gets their own referral links',
-      'Can earn commissions on referrals',
-    ],
+    color: 'text-green-600',
+    bgColor: 'bg-green-600',
   },
   {
-    value: 'preparer' as ConversionType,
-    label: 'Convert to Tax Preparer',
-    description: 'Creates application for admin approval',
+    value: 'preparer',
+    label: 'Tax Preparer (Application)',
+    shortLabel: 'Tax Preparer',
+    description: 'Creates preparer application for admin approval',
     icon: Briefcase,
-    color: 'bg-blue-600',
-    benefits: [
-      'Creates preparer application',
-      'Pre-fills with lead info',
-      'Routes to admin for approval',
-    ],
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-600',
   },
 ];
 
@@ -148,87 +155,60 @@ export function LeadConversionDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Convert Lead</DialogTitle>
           <DialogDescription>
-            Choose how to convert{' '}
+            Convert{' '}
             <span className="font-semibold">
               {lead?.first_name} {lead?.last_name}
             </span>{' '}
-            ({lead?.email})
+            to a client, affiliate, or tax preparer.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Conversion Type Selection */}
-          <RadioGroup
-            value={conversionType}
-            onValueChange={(value) => setConversionType(value as ConversionType)}
-            className="space-y-3"
-          >
-            {CONVERSION_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const isSelected = conversionType === option.value;
-
-              return (
-                <Card
-                  key={option.value}
-                  className={`cursor-pointer transition-all ${
-                    isSelected
-                      ? 'ring-2 ring-primary border-primary'
-                      : 'hover:border-gray-400'
-                  }`}
-                  onClick={() => setConversionType(option.value)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <RadioGroupItem value={option.value} id={option.value} className="mt-1" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-1.5 rounded ${option.color}`}>
-                            <Icon className="h-4 w-4 text-white" />
-                          </div>
-                          <Label
-                            htmlFor={option.value}
-                            className="font-semibold cursor-pointer"
-                          >
-                            {option.label}
-                          </Label>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {option.description}
-                        </p>
-                        {isSelected && (
-                          <ul className="mt-2 space-y-1">
-                            {option.benefits.map((benefit, idx) => (
-                              <li
-                                key={idx}
-                                className="text-xs text-muted-foreground flex items-center gap-1"
-                              >
-                                <span className="text-green-600">✓</span> {benefit}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+          {/* Conversion Type Dropdown */}
+          <div className="space-y-2">
+            <Label htmlFor="conversion-type">Convert To</Label>
+            <Select
+              value={conversionType}
+              onValueChange={(value) => setConversionType(value as ConversionType)}
+            >
+              <SelectTrigger id="conversion-type" className="w-full">
+                <SelectValue placeholder="Select conversion type..." />
+              </SelectTrigger>
+              <SelectContent>
+                {CONVERSION_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className={`h-4 w-4 ${option.color}`} />
+                        <span>{option.label}</span>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </RadioGroup>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {selectedOption && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {selectedOption.description}
+              </p>
+            )}
+          </div>
 
-          {/* Additional Info for Selected Type */}
+          {/* Info Card for Affiliate */}
           {conversionType === 'affiliate' && (
             <Card className="bg-green-50 border-green-200">
               <CardContent className="p-3">
-                <div className="flex items-center gap-2 text-green-800 text-sm">
+                <div className="flex items-center gap-2 text-green-800 text-sm font-medium">
                   <DollarSign className="h-4 w-4" />
-                  <span className="font-medium">Affiliate Benefits:</span>
+                  Affiliate Benefits
                 </div>
-                <ul className="mt-1 text-xs text-green-700 space-y-0.5 ml-6">
-                  <li>• 15% discount on tax preparation services</li>
+                <ul className="mt-2 text-xs text-green-700 space-y-1">
+                  <li>• Special affiliate pricing/discount</li>
                   <li>• Personal referral links (lead, intake, appointment)</li>
                   <li>• Commission on successful referrals</li>
                 </ul>
@@ -236,25 +216,25 @@ export function LeadConversionDialog({
             </Card>
           )}
 
+          {/* Info Card for Preparer */}
           {conversionType === 'preparer' && (
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-3">
-                <div className="flex items-center gap-2 text-blue-800 text-sm">
+                <div className="flex items-center gap-2 text-blue-800 text-sm font-medium">
                   <FileText className="h-4 w-4" />
-                  <span className="font-medium">Application Process:</span>
+                  Application Process
                 </div>
-                <ul className="mt-1 text-xs text-blue-700 space-y-0.5 ml-6">
-                  <li>• Application created with lead's info pre-filled</li>
-                  <li>• Admin reviews and approves/rejects</li>
-                  <li>• If approved: account created with tax preparer role</li>
-                  <li>• Gets tracking code, QR code, and referral links</li>
+                <ul className="mt-2 text-xs text-blue-700 space-y-1">
+                  <li>• Creates application with lead's info pre-filled</li>
+                  <li>• Routes to admin for review and approval</li>
+                  <li>• If approved: gets tax preparer account + referral links</li>
                 </ul>
               </CardContent>
             </Card>
           )}
 
           {/* Notes */}
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="conversion-notes">Notes (optional)</Label>
             <Textarea
               id="conversion-notes"
@@ -262,7 +242,6 @@ export function LeadConversionDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="mt-1"
             />
           </div>
 
@@ -281,7 +260,7 @@ export function LeadConversionDialog({
           <Button
             onClick={handleConvert}
             disabled={submitting}
-            className={selectedOption?.color}
+            className={selectedOption?.bgColor}
           >
             {submitting ? (
               <>
@@ -291,7 +270,7 @@ export function LeadConversionDialog({
             ) : (
               <>
                 {selectedOption && <selectedOption.icon className="h-4 w-4 mr-2" />}
-                {selectedOption?.label}
+                Convert to {selectedOption?.shortLabel}
               </>
             )}
           </Button>
