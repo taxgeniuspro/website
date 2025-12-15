@@ -24,9 +24,7 @@ import {
   Loader2,
   UserCheck,
   Users,
-  Briefcase,
   DollarSign,
-  FileText,
 } from 'lucide-react';
 
 interface TaxIntakeLead {
@@ -45,7 +43,7 @@ interface LeadConversionDialogProps {
   onConversionComplete: () => void;
 }
 
-type ConversionType = 'client' | 'affiliate' | 'preparer';
+type ConversionType = 'client' | 'affiliate';
 
 const CONVERSION_OPTIONS: {
   value: ConversionType;
@@ -58,7 +56,7 @@ const CONVERSION_OPTIONS: {
 }[] = [
   {
     value: 'client',
-    label: 'Client (Standard)',
+    label: 'Client (Standard Pricing)',
     shortLabel: 'Client',
     description: 'Standard client - gets their taxes prepared with regular pricing',
     icon: UserCheck,
@@ -69,19 +67,10 @@ const CONVERSION_OPTIONS: {
     value: 'affiliate',
     label: 'Client/Affiliate (Special Pricing)',
     shortLabel: 'Affiliate Client',
-    description: 'Client with affiliate discount and referral benefits',
+    description: 'Client with affiliate discount, personal referral links, and commission on referrals',
     icon: Users,
     color: 'text-green-600',
     bgColor: 'bg-green-600',
-  },
-  {
-    value: 'preparer',
-    label: 'Tax Preparer (Application)',
-    shortLabel: 'Tax Preparer',
-    description: 'Creates preparer application for admin approval',
-    icon: Briefcase,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-600',
   },
 ];
 
@@ -128,8 +117,6 @@ export function LeadConversionDialog({
         successMessage = data.requiresSignup
           ? `Invitation sent to ${lead.email}. They'll become an affiliate client after signing up.`
           : 'Lead converted to affiliate client with referral benefits!';
-      } else if (conversionType === 'preparer') {
-        successMessage = `Tax preparer application created for ${lead.first_name} ${lead.last_name}. Awaiting admin approval.`;
       }
 
       alert(successMessage);
@@ -211,23 +198,6 @@ export function LeadConversionDialog({
                   <li>• Special affiliate pricing/discount</li>
                   <li>• Personal referral links (lead, intake, appointment)</li>
                   <li>• Commission on successful referrals</li>
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Info Card for Preparer */}
-          {conversionType === 'preparer' && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2 text-blue-800 text-sm font-medium">
-                  <FileText className="h-4 w-4" />
-                  Application Process
-                </div>
-                <ul className="mt-2 text-xs text-blue-700 space-y-1">
-                  <li>• Creates application with lead's info pre-filled</li>
-                  <li>• Routes to admin for review and approval</li>
-                  <li>• If approved: gets tax preparer account + referral links</li>
                 </ul>
               </CardContent>
             </Card>
