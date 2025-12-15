@@ -103,6 +103,7 @@ export default function ClientDashboard() {
   const taxReturn = data?.currentReturn;
   const stats = data?.stats;
   const referralStats = data?.referralStats;
+  const hideReferralProgram = data?.hideReferralProgram ?? false;
 
   return (
     <>
@@ -186,19 +187,21 @@ export default function ClientDashboard() {
             </CardContent>
           </Card>
 
-          {/* Referrals Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">My Referrals</CardTitle>
-              <Users className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{referralStats?.totalLeads || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {referralStats?.totalLeads ? 'People referred' : 'Start earning'}
-              </p>
-            </CardContent>
-          </Card>
+          {/* Referrals Card - Hidden if user opted out */}
+          {!hideReferralProgram && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-sm font-medium">My Referrals</CardTitle>
+                <Users className="h-4 w-4 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{referralStats?.totalLeads || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {referralStats?.totalLeads ? 'People referred' : 'Start earning'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Tax Return Progress - STATE 3: Has tax return */}
@@ -412,42 +415,44 @@ export default function ClientDashboard() {
           </Card>
         )}
 
-        {/* Share & Earn Quick Card */}
-        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Gift className="h-5 w-5 text-primary" />
+        {/* Share & Earn Quick Card - Hidden if user opted out */}
+        {!hideReferralProgram && (
+          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Gift className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Share & Earn</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Refer friends and family to earn rewards
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-lg">Share & Earn</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Refer friends and family to earn rewards
-                  </p>
+                <Link
+                  href="/dashboard/client/share-earn"
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4"
+                >
+                  Get Started
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Users className="h-4 w-4" />
+                  <span>{referralStats?.totalLeads || 0} referrals</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Share your link to earn</span>
                 </div>
               </div>
-              <Link
-                href="/dashboard/client/share-earn"
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4"
-              >
-                Get Started
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1">
-                <Users className="h-4 w-4" />
-                <span>{referralStats?.totalLeads || 0} referrals</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <TrendingUp className="h-4 w-4" />
-                <span>Share your link to earn</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
       </div>
     </>

@@ -204,6 +204,9 @@ model Profile {
   affiliateApprovedAt DateTime?
   affiliateApprovedBy String? // Admin who approved
 
+  // Referral Program Opt-Out (user preference)
+  hideReferralProgram Boolean @default(false) // Hide Share & Earn, My Referrals, My Earnings from dashboard
+
   // Account Status (for admin deactivation)
   isActive      Boolean   @default(true)  // False = account suspended
   deactivatedAt DateTime?                 // When account was deactivated
@@ -1538,6 +1541,9 @@ model TaxIntakeLead {
   clientFolderId String? // Root folder for this lead's documents
   clientFolder   Folder? @relation("LeadClientFolder", fields: [clientFolderId], references: [id], onDelete: SetNull)
 
+  // Lead Expiration (auto-delete after 6 months if not converted to client)
+  expiresAt DateTime? // 6 months from creation - lead auto-deleted if not converted by this date
+
   // Relations
   activities LeadActivity[] // Activity timeline
   tasks      LeadTask[] // Task management
@@ -1562,6 +1568,7 @@ model TaxIntakeLead {
   @@index([lastViewedAt])
   @@index([clientFolderId])
   @@index([unqualified])
+  @@index([expiresAt])
   @@map("tax_intake_leads")
 }
 

@@ -12,6 +12,7 @@ import { SearchDrawer } from '@/components/mobile/SearchDrawer';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { type UserRole as MobileNavRole } from '@/lib/mobile-navigation-config';
+import type { AffiliateStatus } from '@prisma/client';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -20,6 +21,10 @@ interface DashboardLayoutClientProps {
   isViewingAsOtherRole: boolean;
   viewingRoleName?: string;
   permissions: Partial<UserPermissions>;
+  // Status-based access control (for clients)
+  affiliateStatus?: AffiliateStatus | null;
+  hasFiledTaxes?: boolean | null;
+  hideReferralProgram?: boolean | null;
 }
 
 // Convert UserRole to MobileNav role format
@@ -40,6 +45,9 @@ export function DashboardLayoutClient({
   isViewingAsOtherRole,
   viewingRoleName,
   permissions,
+  affiliateStatus,
+  hasFiledTaxes,
+  hideReferralProgram,
 }: DashboardLayoutClientProps) {
   const [linksOpen, setLinksOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -85,7 +93,13 @@ export function DashboardLayoutClient({
   return (
     <SidebarProvider defaultOpen={true}>
       {/* Sidebar - uses effective role-based navigation with permissions */}
-      <DashboardSidebar role={effectiveRole} permissions={permissions} />
+      <DashboardSidebar
+        role={effectiveRole}
+        permissions={permissions}
+        affiliateStatus={affiliateStatus}
+        hasFiledTaxes={hasFiledTaxes}
+        hideReferralProgram={hideReferralProgram}
+      />
 
       {/* Main content area with header */}
       <SidebarInset className="flex flex-col">

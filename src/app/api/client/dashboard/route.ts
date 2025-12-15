@@ -243,6 +243,8 @@ export async function GET(req: NextRequest) {
             formData: taxIntake.full_form_data as Record<string, unknown> | null,
           }
         : null,
+      // User preference to hide referral program features
+      hideReferralProgram: profile.hideReferralProgram ?? false,
     };
 
     return NextResponse.json(response);
