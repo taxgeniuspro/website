@@ -1,12 +1,17 @@
 /**
  * Sign Up API Route
  * Creates new user accounts with hashed passwords and profile
+ *
+ * Also handles pending conversions for rejected preparer applicants:
+ * - If user has a rejected preparer application with [PENDING_CONVERSION] marker,
+ *   we apply the conversion (to client or affiliate) and assign to Owliver
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
+import { createClientFromPreparerApplication } from '@/lib/services/lead-conversion.service';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -147,6 +152,45 @@ export async function POST(req: NextRequest) {
     } catch (trackingError) {
       // Log but don't block signup
       logger.error('[Signup] Failed to assign tracking code', { error: trackingError, userId: user.id });
+    }
+
+    // Check for pending preparer application conversions
+    // If this user was rejected from a preparer application but marked for conversion,
+    // process that conversion now and assign them to Owliver
+    try {
+      const pendingApplication = await prisma.preparerApplication.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          status: 'REJECTED',
+          notes: { contains: '[PENDING_CONVERSION:' },
+        },
+      });
+
+      if (pendingApplication) {
+        // Extract conversion type from notes
+        const conversionMatch = pendingApplication.notes?.match(/\[PENDING_CONVERSION:(client|affiliate)\]/);
+        if (conversionMatch) {
+          const conversionType = conversionMatch[1] as 'client' | 'affiliate';
+          logger.info('[Signup] Processing pending preparer application conversion', {
+            userId: user.id,
+            applicationId: pendingApplication.id,
+            conversionType,
+          });
+
+          await createClientFromPreparerApplication(pendingApplication.id, user.id, conversionType);
+          logger.info('[Signup] Applied pending conversion from rejected preparer application', {
+            userId: user.id,
+            profileId: profile.id,
+            conversionType,
+          });
+        }
+      }
+    } catch (conversionError) {
+      // Log but don't block signup - the user account was created successfully
+      logger.error('[Signup] Failed to process pending preparer conversion', {
+        error: conversionError,
+        userId: user.id,
+      });
     }
 
     // Return success (without password)
