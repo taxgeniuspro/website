@@ -157,6 +157,54 @@ function ContactPageContent() {
       {/* Contact Form & Info */}
       <section className="py-20">
         <div className="container mx-auto px-4 lg:px-8">
+          {/* Mobile-first: Preparer card at top on mobile */}
+          {preparer && (
+            <div className="lg:hidden mb-8">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-6">
+                <div className="flex flex-col items-center text-center gap-4">
+                  {preparer.avatarUrl ? (
+                    <img
+                      src={preparer.avatarUrl}
+                      alt={preparerName || 'Tax Preparer'}
+                      className="w-24 h-24 rounded-full object-cover border-4 border-primary/30 shadow-lg"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center border-4 border-primary/30">
+                      <span className="text-2xl font-bold text-primary">
+                        {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">{t('yourTaxPreparer')}</p>
+                    <p className="font-bold text-xl text-foreground">{preparerName}</p>
+                  </div>
+                  {/* Direct contact buttons on mobile */}
+                  <div className="flex gap-3 mt-2">
+                    {preparer.phone && (
+                      <a
+                        href={`tel:${preparer.phone.replace(/[^+\d]/g, '')}`}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium"
+                      >
+                        <Phone className="w-4 h-4" />
+                        {t('call')}
+                      </a>
+                    )}
+                    {preparer.email && (
+                      <a
+                        href={`mailto:${preparer.email}`}
+                        className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm font-medium"
+                      >
+                        <Mail className="w-4 h-4" />
+                        {t('email')}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid lg:grid-cols-2 gap-12">
             {/* Contact Form */}
             <div>
@@ -312,11 +360,11 @@ function ContactPageContent() {
 
             {/* Contact Information */}
             <div className="space-y-8">
-              {/* Show preparer info prominently when assigned */}
+              {/* Show preparer info prominently when assigned (hidden on mobile - shown at top instead) */}
               {preparer ? (
                 <div>
-                  {/* Preparer Card with Photo */}
-                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 mb-6">
+                  {/* Preparer Card with Photo - Desktop only */}
+                  <div className="hidden lg:block bg-primary/5 border border-primary/20 rounded-lg p-6 mb-6">
                     <div className="flex flex-col items-center text-center gap-4">
                       {preparer.avatarUrl ? (
                         <img

@@ -56,6 +56,7 @@ async function getPreparerByRef(ref: string | undefined) {
 export default async function TaxFormPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const preparer = await getPreparerByRef(params.ref);
+  const preparerName = preparer ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() : null;
 
   return (
     <div className="min-h-screen bg-background py-12">
@@ -65,6 +66,41 @@ export default async function TaxFormPage({ searchParams }: PageProps) {
       </Suspense>
 
       <div className="container mx-auto px-4">
+        {/* Mobile-first: Preparer card prominently at top on mobile */}
+        {preparer && (
+          <div className="lg:hidden max-w-4xl mx-auto mb-6">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+              <div className="flex items-center gap-4">
+                {preparer.avatarUrl ? (
+                  <img
+                    src={preparer.avatarUrl}
+                    alt={preparerName || 'Tax Preparer'}
+                    className="w-16 h-16 rounded-full object-cover border-3 border-primary/30 shadow-lg flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border-3 border-primary/30 flex-shrink-0">
+                    <span className="text-lg font-bold text-primary">
+                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                    </span>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Your Tax Professional</p>
+                  <p className="font-bold text-lg text-foreground truncate">{preparerName}</p>
+                  {preparer.phone && (
+                    <a
+                      href={`tel:${preparer.phone.replace(/[^+\d]/g, '')}`}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      {preparer.phone}
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-4xl mx-auto mb-8 text-center">
           <h1 className="text-4xl font-bold mb-3">Start Your Tax Return</h1>
           <p className="text-lg text-muted-foreground">
