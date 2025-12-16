@@ -181,6 +181,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
+    label: 'Promotional Images',
+    href: '/dashboard/tax-preparer/promotional-images',
+    icon: Image,
+    permission: 'trackingCode',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
     label: 'My Clients',
     href: '/dashboard/tax-preparer/clients',
     icon: Users,

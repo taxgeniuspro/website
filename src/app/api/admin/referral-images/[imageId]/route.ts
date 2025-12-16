@@ -58,7 +58,7 @@ export async function DELETE(
       await cloudinary.uploader.destroy(publicId);
       logger.info('Deleted image from Cloudinary', { publicId });
     } catch (cloudinaryError) {
-      logger.warn('Failed to delete from Cloudinary (continuing anyway)', { cloudinaryError });
+      logger.warn('Failed to delete from Cloudinary (continuing anyway)', { error: String(cloudinaryError) });
     }
 
     // Delete from database
