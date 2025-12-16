@@ -15,10 +15,6 @@
     {
       "path": "/api/cron/cleanup-expired-leads",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/send-scheduled-emails",
-      "schedule": "0 8 * * *"
     }
   ],
   "env": {
