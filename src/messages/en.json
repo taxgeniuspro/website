@@ -472,7 +472,9 @@
       "faqA4": "We offer a 100% satisfaction guarantee. If you're not completely satisfied, we'll make it right or provide a full refund.",
       "yourTaxPreparer": "Your Tax Preparer",
       "directPhone": "Direct Phone",
-      "directEmail": "Direct Email"
+      "directEmail": "Direct Email",
+      "call": "Call",
+      "email": "Email"
     }
   },
   "home": {

@@ -472,7 +472,9 @@
       "faqA4": "Ofrecemos una garantía de satisfacción del 100%. Si no está completamente satisfecho, lo arreglaremos o proporcionaremos un reembolso completo.",
       "yourTaxPreparer": "Su Preparador de Impuestos",
       "directPhone": "Teléfono Directo",
-      "directEmail": "Correo Electrónico Directo"
+      "directEmail": "Correo Electrónico Directo",
+      "call": "Llamar",
+      "email": "Correo"
     }
   },
   "home": {
