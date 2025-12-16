@@ -1,7 +1,7 @@
 /**
  * Admin Referral Images API
  *
- * GET /api/admin/referral-images - List all image folders
+ * GET /api/admin/referral-images - List all image folders grouped by folderType
  * POST /api/admin/referral-images - Create a new image folder (manual, rarely used)
  */
 
@@ -9,6 +9,31 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { FolderType } from '@prisma/client';
+
+// Folder type display configuration
+const FOLDER_TYPE_INFO: Record<FolderType, { displayName: string; dateRange: string; usedBy: string }> = {
+  preseason_loans: {
+    displayName: 'Pre-Season Loans',
+    dateRange: 'Dec 1 - Jan 14',
+    usedBy: 'Tax Preparer',
+  },
+  tax_season_lead: {
+    displayName: 'Tax Season Lead',
+    dateRange: 'Jan 15 - Apr 15',
+    usedBy: 'Tax Preparer',
+  },
+  tax_season_intake: {
+    displayName: 'Tax Season Intake',
+    dateRange: 'Jan 15 - Apr 15',
+    usedBy: 'Tax Preparer',
+  },
+  client_referral: {
+    displayName: 'Client Referral',
+    dateRange: 'Year-round',
+    usedBy: 'Client',
+  },
+};
 
 export async function GET() {
   try {
@@ -48,18 +73,22 @@ export async function GET() {
       },
       orderBy: [
         { category: 'asc' }, // 'default' first, then 'preparer'
+        { folderType: 'asc' },
         { name: 'asc' },
       ],
     });
 
     return NextResponse.json({
       success: true,
+      folderTypeInfo: FOLDER_TYPE_INFO,
       imageSets: imageSets.map((set) => ({
         id: set.id,
         name: set.name,
         description: set.description,
         category: set.category,
+        folderType: set.folderType,
         preparerId: set.preparerId,
+        preparerName: set.preparer ? `${set.preparer.firstName} ${set.preparer.lastName}` : null,
         preparerCode: set.preparer?.customTrackingCode || null,
         isActive: set.isActive,
         imageCount: set.images.length,

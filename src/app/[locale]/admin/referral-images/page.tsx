@@ -3,10 +3,14 @@
 /**
  * Admin Referral Images Management Page
  *
- * Simple folder-based system:
- * - One "Tax Genius Default" folder with company-wide images
- * - One folder per tax preparer (auto-created when preparer is added)
- * - If preparer folder is empty, their referrals use the default images
+ * 5 tabs:
+ * - Tax Genius Defaults (4 folder types for company-wide images)
+ * - Pre-Season Loans (Dec 1 - Jan 14) - Preparer folders
+ * - Tax Season Lead (Jan 15 - Apr 15) - Preparer folders
+ * - Tax Season Intake (Jan 15 - Apr 15) - Preparer folders
+ * - Client Referral (Year-round) - Preparer folders
+ *
+ * If preparer folder is empty, system falls back to Tax Genius Default
  */
 
 import { useState, useRef } from 'react';
@@ -19,8 +23,26 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
-import { Upload, Trash2, Download, Image as ImageIcon, Building2, User, Loader2, FolderOpen, AlertCircle, Check, Search } from 'lucide-react';
+import {
+  Upload,
+  Trash2,
+  Download,
+  Image as ImageIcon,
+  Building2,
+  User,
+  Loader2,
+  FolderOpen,
+  AlertCircle,
+  Check,
+  Search,
+  Calendar,
+  Snowflake,
+  Users,
+  FileText,
+} from 'lucide-react';
 import Image from 'next/image';
+
+type FolderType = 'preseason_loans' | 'tax_season_lead' | 'tax_season_intake' | 'client_referral';
 
 interface ReferralImage {
   id: string;
@@ -37,7 +59,9 @@ interface ImageFolder {
   name: string;
   description: string | null;
   category: 'default' | 'preparer';
+  folderType: FolderType;
   preparerId: string | null;
+  preparerName: string | null;
   preparerCode: string | null;
   isActive: boolean;
   imageCount: number;
@@ -46,13 +70,40 @@ interface ImageFolder {
   updatedAt: string;
 }
 
-interface Preparer {
-  id: string;
-  firstName: string;
-  lastName: string;
-  customTrackingCode: string | null;
-  email: string;
+interface FolderTypeInfo {
+  displayName: string;
+  dateRange: string;
+  usedBy: string;
 }
+
+const FOLDER_TYPE_CONFIG: Record<FolderType, { displayName: string; dateRange: string; icon: typeof Snowflake; description: string }> = {
+  preseason_loans: {
+    displayName: 'Pre-Season Loans',
+    dateRange: 'Dec 1 - Jan 14',
+    icon: Snowflake,
+    description: 'Promote pre-season loan products before tax season.',
+  },
+  tax_season_lead: {
+    displayName: 'Tax Season Lead',
+    dateRange: 'Jan 15 - Apr 15',
+    icon: Users,
+    description: 'Get new leads during tax season.',
+  },
+  tax_season_intake: {
+    displayName: 'Tax Season Intake',
+    dateRange: 'Jan 15 - Apr 15',
+    icon: FileText,
+    description: 'Get intake form completions during tax season.',
+  },
+  client_referral: {
+    displayName: 'Client Referral',
+    dateRange: 'Year-round',
+    icon: Calendar,
+    description: 'Clients share to earn $50-$100 referral bonuses.',
+  },
+};
+
+const ALL_FOLDER_TYPES: FolderType[] = ['preseason_loans', 'tax_season_lead', 'tax_season_intake', 'client_referral'];
 
 export default function AdminReferralImagesPage() {
   const queryClient = useQueryClient();
@@ -60,10 +111,10 @@ export default function AdminReferralImagesPage() {
 
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState('default');
+  const [activeTab, setActiveTab] = useState('defaults');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch all folders and preparers
+  // Fetch all folders
   const { data: foldersData, isLoading: foldersLoading } = useQuery({
     queryKey: ['admin-referral-folders'],
     queryFn: async () => {
@@ -73,16 +124,7 @@ export default function AdminReferralImagesPage() {
     },
   });
 
-  const { data: preparersData, isLoading: preparersLoading } = useQuery({
-    queryKey: ['preparers-list'],
-    queryFn: async () => {
-      const response = await fetch('/api/admin/preparers');
-      if (!response.ok) throw new Error('Failed to fetch preparers');
-      return response.json();
-    },
-  });
-
-  // Initialize folders mutation (creates default + all preparer folders)
+  // Initialize folders mutation (creates all folder types for default + all preparers)
   const initFoldersMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch('/api/admin/referral-images/initialize', {
@@ -93,7 +135,7 @@ export default function AdminReferralImagesPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-referral-folders'] });
-      toast.success(`Created ${data.created} folders`);
+      toast.success(data.message || `Created ${data.created} folders`);
     },
     onError: () => {
       toast.error('Failed to initialize folders');
@@ -127,7 +169,6 @@ export default function AdminReferralImagesPage() {
     const files = event.target.files;
     if (!files || files.length === 0 || !selectedFolder) return;
 
-    // Limit to 4 images
     if (files.length > 4) {
       toast.error('Maximum 4 images allowed per folder');
       return;
@@ -164,37 +205,35 @@ export default function AdminReferralImagesPage() {
   };
 
   const folders: ImageFolder[] = foldersData?.imageSets || [];
-  const preparers: Preparer[] = preparersData?.preparers || [];
-  const isLoading = foldersLoading || preparersLoading;
+  const folderTypeInfo: Record<FolderType, FolderTypeInfo> = foldersData?.folderTypeInfo || {};
+  const isLoading = foldersLoading;
 
-  const defaultFolder = folders.find(f => f.category === 'default');
-  const preparerFolders = folders.filter(f => f.category === 'preparer');
+  // Group folders by category and type
+  const defaultFolders = folders.filter((f) => f.category === 'default');
+  const preparerFolders = folders.filter((f) => f.category === 'preparer');
 
-  // Find preparers without folders
-  const preparersWithoutFolders = preparers.filter(
-    p => !preparerFolders.some(f => f.preparerId === p.id)
-  );
+  // Group preparer folders by folderType
+  const preparerFoldersByType: Record<FolderType, ImageFolder[]> = {
+    preseason_loans: preparerFolders.filter((f) => f.folderType === 'preseason_loans'),
+    tax_season_lead: preparerFolders.filter((f) => f.folderType === 'tax_season_lead'),
+    tax_season_intake: preparerFolders.filter((f) => f.folderType === 'tax_season_intake'),
+    client_referral: preparerFolders.filter((f) => f.folderType === 'client_referral'),
+  };
 
-  // Filter preparer folders by search query
-  const filteredPreparerFolders = preparerFolders.filter(folder => {
-    if (!searchQuery.trim()) return true;
+  // Filter folders by search query
+  const filterBySearch = (folderList: ImageFolder[]) => {
+    if (!searchQuery.trim()) return folderList;
     const query = searchQuery.toLowerCase();
-    return (
-      folder.name.toLowerCase().includes(query) ||
-      (folder.preparerCode && folder.preparerCode.toLowerCase().includes(query))
+    return folderList.filter(
+      (folder) =>
+        folder.name.toLowerCase().includes(query) ||
+        (folder.preparerCode && folder.preparerCode.toLowerCase().includes(query)) ||
+        (folder.preparerName && folder.preparerName.toLowerCase().includes(query))
     );
-  });
+  };
 
-  // Filter preparers without folders by search query
-  const filteredPreparersWithoutFolders = preparersWithoutFolders.filter(preparer => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      `${preparer.firstName} ${preparer.lastName}`.toLowerCase().includes(query) ||
-      (preparer.customTrackingCode && preparer.customTrackingCode.toLowerCase().includes(query)) ||
-      preparer.email.toLowerCase().includes(query)
-    );
-  });
+  // Check if initialization is needed
+  const needsInitialization = defaultFolders.length < 4;
 
   if (isLoading) {
     return (
@@ -224,13 +263,13 @@ export default function AdminReferralImagesPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Referral Program Images</h1>
+          <h1 className="text-2xl font-bold">Promotional Image Folders</h1>
           <p className="text-muted-foreground">
-            Manage promotional images for client referrals. Each preparer has their own folder.
+            Manage promotional images by season and purpose. Each preparer has 4 folders.
           </p>
         </div>
 
-        {preparersWithoutFolders.length > 0 && (
+        {needsInitialization && (
           <Button
             onClick={() => initFoldersMutation.mutate()}
             disabled={initFoldersMutation.isPending}
@@ -244,7 +283,7 @@ export default function AdminReferralImagesPage() {
             ) : (
               <>
                 <FolderOpen className="mr-2 h-4 w-4" />
-                Initialize All Folders ({preparersWithoutFolders.length + (defaultFolder ? 0 : 1)})
+                Initialize All Folders
               </>
             )}
           </Button>
@@ -255,133 +294,151 @@ export default function AdminReferralImagesPage() {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          <strong>How it works:</strong> If a preparer&apos;s folder is empty, their referral emails will use the <strong>Tax Genius Default</strong> images.
-          Upload custom images to a preparer&apos;s folder to personalize their referral materials.
+          <strong>Fallback Logic:</strong> If a preparer&apos;s folder is empty for any type, the system uses the <strong>Tax Genius Default</strong> images of that same type.
         </AlertDescription>
       </Alert>
 
-      {/* Tabs for Default vs Preparer Folders */}
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="default" className="flex items-center gap-2">
+        <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="defaults" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
-            Tax Genius Default
-            {defaultFolder && defaultFolder.imageCount > 0 && (
-              <Badge variant="secondary" className="ml-1">{defaultFolder.imageCount}</Badge>
-            )}
+            Tax Genius Defaults
+            <Badge variant="secondary" className="ml-1">{defaultFolders.length}/4</Badge>
           </TabsTrigger>
-          <TabsTrigger value="preparers" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Tax Preparers
-            <Badge variant="secondary" className="ml-1">{preparerFolders.length}</Badge>
-          </TabsTrigger>
+          {ALL_FOLDER_TYPES.map((folderType) => {
+            const config = FOLDER_TYPE_CONFIG[folderType];
+            const Icon = config.icon;
+            const count = preparerFoldersByType[folderType].length;
+            return (
+              <TabsTrigger key={folderType} value={folderType} className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                {config.displayName}
+                <Badge variant="secondary" className="ml-1">{count}</Badge>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
-        {/* Default Folder Tab */}
-        <TabsContent value="default" className="mt-6">
-          {defaultFolder ? (
-            <FolderCard
-              folder={defaultFolder}
-              isDefault={true}
-              onUpload={handleUploadClick}
-              onDeleteImage={(id) => deleteImageMutation.mutate(id)}
-              isUploading={isUploading && selectedFolder === defaultFolder.id}
-              isDeleting={deleteImageMutation.isPending}
-            />
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">Default folder not created yet</p>
-                <Button
-                  onClick={() => initFoldersMutation.mutate()}
-                  disabled={initFoldersMutation.isPending}
-                >
-                  {initFoldersMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FolderOpen className="mr-2 h-4 w-4" />
-                  )}
-                  Create Default Folder
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+        {/* Defaults Tab */}
+        <TabsContent value="defaults" className="mt-6 space-y-4">
+          <p className="text-muted-foreground">
+            Company-wide default images used when a preparer&apos;s folder is empty.
+          </p>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {ALL_FOLDER_TYPES.map((folderType) => {
+              const config = FOLDER_TYPE_CONFIG[folderType];
+              const folder = defaultFolders.find((f) => f.folderType === folderType);
+              const Icon = config.icon;
+
+              if (!folder) {
+                return (
+                  <Card key={folderType} className="border-dashed">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Icon className="h-4 w-4" />
+                        {config.displayName}
+                      </CardTitle>
+                      <CardDescription>{config.dateRange}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-center py-8">
+                      <p className="text-sm text-muted-foreground">Not created yet</p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => initFoldersMutation.mutate()}
+                        disabled={initFoldersMutation.isPending}
+                      >
+                        <FolderOpen className="mr-2 h-4 w-4" />
+                        Initialize
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              return (
+                <FolderCard
+                  key={folder.id}
+                  folder={folder}
+                  isDefault={true}
+                  folderTypeConfig={config}
+                  onUpload={handleUploadClick}
+                  onDeleteImage={(id) => deleteImageMutation.mutate(id)}
+                  isUploading={isUploading && selectedFolder === folder.id}
+                  isDeleting={deleteImageMutation.isPending}
+                />
+              );
+            })}
+          </div>
         </TabsContent>
 
-        {/* Preparer Folders Tab */}
-        <TabsContent value="preparers" className="mt-6 space-y-4">
-          {/* Search Input */}
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or tracking code..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+        {/* Preparer Folder Tabs (one per folder type) */}
+        {ALL_FOLDER_TYPES.map((folderType) => {
+          const config = FOLDER_TYPE_CONFIG[folderType];
+          const typeFolders = filterBySearch(preparerFoldersByType[folderType]);
+          const defaultFolderForType = defaultFolders.find((f) => f.folderType === folderType);
 
-          {/* Results count */}
-          {searchQuery && (
-            <p className="text-sm text-muted-foreground">
-              Found {filteredPreparerFolders.length} folder{filteredPreparerFolders.length !== 1 ? 's' : ''}
-              {filteredPreparersWithoutFolders.length > 0 && ` and ${filteredPreparersWithoutFolders.length} pending`}
-            </p>
-          )}
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredPreparerFolders.map((folder) => (
-              <FolderCard
-                key={folder.id}
-                folder={folder}
-                isDefault={false}
-                usesDefault={folder.imageCount === 0}
-                onUpload={handleUploadClick}
-                onDeleteImage={(id) => deleteImageMutation.mutate(id)}
-                isUploading={isUploading && selectedFolder === folder.id}
-                isDeleting={deleteImageMutation.isPending}
-              />
-            ))}
-
-            {/* Show preparers without folders */}
-            {filteredPreparersWithoutFolders.map((preparer) => (
-              <Card key={preparer.id} className="border-dashed opacity-60">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    {preparer.firstName} {preparer.lastName}
-                  </CardTitle>
-                  <CardDescription>
-                    {preparer.customTrackingCode && (
-                      <Badge variant="outline" className="text-xs">
-                        {preparer.customTrackingCode}
-                      </Badge>
-                    )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Folder will be created when you click &quot;Initialize All Folders&quot;
+          return (
+            <TabsContent key={folderType} value={folderType} className="mt-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-muted-foreground">{config.description}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    <strong>Active Period:</strong> {config.dateRange}
                   </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
+              </div>
 
-          {filteredPreparerFolders.length === 0 && filteredPreparersWithoutFolders.length === 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {searchQuery ? (
-                  <>No preparers found matching &quot;{searchQuery}&quot;. Try a different search term.</>
-                ) : (
-                  <>No tax preparers found. Add tax preparers first, then their folders will be created automatically.</>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-        </TabsContent>
+              {/* Search */}
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or tracking code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              {/* Results count */}
+              {searchQuery && (
+                <p className="text-sm text-muted-foreground">
+                  Found {typeFolders.length} folder{typeFolders.length !== 1 ? 's' : ''}
+                </p>
+              )}
+
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {typeFolders.map((folder) => (
+                  <FolderCard
+                    key={folder.id}
+                    folder={folder}
+                    isDefault={false}
+                    usesDefault={folder.imageCount === 0 && defaultFolderForType && defaultFolderForType.imageCount > 0}
+                    folderTypeConfig={config}
+                    onUpload={handleUploadClick}
+                    onDeleteImage={(id) => deleteImageMutation.mutate(id)}
+                    isUploading={isUploading && selectedFolder === folder.id}
+                    isDeleting={deleteImageMutation.isPending}
+                  />
+                ))}
+              </div>
+
+              {typeFolders.length === 0 && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {searchQuery ? (
+                      <>No preparers found matching &quot;{searchQuery}&quot;. Try a different search term.</>
+                    ) : (
+                      <>No preparer folders for this type. Click &quot;Initialize All Folders&quot; to create them.</>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </TabsContent>
+          );
+        })}
       </Tabs>
     </div>
   );
@@ -392,13 +449,25 @@ interface FolderCardProps {
   folder: ImageFolder;
   isDefault: boolean;
   usesDefault?: boolean;
+  folderTypeConfig: { displayName: string; dateRange: string; icon: typeof Snowflake };
   onUpload: (folderId: string) => void;
   onDeleteImage: (imageId: string) => void;
   isUploading: boolean;
   isDeleting: boolean;
 }
 
-function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, isUploading, isDeleting }: FolderCardProps) {
+function FolderCard({
+  folder,
+  isDefault,
+  usesDefault,
+  folderTypeConfig,
+  onUpload,
+  onDeleteImage,
+  isUploading,
+  isDeleting,
+}: FolderCardProps) {
+  const Icon = folderTypeConfig.icon;
+
   return (
     <Card className={isDefault ? 'border-2 border-secondary' : ''}>
       <CardHeader className="pb-3">
@@ -406,13 +475,16 @@ function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, i
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               {isDefault ? (
-                <Building2 className="h-4 w-4 text-secondary" />
+                <Icon className="h-4 w-4 text-secondary" />
               ) : (
                 <User className="h-4 w-4" />
               )}
-              {folder.name}
+              {isDefault ? folderTypeConfig.displayName : folder.name}
             </CardTitle>
-            <CardDescription className="mt-1 flex items-center gap-2">
+            <CardDescription className="mt-1 flex items-center gap-2 flex-wrap">
+              {isDefault && (
+                <span className="text-xs">{folderTypeConfig.dateRange}</span>
+              )}
               {folder.preparerCode && (
                 <Badge variant="outline" className="text-xs">
                   {folder.preparerCode}
@@ -427,7 +499,7 @@ function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, i
             </CardDescription>
           </div>
           <Badge className={isDefault ? 'bg-secondary' : 'bg-muted text-muted-foreground'}>
-            {folder.imageCount}/4 images
+            {folder.imageCount}/4
           </Badge>
         </div>
       </CardHeader>
@@ -437,7 +509,10 @@ function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, i
         {folder.images.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {folder.images.map((image) => (
-              <div key={image.id} className="relative aspect-square rounded-lg overflow-hidden bg-muted group">
+              <div
+                key={image.id}
+                className="relative aspect-square rounded-lg overflow-hidden bg-muted group"
+              >
                 <Image
                   src={image.thumbnailUrl || image.imageUrl}
                   alt={image.altText}
@@ -482,9 +557,9 @@ function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, i
           >
             <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">
-              {isDefault ? 'Add default promotional images' : 'Add custom images for this preparer'}
+              {isDefault ? 'Add default images' : 'Add custom images'}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">Click to upload (max 4 images)</p>
+            <p className="text-xs text-muted-foreground mt-1">Click to upload (max 4)</p>
           </div>
         )}
 
@@ -508,7 +583,7 @@ function FolderCard({ folder, isDefault, usesDefault, onUpload, onDeleteImage, i
           ) : (
             <>
               <Upload className="mr-2 h-4 w-4" />
-              Upload Images ({4 - folder.imageCount} remaining)
+              Upload ({4 - folder.imageCount} remaining)
             </>
           )}
         </Button>

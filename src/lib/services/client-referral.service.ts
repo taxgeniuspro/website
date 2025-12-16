@@ -4,15 +4,47 @@
  * Manages client referral program features:
  * - Generates unique referral codes for clients
  * - Builds personalized referral links
- * - Gets appropriate promotional images based on season/preparer
+ * - Gets appropriate promotional images based on season/preparer/folderType
  * - Generates social media copy
  * - Sends referral invitation emails
+ *
+ * Folder Types:
+ * - preseason_loans: Dec 1 - Jan 14 (promote pre-season loan products)
+ * - tax_season_lead: Jan 15 - Apr 15 (get new leads during tax season)
+ * - tax_season_intake: Jan 15 - Apr 15 (get intake form completions)
+ * - client_referral: Year-round (clients share to earn referral bonuses)
  */
 
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { FolderType } from '@prisma/client';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
+
+/**
+ * Determine the currently active folder type based on the date
+ * - Dec 1 - Jan 14: preseason_loans
+ * - Jan 15 - Apr 15: tax_season_lead (default for marketing to new leads)
+ * - Rest of year: client_referral (default)
+ */
+export function getActiveFolderType(context: 'lead' | 'intake' | 'client' = 'lead'): FolderType {
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-12
+  const day = now.getDate();
+
+  // Dec 1 - Jan 14 = preseason_loans
+  if (month === 12 || (month === 1 && day <= 14)) {
+    return 'preseason_loans';
+  }
+
+  // Jan 15 - Apr 15 = tax_season (lead or intake based on context)
+  if ((month === 1 && day >= 15) || month === 2 || month === 3 || (month === 4 && day <= 15)) {
+    return context === 'intake' ? 'tax_season_intake' : 'tax_season_lead';
+  }
+
+  // Rest of year = client_referral (year-round)
+  return 'client_referral';
+}
 
 /**
  * Generate a unique 7-character referral code
@@ -36,6 +68,13 @@ export function buildReferralLink(
 ): string {
   const encodedName = encodeURIComponent(clientFirstName);
   return `${APP_URL}/new/?tp=${preparerCode}&cl=${encodedName}&co=${referralCode}`;
+}
+
+/**
+ * Build a short referral link
+ */
+export function buildShortReferralLink(referralCode: string): string {
+  return `${APP_URL}/go/${referralCode}`;
 }
 
 /**
@@ -72,25 +111,35 @@ interface ReferralImageSetWithImages {
   id: string;
   name: string;
   category: string;
+  folderType: FolderType;
   images: ReferralImage[];
+  isDefault: boolean; // true if using fallback default images
 }
 
 /**
- * Get the appropriate image set for a preparer
+ * Get the appropriate image set for a preparer and folder type
  *
  * Logic:
- * 1. If preparer has custom images in their folder → use those
- * 2. Otherwise → use Tax Genius Default images
+ * 1. If preparer has custom images in their folder for the specified type → use those
+ * 2. Otherwise → use Tax Genius Default images for that type
+ *
+ * @param preparerId - The preparer's profile ID (optional)
+ * @param folderType - The type of folder to get images from (defaults to auto-detect based on date)
  */
 export async function getCurrentImageSet(
-  preparerId?: string
+  preparerId?: string,
+  folderType?: FolderType
 ): Promise<ReferralImageSetWithImages | null> {
   try {
+    // Auto-detect folder type if not specified
+    const targetFolderType = folderType || getActiveFolderType();
+
     // First, try to get preparer-specific images (if preparerId provided)
     if (preparerId) {
       const preparerSet = await prisma.referralImageSet.findFirst({
         where: {
           preparerId,
+          folderType: targetFolderType,
           category: 'preparer',
           isActive: true,
         },
@@ -108,6 +157,7 @@ export async function getCurrentImageSet(
           id: preparerSet.id,
           name: preparerSet.name,
           category: preparerSet.category,
+          folderType: preparerSet.folderType,
           images: preparerSet.images.map((img) => ({
             id: img.id,
             url: img.imageUrl,
@@ -115,15 +165,17 @@ export async function getCurrentImageSet(
             alt: img.altText,
             platform: img.platform,
           })),
+          isDefault: false,
         };
       }
     }
 
-    // Fallback to default Tax Genius folder
+    // Fallback to default Tax Genius folder for the same type
     const defaultSet = await prisma.referralImageSet.findFirst({
       where: {
         category: 'default',
         preparerId: null,
+        folderType: targetFolderType,
         isActive: true,
       },
       include: {
@@ -139,6 +191,7 @@ export async function getCurrentImageSet(
         id: defaultSet.id,
         name: defaultSet.name,
         category: defaultSet.category,
+        folderType: defaultSet.folderType,
         images: defaultSet.images.map((img) => ({
           id: img.id,
           url: img.imageUrl,
@@ -146,20 +199,31 @@ export async function getCurrentImageSet(
           alt: img.altText,
           platform: img.platform,
         })),
+        isDefault: true,
       };
     }
 
     return null;
   } catch (error) {
-    logger.error('Error getting current image set', { error, preparerId });
+    logger.error('Error getting current image set', { error, preparerId, folderType });
     return null;
   }
+}
+
+/**
+ * Get client referral images specifically (always uses client_referral folder type)
+ */
+export async function getClientReferralImages(
+  preparerId?: string
+): Promise<ReferralImageSetWithImages | null> {
+  return getCurrentImageSet(preparerId, 'client_referral');
 }
 
 interface ClientReferralInvitationResult {
   id: string;
   referralCode: string;
   referralLink: string;
+  shortLink: string;
   imageSetId: string | null;
 }
 
@@ -187,6 +251,7 @@ export async function getOrCreateClientReferralInvitation(
         id: existing.id,
         referralCode: existing.referralCode,
         referralLink: existing.referralLink,
+        shortLink: buildShortReferralLink(existing.referralCode),
         imageSetId: existing.imageSetId,
       };
     }
@@ -232,8 +297,8 @@ export async function getOrCreateClientReferralInvitation(
     const clientName = client.firstName || 'Friend';
     const referralLink = buildReferralLink(preparerCode, clientName, referralCode);
 
-    // Get current image set
-    const imageSet = await getCurrentImageSet(preparerId);
+    // Get current image set (specifically client_referral type)
+    const imageSet = await getClientReferralImages(preparerId);
 
     // Create the invitation
     const invitation = await prisma.clientReferralInvitation.create({
@@ -259,6 +324,7 @@ export async function getOrCreateClientReferralInvitation(
       id: invitation.id,
       referralCode: invitation.referralCode,
       referralLink: invitation.referralLink,
+      shortLink: buildShortReferralLink(invitation.referralCode),
       imageSetId: invitation.imageSetId,
     };
   } catch (error) {
@@ -373,5 +439,47 @@ export async function incrementImageDownload(imageId: string): Promise<boolean> 
   } catch (error) {
     logger.error('Error incrementing image download', { error, imageId });
     return false;
+  }
+}
+
+/**
+ * Resolve a client referral code to full invitation data
+ * Used by /go/[code] route to redirect with proper tracking
+ */
+export async function resolveReferralCode(code: string) {
+  try {
+    const invitation = await prisma.clientReferralInvitation.findUnique({
+      where: { referralCode: code },
+      include: {
+        preparer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            customTrackingCode: true,
+          },
+        },
+        client: {
+          select: {
+            firstName: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      return null;
+    }
+
+    return {
+      referralCode: invitation.referralCode,
+      referralLink: invitation.referralLink,
+      preparerCode: invitation.preparer.customTrackingCode || 'tg',
+      preparerName: `${invitation.preparer.firstName} ${invitation.preparer.lastName}`,
+      clientName: invitation.client.firstName || 'Friend',
+    };
+  } catch (error) {
+    logger.error('Error resolving referral code', { error, code });
+    return null;
   }
 }
