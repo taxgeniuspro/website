@@ -71,12 +71,22 @@ export default function PreparerStartPage() {
             {/* Left Side - Logo Image */}
             <div className="hidden lg:block sticky top-24">
               <div className="relative h-[600px] rounded-2xl overflow-hidden shadow-2xl border-4 border-primary/20 bg-muted flex items-center justify-center p-12">
+                {/* Dark/black logo for light theme */}
                 <Image
-                  src="/images/tax-genius-logo.png"
+                  src="/images/logo-light-theme.png"
                   alt="Tax Genius Pro - Join Our Team"
                   width={600}
                   height={800}
-                  className="w-full h-auto object-contain"
+                  className="w-full h-auto object-contain dark:hidden"
+                  priority
+                />
+                {/* White logo for dark theme */}
+                <Image
+                  src="/images/logo-dark-theme.png"
+                  alt="Tax Genius Pro - Join Our Team"
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain hidden dark:block"
                   priority
                 />
               </div>

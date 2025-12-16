@@ -33,12 +33,22 @@ export default function ReferralPage() {
         <div className="container mx-auto px-4 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <Link href="/">
+              {/* Dark/black logo for light theme */}
               <Image
-                src="/images/wordpress-assets/taxgenius-logo.png"
+                src="/images/logo-light-theme.png"
                 alt="Tax Genius Pro"
                 width={200}
                 height={50}
-                className="h-12 w-auto"
+                className="h-12 w-auto dark:hidden"
+                priority
+              />
+              {/* White logo for dark theme */}
+              <Image
+                src="/images/logo-dark-theme.png"
+                alt="Tax Genius Pro"
+                width={200}
+                height={50}
+                className="h-12 w-auto hidden dark:block"
                 priority
               />
             </Link>
@@ -416,13 +426,22 @@ export default function ReferralPage() {
       {/* Footer */}
       <footer className="bg-card border-t py-8">
         <div className="container mx-auto px-4 lg:px-8 text-center">
-          <Link href="/">
+          <Link href="/" className="inline-block mb-4">
+            {/* Dark/black logo for light theme */}
             <Image
-              src="/images/wordpress-assets/taxgenius-logo.png"
+              src="/images/logo-light-theme.png"
               alt="Tax Genius Pro"
               width={150}
               height={40}
-              className="h-10 w-auto mx-auto mb-4"
+              className="h-10 w-auto mx-auto dark:hidden"
+            />
+            {/* White logo for dark theme */}
+            <Image
+              src="/images/logo-dark-theme.png"
+              alt="Tax Genius Pro"
+              width={150}
+              height={40}
+              className="h-10 w-auto mx-auto hidden dark:block"
             />
           </Link>
           <p className="text-sm text-muted-foreground mb-2">

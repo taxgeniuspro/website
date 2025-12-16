@@ -122,8 +122,9 @@ export default function ClientReferralLandingPage() {
       {/* Header */}
       <div className="bg-secondary text-white py-4">
         <div className="container mx-auto px-4 flex items-center justify-center">
+          {/* Always use white logo on dark secondary background */}
           <Image
-            src="/images/tax-genius-logo.png"
+            src="/images/logo-dark-theme.png"
             alt="Tax Genius Pro"
             width={150}
             height={50}

@@ -231,12 +231,21 @@ export function Footer({ preparer }: FooterProps) {
           <div className="py-8 sm:py-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 lg:gap-8">
             {/* Column 1 - About */}
             <div className="space-y-4">
+              {/* Dark/black logo for light theme */}
               <Image
-                src="/images/wordpress-assets/taxgenius-logo.png"
+                src="/images/logo-light-theme.png"
                 alt="Tax Genius Pro"
                 width={160}
                 height={40}
-                className="h-10 w-auto"
+                className="h-10 w-auto dark:hidden"
+              />
+              {/* White logo for dark theme */}
+              <Image
+                src="/images/logo-dark-theme.png"
+                alt="Tax Genius Pro"
+                width={160}
+                height={40}
+                className="h-10 w-auto hidden dark:block"
               />
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Professional tax preparation services with licensed CPAs. Serving individuals and
