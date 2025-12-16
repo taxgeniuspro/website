@@ -20,13 +20,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, Search, Filter, Download, UserPlus } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Users, Search, Filter, Download, UserPlus, Trash2 } from 'lucide-react';
 import { EditUserModal } from '@/components/admin/EditUserModal';
 import { CreateTaxPreparerModal } from '@/components/admin/CreateTaxPreparerModal';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
+
+// Owliver Owl's profile ID - cannot be terminated
+const OWLIVER_PROFILE_ID = 'p_086ccd7b-6a51-406a-b157-bfc8a743c676';
 
 interface User {
   id: string;
@@ -57,6 +70,8 @@ export function UserManagementClient({
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [terminateUser, setTerminateUser] = useState<User | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
   const router = useRouter();
 
   const handleEditUser = (user: User) => {
@@ -121,6 +136,49 @@ export function UserManagementClient({
       logger.error('Error updating user:', error);
       throw error;
     }
+  };
+
+  const handleTerminatePreparer = async () => {
+    if (!terminateUser) return;
+
+    setIsTerminating(true);
+    try {
+      const response = await fetch(`/api/admin/preparers/${terminateUser.id}/terminate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: true }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to terminate preparer');
+      }
+
+      // Remove from local state
+      setUsers((prev) => prev.filter((user) => user.id !== terminateUser.id));
+
+      toast.success(
+        `${data.preparerName} has been terminated. ${data.clientsReassigned} clients and ${data.leadsReassigned} leads reassigned to Owliver Owl.`
+      );
+      router.refresh();
+    } catch (error) {
+      logger.error('Error terminating preparer:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to terminate preparer');
+    } finally {
+      setIsTerminating(false);
+      setTerminateUser(null);
+    }
+  };
+
+  const canTerminate = (user: User): boolean => {
+    // Can only terminate tax preparers
+    if (user.role !== 'tax_preparer') return false;
+    // Cannot terminate Owliver
+    if (user.id === OWLIVER_PROFILE_ID) return false;
+    return true;
   };
 
   const getRoleBadgeColor = (role?: string) => {
@@ -283,13 +341,25 @@ export function UserManagementClient({
                       </TableCell>
                       <TableCell className="text-muted-foreground">{createdAt}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditUser(user)}
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditUser(user)}
+                          >
+                            Edit
+                          </Button>
+                          {canTerminate(user) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => setTerminateUser(user)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -338,6 +408,50 @@ export function UserManagementClient({
           router.refresh();
         }}
       />
+
+      {/* Terminate Preparer Confirmation Dialog */}
+      <AlertDialog open={!!terminateUser} onOpenChange={(open) => !open && setTerminateUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600">
+              Terminate Tax Preparer
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Are you sure you want to terminate{' '}
+                  <span className="font-semibold">
+                    {terminateUser?.firstName} {terminateUser?.lastName}
+                  </span>
+                  ?
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-800">
+                  <p className="font-medium mb-1">This action will:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Reassign all their clients to Owliver Owl (Tax Genius)</li>
+                    <li>Reassign all their leads to Owliver Owl</li>
+                    <li>Delete their referral images and short links</li>
+                    <li>Delete their profile and user account</li>
+                  </ul>
+                </div>
+                <p className="text-red-600 font-medium">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTerminating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleTerminatePreparer}
+              disabled={isTerminating}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isTerminating ? 'Terminating...' : 'Terminate Preparer'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
