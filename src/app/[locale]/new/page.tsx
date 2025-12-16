@@ -7,7 +7,7 @@
  *
  * This page:
  * 1. Parses the referral parameters
- * 2. Shows a personalized welcome message
+ * 2. Shows a personalized welcome message with preparer photo
  * 3. Tracks the referral click
  * 4. Redirects to the intake form with attribution
  */
@@ -16,15 +16,22 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Gift, Users, FileText, Loader2 } from 'lucide-react';
+import { ArrowRight, Gift, Users, FileText, Loader2, Phone, Mail } from 'lucide-react';
 import Image from 'next/image';
+
+interface PreparerInfo {
+  name: string;
+  firstName: string | null;
+  avatarUrl: string | null;
+  phone: string | null;
+}
 
 export default function ClientReferralLandingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [preparerName, setPreparerName] = useState<string | null>(null);
+  const [preparerInfo, setPreparerInfo] = useState<PreparerInfo | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [preparerCode, setPreparerCode] = useState<string | null>(null);
@@ -49,13 +56,18 @@ export default function ClientReferralLandingPage() {
       });
     }
 
-    // Resolve preparer name from code
+    // Resolve preparer info from code
     if (tp) {
       fetch(`/api/referrals/resolve?username=${tp}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.referralSource?.name) {
-            setPreparerName(data.referralSource.name);
+          if (data.referralSource) {
+            setPreparerInfo({
+              name: data.referralSource.name,
+              firstName: data.referralSource.firstName,
+              avatarUrl: data.referralSource.avatarUrl,
+              phone: data.referralSource.phone,
+            });
           }
         })
         .catch(() => {
@@ -80,6 +92,18 @@ export default function ClientReferralLandingPage() {
     }
 
     router.push(`/start-filing/form?${params.toString()}`);
+  };
+
+  // Format phone number for display
+  const formatPhone = (phone: string) => {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    }
+    if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      return `(${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+    }
+    return phone;
   };
 
   if (isLoading) {
@@ -132,10 +156,43 @@ export default function ClientReferralLandingPage() {
           </CardHeader>
 
           <CardContent className="pt-6">
-            {preparerName && (
-              <div className="text-center mb-6 p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Your Tax Expert</p>
-                <p className="text-xl font-semibold text-foreground">{preparerName}</p>
+            {/* Preparer Card with Photo */}
+            {preparerInfo && (
+              <div className="mb-8 p-6 bg-muted rounded-xl">
+                <p className="text-sm text-muted-foreground text-center mb-4">Your Tax Expert</p>
+                <div className="flex flex-col items-center">
+                  {/* Preparer Photo */}
+                  {preparerInfo.avatarUrl ? (
+                    <div className="relative w-32 h-32 mb-4 rounded-full overflow-hidden border-4 border-secondary shadow-lg">
+                      <Image
+                        src={preparerInfo.avatarUrl}
+                        alt={preparerInfo.name}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-32 h-32 mb-4 rounded-full bg-secondary/20 flex items-center justify-center border-4 border-secondary">
+                      <span className="text-4xl font-bold text-secondary">
+                        {preparerInfo.firstName?.charAt(0) || 'T'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Preparer Name */}
+                  <h2 className="text-2xl font-bold text-foreground mb-2">{preparerInfo.name}</h2>
+
+                  {/* Preparer Contact Info */}
+                  {preparerInfo.phone && (
+                    <a
+                      href={`tel:${preparerInfo.phone.replace(/\D/g, '')}`}
+                      className="flex items-center gap-2 text-secondary hover:underline mt-2"
+                    >
+                      <Phone className="h-5 w-5" />
+                      <span className="text-lg font-medium">{formatPhone(preparerInfo.phone)}</span>
+                    </a>
+                  )}
+                </div>
               </div>
             )}
 
@@ -210,9 +267,18 @@ export default function ClientReferralLandingPage() {
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer - Now shows preparer contact instead of company */}
         <div className="text-center mt-8 text-sm text-muted-foreground">
-          <p>Questions? Call us at <a href="tel:+14046271015" className="text-secondary hover:underline">+1 404-627-1015</a></p>
+          {preparerInfo?.phone ? (
+            <p>
+              Questions? Call {preparerInfo.firstName || preparerInfo.name} at{' '}
+              <a href={`tel:${preparerInfo.phone.replace(/\D/g, '')}`} className="text-secondary hover:underline">
+                {formatPhone(preparerInfo.phone)}
+              </a>
+            </p>
+          ) : (
+            <p>Questions? Call us at <a href="tel:+14046271015" className="text-secondary hover:underline">+1 404-627-1015</a></p>
+          )}
           <p className="mt-2">© 2025 TaxGeniusPro. All rights reserved.</p>
         </div>
       </div>
