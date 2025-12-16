@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
         lastName: true,
         role: true,
         companyName: true,
+        avatarUrl: true,
+        phone: true,
         affiliateBondedToPreparerId: true, // For affiliates, get bonded preparer
       },
     });
@@ -74,8 +76,12 @@ export async function GET(req: NextRequest) {
       referralSource: {
         id: profile.id,
         name: `${profile.firstName} ${profile.lastName}`,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
         role: profile.role,
         companyName: profile.companyName,
+        avatarUrl: profile.avatarUrl,
+        phone: profile.phone,
       },
     });
   } catch (error) {
