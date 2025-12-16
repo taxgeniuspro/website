@@ -11,12 +11,6 @@
       "maxDuration": 30
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/cleanup-expired-leads",
-      "schedule": "0 0 * * *"
-    }
-  ],
   "env": {
     "SKIP_ENV_VALIDATION": "true",
     "BUILD_TIMESTAMP": "1733331600"
