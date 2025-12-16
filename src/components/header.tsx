@@ -80,7 +80,7 @@ export function Header() {
             {/* Services Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="px-4 py-2 text-foreground/80 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
+                <button className="px-4 py-2 text-gray-900 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
                   {t('services')}
                   <ChevronDown className="w-4 h-4" />
                 </button>
@@ -124,7 +124,7 @@ export function Header() {
             {/* Resources Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="px-4 py-2 text-foreground/80 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
+                <button className="px-4 py-2 text-gray-900 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
                   {t('resources')}
                   <ChevronDown className="w-4 h-4" />
                 </button>
@@ -162,7 +162,7 @@ export function Header() {
             {/* Opportunities Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="px-4 py-2 text-foreground/80 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
+                <button className="px-4 py-2 text-gray-900 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm flex items-center gap-1">
                   {t('joinUs')}
                   <ChevronDown className="w-4 h-4" />
                 </button>
@@ -188,13 +188,13 @@ export function Header() {
 
             <Link
               href="/about"
-              className="px-4 py-2 text-foreground/80 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm"
+              className="px-4 py-2 text-gray-900 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm"
             >
               {t('about')}
             </Link>
             <Link
               href="/contact"
-              className="px-4 py-2 text-foreground/80 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm"
+              className="px-4 py-2 text-gray-900 hover:text-primary hover:bg-muted/50 rounded-md transition-colors font-medium text-sm"
             >
               {t('contact')}
             </Link>
@@ -229,7 +229,7 @@ export function Header() {
             <div className="px-2">
               <button
                 onClick={() => setServicesOpen(!servicesOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-gray-900 font-medium hover:bg-muted/50 rounded-md transition-colors"
               >
                 <span>{t('services')}</span>
                 <ChevronRight className={cn('w-5 h-5 transition-transform', servicesOpen && 'rotate-90')} />
@@ -238,31 +238,31 @@ export function Header() {
                 <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
                   <Link
                     href="/personal-tax-filing"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('servicesMenu.personalTaxFiling')}
                   </Link>
                   <Link
                     href="/business-tax"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('servicesMenu.businessTaxServices')}
                   </Link>
                   <Link
                     href="/tax-planning"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('servicesMenu.taxPlanningAdvisory')}
                   </Link>
                   <Link
                     href="/audit-protection"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('servicesMenu.auditProtection')}
                   </Link>
                   <Link
                     href="/irs-resolution"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('servicesMenu.irsResolutionServices')}
                   </Link>
@@ -280,7 +280,7 @@ export function Header() {
             <div className="px-2">
               <button
                 onClick={() => setResourcesOpen(!resourcesOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-gray-900 font-medium hover:bg-muted/50 rounded-md transition-colors"
               >
                 <span>{t('resources')}</span>
                 <ChevronRight className={cn('w-5 h-5 transition-transform', resourcesOpen && 'rotate-90')} />
@@ -289,31 +289,31 @@ export function Header() {
                 <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
                   <Link
                     href="/tax-guide"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('resourcesMenu.taxGuide2024')}
                   </Link>
                   <Link
                     href="/blog"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('resourcesMenu.taxBlogTips')}
                   </Link>
                   <Link
                     href="/help"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('resourcesMenu.helpCenter')}
                   </Link>
                   <Link
                     href="/tax-calculator"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('resourcesMenu.taxCalculator')}
                   </Link>
                   <Link
                     href="/find-a-refund"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('resourcesMenu.findMyRefund')}
                   </Link>
@@ -325,7 +325,7 @@ export function Header() {
             <div className="px-2">
               <button
                 onClick={() => setJoinUsOpen(!joinUsOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-gray-900 font-medium hover:bg-muted/50 rounded-md transition-colors"
               >
                 <span>{t('joinUs')}</span>
                 <ChevronRight className={cn('w-5 h-5 transition-transform', joinUsOpen && 'rotate-90')} />
@@ -334,19 +334,19 @@ export function Header() {
                 <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-4">
                   <Link
                     href="/preparer/start"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('joinUsMenu.becomeTaxPreparer')}
                   </Link>
                   <Link
                     href="/affiliate/apply"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('joinUsMenu.joinAsAffiliate')}
                   </Link>
                   <Link
                     href="/referral"
-                    className="block px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50 rounded-md"
+                    className="block px-3 py-2 text-sm text-gray-800 hover:bg-muted/50 rounded-md"
                   >
                     {t('joinUsMenu.referralProgram')}
                   </Link>
@@ -358,13 +358,13 @@ export function Header() {
             <div className="px-2 border-t pt-2 mt-2">
               <Link
                 href="/about"
-                className="block px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md"
+                className="block px-4 py-3 text-gray-900 font-medium hover:bg-muted/50 rounded-md"
               >
                 {t('about')}
               </Link>
               <Link
                 href="/contact"
-                className="block px-4 py-3 text-foreground font-medium hover:bg-muted/50 rounded-md"
+                className="block px-4 py-3 text-gray-900 font-medium hover:bg-muted/50 rounded-md"
               >
                 {t('contact')}
               </Link>
