@@ -9,6 +9,11 @@ import { getEmailRecipients } from '@/config/email-routing';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { addMonths } from 'date-fns';
+import {
+  generateReferralCode,
+  buildReferralLink,
+} from '@/lib/services/client-referral.service';
+import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -532,6 +537,49 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
           leadId: lead.id,
           email: lead.email,
         },
+      });
+    }
+
+    // ========================================
+    // SCHEDULE CLIENT REFERRAL INVITATION EMAIL
+    // Send 30 minutes after lead form completion
+    // ========================================
+    try {
+      // Get the preparer's tracking code for the referral link
+      let preparerCode = 'tg'; // Default to Tax Genius
+      if (assignedPreparerId) {
+        const preparerProfile = await prisma.profile.findFirst({
+          where: { userId: assignedPreparerId },
+          select: { customTrackingCode: true, trackingCode: true },
+        });
+        if (preparerProfile) {
+          preparerCode = preparerProfile.customTrackingCode || preparerProfile.trackingCode || 'tg';
+        }
+      }
+
+      // Generate unique referral code for this lead
+      const referralCode = generateReferralCode();
+      const referralLink = buildReferralLink(preparerCode, first_name || 'Friend', referralCode);
+
+      // Schedule referral invitation email for 30 minutes from now
+      const scheduledEmailId = await scheduleReferralInvitationEmail(
+        lead.id,
+        referralCode,
+        referralLink
+      );
+
+      if (scheduledEmailId) {
+        logger.info('Referral invitation email scheduled', {
+          leadId: lead.id,
+          scheduledEmailId,
+          referralCode,
+        });
+      }
+    } catch (referralError) {
+      // Log error but don't fail the request - lead was already saved
+      logger.error('Failed to schedule referral invitation email', {
+        error: referralError,
+        leadId: lead.id,
       });
     }
 

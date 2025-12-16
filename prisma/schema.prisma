@@ -3849,17 +3849,30 @@ model CreativeUsage {
 
 // ============ Client Referral Program ============
 
-// Referral Image Folders - One per preparer + one default company folder
-// - "default" folder (preparerId = null): Company-wide Tax Genius images
-// - Preparer folders (preparerId set): Custom images for that preparer
-// If preparer folder is empty, fallback to default folder images
-model ReferralImageSet {
-  id          String  @id @default(cuid())
-  category    String  @default("preparer") // "default" or "preparer"
-  preparerId  String? @unique // null = default company folder, otherwise one folder per preparer
-  preparer    Profile? @relation("PreparerImageSets", fields: [preparerId], references: [id], onDelete: Cascade)
+// Folder types for promotional images
+// - preseason_loans: Dec 1 - Jan 14 (promote pre-season loan products)
+// - tax_season_lead: Jan 15 - Apr 15 (get new leads during tax season)
+// - tax_season_intake: Jan 15 - Apr 15 (get intake form completions)
+// - client_referral: Year-round (clients share to earn $50-$100 referral bonuses)
+enum FolderType {
+  preseason_loans
+  tax_season_lead
+  tax_season_intake
+  client_referral
+}
 
-  name        String // Display name (e.g., "Tax Genius Default" or "Gelisa White")
+// Referral Image Folders - 4 folders per preparer + 4 default company folders
+// - "default" folders (preparerId = null): Company-wide Tax Genius images (one per folder type)
+// - Preparer folders (preparerId set): Custom images for that preparer (4 per preparer)
+// If preparer folder is empty, fallback to default folder images of the same type
+model ReferralImageSet {
+  id          String     @id @default(cuid())
+  category    String     @default("preparer") // "default" or "preparer"
+  folderType  FolderType @default(client_referral) // Type of promotional content
+  preparerId  String?    // null = default company folder
+  preparer    Profile?   @relation("PreparerImageSets", fields: [preparerId], references: [id], onDelete: Cascade)
+
+  name        String // Display name (e.g., "Tax Genius Default - Pre-Season Loans")
   description String?
   isActive    Boolean @default(true)
 
@@ -3870,7 +3883,8 @@ model ReferralImageSet {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([category])
+  @@unique([preparerId, folderType]) // One folder per type per preparer (null preparerId = default)
+  @@index([category, folderType])
   @@index([isActive])
   @@map("referral_image_sets")
 }
@@ -3931,4 +3945,22 @@ model ClientReferralInvitation {
   @@index([referralCode])
   @@index([sentAt])
   @@map("client_referral_invitations")
+}
+
+// Scheduled Emails - For delayed sending (e.g., 30 min after lead form completion)
+model ScheduledEmail {
+  id          String   @id @default(cuid())
+  type        String   // Email type: "client_referral_invitation", etc.
+  recipientId String   // Profile or Lead ID
+  data        Json     // Email template data (name, link, images, etc.)
+  sendAt      DateTime // Scheduled send time
+  sentAt      DateTime? // When actually sent (null = not yet sent)
+  status      String   @default("pending") // pending, sent, failed, cancelled
+  error       String?  // Error message if failed
+  attempts    Int      @default(0) // Retry count
+  createdAt   DateTime @default(now())
+
+  @@index([status, sendAt])
+  @@index([type, status])
+  @@map("scheduled_emails")
 }
