@@ -122,11 +122,19 @@ export default function PreparerLandingPage() {
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
             <div className="w-32 h-32 mx-auto mb-6 relative">
+              {/* Dark/black logo for light theme */}
               <Image
-                src="/tax-genius-logo.png"
+                src="/images/logo-light-theme.png"
                 alt="Tax Genius Logo"
                 fill
-                className="object-contain"
+                className="object-contain dark:hidden"
+              />
+              {/* White logo for dark theme */}
+              <Image
+                src="/images/logo-dark-theme.png"
+                alt="Tax Genius Logo"
+                fill
+                className="object-contain hidden dark:block"
               />
             </div>
             <h2 className="text-4xl md:text-5xl font-bold mb-4">MEET COACH OWLIVER.</h2>
