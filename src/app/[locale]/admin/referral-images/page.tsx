@@ -18,7 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Upload, Trash2, Download, Image as ImageIcon, Building2, User, Loader2, FolderOpen, AlertCircle, Check } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Upload, Trash2, Download, Image as ImageIcon, Building2, User, Loader2, FolderOpen, AlertCircle, Check, Search } from 'lucide-react';
 import Image from 'next/image';
 
 interface ReferralImage {
@@ -60,6 +61,7 @@ export default function AdminReferralImagesPage() {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('default');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch all folders and preparers
   const { data: foldersData, isLoading: foldersLoading } = useQuery({
@@ -172,6 +174,27 @@ export default function AdminReferralImagesPage() {
   const preparersWithoutFolders = preparers.filter(
     p => !preparerFolders.some(f => f.preparerId === p.id)
   );
+
+  // Filter preparer folders by search query
+  const filteredPreparerFolders = preparerFolders.filter(folder => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      folder.name.toLowerCase().includes(query) ||
+      (folder.preparerCode && folder.preparerCode.toLowerCase().includes(query))
+    );
+  });
+
+  // Filter preparers without folders by search query
+  const filteredPreparersWithoutFolders = preparersWithoutFolders.filter(preparer => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      `${preparer.firstName} ${preparer.lastName}`.toLowerCase().includes(query) ||
+      (preparer.customTrackingCode && preparer.customTrackingCode.toLowerCase().includes(query)) ||
+      preparer.email.toLowerCase().includes(query)
+    );
+  });
 
   if (isLoading) {
     return (
@@ -287,9 +310,28 @@ export default function AdminReferralImagesPage() {
         </TabsContent>
 
         {/* Preparer Folders Tab */}
-        <TabsContent value="preparers" className="mt-6">
+        <TabsContent value="preparers" className="mt-6 space-y-4">
+          {/* Search Input */}
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or tracking code..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {/* Results count */}
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground">
+              Found {filteredPreparerFolders.length} folder{filteredPreparerFolders.length !== 1 ? 's' : ''}
+              {filteredPreparersWithoutFolders.length > 0 && ` and ${filteredPreparersWithoutFolders.length} pending`}
+            </p>
+          )}
+
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {preparerFolders.map((folder) => (
+            {filteredPreparerFolders.map((folder) => (
               <FolderCard
                 key={folder.id}
                 folder={folder}
@@ -303,7 +345,7 @@ export default function AdminReferralImagesPage() {
             ))}
 
             {/* Show preparers without folders */}
-            {preparersWithoutFolders.map((preparer) => (
+            {filteredPreparersWithoutFolders.map((preparer) => (
               <Card key={preparer.id} className="border-dashed opacity-60">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -327,11 +369,15 @@ export default function AdminReferralImagesPage() {
             ))}
           </div>
 
-          {preparerFolders.length === 0 && preparersWithoutFolders.length === 0 && (
+          {filteredPreparerFolders.length === 0 && filteredPreparersWithoutFolders.length === 0 && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No tax preparers found. Add tax preparers first, then their folders will be created automatically.
+                {searchQuery ? (
+                  <>No preparers found matching &quot;{searchQuery}&quot;. Try a different search term.</>
+                ) : (
+                  <>No tax preparers found. Add tax preparers first, then their folders will be created automatically.</>
+                )}
               </AlertDescription>
             </Alert>
           )}
