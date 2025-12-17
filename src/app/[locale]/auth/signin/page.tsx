@@ -1,22 +1,24 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Mail } from 'lucide-react';
+import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTranslations } from 'next-intl';
 
 function SignInContent() {
   const t = useTranslations('auth.signin');
+  const tErrors = useTranslations('auth.error.errors');
   const searchParams = useSearchParams();
   const router = useRouter();
   const role = searchParams.get('role') || 'client';
+  const urlError = searchParams.get('error');
 
   // Clean the callback URL to prevent 0.0.0.0 or localhost from being used
   let callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
@@ -36,6 +38,46 @@ function SignInContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+
+  // Classic email/password login state
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isCredentialsLoading, setIsCredentialsLoading] = useState(false);
+
+  // Handle URL error parameter (e.g., OAuthAccountNotLinked)
+  useEffect(() => {
+    if (urlError) {
+      // Map error codes to translated messages
+      const errorMessages: Record<string, { title: string; description: string }> = {
+        OAuthAccountNotLinked: {
+          title: tErrors('OAuthAccountNotLinked.title', { defaultValue: 'Account Not Linked' }),
+          description: tErrors('OAuthAccountNotLinked.description', { defaultValue: 'This email is already associated with another account. Please sign in with email and password below.' }),
+        },
+        CredentialsSignin: {
+          title: tErrors('CredentialsSignin.title', { defaultValue: 'Sign In Failed' }),
+          description: tErrors('CredentialsSignin.description', { defaultValue: 'Invalid email or password.' }),
+        },
+        EmailSignin: {
+          title: tErrors('EmailSignin.title', { defaultValue: 'Email Sign In Error' }),
+          description: tErrors('EmailSignin.description', { defaultValue: 'Error sending verification email.' }),
+        },
+      };
+
+      const errorInfo = errorMessages[urlError] || {
+        title: 'Sign In Error',
+        description: 'An error occurred. Please try again.',
+      };
+
+      setError(`${errorInfo.title}: ${errorInfo.description}`);
+
+      // If OAuthAccountNotLinked, automatically show the email/password form
+      if (urlError === 'OAuthAccountNotLinked') {
+        setShowEmailPassword(true);
+      }
+    }
+  }, [urlError, tErrors]);
 
   // Role-specific content
   const roleContent = {
@@ -146,6 +188,43 @@ function SignInContent() {
     }
   };
 
+  const handleCredentialsSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email) {
+      setError(t('errors.emailRequired', { defaultValue: 'Please enter your email address' }));
+      return;
+    }
+    if (!password) {
+      setError(t('errors.passwordRequired', { defaultValue: 'Please enter your password' }));
+      return;
+    }
+
+    setError('');
+    setIsCredentialsLoading(true);
+
+    try {
+      const result = await signIn('credentials', {
+        email: email.toLowerCase(),
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError(t('errors.invalidCredentials', { defaultValue: 'Invalid email or password. Please check your credentials and try again.' }));
+        setIsCredentialsLoading(false);
+        return;
+      }
+
+      // Success - redirect to dashboard
+      router.push(callbackUrl);
+    } catch (error) {
+      console.error('Credentials sign in error:', error);
+      setError(t('errors.unexpectedError', { defaultValue: 'An unexpected error occurred. Please try again.' }));
+      setIsCredentialsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Left Side - Role-specific messaging with image */}
@@ -230,7 +309,7 @@ function SignInContent() {
             variant="default"
             className="w-full h-14 text-base font-semibold"
             onClick={handleGoogleSignIn}
-            disabled={isLoading || isMagicLinkLoading}
+            disabled={isLoading || isMagicLinkLoading || isCredentialsLoading}
           >
             <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -260,7 +339,7 @@ function SignInContent() {
               placeholder={t('form.emailForMagicLink', { defaultValue: 'Enter email for magic link' })}
               value={magicLinkEmail}
               onChange={(e) => setMagicLinkEmail(e.target.value)}
-              disabled={isLoading || isMagicLinkLoading || magicLinkSent}
+              disabled={isLoading || isMagicLinkLoading || isCredentialsLoading || magicLinkSent}
               className="h-12"
             />
             <Button
@@ -268,7 +347,7 @@ function SignInContent() {
               variant="outline"
               className="w-full h-12 text-base"
               onClick={handleMagicLinkSignIn}
-              disabled={isLoading || isMagicLinkLoading || magicLinkSent}
+              disabled={isLoading || isMagicLinkLoading || isCredentialsLoading || magicLinkSent}
             >
               {isMagicLinkLoading ? (
                 <>
@@ -288,6 +367,94 @@ function SignInContent() {
               )}
             </Button>
           </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                {t('form.or', { defaultValue: 'Or' })}
+              </span>
+            </div>
+          </div>
+
+          {/* Classic Email/Password Login */}
+          {!showEmailPassword ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full h-10 text-sm"
+              onClick={() => setShowEmailPassword(true)}
+            >
+              <Lock className="mr-2 h-4 w-4" />
+              {t('form.signInWithPassword', { defaultValue: 'Sign in with Email & Password' })}
+            </Button>
+          ) : (
+            <form onSubmit={handleCredentialsSignIn} className="space-y-3">
+              <Input
+                type="email"
+                placeholder={t('form.email', { defaultValue: 'Email address' })}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isCredentialsLoading}
+                className="h-12"
+                autoComplete="email"
+              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={t('form.password', { defaultValue: 'Password' })}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isCredentialsLoading}
+                  className="h-12 pr-10"
+                  autoComplete="current-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isCredentialsLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+              <Button
+                type="submit"
+                variant="default"
+                className="w-full h-12 text-base"
+                disabled={isCredentialsLoading}
+              >
+                {isCredentialsLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('form.signingIn', { defaultValue: 'Signing in...' })}
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 h-4 w-4" />
+                    {t('form.signIn', { defaultValue: 'Sign In' })}
+                  </>
+                )}
+              </Button>
+              <div className="text-center">
+                <a
+                  href="/auth/forgot-password"
+                  className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                >
+                  {t('form.forgotPassword', { defaultValue: 'Forgot password?' })}
+                </a>
+              </div>
+            </form>
+          )}
 
           <div className="text-center text-sm text-muted-foreground pt-4">
             {t('form.dontHaveAccount')}{' '}
