@@ -71,7 +71,7 @@ export default async function ClientsStatusPage({
     // Fetch all tax preparers for the filter dropdown
     preparers = await prisma.profile.findMany({
       where: {
-        role: 'TAX_PREPARER',
+        role: 'tax_preparer',
       },
       select: {
         id: true,
@@ -86,7 +86,7 @@ export default async function ClientsStatusPage({
 
     // Build where clause for clients
     const clientsWhere: any = {
-      role: 'CLIENT',
+      role: 'client',
     };
 
     // Apply search filter

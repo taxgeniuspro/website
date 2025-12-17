@@ -33,7 +33,7 @@ export default async function PermissionsPage() {
   try {
     adminUsers = await prisma.profile.findMany({
       where: {
-        role: 'ADMIN',
+        role: 'admin',
       },
       orderBy: {
         createdAt: 'desc',
