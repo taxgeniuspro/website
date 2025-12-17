@@ -125,24 +125,24 @@ function CashAdvancePageContent() {
         <ShortLinkTracker />
       </Suspense>
 
-      {/* LOGO at top */}
-      <header className="py-4 px-4">
+      {/* Tax Genius Pro Logo */}
+      <header className="py-6 px-4">
         <div className="container mx-auto max-w-6xl">
           <div className="flex justify-center">
             <Image
               src="/images/logo-light-theme.png"
               alt="Tax Genius Pro"
-              width={180}
-              height={50}
-              className="dark:hidden"
+              width={200}
+              height={55}
+              className="dark:hidden h-auto"
               priority
             />
             <Image
               src="/images/logo-dark-theme.png"
               alt="Tax Genius Pro"
-              width={180}
-              height={50}
-              className="hidden dark:block"
+              width={200}
+              height={55}
+              className="hidden dark:block h-auto"
               priority
             />
           </div>
