@@ -445,6 +445,52 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
     try {
       // Send comprehensive tax intake email if all tax details are provided
       if (isCompleteTaxIntake) {
+        // Query for any documents uploaded for this lead (e.g., driver's license)
+        let documentUrls: { driversLicenseUrl?: string; additionalDocUrls?: string[] } = {};
+        try {
+          if (lead.clientFolderId) {
+            const documents = await prisma.document.findMany({
+              where: {
+                folderId: lead.clientFolderId,
+                isDeleted: false,
+              },
+              select: {
+                fileUrl: true,
+                metadata: true,
+                type: true,
+              },
+            });
+
+            // Categorize documents by type
+            for (const doc of documents) {
+              const metadata = doc.metadata as { documentType?: string } | null;
+              if (metadata?.documentType === 'drivers_license' || doc.type === 'OTHER') {
+                // First ID document found becomes driver's license
+                if (!documentUrls.driversLicenseUrl) {
+                  documentUrls.driversLicenseUrl = doc.fileUrl;
+                } else {
+                  // Additional documents
+                  if (!documentUrls.additionalDocUrls) {
+                    documentUrls.additionalDocUrls = [];
+                  }
+                  documentUrls.additionalDocUrls.push(doc.fileUrl);
+                }
+              }
+            }
+
+            logger.info('Found documents for PDF embedding', {
+              leadId: lead.id,
+              folderId: lead.clientFolderId,
+              documentCount: documents.length,
+              hasDriversLicense: !!documentUrls.driversLicenseUrl,
+              additionalDocs: documentUrls.additionalDocUrls?.length || 0,
+            });
+          }
+        } catch (docError) {
+          logger.error('Failed to query documents for PDF', { leadId: lead.id, error: docError });
+          // Continue without documents
+        }
+
         // Generate professional PDF form for email attachment
         let pdfAttachment: { filename: string; content: Buffer } | undefined;
         try {
@@ -474,6 +520,9 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
             referrerType: attributionResult.attribution.referrerType,
             tax_year,
             created_at: lead.created_at,
+            // Include document URLs for PDF embedding
+            drivers_license_url: documentUrls.driversLicenseUrl,
+            additional_document_urls: documentUrls.additionalDocUrls,
           });
           pdfAttachment = {
             filename: `TaxIntake_${last_name}_${lead.id.slice(-6).toUpperCase()}.pdf`,
