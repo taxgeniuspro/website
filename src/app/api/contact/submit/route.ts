@@ -5,6 +5,7 @@ import { getResendClient } from '@/lib/resend';
 import { ContactFormNotification } from '../../../../../emails/contact-form-notification';
 import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { getEmailRecipients } from '@/config/email-routing';
+import { generateContactFormPDF } from '@/lib/services/pdf-form-generator.service';
 
 /**
  * POST /api/contact/submit - Handle contact form submissions
@@ -238,6 +239,38 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
     }
 
     try {
+      // Generate professional PDF form for email attachment
+      let pdfAttachment: { filename: string; content: Buffer } | undefined;
+      try {
+        const pdfBuffer = await generateContactFormPDF({
+          id: crmContact.id,
+          firstName,
+          lastName,
+          email,
+          phone: phone || null,
+          service,
+          message,
+          referrerUsername: ref || null,
+          referrerType: ref ? 'tax_preparer' : null,
+          createdAt: new Date(),
+        });
+        pdfAttachment = {
+          filename: `ContactForm_${lastName}_${crmContact.id.slice(-6).toUpperCase()}.pdf`,
+          content: pdfBuffer,
+        };
+        logger.info('PDF form generated for contact form', {
+          contactId: crmContact.id,
+          filename: pdfAttachment.filename,
+          size: pdfBuffer.length,
+        });
+      } catch (pdfError) {
+        // Log error but don't fail - email will be sent without attachment
+        logger.error('Failed to generate PDF form for contact form', {
+          contactId: crmContact.id,
+          error: pdfError,
+        });
+      }
+
       if (process.env.NODE_ENV === 'development') {
         logger.info('Contact form email (Dev Mode)', {
           to: primaryRecipient,
@@ -249,6 +282,7 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
           service,
           message,
           assignedPreparer: assignedPreparerId ? 'Yes' : 'No',
+          hasPdfAttachment: !!pdfAttachment,
         });
       } else {
         // Build referral code for email - if ref provided, use it as the code
@@ -272,17 +306,22 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
             referralCode: referralCode,
             referralSource: referralSource,
           }),
+          // PDF attachment for professional print-ready form
+          ...(pdfAttachment && {
+            attachments: [pdfAttachment],
+          }),
         });
 
         if (error) {
           logger.error('Failed to send contact form email', error);
           // Don't fail the request if email fails - we still saved to database
         } else {
-          logger.info('Contact form email sent', {
+          logger.info('Contact form email sent with PDF attachment', {
             emailId: data?.id,
             to: primaryRecipient,
             cc: recipients.cc,
             assignedPreparer: assignedPreparerId ? 'Yes' : 'No',
+            hasPdfAttachment: !!pdfAttachment,
           });
         }
       }

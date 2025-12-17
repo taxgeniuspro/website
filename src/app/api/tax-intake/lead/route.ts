@@ -14,6 +14,7 @@ import {
   buildReferralLink,
 } from '@/lib/services/client-referral.service';
 import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
+import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -444,6 +445,53 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
     try {
       // Send comprehensive tax intake email if all tax details are provided
       if (isCompleteTaxIntake) {
+        // Generate professional PDF form for email attachment
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateTaxIntakePDF({
+            id: lead.id,
+            first_name,
+            middle_name,
+            last_name,
+            email,
+            phone,
+            country_code,
+            address_line_1,
+            address_line_2,
+            city,
+            state,
+            zip_code,
+            filing_status,
+            employment_type,
+            occupation,
+            has_dependents,
+            number_of_dependents,
+            has_mortgage,
+            wants_refund_advance,
+            denied_eitc,
+            has_irs_pin,
+            referrerUsername: attributionResult.attribution.referrerUsername,
+            referrerType: attributionResult.attribution.referrerType,
+            tax_year,
+            created_at: lead.created_at,
+          });
+          pdfAttachment = {
+            filename: `TaxIntake_${last_name}_${lead.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF form generated for tax intake', {
+            leadId: lead.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email will be sent without attachment
+          logger.error('Failed to generate PDF form for tax intake', {
+            leadId: lead.id,
+            error: pdfError,
+          });
+        }
+
         await EmailService.sendTaxIntakeCompleteEmail(emailRecipient, {
           leadId: lead.id,
           // Personal Information
@@ -492,12 +540,13 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
           referrerUsername: attributionResult.attribution.referrerUsername,
           referrerType: attributionResult.attribution.referrerType,
           attributionMethod: attributionResult.attribution.attributionMethod,
-        }, ccEmail, (locale as 'en' | 'es') || 'en'); // Pass CC email and locale
-        logger.info('Comprehensive tax intake email sent', {
+        }, ccEmail, (locale as 'en' | 'es') || 'en', pdfAttachment); // Pass CC email, locale, and PDF attachment
+        logger.info('Comprehensive tax intake email sent with PDF attachment', {
           leadId: lead.id,
           recipient: emailRecipient,
           cc: ccEmail,
           locale: locale || 'en',
+          hasPdfAttachment: !!pdfAttachment,
         });
       } else {
         // Send basic lead notification for incomplete submissions
