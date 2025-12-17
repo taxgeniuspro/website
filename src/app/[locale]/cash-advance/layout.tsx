@@ -1,8 +1,81 @@
 import type { Metadata } from 'next';
+import { prisma } from '@/lib/prisma';
 
 interface Props {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ ref?: string }>;
+}
+
+/**
+ * Get the promotional image URL for the cash advance page.
+ * Facebook/social crawlers don't follow redirects, so we need the direct image URL.
+ */
+async function getOgImageUrl(ref?: string): Promise<string> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
+  const fallbackImage = `${appUrl}/og-cash-advance.jpg`;
+
+  try {
+    let preparerId: string | undefined;
+
+    // If preparer code is provided, look up the preparer
+    if (ref) {
+      const preparer = await prisma.profile.findFirst({
+        where: {
+          OR: [{ customTrackingCode: ref }, { trackingCode: ref }],
+          role: 'tax_preparer',
+        },
+        select: { id: true },
+      });
+      preparerId = preparer?.id;
+    }
+
+    // First, try preparer-specific images
+    if (preparerId) {
+      const preparerSet = await prisma.referralImageSet.findFirst({
+        where: {
+          preparerId,
+          folderType: 'preseason_loans',
+          category: 'preparer',
+          isActive: true,
+        },
+        include: {
+          images: {
+            orderBy: { sortOrder: 'asc' },
+            take: 1,
+          },
+        },
+      });
+
+      if (preparerSet?.images.length && preparerSet.images[0].imageUrl) {
+        return preparerSet.images[0].imageUrl;
+      }
+    }
+
+    // Fallback to default images
+    const defaultSet = await prisma.referralImageSet.findFirst({
+      where: {
+        category: 'default',
+        preparerId: null,
+        folderType: 'preseason_loans',
+        isActive: true,
+      },
+      include: {
+        images: {
+          orderBy: { sortOrder: 'asc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (defaultSet?.images.length && defaultSet.images[0].imageUrl) {
+      return defaultSet.images[0].imageUrl;
+    }
+
+    return fallbackImage;
+  } catch (error) {
+    console.error('Error fetching OG image:', error);
+    return fallbackImage;
+  }
 }
 
 /**
@@ -12,16 +85,16 @@ interface Props {
  * If a preparer ref code is provided:
  * - Uses their custom preseason_loans image if they have one
  * - Otherwise falls back to default preseason_loans images
+ *
+ * IMPORTANT: Returns direct Cloudinary URL, not a redirect.
+ * Facebook/Twitter crawlers don't follow redirects for OG images.
  */
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const resolvedSearchParams = await searchParams;
   const ref = resolvedSearchParams?.ref;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
-  // Build dynamic OG image URL that uses our API to get the right promotional image
-  const ogImageUrl = ref
-    ? `${appUrl}/api/cash-advance/og?ref=${encodeURIComponent(ref)}`
-    : `${appUrl}/api/cash-advance/og`;
+  // Get the actual image URL (direct Cloudinary URL, not a redirect)
+  const ogImageUrl = await getOgImageUrl(ref || undefined);
 
   return {
     title: 'Preseason Tax Advance - Get Up to $7,000 | Tax Genius Pro',
