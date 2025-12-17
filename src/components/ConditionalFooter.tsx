@@ -52,7 +52,7 @@ function ConditionalFooterInner() {
   }, [preparerRef]);
 
   // Routes where footer should be hidden (lead/intake pages)
-  const hideFooterRoutes = ['/start-filing/form', '/book-appointment', '/book'];
+  const hideFooterRoutes = ['/start-filing/form', '/book-appointment', '/book', '/cash-advance'];
 
   // Check if current route should hide footer
   const shouldHideFooter = hideFooterRoutes.some((route) => pathname?.startsWith(route));
