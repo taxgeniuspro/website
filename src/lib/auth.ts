@@ -73,6 +73,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           response_type: 'code',
         },
       },
+      // Fix for OAuthAccountNotLinked error - ensure profile has consistent id
+      // See: https://github.com/nextauthjs/next-auth/issues/12456
+      profile(profile) {
+        return {
+          id: profile.sub, // Use Google's sub (subject) as the user ID
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
     }),
 
     // Magic Link Provider (Email-based passwordless login)
@@ -134,8 +144,83 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // Check if user is deactivated (for all login types)
-      if (user?.id) {
+      // Handle Google OAuth account linking
+      // This fixes OAuthAccountNotLinked error when user exists with same email
+      if (account?.provider === 'google' && user?.email) {
+        try {
+          // Check if user already exists with this email
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email.toLowerCase() },
+            include: {
+              accounts: true,
+              profile: true,
+            },
+          });
+
+          if (existingUser) {
+            // Check if Google account is already linked
+            const hasGoogleAccount = existingUser.accounts.some(
+              (acc) => acc.provider === 'google'
+            );
+
+            if (!hasGoogleAccount && account.providerAccountId) {
+              // Manually link the Google account to existing user
+              logger.info('Linking Google account to existing user', {
+                userId: existingUser.id,
+                email: user.email,
+              });
+
+              await prisma.account.create({
+                data: {
+                  userId: existingUser.id,
+                  type: account.type,
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  access_token: account.access_token,
+                  refresh_token: account.refresh_token,
+                  expires_at: account.expires_at,
+                  token_type: account.token_type,
+                  scope: account.scope,
+                  id_token: account.id_token,
+                },
+              });
+
+              // Update user object to use existing user's ID
+              // This is crucial - NextAuth needs to use the existing user's ID
+              (user as NextAuthUser & { id: string }).id = existingUser.id;
+            } else if (hasGoogleAccount) {
+              // Google account already linked - use existing user ID
+              (user as NextAuthUser & { id: string }).id = existingUser.id;
+            }
+
+            // Check if user is deactivated
+            if (existingUser.profile?.isActive === false) {
+              logger.warn('Deactivated user attempted to sign in', {
+                userId: existingUser.id,
+                email: user.email,
+              });
+              return '/suspended';
+            }
+
+            // Attach role from existing profile
+            if (existingUser.profile?.role) {
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
+            } else {
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
+            }
+
+            return true;
+          }
+        } catch (error) {
+          logger.error('Error during Google OAuth account linking', { error, email: user.email });
+          // Continue with normal flow - let NextAuth handle it
+        }
+      }
+
+      // Check if user is deactivated (for non-Google login types)
+      if (user?.id && account?.provider !== 'google') {
         try {
           const profile = await prisma.profile.findUnique({
             where: { userId: user.id },
@@ -145,32 +230,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // Block deactivated users from signing in
           if (profile && profile.isActive === false) {
             logger.warn('Deactivated user attempted to sign in', { userId: user.id, email: user.email });
-            // Return false to block sign-in, or redirect to suspended page
-            // NextAuth will redirect to error page with error=AccessDenied
             return '/suspended';
-          }
-
-          // For OAuth providers (Google), fetch role from database and attach to user
-          if (account?.provider === 'google') {
-            if (profile?.role) {
-              // Attach role to user object so JWT callback can access it
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = profile.role;
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = profile.isActive ?? true;
-            } else {
-              // Default to 'client' if no profile exists yet (new users)
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-            }
           }
         } catch (error) {
           logger.error('Failed to fetch user profile during sign-in', { error, userId: user.id });
-          // Default to 'client' on error for OAuth
-          if (account?.provider === 'google') {
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-          }
         }
       }
+
       return true;
     },
     async jwt({ token, user, trigger, session }) {
