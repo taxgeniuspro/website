@@ -88,12 +88,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Final fallback - redirect to static image
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
-    return NextResponse.redirect(`${appUrl}/og-cash-advance.jpg`);
+    // No image found - return 404
+    // Note: Default images should exist in the database under folderType: 'preseason_loans'
+    console.error('No preseason_loans images found in database');
+    return new NextResponse('No OG image available', { status: 404 });
   } catch (error) {
     console.error('Error generating OG image:', error);
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
-    return NextResponse.redirect(`${appUrl}/og-cash-advance.jpg`);
+    return new NextResponse('Error generating OG image', { status: 500 });
   }
 }

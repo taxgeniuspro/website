@@ -90,13 +90,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(imageUrl);
     }
 
-    // Final fallback to static OG image
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
-    return NextResponse.redirect(`${appUrl}/og-cash-advance.jpg`);
+    // No image found - return 404
+    // Note: Default images should exist in the database under folderType: 'preseason_loans'
+    logger.error('No preseason_loans images found in database');
+    return NextResponse.json({ error: 'No OG image available' }, { status: 404 });
   } catch (error) {
     logger.error('Error getting cash advance OG image', { error });
-    // On error, fallback to static image
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
-    return NextResponse.redirect(`${appUrl}/og-cash-advance.jpg`);
+    return NextResponse.json({ error: 'Error generating OG image' }, { status: 500 });
   }
 }
