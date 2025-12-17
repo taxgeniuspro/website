@@ -10,9 +10,18 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle, Phone, Mail } from 'lucide-react';
 import Image from 'next/image';
-import { Header } from '@/components/header';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { logger } from '@/lib/logger';
+
+// Default to Ray Hamilton when no ref code
+const DEFAULT_PREPARER = {
+  firstName: 'Ray',
+  lastName: 'Hamilton',
+  phone: '1 (404) 396-9512',
+  email: 'rhamiltonfirm@gmail.com',
+  avatarUrl: 'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_rh.jpg',
+  trackingCode: 'rh',
+};
 
 interface PreparerInfo {
   firstName: string;
@@ -29,7 +38,7 @@ function CashAdvancePageContent() {
   const searchParams = useSearchParams();
   const refCode = searchParams?.get('ref');
 
-  const [preparer, setPreparer] = useState<PreparerInfo | null>(null);
+  const [preparer, setPreparer] = useState<PreparerInfo>(DEFAULT_PREPARER);
   const [formData, setFormData] = useState({
     firstName: '',
     phone: '',
@@ -62,7 +71,8 @@ function CashAdvancePageContent() {
     }
   };
 
-  const preparerName = preparer ? `${preparer.firstName} ${preparer.lastName}` : null;
+  const preparerName = `${preparer.firstName} ${preparer.lastName}`;
+  const cleanPhone = preparer.phone?.replace(/[^+\d]/g, '') || '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,14 +87,14 @@ function CashAdvancePageContent() {
       const response = await fetch('/api/cash-advance/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, locale, ref: refCode }),
+        body: JSON.stringify({ ...formData, locale, ref: refCode || preparer.trackingCode }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to submit form');
 
       const thankYouUrl = refCode
         ? `/${locale}/cash-advance/thank-you?ref=${refCode}`
-        : `/${locale}/cash-advance/thank-you`;
+        : `/${locale}/cash-advance/thank-you?ref=${preparer.trackingCode}`;
       router.push(thankYouUrl);
     } catch (error) {
       logger.error('Error submitting cash advance form:', error);
@@ -105,48 +115,42 @@ function CashAdvancePageContent() {
         <ShortLinkTracker />
       </Suspense>
 
-      <Header />
-
       {/* HERO + FORM - Above the fold */}
       <section className="py-8 lg:py-12 bg-gradient-to-b from-primary/5 to-background">
         <div className="container mx-auto px-4 max-w-6xl">
 
-          {/* Preparer Card - Shows at top when ref code present */}
-          {preparer && (
-            <div className="mb-6 bg-white dark:bg-card border border-primary/20 rounded-xl p-4 shadow-lg max-w-md mx-auto lg:mx-0">
-              <div className="flex items-center gap-4">
-                {preparer.avatarUrl ? (
-                  <img
-                    src={preparer.avatarUrl}
-                    alt={preparerName || 'Tax Preparer'}
-                    className="w-16 h-16 rounded-full object-cover border-3 border-primary/30"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border-3 border-primary/30">
-                    <span className="text-xl font-bold text-primary">
-                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
-                    </span>
-                  </div>
-                )}
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground">Your Tax Professional</p>
-                  <p className="font-bold text-lg">{preparerName}</p>
-                  <div className="flex gap-2 mt-1">
-                    {preparer.phone && (
-                      <a href={`tel:${preparer.phone.replace(/[^+\d]/g, '')}`} className="text-xs text-primary hover:underline flex items-center gap-1">
-                        <Phone className="w-3 h-3" /> Call
-                      </a>
-                    )}
-                    {preparer.email && (
-                      <a href={`mailto:${preparer.email}`} className="text-xs text-primary hover:underline flex items-center gap-1">
-                        <Mail className="w-3 h-3" /> Email
-                      </a>
-                    )}
-                  </div>
+          {/* Tax Preparer Card - Always visible at top */}
+          <div className="mb-6 bg-white dark:bg-card border border-primary/20 rounded-xl p-4 shadow-lg max-w-md mx-auto lg:mx-0">
+            <div className="flex items-center gap-4">
+              {preparer.avatarUrl ? (
+                <img
+                  src={preparer.avatarUrl}
+                  alt={preparerName}
+                  className="w-20 h-20 rounded-full object-cover border-4 border-primary/30"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center border-4 border-primary/30">
+                  <span className="text-2xl font-bold text-primary">
+                    {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Your Tax Professional</p>
+                <p className="font-bold text-xl">{preparerName}</p>
+                <div className="flex flex-col gap-1 mt-2">
+                  {preparer.phone && (
+                    <a
+                      href={`tel:${cleanPhone}`}
+                      className="text-sm text-primary hover:underline flex items-center gap-2 font-medium"
+                    >
+                      <Phone className="w-4 h-4" /> {preparer.phone}
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
 
