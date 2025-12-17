@@ -9,9 +9,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckCircle, Phone, DollarSign, FileText, Clock, CreditCard } from 'lucide-react';
+import { CheckCircle, Phone, DollarSign, FileText, Clock, CreditCard, ArrowRight, Zap } from 'lucide-react';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { logger } from '@/lib/logger';
+import Image from 'next/image';
 
 // Default to Ray Hamilton when no ref code
 const DEFAULT_PREPARER = {
@@ -32,43 +33,16 @@ interface PreparerInfo {
   trackingCode: string;
 }
 
-// Animation variants
-const fadeInUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0 },
-};
-
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-};
-
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.9 },
-  visible: { opacity: 1, scale: 1 },
-};
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
 function CashAdvancePageContent() {
   const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams?.get('ref');
-  const heroRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   // Parallax scroll effect
   const { scrollY } = useScroll();
-  const heroY = useTransform(scrollY, [0, 500], [0, 150]);
-  const heroOpacity = useTransform(scrollY, [0, 300], [1, 0.3]);
+  const heroY = useTransform(scrollY, [0, 500], [0, 100]);
 
   const [preparer, setPreparer] = useState<PreparerInfo>(DEFAULT_PREPARER);
   const [formData, setFormData] = useState({
@@ -105,6 +79,10 @@ function CashAdvancePageContent() {
 
   const preparerName = `${preparer.firstName} ${preparer.lastName}`;
   const cleanPhone = preparer.phone?.replace(/[^+\d]/g, '') || '';
+
+  const scrollToForm = () => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,421 +125,423 @@ function CashAdvancePageContent() {
         <ShortLinkTracker />
       </Suspense>
 
-      {/* HERO + FORM - Above the fold with parallax */}
-      <section ref={heroRef} className="relative py-8 lg:py-16 overflow-hidden">
-        {/* Animated background gradient */}
+      {/* LOGO at top */}
+      <header className="py-4 px-4">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-center">
+            <Image
+              src="/tax-genius-logo-dark.png"
+              alt="Tax Genius Pro"
+              width={180}
+              height={50}
+              className="dark:hidden"
+              priority
+            />
+            <Image
+              src="/tax-genius-logo-light.png"
+              alt="Tax Genius Pro"
+              width={180}
+              height={50}
+              className="hidden dark:block"
+              priority
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* HERO - BIG $7,000 CALL TO ACTION */}
+      <section className="relative pt-4 pb-8 overflow-hidden">
+        {/* Animated background */}
         <motion.div
-          style={{ y: heroY, opacity: heroOpacity }}
-          className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-background -z-10"
+          style={{ y: heroY }}
+          className="absolute inset-0 bg-gradient-to-b from-green-500/10 via-primary/5 to-background -z-10"
         />
 
-        {/* Floating decorative elements */}
-        <motion.div
-          animate={{
-            y: [0, -20, 0],
-            rotate: [0, 5, 0]
-          }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          className="absolute top-20 right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl -z-10"
-        />
-        <motion.div
-          animate={{
-            y: [0, 20, 0],
-            rotate: [0, -5, 0]
-          }}
-          transition={{
-            duration: 8,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          className="absolute bottom-20 left-10 w-40 h-40 bg-green-500/10 rounded-full blur-3xl -z-10"
-        />
+        {/* Pulsing glow behind amount */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-96 h-96 bg-green-500/20 rounded-full blur-[100px] -z-10 animate-pulse" />
 
-        <div className="container mx-auto px-4 max-w-6xl">
-
-          {/* Tax Preparer Card - Always visible at top */}
+        <div className="container mx-auto px-4 max-w-4xl text-center">
+          {/* Urgency badge */}
           <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={scaleIn}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-8"
           >
-            <div className="bg-white dark:bg-card border-2 border-primary/20 rounded-2xl p-5 shadow-xl max-w-md mx-auto lg:mx-0">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  {preparer.avatarUrl ? (
-                    <img
-                      src={preparer.avatarUrl}
-                      alt={preparerName}
-                      className="w-24 h-24 rounded-full object-cover border-4 border-primary/30 shadow-lg"
-                    />
-                  ) : (
-                    <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center border-4 border-primary/30">
-                      <span className="text-3xl font-bold text-primary">
-                        {preparer.firstName?.[0]}{preparer.lastName?.[0]}
-                      </span>
-                    </div>
-                  )}
-                </motion.div>
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Your Tax Professional</p>
-                  <p className="font-bold text-2xl text-foreground">{preparerName}</p>
-                  {preparer.phone && (
-                    <motion.a
-                      href={`tel:${cleanPhone}`}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
-                    >
-                      <Phone className="w-4 h-4" />
-                      {preparer.phone}
-                    </motion.a>
-                  )}
-                </div>
-              </div>
+            <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-lg shadow-green-500/30 mb-6">
+              <Zap className="w-4 h-4" />
+              LIMITED TIME - PRESEASON 2025
+              <Zap className="w-4 h-4" />
+            </span>
+          </motion.div>
+
+          {/* Main headline - THE STAR */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="mb-6"
+          >
+            <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-foreground mb-2">
+              Get Up To
+            </h1>
+            <div className="relative inline-block">
+              <motion.span
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="text-7xl sm:text-8xl lg:text-[12rem] font-black text-green-500 leading-none"
+              >
+                $7,000
+              </motion.span>
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.4, delay: 0.6 }}
+                className="absolute -top-2 -right-4 sm:-right-8 bg-yellow-400 text-yellow-900 text-xs sm:text-sm font-bold px-2 py-1 rounded-full rotate-12"
+              >
+                TAX ADVANCE*
+              </motion.div>
             </div>
           </motion.div>
 
-          <div className="grid lg:grid-cols-2 gap-10 items-start">
+          {/* Subheadline */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            className="text-xl sm:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto"
+          >
+            Available starting <span className="text-foreground font-semibold">January 2</span> • Fast approval* • File in-person or remotely
+          </motion.p>
 
-            {/* LEFT: Headline + Benefits */}
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={staggerContainer}
-              className="text-center lg:text-left"
-            >
-              <motion.div variants={fadeInUp} transition={{ duration: 0.6 }}>
-                <span className="inline-block px-4 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-sm font-medium mb-4">
-                  💰 Preseason 2025 Offer
-                </span>
-              </motion.div>
-
-              <motion.h1
-                variants={fadeInUp}
-                transition={{ duration: 0.6, delay: 0.1 }}
-                className="text-4xl lg:text-6xl font-bold text-foreground mb-4 leading-tight"
+          {/* KEY BENEFITS - Quick scan */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="flex flex-wrap justify-center gap-4 mb-10"
+          >
+            {[
+              { icon: CreditCard, text: 'No Credit Check' },
+              { icon: Clock, text: 'Same-Day Funding*' },
+              { icon: CheckCircle, text: '0% APR' },
+            ].map((item, i) => (
+              <div
+                key={item.text}
+                className="flex items-center gap-2 bg-white dark:bg-card px-4 py-2 rounded-full shadow-md border"
               >
-                Get Up to{' '}
-                <span className="text-primary relative">
-                  $7,000
-                  <motion.span
-                    initial={{ width: 0 }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 0.8, delay: 0.8 }}
-                    className="absolute bottom-1 left-0 h-3 bg-primary/20 -z-10"
+                <item.icon className="w-5 h-5 text-green-500" />
+                <span className="font-semibold text-sm">{item.text}</span>
+              </div>
+            ))}
+          </motion.div>
+
+          {/* BIG CTA BUTTON */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+            className="mb-8"
+          >
+            <Button
+              onClick={scrollToForm}
+              size="lg"
+              className="bg-green-500 hover:bg-green-600 text-white text-xl sm:text-2xl font-bold px-10 sm:px-16 py-7 sm:py-8 rounded-full shadow-2xl shadow-green-500/40 hover:shadow-green-500/60 transition-all hover:scale-105"
+            >
+              CHECK MY ELIGIBILITY
+              <ArrowRight className="w-6 h-6 ml-2" />
+            </Button>
+          </motion.div>
+
+          {/* Trust indicator */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
+            className="text-sm text-muted-foreground"
+          >
+            🔒 Secure & Confidential • Takes only 60 seconds
+          </motion.p>
+        </div>
+      </section>
+
+      {/* TAX PREPARER CARD - Below hero */}
+      <section className="py-8 bg-muted/30">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-6"
+          >
+            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">Your Personal Tax Professional</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="bg-white dark:bg-card border-2 border-primary/20 rounded-2xl p-6 shadow-xl max-w-md mx-auto"
+          >
+            <div className="flex items-center gap-5">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                {preparer.avatarUrl ? (
+                  <img
+                    src={preparer.avatarUrl}
+                    alt={preparerName}
+                    className="w-28 h-28 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
                   />
-                </span>
-                <br />
-                Tax Advance*
-              </motion.h1>
-
-              <motion.p
-                variants={fadeInUp}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="text-lg lg:text-xl text-muted-foreground mb-8"
-              >
-                Available starting January 2 • Fast approval* • File in-person or remotely
-              </motion.p>
-
-              {/* Benefits - checkmarks with stagger */}
-              <motion.div
-                variants={staggerContainer}
-                className="space-y-4 mb-8"
-              >
-                {[
-                  { icon: CreditCard, text: 'No credit check' },
-                  { icon: Clock, text: 'Same-day or next-day funding*' },
-                  { icon: FileText, text: 'File in person or remotely' },
-                  { icon: CheckCircle, text: 'Trusted Tax Professionals' },
-                ].map((benefit, index) => (
-                  <motion.div
-                    key={benefit.text}
-                    variants={fadeInUp}
-                    transition={{ duration: 0.4, delay: 0.3 + index * 0.1 }}
-                    className="flex items-center gap-3 justify-center lg:justify-start"
+                ) : (
+                  <div className="w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center border-4 border-green-500/30">
+                    <span className="text-4xl font-bold text-primary">
+                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                    </span>
+                  </div>
+                )}
+              </motion.div>
+              <div className="flex-1">
+                <p className="font-bold text-2xl text-foreground mb-1">{preparerName}</p>
+                <p className="text-sm text-muted-foreground mb-3">Licensed Tax Professional</p>
+                {preparer.phone && (
+                  <motion.a
+                    href={`tel:${cleanPhone}`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-500 text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-shadow"
                   >
-                    <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-                      <benefit.icon className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <Phone className="w-4 h-4" />
+                    Call Now: {preparer.phone}
+                  </motion.a>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* LEAD CAPTURE FORM - The money maker */}
+      <section ref={formRef} className="py-12 bg-gradient-to-b from-muted/30 to-background">
+        <div className="container mx-auto px-4 max-w-xl">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <Card className="shadow-2xl border-2 border-green-500/30 overflow-hidden">
+              {/* Form header */}
+              <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 text-center">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">
+                  Get Your Cash Advance
+                </h2>
+                <p className="text-green-100">
+                  Fill out the form • We call you same day
+                </p>
+              </div>
+
+              <CardContent className="p-6 sm:p-8">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div>
+                    <Label htmlFor="firstName" className="text-base font-semibold">First Name *</Label>
+                    <Input
+                      id="firstName"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="Your first name"
+                      className="mt-1.5 h-12 text-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="phone" className="text-base font-semibold">Phone Number *</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="(555) 123-4567"
+                      className="mt-1.5 h-12 text-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email" className="text-base font-semibold">Email (Recommended)</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      placeholder="you@email.com"
+                      className="mt-1.5 h-12 text-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="zipCode" className="text-base font-semibold">Zip Code *</Label>
+                    <Input
+                      id="zipCode"
+                      name="zipCode"
+                      value={formData.zipCode}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="30315"
+                      maxLength={5}
+                      pattern="[0-9]{5}"
+                      className="mt-1.5 h-12 text-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-base font-semibold mb-3 block">Preferred Filing</Label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer bg-muted/50 px-4 py-3 rounded-lg flex-1 hover:bg-muted transition-colors">
+                        <input
+                          type="radio"
+                          name="preferredFiling"
+                          value="in-person"
+                          checked={formData.preferredFiling === 'in-person'}
+                          onChange={handleInputChange}
+                          className="w-4 h-4 text-green-500"
+                        />
+                        <span className="font-medium">In-Person</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer bg-muted/50 px-4 py-3 rounded-lg flex-1 hover:bg-muted transition-colors">
+                        <input
+                          type="radio"
+                          name="preferredFiling"
+                          value="remote"
+                          checked={formData.preferredFiling === 'remote'}
+                          onChange={handleInputChange}
+                          className="w-4 h-4 text-green-500"
+                        />
+                        <span className="font-medium">Remote</span>
+                      </label>
                     </div>
-                    <span className="text-foreground font-medium">{benefit.text}</span>
-                  </motion.div>
-                ))}
-              </motion.div>
+                  </div>
 
-              {/* Trust badges */}
-              <motion.div
-                variants={fadeIn}
-                transition={{ duration: 0.6, delay: 0.7 }}
-                className="flex flex-wrap gap-4 justify-center lg:justify-start text-sm text-muted-foreground"
-              >
-                <span className="flex items-center gap-1">🔒 Secure</span>
-                <span className="flex items-center gap-1">⭐ Trusted Tax Pros</span>
-                <span className="flex items-center gap-1">📍 Atlanta + Remote</span>
-              </motion.div>
-            </motion.div>
-
-            {/* RIGHT: Lead Capture Form */}
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={scaleIn}
-              transition={{ duration: 0.6, delay: 0.3 }}
-            >
-              <Card className="shadow-2xl border-2 border-primary/20 overflow-hidden">
-                <div className="bg-gradient-to-r from-primary to-primary/80 p-4">
-                  <h2 className="text-xl font-bold text-center text-primary-foreground">Check Your Eligibility</h2>
-                  <p className="text-sm text-primary-foreground/80 text-center">
-                    We'll contact you the same day
-                  </p>
-                </div>
-                <CardContent className="p-6">
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.4 }}
-                    >
-                      <Label htmlFor="firstName">First Name *</Label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="Your first name"
-                        className="mt-1 h-12"
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.5 }}
-                    >
-                      <Label htmlFor="phone">Phone Number *</Label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="(555) 123-4567"
-                        className="mt-1 h-12"
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.6 }}
-                    >
-                      <Label htmlFor="email">Email (Recommended)</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        placeholder="you@email.com"
-                        className="mt-1 h-12"
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.7 }}
-                    >
-                      <Label htmlFor="zipCode">Zip Code *</Label>
-                      <Input
-                        id="zipCode"
-                        name="zipCode"
-                        value={formData.zipCode}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="30315"
-                        maxLength={5}
-                        pattern="[0-9]{5}"
-                        className="mt-1 h-12"
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.8 }}
-                    >
-                      <Label className="mb-2 block text-sm">Preferred Filing</Label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                  <div>
+                    <Label className="text-base font-semibold mb-3 block">Best Time to Contact</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {['morning', 'afternoon', 'evening', 'anytime'].map((time) => (
+                        <label
+                          key={time}
+                          className="flex items-center gap-2 cursor-pointer bg-muted/50 px-4 py-3 rounded-lg hover:bg-muted transition-colors"
+                        >
                           <input
                             type="radio"
-                            name="preferredFiling"
-                            value="in-person"
-                            checked={formData.preferredFiling === 'in-person'}
+                            name="bestTimeToContact"
+                            value={time}
+                            checked={formData.bestTimeToContact === time}
                             onChange={handleInputChange}
-                            className="w-4 h-4 text-primary"
+                            className="w-4 h-4 text-green-500"
                           />
-                          <span className="text-sm">In-Person</span>
+                          <span className="font-medium capitalize">{time}</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="preferredFiling"
-                            value="remote"
-                            checked={formData.preferredFiling === 'remote'}
-                            onChange={handleInputChange}
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Remote</span>
-                        </label>
-                      </div>
-                    </motion.div>
+                      ))}
+                    </div>
+                  </div>
 
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.9 }}
-                    >
-                      <Label className="mb-2 block text-sm">Best Time to Contact</Label>
-                      <div className="flex flex-wrap gap-3">
-                        {['morning', 'afternoon', 'evening', 'anytime'].map((time) => (
-                          <label key={time} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="bestTimeToContact"
-                              value={time}
-                              checked={formData.bestTimeToContact === time}
-                              onChange={handleInputChange}
-                              className="w-4 h-4 text-primary"
-                            />
-                            <span className="text-sm capitalize">{time}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </motion.div>
+                  <div className="flex items-start gap-3 pt-2">
+                    <Checkbox
+                      id="consent"
+                      name="consent"
+                      checked={formData.consent}
+                      onCheckedChange={(checked) =>
+                        setFormData((prev) => ({ ...prev, consent: checked as boolean }))
+                      }
+                      className="mt-1"
+                    />
+                    <Label htmlFor="consent" className="text-sm text-muted-foreground leading-relaxed cursor-pointer">
+                      I agree to be contacted by Tax Genius Pro via phone, text, or email regarding my tax advance inquiry.
+                    </Label>
+                  </div>
 
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 1.0 }}
-                      className="flex items-start gap-3 pt-2"
-                    >
-                      <Checkbox
-                        id="consent"
-                        name="consent"
-                        checked={formData.consent}
-                        onCheckedChange={(checked) =>
-                          setFormData((prev) => ({ ...prev, consent: checked as boolean }))
-                        }
-                        className="mt-0.5"
-                      />
-                      <Label htmlFor="consent" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                        I agree to be contacted by Tax Genius Pro via phone, text, or email regarding my tax advance inquiry.
-                      </Label>
-                    </motion.div>
+                  {submitError && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm font-medium">
+                      {submitError}
+                    </div>
+                  )}
 
-                    {submitError && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm"
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full bg-green-500 hover:bg-green-600 text-white text-xl font-bold h-16 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <motion.span
+                        animate={{ opacity: [1, 0.5, 1] }}
+                        transition={{ repeat: Infinity, duration: 1 }}
                       >
-                        {submitError}
-                      </motion.div>
+                        Submitting...
+                      </motion.span>
+                    ) : (
+                      <>
+                        GET MY CASH ADVANCE
+                        <ArrowRight className="w-6 h-6 ml-2" />
+                      </>
                     )}
+                  </Button>
 
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 1.1 }}
-                    >
-                      <Button
-                        type="submit"
-                        size="lg"
-                        className="w-full bg-primary hover:bg-primary/90 text-lg font-semibold h-14 shadow-lg hover:shadow-xl transition-all"
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <motion.span
-                            animate={{ opacity: [1, 0.5, 1] }}
-                            transition={{ repeat: Infinity, duration: 1 }}
-                          >
-                            Submitting...
-                          </motion.span>
-                        ) : (
-                          'Submit & Get Contacted'
-                        )}
-                      </Button>
-                    </motion.div>
-                  </form>
-                </CardContent>
-              </Card>
-            </motion.div>
+                  <p className="text-center text-xs text-muted-foreground">
+                    🔒 Your information is secure and will never be shared
+                  </p>
+                </form>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* NEXT STEPS - Quick info */}
+      <section className="py-12">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-3xl font-bold text-center mb-10"
+          >
+            What Happens Next
+          </motion.h2>
+          <div className="space-y-4">
+            {[
+              { step: 1, icon: Phone, text: 'We call or text you the same day' },
+              { step: 2, icon: FileText, text: 'We confirm your documents (W-2, ID, etc.)' },
+              { step: 3, icon: CheckCircle, text: 'We prepare & e-file your return' },
+              { step: 4, icon: DollarSign, text: 'If approved, receive your advance!' },
+            ].map((item, index) => (
+              <motion.div
+                key={item.step}
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="flex items-center gap-4 bg-white dark:bg-card p-5 rounded-xl border shadow-sm"
+              >
+                <div className="w-12 h-12 bg-green-500 text-white rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0">
+                  {item.step}
+                </div>
+                <p className="text-foreground font-medium text-lg">{item.text}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* NEXT STEPS Section with parallax */}
-      <section className="py-16 bg-muted/30 relative overflow-hidden">
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-        >
-          <div className="container mx-auto px-4 max-w-3xl">
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="text-3xl font-bold text-center mb-10"
-            >
-              What Happens Next
-            </motion.h2>
-            <div className="space-y-4">
-              {[
-                { step: 1, icon: Phone, text: 'We call or text you the same day' },
-                { step: 2, icon: FileText, text: 'We confirm your documents (W-2, ID, etc.)' },
-                { step: 3, icon: CheckCircle, text: 'We prepare & e-file your return' },
-                { step: 4, icon: DollarSign, text: 'If approved, receive your advance' },
-              ].map((item, index) => (
-                <motion.div
-                  key={item.step}
-                  initial={{ opacity: 0, x: -30 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: index * 0.15 }}
-                  whileHover={{ scale: 1.02, x: 10 }}
-                  className="flex items-center gap-4 bg-background p-5 rounded-xl border-2 border-transparent hover:border-primary/20 shadow-sm hover:shadow-md transition-all cursor-default"
-                >
-                  <div className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0 shadow-md">
-                    {item.step}
-                  </div>
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                    <item.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <p className="text-foreground font-medium text-lg">{item.text}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-      </section>
-
-      {/* TESTIMONIALS with stagger animation */}
-      <section className="py-16">
+      {/* TESTIMONIALS */}
+      <section className="py-12 bg-muted/30">
         <div className="container mx-auto px-4 max-w-4xl">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -583,9 +563,8 @@ function CashAdvancePageContent() {
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.15 }}
-                whileHover={{ y: -5 }}
-                className="bg-muted/30 p-6 rounded-xl border shadow-sm hover:shadow-lg transition-all"
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="bg-white dark:bg-card p-6 rounded-xl border shadow-sm"
               >
                 <div className="flex gap-1 mb-3">
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -600,8 +579,8 @@ function CashAdvancePageContent() {
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-16 bg-muted/30">
+      {/* FAQ */}
+      <section className="py-12">
         <div className="container mx-auto px-4 max-w-3xl">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -640,9 +619,8 @@ function CashAdvancePageContent() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                whileHover={{ scale: 1.01 }}
-                className="bg-background p-5 rounded-xl border shadow-sm hover:shadow-md transition-all"
+                transition={{ duration: 0.5, delay: i * 0.05 }}
+                className="bg-white dark:bg-card p-5 rounded-xl border shadow-sm"
               >
                 <p className="font-semibold mb-2 text-lg">{faq.q}</p>
                 <p className="text-muted-foreground">{faq.a}</p>
@@ -652,18 +630,39 @@ function CashAdvancePageContent() {
         </div>
       </section>
 
-      {/* LEGAL DISCLAIMER */}
-      <section className="py-8 border-t">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <motion.p
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
+      {/* FINAL CTA */}
+      <section className="py-12 bg-green-500">
+        <div className="container mx-auto px-4 max-w-2xl text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-xs text-muted-foreground text-center"
           >
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+              Ready to Get Your Advance?
+            </h2>
+            <p className="text-green-100 mb-8 text-lg">
+              Don't wait weeks for your refund. Get cash in hand now.
+            </p>
+            <Button
+              onClick={scrollToForm}
+              size="lg"
+              className="bg-white text-green-600 hover:bg-green-50 text-xl font-bold px-12 py-7 rounded-full shadow-xl"
+            >
+              CHECK MY ELIGIBILITY NOW
+              <ArrowRight className="w-6 h-6 ml-2" />
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* LEGAL DISCLAIMER */}
+      <section className="py-6 border-t">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <p className="text-xs text-muted-foreground text-center">
             *Advance amounts based on eligibility, IRS acceptance, and bank approval. Not all applicants qualify for the maximum amount. Funding timing varies by bank. 0% APR and $0 loan fees. Tax preparation fees apply.
-          </motion.p>
+          </p>
         </div>
       </section>
     </div>
