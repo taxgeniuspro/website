@@ -30,16 +30,16 @@ async function testCashAdvanceSubmission() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 
-  // Test data
+  // Test data - NO ref code to test default routing
   const testData = {
-    firstName: 'TestLeadCashAdvance',
-    phone: '5551234567',
-    email: 'testcashadvance@example.com',
+    firstName: 'TestDefaultRouting',
+    phone: '5559876543',
+    email: 'testdefaultrouting@example.com',
     zipCode: '30315',
-    preferredFiling: 'remote',
-    bestTimeToContact: 'afternoon',
+    preferredFiling: 'in-person',
+    bestTimeToContact: 'morning',
     locale: 'en',
-    ref: 'gw', // Gelisa White's tracking code
+    ref: null, // No ref code - should route to Ray Hamilton (EN default)
   };
 
   console.log('📋 Test Data:');

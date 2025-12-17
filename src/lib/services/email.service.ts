@@ -1350,7 +1350,8 @@ export class EmailService {
       attributionMethod?: string;
     },
     ccEmail?: string,
-    locale?: 'en' | 'es'
+    locale?: 'en' | 'es',
+    pdfAttachment?: { filename: string; content: Buffer }
   ): Promise<boolean> {
     try {
       // Check if preparerId is an email address (for language-based routing)
@@ -1452,6 +1453,10 @@ export class EmailService {
           // Locale for translations
           locale: locale || 'en',
           recipientName,
+        }),
+        // PDF attachment for professional print-ready form
+        ...(pdfAttachment && {
+          attachments: [pdfAttachment],
         }),
       });
 
