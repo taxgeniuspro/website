@@ -92,10 +92,10 @@ export default async function ReferralsStatusPage() {
       },
     });
 
-    // Get top referrers
+    // Get top referrers (tax preparers who have referrals)
     topReferrers = await prisma.profile.findMany({
       where: {
-        role: 'REFERRER',
+        role: 'tax_preparer',
       },
       include: {
         referrerReferrals: {
