@@ -33,12 +33,6 @@ interface PreparerInfo {
   trackingCode: string;
 }
 
-interface PromoImage {
-  id: string;
-  url: string;
-  thumbnailUrl: string | null;
-  alt: string;
-}
 
 function CashAdvancePageContent() {
   const locale = useLocale();
@@ -53,7 +47,6 @@ function CashAdvancePageContent() {
 
   const [preparer, setPreparer] = useState<PreparerInfo>(DEFAULT_PREPARER);
   const [hasCustomPreparer, setHasCustomPreparer] = useState(false);
-  const [promoImage, setPromoImage] = useState<PromoImage | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     phone: '',
@@ -72,24 +65,7 @@ function CashAdvancePageContent() {
     } else {
       setHasCustomPreparer(false);
     }
-    // Fetch promotional image
-    fetchPromoImage(refCode);
   }, [refCode]);
-
-  const fetchPromoImage = async (code: string | null) => {
-    try {
-      const url = code ? `/api/cash-advance/images?ref=${encodeURIComponent(code)}` : '/api/cash-advance/images';
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.image) {
-          setPromoImage(data.image);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching promo image:', error);
-    }
-  };
 
   const fetchPreparerInfo = async (code: string) => {
     try {
@@ -294,21 +270,6 @@ function CashAdvancePageContent() {
             </div>
           </motion.div>
 
-          {/* PROMOTIONAL IMAGE - Rotates every 3 days */}
-          {promoImage && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.58 }}
-              className="mb-8 max-w-lg mx-auto"
-            >
-              <img
-                src={promoImage.url}
-                alt={promoImage.alt || 'Tax Advance Promotion'}
-                className="w-full h-auto rounded-2xl shadow-xl border-2 border-green-500/20"
-              />
-            </motion.div>
-          )}
 
           {/* KEY BENEFITS - Quick scan */}
           <motion.div
