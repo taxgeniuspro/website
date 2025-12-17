@@ -33,7 +33,6 @@ interface PreparerInfo {
   trackingCode: string;
 }
 
-
 function CashAdvancePageContent() {
   const locale = useLocale();
   const router = useRouter();
@@ -269,7 +268,6 @@ function CashAdvancePageContent() {
               </div>
             </div>
           </motion.div>
-
 
           {/* KEY BENEFITS - Quick scan */}
           <motion.div
