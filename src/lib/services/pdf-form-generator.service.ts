@@ -3,10 +3,133 @@
  *
  * Generates professional, black-and-white PDF forms for email attachments.
  * Designed for print-ready output with proper labeling and formatting.
+ * Supports embedding images (like driver's license) from URLs.
  */
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { logger } from '@/lib/logger';
+
+// Image handling types
+interface ImageData {
+  base64: string;
+  format: 'JPEG' | 'PNG';
+  width: number;
+  height: number;
+}
+
+/**
+ * Fetch an image from URL and convert to base64
+ * Returns null if image cannot be fetched
+ */
+async function fetchImageAsBase64(url: string): Promise<ImageData | null> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'image/*',
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn('Failed to fetch image for PDF', { url, status: response.status });
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
+
+    // Determine format from content type
+    let format: 'JPEG' | 'PNG' = 'JPEG';
+    if (contentType.includes('png')) {
+      format = 'PNG';
+    }
+
+    // For image dimensions, we'll use default sizing
+    // jsPDF will scale appropriately
+    return {
+      base64,
+      format,
+      width: 0, // Will be calculated on render
+      height: 0,
+    };
+  } catch (error) {
+    logger.error('Error fetching image for PDF', { url, error });
+    return null;
+  }
+}
+
+/**
+ * Add an image page to the PDF document
+ * Images are rendered in grayscale for B&W printing
+ */
+function addImagePage(
+  doc: jsPDF,
+  imageData: ImageData,
+  label: string,
+  refId: string,
+  date: string,
+  pageNum: number,
+  totalPages: number
+): void {
+  doc.addPage();
+
+  // Add header
+  let y = MARGIN;
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TAX GENIUS PRO', MARGIN, y);
+
+  y += 24;
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Document Attachment', MARGIN, y);
+
+  y += 8;
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, PAGE_WIDTH - MARGIN, y);
+
+  y += 20;
+
+  // Document label
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text(label, MARGIN, y);
+  y += 20;
+
+  // Calculate image dimensions to fit within content area
+  // Max width is content width, max height is available space minus footer
+  const maxWidth = CONTENT_WIDTH;
+  const maxHeight = PAGE_HEIGHT - y - MARGIN - 40; // Leave space for footer
+
+  // Add the image - jsPDF will handle format conversion
+  try {
+    const imgDataUri = `data:image/${imageData.format.toLowerCase()};base64,${imageData.base64}`;
+
+    // Add image with auto-calculated dimensions
+    // Use 'SLOW' compression to apply grayscale filter effect
+    doc.addImage(
+      imgDataUri,
+      imageData.format,
+      MARGIN,
+      y,
+      maxWidth,
+      maxHeight,
+      undefined,
+      'SLOW' // Better compression, works well for documents
+    );
+  } catch (imgError) {
+    // If image fails to render, add placeholder text
+    logger.error('Failed to embed image in PDF', { label, error: imgError });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.text('[Image could not be embedded - see original upload]', MARGIN, y);
+  }
+
+  // Add footer
+  addFooter(doc, refId, date, pageNum, totalPages);
+}
 
 // Extend jsPDF type for autoTable
 declare module 'jspdf' {
@@ -44,6 +167,10 @@ interface TaxIntakeData {
   referrerType?: string | null;
   tax_year?: number | null;
   created_at: Date | string;
+  // Image attachments
+  drivers_license_url?: string | null;
+  ssn_card_url?: string | null;
+  additional_document_urls?: string[] | null;
 }
 
 interface ContactFormData {
@@ -350,10 +477,59 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
     ],
   });
 
-  // Add footer
+  // Collect all image URLs to embed
+  const imagesToEmbed: { url: string; label: string }[] = [];
+
+  if (data.drivers_license_url) {
+    imagesToEmbed.push({ url: data.drivers_license_url, label: "Driver's License" });
+  }
+  if (data.ssn_card_url) {
+    imagesToEmbed.push({ url: data.ssn_card_url, label: 'Social Security Card' });
+  }
+  if (data.additional_document_urls && data.additional_document_urls.length > 0) {
+    data.additional_document_urls.forEach((url, index) => {
+      imagesToEmbed.push({ url, label: `Additional Document ${index + 1}` });
+    });
+  }
+
+  // Calculate total pages (1 for form + 1 per image)
+  const totalPages = 1 + imagesToEmbed.length;
+
+  // Add footer to first page
   const refId = data.id.slice(-8).toUpperCase();
   const submittedDate = formatDate(data.created_at);
-  addFooter(doc, refId, submittedDate, 1, 1);
+  addFooter(doc, refId, submittedDate, 1, totalPages);
+
+  // Fetch and embed each image on its own page
+  let currentPage = 2;
+  for (const { url, label } of imagesToEmbed) {
+    try {
+      const imageData = await fetchImageAsBase64(url);
+      if (imageData) {
+        addImagePage(doc, imageData, label, refId, submittedDate, currentPage, totalPages);
+        logger.info('Image embedded in PDF', { label, url: url.substring(0, 50) + '...' });
+      } else {
+        // Add a page noting the image couldn't be loaded
+        doc.addPage();
+        let iy = addHeader(doc, 'Document Attachment');
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, MARGIN, iy);
+        iy += 20;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'italic');
+        doc.text('[Image could not be loaded - please access via original upload link]', MARGIN, iy);
+        iy += 16;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`URL: ${url}`, MARGIN, iy);
+        addFooter(doc, refId, submittedDate, currentPage, totalPages);
+      }
+    } catch (imgError) {
+      logger.error('Failed to process image for PDF', { label, url, error: imgError });
+      // Continue with other images
+    }
+    currentPage++;
+  }
 
   // Convert to Buffer
   const arrayBuffer = doc.output('arraybuffer');
