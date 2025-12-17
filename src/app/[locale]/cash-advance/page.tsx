@@ -14,14 +14,14 @@ import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { logger } from '@/lib/logger';
 import Image from 'next/image';
 
-// Default to Ray Hamilton when no ref code
+// Default to Owliver Owl (company mascot) when no ref code
 const DEFAULT_PREPARER = {
-  firstName: 'Ray',
-  lastName: 'Hamilton',
-  phone: '1 (404) 396-9512',
-  email: 'rhamiltonfirm@gmail.com',
-  avatarUrl: 'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_rh.jpg',
-  trackingCode: 'rh',
+  firstName: 'Owliver',
+  lastName: 'Owl',
+  phone: '1 (404) 627-1015',
+  email: 'taxgenius.tax@gmail.com',
+  avatarUrl: 'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg',
+  trackingCode: 'ow',
 };
 
 interface PreparerInfo {
