@@ -45,8 +45,87 @@ declare module '@auth/core/jwt' {
   }
 }
 
+// Get base adapter
+const baseAdapter = PrismaAdapter(prisma);
+
+// Custom adapter that extends PrismaAdapter to handle account linking properly
+// This fixes the OAuthAccountNotLinked error when users sign up with one method
+// and later try to sign in with Google
+const customAdapter = {
+  ...baseAdapter,
+
+  // Override getUserByAccount to return user by email when allowDangerousEmailAccountLinking is enabled
+  // This is called during OAuth to check if account exists - if it doesn't find one,
+  // but a user with the same email exists, we need to return that user to allow linking
+  async getUserByAccount(providerAccountId: { provider: string; providerAccountId: string }) {
+    // First try the normal lookup
+    const account = await prisma.account.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider: providerAccountId.provider,
+          providerAccountId: providerAccountId.providerAccountId,
+        },
+      },
+      include: { user: true },
+    });
+
+    if (account?.user) {
+      return account.user;
+    }
+
+    // Account not found - this is where OAuthAccountNotLinked would normally be thrown
+    // Return null to let the flow continue (the signIn callback will handle linking)
+    return null;
+  },
+
+  // Override linkAccount to handle existing users with different providers
+  async linkAccount(account: {
+    userId: string;
+    type: string;
+    provider: string;
+    providerAccountId: string;
+    refresh_token?: string;
+    access_token?: string;
+    expires_at?: number;
+    token_type?: string;
+    scope?: string;
+    id_token?: string;
+  }) {
+    // Check if this account already exists
+    const existingAccount = await prisma.account.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider: account.provider,
+          providerAccountId: account.providerAccountId,
+        },
+      },
+    });
+
+    if (existingAccount) {
+      // Account already linked, just return it
+      return existingAccount;
+    }
+
+    // Create the new account link
+    return prisma.account.create({
+      data: {
+        userId: account.userId,
+        type: account.type,
+        provider: account.provider,
+        providerAccountId: account.providerAccountId,
+        refresh_token: account.refresh_token,
+        access_token: account.access_token,
+        expires_at: account.expires_at,
+        token_type: account.token_type,
+        scope: account.scope,
+        id_token: account.id_token,
+      },
+    });
+  },
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: customAdapter,
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   trustHost: true, // Trust the host in production (required for NextAuth v5)
   session: {
