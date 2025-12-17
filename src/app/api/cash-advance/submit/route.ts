@@ -156,10 +156,6 @@ export async function POST(req: NextRequest) {
             referrerType: 'tax_preparer',
             attributionMethod: 'ref_param',
           }),
-          // Add tag for preseason cash advance interest
-          notes: existingContact.notes
-            ? `${existingContact.notes}\n[${new Date().toISOString()}] Preseason Cash Advance Interest - Zip: ${zipCode}, Preferred: ${preferredFiling}, Contact Time: ${bestTimeToContact}`
-            : `[${new Date().toISOString()}] Preseason Cash Advance Interest - Zip: ${zipCode}, Preferred: ${preferredFiling}, Contact Time: ${bestTimeToContact}`,
         },
       });
 
@@ -186,7 +182,6 @@ export async function POST(req: NextRequest) {
           referrerUsername: ref || null,
           referrerType: ref ? 'tax_preparer' : null,
           attributionMethod: ref ? 'ref_param' : null,
-          notes: `[${new Date().toISOString()}] Preseason Cash Advance Interest - Zip: ${zipCode}, Preferred: ${preferredFiling}, Contact Time: ${bestTimeToContact}`,
         },
       });
 
