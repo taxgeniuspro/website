@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 
+// Force dynamic rendering so OG images are fetched fresh based on ref parameter
+export const dynamic = 'force-dynamic';
+
 interface Props {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ ref?: string }>;
