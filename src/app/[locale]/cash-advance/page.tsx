@@ -130,7 +130,7 @@ function CashAdvancePageContent() {
         <div className="container mx-auto max-w-6xl">
           <div className="flex justify-center">
             <Image
-              src="/tax-genius-logo-dark.png"
+              src="/images/logo-light-theme.png"
               alt="Tax Genius Pro"
               width={180}
               height={50}
@@ -138,7 +138,7 @@ function CashAdvancePageContent() {
               priority
             />
             <Image
-              src="/tax-genius-logo-light.png"
+              src="/images/logo-dark-theme.png"
               alt="Tax Genius Pro"
               width={180}
               height={50}
