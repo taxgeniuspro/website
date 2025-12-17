@@ -209,17 +209,62 @@ function CashAdvancePageContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.5 }}
-            className="text-xl sm:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto"
+            className="text-xl sm:text-2xl text-muted-foreground mb-6 max-w-2xl mx-auto"
           >
             Available starting <span className="text-foreground font-semibold">January 2</span> • Fast approval* • File in-person or remotely
           </motion.p>
+
+          {/* TAX PREPARER CARD - Right below hero text */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.55 }}
+            className="bg-white dark:bg-card border-2 border-green-500/30 rounded-2xl p-4 sm:p-5 shadow-xl max-w-md mx-auto mb-8"
+          >
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3 text-center">Your Personal Tax Professional</p>
+            <div className="flex items-center gap-4">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                {preparer.avatarUrl ? (
+                  <img
+                    src={preparer.avatarUrl}
+                    alt={preparerName}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary/20 flex items-center justify-center border-4 border-green-500/30">
+                    <span className="text-3xl font-bold text-primary">
+                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                    </span>
+                  </div>
+                )}
+              </motion.div>
+              <div className="flex-1 text-left">
+                <p className="font-bold text-xl sm:text-2xl text-foreground mb-0.5">{preparerName}</p>
+                <p className="text-xs text-muted-foreground mb-2">Licensed Tax Professional</p>
+                {preparer.phone && (
+                  <motion.a
+                    href={`tel:${cleanPhone}`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-shadow"
+                  >
+                    <Phone className="w-4 h-4" />
+                    {preparer.phone}
+                  </motion.a>
+                )}
+              </div>
+            </div>
+          </motion.div>
 
           {/* KEY BENEFITS - Quick scan */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.6 }}
-            className="flex flex-wrap justify-center gap-4 mb-10"
+            className="flex flex-wrap justify-center gap-4 mb-8"
           >
             {[
               { icon: CreditCard, text: 'No Credit Check' },
@@ -262,65 +307,6 @@ function CashAdvancePageContent() {
           >
             🔒 Secure & Confidential • Takes only 60 seconds
           </motion.p>
-        </div>
-      </section>
-
-      {/* TAX PREPARER CARD - Below hero */}
-      <section className="py-8 bg-muted/30">
-        <div className="container mx-auto px-4 max-w-4xl">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-6"
-          >
-            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-2">Your Personal Tax Professional</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="bg-white dark:bg-card border-2 border-primary/20 rounded-2xl p-6 shadow-xl max-w-md mx-auto"
-          >
-            <div className="flex items-center gap-5">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                {preparer.avatarUrl ? (
-                  <img
-                    src={preparer.avatarUrl}
-                    alt={preparerName}
-                    className="w-28 h-28 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
-                  />
-                ) : (
-                  <div className="w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center border-4 border-green-500/30">
-                    <span className="text-4xl font-bold text-primary">
-                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
-                    </span>
-                  </div>
-                )}
-              </motion.div>
-              <div className="flex-1">
-                <p className="font-bold text-2xl text-foreground mb-1">{preparerName}</p>
-                <p className="text-sm text-muted-foreground mb-3">Licensed Tax Professional</p>
-                {preparer.phone && (
-                  <motion.a
-                    href={`tel:${cleanPhone}`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-500 text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-shadow"
-                  >
-                    <Phone className="w-4 h-4" />
-                    Call Now: {preparer.phone}
-                  </motion.a>
-                )}
-              </div>
-            </div>
-          </motion.div>
         </div>
       </section>
 
