@@ -1,0 +1,50 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img "Tax Genius Pro" [ref=e6]
+      - generic [ref=e8]:
+        - img [ref=e10]
+        - img [ref=e14]
+      - generic [ref=e17]:
+        - heading "Email Verification" [level=1] [ref=e18]
+        - paragraph [ref=e19]: Email verification is now handled automatically by our authentication provider
+      - alert [ref=e20]:
+        - img [ref=e21]
+        - generic [ref=e24]: auth.verify.clickLink
+      - generic [ref=e25]:
+        - paragraph [ref=e26]: auth.verify.tips.title
+        - list [ref=e27]:
+          - listitem [ref=e28]: auth.verify.tips.checkSpam
+          - listitem [ref=e29]: auth.verify.tips.checkTypo
+          - listitem [ref=e30]: auth.verify.tips.wait
+      - button "auth.verify.backToSignIn" [ref=e32]
+    - paragraph [ref=e33]: auth.verify.footer
+  - contentinfo [ref=e34]:
+    - generic [ref=e36]:
+      - paragraph [ref=e37]: Tap expand for more options
+      - generic [ref=e38]:
+        - link "Call Us" [ref=e39] [cursor=pointer]:
+          - /url: tel:+14046271015
+          - img [ref=e40]
+        - link "Location" [ref=e42] [cursor=pointer]:
+          - /url: https://maps.google.com/?q=1632+Jonesboro+Rd+SE+Atlanta+GA+30315
+          - img [ref=e43]
+        - link "Facebook" [ref=e46] [cursor=pointer]:
+          - /url: https://www.facebook.com/Taxgeniusfb/
+          - img [ref=e47]
+        - link "Instagram" [ref=e49] [cursor=pointer]:
+          - /url: https://www.instagram.com/taxgeniusig/
+          - img [ref=e50]
+        - link "LinkedIn" [ref=e52] [cursor=pointer]:
+          - /url: https://www.linkedin.com/company/mytaxgenius
+          - img [ref=e53]
+        - button "Expand footer" [ref=e55]:
+          - img [ref=e56]
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - alert [ref=e58]: Verify Your Email - Tax Genius Pro
+```
