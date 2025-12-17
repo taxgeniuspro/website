@@ -3,13 +3,12 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Eye, EyeOff, Mail } from 'lucide-react';
+import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Mail } from 'lucide-react';
 import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslations } from 'next-intl';
 
@@ -32,10 +31,7 @@ function SignInContent() {
     callbackUrl = '/dashboard';
   }
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [magicLinkEmail, setMagicLinkEmail] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
@@ -98,34 +94,6 @@ function SignInContent() {
 
   const content = roleContent[role as keyof typeof roleContent] || roleContent.client;
   const IconComponent = content.icon;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError(t('errors.invalidCredentials'));
-        setIsLoading(false);
-        return;
-      }
-
-      // Successful sign in - redirect to callback URL
-      router.push(callbackUrl);
-      router.refresh();
-    } catch (error) {
-      console.error('Sign in error:', error);
-      setError(t('errors.unexpectedError'));
-      setIsLoading(false);
-    }
-  };
 
   const handleGoogleSignIn = async () => {
     setError('');
@@ -321,99 +289,7 @@ function SignInContent() {
             </Button>
           </div>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">
-                {t('form.orUseEmailPassword', { defaultValue: 'Or use email & password' })}
-              </span>
-            </div>
-          </div>
-
-          {/* Traditional Email/Password - Always visible */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">{t('form.email')}</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder={t('form.emailPlaceholder')}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-                className="h-12"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">{t('form.password')}</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={t('form.passwordPlaceholder')}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-12 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  disabled={isLoading}
-                  aria-label={showPassword ? t('form.hidePassword') : t('form.showPassword')}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300"
-                  disabled={isLoading}
-                />
-                <span className="text-muted-foreground">{t('form.rememberMe')}</span>
-              </label>
-              <a
-                href="/auth/forgot-password"
-                className="text-primary hover:underline"
-              >
-                {t('form.forgotPassword')}
-              </a>
-            </div>
-
-            <Button
-              type="submit"
-              className={`w-full h-12 text-lg ${
-                role === 'affiliate' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
-              }`}
-              disabled={isLoading || isMagicLinkLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('form.signingInButton')}
-                </>
-              ) : (
-                t('form.signInButton')
-              )}
-            </Button>
-          </form>
-
-          <div className="text-center text-sm text-muted-foreground">
+          <div className="text-center text-sm text-muted-foreground pt-4">
             {t('form.dontHaveAccount')}{' '}
             <a
               href={`/auth/signup${role ? `?role=${role}` : ''}`}
@@ -423,18 +299,6 @@ function SignInContent() {
             </a>
           </div>
 
-          {/* Test Login Link (Development Only) */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-6 pt-6 border-t text-center">
-              <p className="text-xs text-muted-foreground mb-2">🧪 Development Mode</p>
-              <a
-                href="/auth/test-login"
-                className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium"
-              >
-                Use Test Login (Email/Password)
-              </a>
-            </div>
-          )}
         </div>
       </div>
     </div>
