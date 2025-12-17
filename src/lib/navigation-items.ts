@@ -443,6 +443,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '📢 Marketing',
     roles: ['admin'],
   },
+  {
+    label: 'Referral Images',
+    href: '/admin/referral-images',
+    icon: Image,
+    permission: 'marketingHub',
+    section: '📢 Marketing',
+    roles: ['admin'],
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🛒 STORE & PRODUCTS SECTION (Admin only)

@@ -1,0 +1,186 @@
+Role,Feature Category,Feature Name,Status,File Path,Priority,Notes
+SUPER_ADMIN,Dashboard,Admin Dashboard Access,✅ Working,src/app/dashboard/admin/page.tsx,P0,Full access to all features
+SUPER_ADMIN,User Management,User List & Role Assignment,✅ Working,src/app/admin/users/page.tsx,P0,Can manage all users
+SUPER_ADMIN,Permissions,Permission Template Management,✅ Working,src/app/admin/permissions/page.tsx,P0,SUPER_ADMIN only
+SUPER_ADMIN,Database,Database Management Interface,✅ Working,src/app/admin/database/page.tsx,P0,SUPER_ADMIN only - direct DB access
+SUPER_ADMIN,Analytics,Google Analytics Integration,✅ Working,src/app/admin/analytics/page.tsx,P0,SUPER_ADMIN only feature
+SUPER_ADMIN,Security,Route Access Control,✅ Working,src/app/admin/route-access-control/page.tsx,P0,WordPress-style restrictions
+SUPER_ADMIN,Files,Client File Center (All Clients),✅ Working,src/app/admin/file-center/page.tsx,P0,SUPER_ADMIN only - all client files
+SUPER_ADMIN,Impersonation,View As Role Switcher,✅ Working,src/lib/utils/role-switcher.ts,P1,⚠️ Missing audit logging
+ADMIN,Dashboard,Admin Dashboard Access,✅ Working,src/app/dashboard/admin/page.tsx,P0,Limited compared to SUPER_ADMIN
+ADMIN,Analytics,Company Analytics,✅ Working,src/app/admin/analytics/page.tsx,P0,Cannot access Google Analytics
+ADMIN,Analytics,Preparer Analytics,✅ Working,src/app/admin/analytics/preparers/page.tsx,P0,Performance metrics
+ADMIN,Analytics,Affiliate Analytics,✅ Working,src/app/admin/analytics/affiliates/page.tsx,P0,Campaign performance
+ADMIN,Analytics,Client Analytics,✅ Working,src/app/admin/analytics/clients/page.tsx,P0,Referral metrics
+ADMIN,Support,Ticket Reports,✅ Working,src/app/admin/ticket-reports/page.tsx,P0,Support metrics dashboard
+ADMIN,Financial,Payout Approval,✅ Working,src/app/admin/payouts/page.tsx,P1,Approve/reject payouts
+ADMIN,Financial,Earnings Dashboard,✅ Working,src/app/admin/earnings/page.tsx,P1,Company-wide earnings
+ADMIN,Communications,Email Management,✅ Working,src/app/admin/emails/page.tsx,P1,Email campaigns
+ADMIN,Communications,Calendar Management,✅ Working,src/app/admin/calendar/page.tsx,P1,Appointment scheduling
+ADMIN,Communications,Address Book (CRM),✅ Working,src/app/admin/address-book/page.tsx,P1,Contact management
+ADMIN,Support,Support Settings,✅ Working,src/app/admin/support-settings/page.tsx,P1,Support system config
+ADMIN,Support,Saved Replies,✅ Working,src/app/admin/saved-replies/page.tsx,P1,AI-powered responses
+ADMIN,Support,Workflow Automation,✅ Working,src/app/admin/workflows/page.tsx,P1,Ticket workflows
+ADMIN,Content,AI Content Generator,✅ Working,src/app/admin/content-generator/page.tsx,P1,Landing page generation
+ADMIN,Content,Content Restrictions,✅ Working,src/app/admin/content-restrictions/page.tsx,P1,Role-based content visibility
+ADMIN,Marketing,Marketing Hub,✅ Working,src/app/admin/marketing-hub/page.tsx,P1,Campaign management
+ADMIN,Marketing,Tracking Codes,✅ Working,src/app/admin/tracking-codes/page.tsx,P1,UTM tracking
+ADMIN,Marketing,Quick Share Links,✅ Working,src/app/admin/quick-share/page.tsx,P1,Quick share management
+ADMIN,Booking,Booking Settings,✅ Working,src/app/admin/booking-settings/page.tsx,P1,Preparer booking config
+ADMIN,Client Management,Client Status Tracking,✅ Working,src/app/admin/clients-status/page.tsx,P1,Client workflow tracking
+ADMIN,Client Management,Referrals Status,⚠️ Page Missing,Navigation references /admin/referrals-status,P0,❌ 404 Error - Fix required
+ADMIN,System,System Settings,✅ Working,src/app/admin/settings/page.tsx,P2,General system configuration
+ADMIN,Learning,Learning Center,✅ Working,src/app/admin/learning-center/page.tsx,P2,Admin training resources
+ADMIN,Restricted,Permission Management,❌ Blocked,src/app/admin/permissions/page.tsx,N/A,SUPER_ADMIN only
+ADMIN,Restricted,Database Access,❌ Blocked,src/app/admin/database/page.tsx,N/A,SUPER_ADMIN only
+ADMIN,Restricted,Client File Center,❌ Blocked,src/app/admin/file-center/page.tsx,N/A,SUPER_ADMIN only
+ADMIN,Restricted,Google Analytics,❌ Blocked,src/app/admin/analytics/google/page.tsx,N/A,SUPER_ADMIN only
+TAX_PREPARER,Dashboard,Tax Preparer Dashboard,✅ Working,src/app/dashboard/tax-preparer/page.tsx,P0,Main dashboard with stats
+TAX_PREPARER,Booking,Calendar/Booking System,✅ Working,src/components/AppointmentBooking.tsx,P0,Full booking preferences
+TAX_PREPARER,Booking,Appointment Types,✅ Working,src/app/api/preparers/[id]/booking-preferences/route.ts,P0,Phone/Video/In-Person
+TAX_PREPARER,Marketing,Referral Link Generation,✅ Working,src/components/dashboard/ReferralLinksManager.tsx,P0,Auto-generated intake & booking links
+TAX_PREPARER,Marketing,Vanity URL Customization,✅ Working,src/components/VanityLinkManager.tsx,P0,One-time custom URL
+TAX_PREPARER,Marketing,QR Code Generation,✅ Working,src/components/QRPosterGenerator.tsx,P0,Download QR codes for links
+TAX_PREPARER,Analytics,Lead Analytics,✅ Working,src/app/dashboard/tax-preparer/analytics/page.tsx,P0,Lead tracking and conversion
+TAX_PREPARER,Analytics,Performance Metrics,✅ Working,src/app/dashboard/tax-preparer/analytics/page.tsx,P0,Returns filed customer stats
+TAX_PREPARER,Analytics,Top Referrers,✅ Working,src/app/dashboard/tax-preparer/analytics/page.tsx,P1,Referrer performance tracking
+TAX_PREPARER,Analytics,Link Performance,✅ Working,src/app/dashboard/tax-preparer/analytics/page.tsx,P1,Click tracking per link
+TAX_PREPARER,Financial,Earnings Overview,✅ Working,src/app/dashboard/tax-preparer/earnings/page.tsx,P0,Monthly/all-time earnings
+TAX_PREPARER,Financial,Commission History,✅ Working,src/components/dashboard/commission-history-table.tsx,P0,Transaction details
+TAX_PREPARER,Financial,Payment Method,✅ Working,src/app/dashboard/tax-preparer/earnings/page.tsx,P1,Manage direct deposit
+TAX_PREPARER,Financial,1099-NEC Forms,✅ Working,src/app/dashboard/tax-preparer/earnings/page.tsx,P2,Tax document download
+TAX_PREPARER,Client Management,My Clients List,✅ Working,src/components/dashboard/preparer/ClientsTab.tsx,P0,Assigned clients only
+TAX_PREPARER,Client Management,Client Search & Filter,✅ Working,src/components/dashboard/preparer/ClientsTab.tsx,P0,By status priority etc
+TAX_PREPARER,Client Management,Client Kanban Board,✅ Working,src/components/dashboard/preparer/ClientsTab.tsx,P1,Workflow visualization
+TAX_PREPARER,Documents,Client File Manager,✅ Working,src/components/documents/TaxPreparerFileCenter.tsx,P0,Per-client document access
+TAX_PREPARER,Documents,File Upload,✅ Working,src/components/file-manager/UploadDialog.tsx,P0,Upload to client folders
+TAX_PREPARER,Documents,Folder Management,✅ Working,src/components/file-manager/FileManager.tsx,P0,Create/organize folders
+TAX_PREPARER,Documents,File Operations,✅ Working,src/components/file-manager/FileManager.tsx,P1,Move/delete files
+TAX_PREPARER,Support,Support Tickets,✅ Working,src/app/dashboard/tax-preparer/tickets/page.tsx,P1,Manage client tickets
+TAX_PREPARER,Support,AI Response Suggestions,✅ Working,src/lib/services/ai-support.service.ts,P1,AI-powered ticket responses
+TAX_PREPARER,Leads,Lead Management,✅ Working,src/components/dashboard/preparer/LeadsManagementTab.tsx,P1,View/promote leads
+TAX_PREPARER,Leads,Lead to Client Promotion,✅ Working,src/app/api/preparers/leads/route.ts,P1,Convert LEAD → CLIENT only
+TAX_PREPARER,Profile,Profile Settings,⚠️ Partial,src/app/dashboard/tax-preparer/settings/page.tsx,P1,UI exists save not wired
+TAX_PREPARER,Profile,Credentials Management,✅ Working,src/app/dashboard/tax-preparer/settings/page.tsx,P1,PTIN CPA/EA license
+TAX_PREPARER,Profile,Availability Settings,✅ Working,src/app/dashboard/tax-preparer/settings/page.tsx,P1,Accepting clients toggle
+TAX_PREPARER,Profile,Notification Preferences,✅ Working,src/app/dashboard/tax-preparer/settings/page.tsx,P2,Email/SMS preferences
+TAX_PREPARER,Profile,Profile Photo Upload,❌ Missing,src/app/dashboard/tax-preparer/settings/page.tsx,P1,⚠️ No upload API backend
+TAX_PREPARER,Profile,Photo on Booking Forms,❌ Missing,N/A,P1,⚠️ Not displayed on lead gen forms
+TAX_PREPARER,Profile,Photo on Intake Forms,❌ Missing,N/A,P1,⚠️ Missing from intake pages
+TAX_PREPARER,Profile,Default Avatar System,❌ Missing,N/A,P1,⚠️ No initials fallback
+TAX_PREPARER,Academy,Training Access,✅ Working,src/app/app/academy/page.tsx,P2,Tax preparer only academy
+TAX_PREPARER,Store,Marketing Materials Purchase,✅ Working,src/app/store/page.tsx,P2,Access to store
+AFFILIATE,Dashboard,Affiliate Dashboard,✅ Working,src/app/dashboard/affiliate/page.tsx,P0,Marketing-focused dashboard
+AFFILIATE,Marketing,Referral Links (2 types),✅ Working,src/components/dashboard/ReferralLinksManager.tsx,P0,Intake & appointment links
+AFFILIATE,Marketing,Vanity URL,✅ Working,src/components/VanityLinkManager.tsx,P0,Custom URL slug
+AFFILIATE,Marketing,QR Code Generation,✅ Working,src/components/QRPosterGenerator.tsx,P0,Downloadable QR codes
+AFFILIATE,Marketing,Link Analytics,✅ Working,src/app/dashboard/affiliate/analytics/page.tsx,P0,Clicks/leads/conversions
+AFFILIATE,Analytics,KPI Dashboard,⚠️ Partial,src/app/dashboard/affiliate/analytics/page.tsx,P0,⚠️ May use mock data
+AFFILIATE,Analytics,Commission Metrics,✅ Working,src/app/dashboard/affiliate/analytics/page.tsx,P0,Earnings and conversion rates
+AFFILIATE,Analytics,Campaign Performance,⚠️ Partial,src/app/dashboard/affiliate/analytics/page.tsx,P1,⚠️ Backend integration unclear
+AFFILIATE,Analytics,Conversion Funnel,✅ Working,src/app/dashboard/affiliate/analytics/page.tsx,P1,Visual funnel chart
+AFFILIATE,Financial,Commission History,✅ Working,src/app/dashboard/affiliate/earnings/page.tsx,P0,Transaction details
+AFFILIATE,Financial,3-Tier Commission System,✅ Working,src/app/dashboard/affiliate/earnings/page.tsx,P0,20%/25%/30% tiers
+AFFILIATE,Financial,Monthly Earnings Chart,✅ Working,src/app/dashboard/affiliate/earnings/page.tsx,P0,Visual earnings tracking
+AFFILIATE,Financial,Payment Method,✅ Working,src/app/dashboard/affiliate/earnings/page.tsx,P1,Direct deposit management
+AFFILIATE,Financial,1099-NEC Forms,✅ Working,src/app/dashboard/affiliate/earnings/page.tsx,P2,Tax documents
+AFFILIATE,Leads,Lead Tracking,✅ Working,src/app/dashboard/affiliate/leads/page.tsx,P0,Lead list with status
+AFFILIATE,Leads,Lead Sources Breakdown,✅ Working,src/app/dashboard/affiliate/leads/page.tsx,P1,Source analytics
+AFFILIATE,Leads,Lead Conversion Funnel,✅ Working,src/app/dashboard/affiliate/leads/page.tsx,P1,Conversion visualization
+AFFILIATE,Marketing Materials,Content Library,❌ Hardcoded,src/app/dashboard/affiliate/marketing/page.tsx,P1,⚠️ Static data not CMS
+AFFILIATE,Marketing Materials,Email Templates,❌ Hardcoded,src/app/dashboard/affiliate/marketing/page.tsx,P1,⚠️ Hardcoded templates
+AFFILIATE,Marketing Materials,Visual Assets,❌ Hardcoded,src/app/dashboard/affiliate/marketing/page.tsx,P1,⚠️ No real asset library
+AFFILIATE,Marketing Materials,Marketing Tips,✅ Working,src/app/dashboard/affiliate/marketing/page.tsx,P2,Static content (acceptable)
+AFFILIATE,Gamification,Contest Display,⚠️ Partial,src/components/ContestDisplay.tsx,P1,⚠️ Backend unclear
+AFFILIATE,Gamification,Leaderboard,⚠️ Partial,src/components/ContestDisplay.tsx,P1,⚠️ May be mock data
+AFFILIATE,Gamification,User Progress Tracking,⚠️ Partial,src/components/ContestDisplay.tsx,P2,⚠️ Needs verification
+AFFILIATE,Store,Marketing Products,✅ Working,src/app/store/page.tsx,P2,Purchase marketing materials
+AFFILIATE,Profile,Settings & Preferences,✅ Working,src/app/dashboard/affiliate/settings/page.tsx,P2,Profile management
+AFFILIATE,Terminology Issue,Affiliate vs Referrer,⚠️ Confused,Throughout codebase,P2,⚠️ Inconsistent naming
+CLIENT,Dashboard,Client Dashboard,✅ Working,src/app/dashboard/client/page.tsx,P0,Tax return progress
+CLIENT,Dashboard,Progress Tracking,✅ Working,src/app/dashboard/client/page.tsx,P0,Visual progress bar
+CLIENT,Dashboard,Refund Estimator,✅ Working,src/app/dashboard/client/page.tsx,P0,Estimated refund/owe amount
+CLIENT,Dashboard,Filing Deadline,✅ Working,src/app/dashboard/client/page.tsx,P0,Countdown timer
+CLIENT,Dashboard,Activity Feed,✅ Working,src/app/dashboard/client/page.tsx,P1,Recent activity tracking
+CLIENT,Documents,Document Upload,✅ Working,src/app/dashboard/client/documents/page.tsx,P0,Drag-and-drop upload
+CLIENT,Documents,Folder Organization,✅ Working,src/components/file-manager/FileManager.tsx,P0,Create folders
+CLIENT,Documents,Grid/List View,✅ Working,src/components/file-manager/FileGrid.tsx,P1,View mode toggle
+CLIENT,Documents,Delete Protection,⚠️ UI Only,src/components/file-manager/FileManager.tsx,P0,⚠️ Verify API enforcement
+CLIENT,Documents,Move Protection,⚠️ UI Only,src/components/file-manager/FileManager.tsx,P0,⚠️ Verify API enforcement
+CLIENT,Documents,Share Protection,⚠️ UI Only,src/components/file-manager/FileManager.tsx,P0,⚠️ Verify API enforcement
+CLIENT,Support,Create Tickets,✅ Working,src/app/dashboard/client/tickets/page.tsx,P0,Support ticket creation
+CLIENT,Support,Ticket Filtering,✅ Working,src/app/dashboard/client/tickets/page.tsx,P0,By status/priority
+CLIENT,Support,Ticket Conversation,✅ Working,src/app/dashboard/client/tickets/[id]/page.tsx,P0,Message thread
+CLIENT,Support,Priority Selection,✅ Working,src/components/support/create-ticket-dialog.tsx,P1,Urgent/High/Normal/Low
+CLIENT,Support,Tag System,✅ Working,src/components/support/create-ticket-dialog.tsx,P2,Custom tags
+CLIENT,AI Assistant,Tax Assistant Widget,✅ Working,src/components/tax-assistant/TaxAssistantWidget.tsx,P0,Floating chatbot
+CLIENT,AI Assistant,Multiple Conversations,✅ Working,src/components/tax-assistant/TaxAssistantWidget.tsx,P0,Thread management
+CLIENT,AI Assistant,Form References,✅ Working,src/components/tax-assistant/TaxAssistantWidget.tsx,P1,IRS form tagging
+CLIENT,AI Assistant,OpenAI Integration,✅ Working,src/lib/services/tax-assistant.service.ts,P0,AI-powered responses
+CLIENT,Messages,Direct Messages (Preparer),✅ Working,src/app/dashboard/client/messages/page.tsx,P0,1-on-1 messaging
+CLIENT,Messages,Dual-Pane Interface,✅ Working,src/app/dashboard/client/messages/page.tsx,P0,List + thread view
+CLIENT,Messages,File Attachments,✅ Working,src/app/dashboard/client/messages/page.tsx,P1,Attach documents
+CLIENT,Messages,Unread Badges,✅ Working,src/app/dashboard/client/messages/page.tsx,P1,Unread count display
+CLIENT,Messages,Quick Actions,✅ Working,src/app/dashboard/client/messages/page.tsx,P2,Preset message templates
+CLIENT,Referrals,Referral Program,⚠️ Conditional,src/app/dashboard/client/referrals/page.tsx,P1,⚠️ Requires shortLinkUsername
+CLIENT,Referrals,Referral Link Generation,⚠️ Conditional,src/components/dashboard/client/MyReferralsTab.tsx,P1,⚠️ If username set
+CLIENT,Referrals,Referral Analytics,⚠️ Conditional,src/app/dashboard/client/referrals/page.tsx,P2,⚠️ Track referrals
+CLIENT,Payments,Payment Dashboard,❌ Placeholder,src/app/dashboard/client/payments/page.tsx,P2,⚠️ Coming soon message
+CLIENT,Profile,Settings,✅ Working,src/app/dashboard/client/settings/page.tsx,P2,Profile management
+LEAD,Dashboard,Pending Approval Page,✅ Working,src/app/dashboard/lead/page.tsx,P0,Account review message
+LEAD,Dashboard,3-Step Process Display,✅ Working,src/app/dashboard/lead/page.tsx,P0,Visual workflow
+LEAD,Dashboard,Timeline Expectation,✅ Working,src/app/dashboard/lead/page.tsx,P0,24-48 hour message
+LEAD,Dashboard,Auto-Redirect on Approval,✅ Working,src/app/dashboard/lead/page.tsx,P0,Redirect when role changes
+LEAD,Restrictions,No Dashboard Access,✅ Working,src/middleware.ts,P0,Only pending page accessible
+LEAD,Restrictions,No Feature Access,✅ Working,src/lib/permissions.ts,P0,Zero permissions assigned
+NAVIGATION,Structure,Navigation Items File,✅ Working,src/lib/navigation-items.ts,P0,Single source of truth
+NAVIGATION,Structure,Role-Based Filtering,✅ Working,src/components/DashboardSidebar.tsx,P0,Dynamic by role
+NAVIGATION,Structure,Permission-Based Filtering,✅ Working,src/components/DashboardSidebar.tsx,P0,Dynamic by permission
+NAVIGATION,Desktop,Desktop Sidebar,✅ Working,src/components/DashboardSidebar.tsx,P0,Collapsible sidebar
+NAVIGATION,Desktop,Section Organization,✅ Working,src/components/DashboardSidebar.tsx,P0,10 sections for admin
+NAVIGATION,Mobile,Mobile Sidebar (Sheet),✅ Working,src/components/MobileSidebar.tsx,P0,280px slide-out
+NAVIGATION,Mobile,Mobile Hub,✅ Working,src/components/mobile-hub/MobileHubClient.tsx,P0,Role-specific actions
+NAVIGATION,Issues,Missing /admin/referrals-status,❌ 404 Error,Navigation line 359,P0,⚠️ Page doesn't exist
+NAVIGATION,Issues,Missing /admin/file-center verification,⚠️ Unclear,Navigation line 197,P0,⚠️ Need to verify exists
+NAVIGATION,Issues,Duplicate Overview Labels,⚠️ UX Issue,Multiple lines,P3,⚠️ Confusing for users
+NAVIGATION,Issues,Duplicate Earnings Labels,⚠️ UX Issue,Lines 244 347 387,P3,⚠️ Should differentiate
+NAVIGATION,Accessibility,Missing ARIA Labels,❌ WCAG Fail,src/components/DashboardSidebar.tsx,P1,⚠️ Screen reader unusable
+NAVIGATION,Accessibility,No aria-expanded,❌ WCAG Fail,src/components/DashboardSidebar.tsx,P1,⚠️ Collapse state hidden
+NAVIGATION,Accessibility,No aria-current,❌ WCAG Fail,src/components/DashboardSidebar.tsx,P1,⚠️ Active page not announced
+NAVIGATION,Accessibility,No Skip to Content,❌ WCAG Fail,All pages,P1,⚠️ Keyboard nav difficult
+MIDDLEWARE,Auth,Clerk Integration,✅ Working,src/middleware.ts,P0,Authentication working
+MIDDLEWARE,Protection,Route Protection,✅ Working,src/middleware.ts,P0,Public vs protected routes
+MIDDLEWARE,Protection,Admin Route Guard,✅ Working,src/middleware.ts (244-290),P0,Admin/super_admin check
+MIDDLEWARE,Protection,Permission Mapping,✅ Working,src/middleware.ts,P0,Route → permission mapping
+MIDDLEWARE,Issues,/mobile-hub Not Protected,⚠️ Security,src/middleware.ts,P1,⚠️ Should require auth
+MIDDLEWARE,Issues,No LEAD Fallback in MobileHub,⚠️ Bug,src/components/mobile-hub/MobileHubClient.tsx,P1,⚠️ Missing role handling
+MIDDLEWARE,Tracking,UTM Parameter Capture,✅ Working,src/middleware.ts (137-138),P1,Attribution tracking
+MIDDLEWARE,Tracking,Short Link Processing,✅ Working,src/middleware.ts (106-113),P1,/go/* redirect
+MIDDLEWARE,Tracking,Booking Query Redirect,✅ Working,src/middleware.ts (117-135),P1,?book=true handling
+MIDDLEWARE,Admin,Role Switcher,✅ Working,src/middleware.ts,P0,View-as functionality
+MIDDLEWARE,Admin,Role Switcher - No Audit Log,⚠️ Security,src/lib/utils/role-switcher.ts,P1,⚠️ Missing compliance logging
+SECURITY,Auth,Clerk Authentication,✅ Working,Clerk integration,P0,Proper auth implementation
+SECURITY,Auth,Middleware Protection,✅ Working,src/middleware.ts,P0,Route-level security
+SECURITY,SQL,Prisma ORM Protection,✅ Working,All database queries,P0,SQL injection protected
+SECURITY,CSRF,Clerk CSRF Protection,✅ Working,Clerk handles CSRF,P0,Built-in protection
+SECURITY,Issues,Client Delete Protection,⚠️ Verify,src/app/api/documents/*,P0,⚠️ UI-only must verify API
+SECURITY,Issues,No Rate Limiting,❌ Missing,Upload endpoints,P1,⚠️ DoS vulnerability
+SECURITY,Issues,No API Key Rotation,❌ Missing,N/A,P2,⚠️ Security best practice
+SECURITY,Issues,Session Management,⚠️ Clerk Only,Clerk dependency,P2,⚠️ Single point of failure
+DATABASE,Schema,76 Tables Total,✅ Working,prisma/schema.prisma,P0,Comprehensive schema
+DATABASE,Schema,1000+ Columns,✅ Working,prisma/schema.prisma,P0,Complex data model
+DATABASE,Schema,100+ Foreign Keys,✅ Working,prisma/schema.prisma,P0,Proper relationships
+DATABASE,Schema,Proper Indexing,✅ Working,prisma/schema.prisma,P0,Indexed frequently queried columns
+DATABASE,Issues,Potential N+1 Queries,⚠️ Unknown,Various API routes,P2,⚠️ Need profiling
+DATABASE,Issues,No Query Caching,❌ Missing,All queries,P2,⚠️ Performance optimization
+DATABASE,Issues,SELECT * Queries,⚠️ Inefficient,Some routes,P2,⚠️ Should specify columns
+CODE_QUALITY,TypeScript,TS Enabled Project-Wide,✅ Working,tsconfig.json,P0,TypeScript configured
+CODE_QUALITY,TypeScript,Prisma Type Generation,✅ Working,Prisma integration,P0,Auto-generated types
+CODE_QUALITY,TypeScript,Component Interfaces,✅ Mostly,Most components,P1,Proper typing mostly
+CODE_QUALITY,TypeScript,Some any Types,⚠️ Issue,Various files,P2,⚠️ Reduce any usage
+CODE_QUALITY,TypeScript,Missing Return Types,⚠️ Issue,Some functions,P2,⚠️ Add explicit types
+CODE_QUALITY,Error Handling,Try-Catch in APIs,✅ Working,Most API routes,P0,Error catching present
+CODE_QUALITY,Error Handling,Custom Logger,✅ Working,src/lib/logger.ts,P0,Logging implemented
+CODE_QUALITY,Error Handling,Generic Error Messages,⚠️ Issue,Some API routes,P1,⚠️ Not user-friendly
+CODE_QUALITY,Error Handling,Missing Error Boundaries,❌ Missing,Client components,P1,⚠️ No fallback UI
+CODE_QUALITY,Error Handling,No Global Error Handler,❌ Missing,N/A,P1,⚠️ Uncaught exceptions
