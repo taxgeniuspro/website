@@ -214,14 +214,16 @@ function CashAdvancePageContent() {
             Available starting <span className="text-foreground font-semibold">January 2</span> • Fast approval* • File in-person or remotely
           </motion.p>
 
-          {/* TAX PREPARER CARD - Right below hero text */}
+          {/* CONTACT CARD - Shows preparer if ref code, otherwise company */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.55 }}
             className="bg-white dark:bg-card border-2 border-green-500/30 rounded-2xl p-4 sm:p-5 shadow-xl max-w-md mx-auto mb-8"
           >
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3 text-center">Your Personal Tax Professional</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3 text-center">
+              {refCode ? 'Your Personal Tax Professional' : 'Contact Us Today'}
+            </p>
             <div className="flex items-center gap-4">
               <motion.div
                 whileHover={{ scale: 1.05 }}
@@ -230,7 +232,7 @@ function CashAdvancePageContent() {
                 {preparer.avatarUrl ? (
                   <img
                     src={preparer.avatarUrl}
-                    alt={preparerName}
+                    alt={refCode ? preparerName : 'Tax Genius Pro'}
                     className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
                   />
                 ) : (
@@ -242,8 +244,12 @@ function CashAdvancePageContent() {
                 )}
               </motion.div>
               <div className="flex-1 text-left">
-                <p className="font-bold text-xl sm:text-2xl text-foreground mb-0.5">{preparerName}</p>
-                <p className="text-xs text-muted-foreground mb-2">Licensed Tax Professional</p>
+                <p className="font-bold text-xl sm:text-2xl text-foreground mb-0.5">
+                  {refCode ? preparerName : 'Tax Genius Pro'}
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  {refCode ? 'Licensed Tax Professional' : 'Professional Tax Services'}
+                </p>
                 {preparer.phone && (
                   <motion.a
                     href={`tel:${cleanPhone}`}
