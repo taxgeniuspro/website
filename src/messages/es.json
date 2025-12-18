@@ -1606,7 +1606,11 @@
         "emailRequired": "Por favor ingrese su dirección de correo electrónico",
         "orUseEmailPassword": "O usar correo electrónico y contraseña",
         "showEmailPasswordOptions": "Mostrar opciones de correo/contraseña",
-        "hideEmailPasswordOptions": "Ocultar opciones de correo/contraseña"
+        "hideEmailPasswordOptions": "Ocultar opciones de correo/contraseña",
+        "or": "O",
+        "signInWithPassword": "Iniciar sesión con Correo y Contraseña",
+        "signIn": "Iniciar Sesión",
+        "signingIn": "Iniciando sesión..."
       },
       "errors": {
         "invalidCredentials": "Correo electrónico o contraseña inválidos. Por favor intente de nuevo.",

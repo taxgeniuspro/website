@@ -1605,7 +1605,11 @@
         "magicLinkSent": "Magic link sent!",
         "orUseEmailPassword": "Or use email & password",
         "showEmailPasswordOptions": "Show email/password options",
-        "hideEmailPasswordOptions": "Hide email/password options"
+        "hideEmailPasswordOptions": "Hide email/password options",
+        "or": "Or",
+        "signInWithPassword": "Sign in with Email & Password",
+        "signIn": "Sign In",
+        "signingIn": "Signing in..."
       },
       "errors": {
         "invalidCredentials": "Invalid email or password. Please try again.",
