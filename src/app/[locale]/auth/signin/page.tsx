@@ -380,81 +380,69 @@ function SignInContent() {
             </div>
           </div>
 
-          {/* Classic Email/Password Login */}
-          {!showEmailPassword ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full h-10 text-sm"
-              onClick={() => setShowEmailPassword(true)}
-            >
-              <Lock className="mr-2 h-4 w-4" />
-              {t('form.signInWithPassword', { defaultValue: 'Sign in with Email & Password' })}
-            </Button>
-          ) : (
-            <form onSubmit={handleCredentialsSignIn} className="space-y-3">
+          {/* Classic Email/Password Login - Always visible */}
+          <form onSubmit={handleCredentialsSignIn} className="space-y-3">
+            <Input
+              type="email"
+              placeholder={t('form.email', { defaultValue: 'Email address' })}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isCredentialsLoading}
+              className="h-12"
+              autoComplete="email"
+            />
+            <div className="relative">
               <Input
-                type="email"
-                placeholder={t('form.email', { defaultValue: 'Email address' })}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                placeholder={t('form.password', { defaultValue: 'Password' })}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 disabled={isCredentialsLoading}
-                className="h-12"
-                autoComplete="email"
+                className="h-12 pr-10"
+                autoComplete="current-password"
               />
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={t('form.password', { defaultValue: 'Password' })}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isCredentialsLoading}
-                  className="h-12 pr-10"
-                  autoComplete="current-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isCredentialsLoading}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </Button>
-              </div>
               <Button
-                type="submit"
-                variant="default"
-                className="w-full h-12 text-base"
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
                 disabled={isCredentialsLoading}
               >
-                {isCredentialsLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('form.signingIn', { defaultValue: 'Signing in...' })}
-                  </>
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <>
-                    <Lock className="mr-2 h-4 w-4" />
-                    {t('form.signIn', { defaultValue: 'Sign In' })}
-                  </>
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
-              <div className="text-center">
-                <a
-                  href="/auth/forgot-password"
-                  className="text-sm text-muted-foreground hover:text-primary hover:underline"
-                >
-                  {t('form.forgotPassword', { defaultValue: 'Forgot password?' })}
-                </a>
-              </div>
-            </form>
-          )}
+            </div>
+            <Button
+              type="submit"
+              variant="default"
+              className="w-full h-12 text-base"
+              disabled={isCredentialsLoading}
+            >
+              {isCredentialsLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('form.signingIn', { defaultValue: 'Signing in...' })}
+                </>
+              ) : (
+                <>
+                  <Lock className="mr-2 h-4 w-4" />
+                  {t('form.signIn', { defaultValue: 'Sign In' })}
+                </>
+              )}
+            </Button>
+            <div className="text-center">
+              <a
+                href="/auth/forgot-password"
+                className="text-sm text-muted-foreground hover:text-primary hover:underline"
+              >
+                {t('form.forgotPassword', { defaultValue: 'Forgot password?' })}
+              </a>
+            </div>
+          </form>
 
           <div className="text-center text-sm text-muted-foreground pt-4">
             {t('form.dontHaveAccount')}{' '}
