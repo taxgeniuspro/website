@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
       validatedData.email.endsWith('@example.com'); // Allow test emails
 
     if (!allowDuplicates) {
-      const existingLead = await prisma.lead.findUnique({
-        where: { email: validatedData.email },
+      const existingLead = await prisma.lead.findFirst({
+        where: { email: validatedData.email, type: 'affiliate' },
       });
 
       if (existingLead) {

@@ -31,7 +31,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    const application = await prisma.lead.findUnique({
+    const application = await prisma.lead.findFirst({
       where: { id, type: 'affiliate' },
     });
 
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const { action, notes } = body;
 
-    const application = await prisma.lead.findUnique({
+    const application = await prisma.lead.findFirst({
       where: { id, type: 'affiliate' },
     });
 
