@@ -221,6 +221,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
+    label: 'Intake Forms',
+    href: '/dashboard/tax-preparer/intake-forms',
+    icon: FileText,
+    permission: 'dashboard',
+    section: '📊 Dashboard',
+    roles: ['tax_preparer'],
+  },
+  {
     label: 'Academy',
     href: '/app/academy',
     icon: GraduationCap,
