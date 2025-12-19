@@ -2,7 +2,9 @@
  * Tax Preparer - My Clients Page
  *
  * Shows all clients assigned to the logged-in tax preparer.
- * Includes client status, tax returns, and quick actions.
+ * Includes:
+ * - Registered clients (ClientPreparer relationships)
+ * - Complete intake forms (TaxIntakeLead with completed=true)
  */
 
 import { redirect } from 'next/navigation';
@@ -32,8 +34,10 @@ import {
   AlertCircle,
   Calendar,
   ExternalLink,
+  UserPlus,
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
+import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 export const metadata = {
   title: 'My Clients - Tax Preparer | Tax Genius Pro',
@@ -48,6 +52,7 @@ const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'ou
   ACCEPTED: 'default',
   REJECTED: 'destructive',
   AMENDED: 'secondary',
+  INTAKE_RECEIVED: 'default',
 };
 
 const statusLabels: Record<string, string> = {
@@ -57,6 +62,7 @@ const statusLabels: Record<string, string> = {
   ACCEPTED: 'Accepted',
   REJECTED: 'Rejected',
   AMENDED: 'Amended',
+  INTAKE_RECEIVED: 'Intake Received',
 };
 
 export default async function MyClientsPage() {
@@ -85,7 +91,9 @@ export default async function MyClientsPage() {
     redirect('/dashboard/tax-preparer');
   }
 
-  // Fetch clients assigned to this preparer with error handling
+  // Fetch clients from TWO sources:
+  // 1. ClientPreparer relationships (registered users)
+  // 2. Complete TaxIntakeLead records (intake forms with completed=true)
   let clients: Array<{
     id: string;
     firstName: string | null;
@@ -95,9 +103,12 @@ export default async function MyClientsPage() {
     assignedAt: Date;
     taxReturns: Array<{ taxYear: number; status: string }>;
     user: { email: string } | null;
+    source: 'registered' | 'intake_form';
+    intakeLeadId?: string;
   }> = [];
 
   try {
+    // Source 1: Registered clients via ClientPreparer
     const clientRelationships = await prisma.clientPreparer.findMany({
       where: {
         preparerId: preparerProfile.id,
@@ -119,7 +130,7 @@ export default async function MyClientsPage() {
       },
     });
 
-    clients = clientRelationships.map((rel) => ({
+    const registeredClients = clientRelationships.map((rel) => ({
       id: rel.client.id,
       firstName: rel.client.firstName,
       lastName: rel.client.lastName,
@@ -128,7 +139,44 @@ export default async function MyClientsPage() {
       assignedAt: rel.assignedAt,
       taxReturns: rel.client.taxReturns.map(tr => ({ taxYear: tr.taxYear, status: tr.status })),
       user: rel.client.user ? { email: rel.client.user.email } : null,
+      source: 'registered' as const,
     }));
+
+    // Source 2: Complete intake forms (TaxIntakeLead with completed=true)
+    const completeIntakeForms = await prisma.taxIntakeLead.findMany({
+      where: {
+        assignedPreparerId: preparerProfile.id,
+        completed: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Get emails of registered clients to avoid duplicates
+    const registeredEmails = new Set(
+      registeredClients.map(c => c.user?.email?.toLowerCase()).filter(Boolean)
+    );
+
+    const intakeFormClients = completeIntakeForms
+      // Filter out intake forms that are already registered clients
+      .filter(intake => !registeredEmails.has(intake.email.toLowerCase()))
+      .map((intake) => ({
+        id: `intake_${intake.id}`,
+        firstName: intake.first_name,
+        lastName: intake.last_name,
+        phone: intake.phone,
+        avatarUrl: null,
+        assignedAt: intake.created_at,
+        taxReturns: [{ taxYear: intake.tax_year, status: 'INTAKE_RECEIVED' }],
+        user: { email: intake.email },
+        source: 'intake_form' as const,
+        intakeLeadId: intake.id,
+      }));
+
+    // Combine both sources
+    clients = [...registeredClients, ...intakeFormClients];
+
+    // Sort by assignedAt descending
+    clients.sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime());
   } catch (error) {
     console.error('Error fetching clients:', error);
     // Continue with empty clients array
@@ -136,7 +184,7 @@ export default async function MyClientsPage() {
 
   // Calculate statistics
   const totalClients = clients.length;
-  const activeClients = clients.filter((c) => c.taxReturns.length > 0).length;
+  const intakeFormClients = clients.filter((c) => c.source === 'intake_form').length;
   const pendingReviews = clients.filter(
     (c) => c.taxReturns[0]?.status === 'IN_REVIEW'
   ).length;
@@ -188,12 +236,12 @@ export default async function MyClientsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Returns</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">New Intakes</CardTitle>
+            <UserPlus className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeClients}</div>
-            <p className="text-xs text-muted-foreground">With tax returns</p>
+            <div className="text-2xl font-bold text-blue-600">{intakeFormClients}</div>
+            <p className="text-xs text-muted-foreground">Ready for tax prep</p>
           </CardContent>
         </Card>
 
@@ -260,6 +308,10 @@ export default async function MyClientsPage() {
                   {clients.map((client) => {
                     const currentReturn = client.taxReturns[0];
                     const initials = `${client.firstName?.[0] || ''}${client.lastName?.[0] || ''}`.toUpperCase() || '?';
+                    const isIntakeForm = client.source === 'intake_form';
+                    const viewLink = isIntakeForm
+                      ? `/dashboard/tax-preparer/leads/${client.intakeLeadId}`
+                      : `/dashboard/tax-preparer/clients/${client.id}`;
 
                     return (
                       <TableRow key={client.id}>
@@ -270,8 +322,14 @@ export default async function MyClientsPage() {
                               <AvatarFallback>{initials}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium">
+                              <p className="font-medium flex items-center gap-2">
                                 {client.firstName} {client.lastName}
+                                {isIntakeForm && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <UserPlus className="w-3 h-3 mr-1" />
+                                    New
+                                  </Badge>
+                                )}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {client.user?.email || 'No email'}
@@ -324,7 +382,7 @@ export default async function MyClientsPage() {
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button size="sm" variant="outline" asChild>
-                              <Link href={`/dashboard/tax-preparer/clients/${client.id}`}>
+                              <Link href={viewLink}>
                                 <FileText className="w-3 h-3 mr-1" />
                                 View
                               </Link>
