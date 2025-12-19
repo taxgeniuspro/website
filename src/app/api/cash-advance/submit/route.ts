@@ -119,10 +119,12 @@ export async function POST(req: NextRequest) {
       });
 
       if (preparerProfile) {
-        assignedPreparerId = preparerProfile.userId;
+        // Use Profile.id (not User.id) to match dashboard queries
+        assignedPreparerId = preparerProfile.id;
         logger.info('Cash advance lead attributed to preparer', {
           ref,
           preparerId: assignedPreparerId,
+          profileId: preparerProfile.id,
         });
       } else {
         logger.warn('Cash advance form ref parameter did not match any preparer', { ref });
