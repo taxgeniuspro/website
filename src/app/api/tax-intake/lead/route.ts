@@ -270,16 +270,13 @@ export async function POST(req: NextRequest) {
     // ========================================
     try {
       // Only create folder if we have an assigned preparer
-      // Use the preparer's profile ID as the folder owner
+      // NOTE: assignedPreparerId IS the Profile.id (not User.id)
+      // This was fixed in PR #120 - leads are assigned by Profile.id
       let folderOwnerId: string | null = null;
 
       if (assignedPreparerId) {
-        // Get the preparer's profile ID
-        const preparerProfile = await prisma.profile.findFirst({
-          where: { userId: assignedPreparerId },
-          select: { id: true },
-        });
-        folderOwnerId = preparerProfile?.id || null;
+        // assignedPreparerId is already a Profile.id, use it directly
+        folderOwnerId = assignedPreparerId;
       }
 
       if (folderOwnerId) {
@@ -705,10 +702,11 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
     // ========================================
     try {
       // Get the preparer's tracking code for the referral link
+      // NOTE: assignedPreparerId IS the Profile.id (not User.id)
       let preparerCode = 'tg'; // Default to Tax Genius
       if (assignedPreparerId) {
-        const preparerProfile = await prisma.profile.findFirst({
-          where: { userId: assignedPreparerId },
+        const preparerProfile = await prisma.profile.findUnique({
+          where: { id: assignedPreparerId },
           select: { customTrackingCode: true, trackingCode: true },
         });
         if (preparerProfile) {
