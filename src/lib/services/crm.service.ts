@@ -127,22 +127,24 @@ export class CRMService {
       });
 
       // Row-level security: tax preparers can only see their assigned contacts
-      // Note: assignedPreparerId stores the User ID (not Profile ID)
+      // Note: assignedPreparerId stores the Profile.id (NOT User.id)
+      // This was updated in PR #120-125 for consistency with TaxIntakeLead
       // Use string comparison to avoid enum vs string type mismatch
       const normalizedRole = String(accessContext.userRole).toLowerCase();
       if (normalizedRole === 'tax_preparer') {
-        if (!accessContext.userId) {
-          throw new Error('User ID not found for tax preparer user');
+        if (!accessContext.preparerId) {
+          throw new Error('Preparer Profile ID not found for tax preparer user');
         }
 
         logger.info('[CRMService] Checking row-level security', {
           normalizedRole,
           contactAssignedPreparerId: contact.assignedPreparerId,
-          accessUserId: accessContext.userId,
-          match: contact.assignedPreparerId === accessContext.userId,
+          accessPreparerId: accessContext.preparerId,
+          match: contact.assignedPreparerId === accessContext.preparerId,
         });
 
-        if (contact.assignedPreparerId !== accessContext.userId) {
+        // FIXED: Compare with preparerId (Profile.id) instead of userId (User.id)
+        if (contact.assignedPreparerId !== accessContext.preparerId) {
           throw new Error('Access denied: Contact not assigned to you');
         }
       }
@@ -273,14 +275,14 @@ export class CRMService {
       }
 
       // Row-level security: tax preparers see only their assigned contacts
-      // Note: assignedPreparerId stores the User ID (not Profile ID)
-      // Use string comparison to avoid enum vs string type mismatch
+      // Note: assignedPreparerId stores the Profile.id (NOT User.id)
+      // This was updated in PR #120-125 for consistency with TaxIntakeLead
       const normalizedListRole = String(accessContext.userRole).toLowerCase();
       if (normalizedListRole === 'tax_preparer') {
-        if (!accessContext.userId) {
-          throw new Error('User ID not found for tax preparer user');
+        if (!accessContext.preparerId) {
+          throw new Error('Preparer Profile ID not found for tax preparer user');
         }
-        where.assignedPreparerId = accessContext.userId;
+        where.assignedPreparerId = accessContext.preparerId;
       }
 
       if (filters.assignedPreparerId) {
