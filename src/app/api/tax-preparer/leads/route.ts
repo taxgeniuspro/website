@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Fetch CRM contact IDs for each lead by email
+    // Include assignedPreparerId to check access permissions
     const leadEmails = leads.map(l => l.email.toLowerCase());
     const crmContacts = await prisma.cRMContact.findMany({
       where: {
@@ -110,13 +111,30 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         email: true,
+        assignedPreparerId: true,
       },
     });
 
-    // Create email -> CRM contact ID map
-    const emailToCrmId = new Map(
-      crmContacts.map(c => [c.email.toLowerCase(), c.id])
-    );
+    // Get current preparer's Profile ID for access check
+    let currentPreparerProfileId: string | null = null;
+    if (isTaxPreparer) {
+      currentPreparerProfileId = where.assignedPreparerId;
+    }
+
+    // Create email -> CRM contact ID map (only if preparer has access)
+    const emailToCrmId = new Map<string, string | null>();
+    for (const c of crmContacts) {
+      // Only include CRM contact ID if:
+      // - User is admin, OR
+      // - CRM contact has no assigned preparer, OR
+      // - CRM contact is assigned to current preparer
+      const canAccess =
+        isAdmin ||
+        !c.assignedPreparerId ||
+        c.assignedPreparerId === currentPreparerProfileId;
+
+      emailToCrmId.set(c.email.toLowerCase(), canAccess ? c.id : null);
+    }
 
     // Determine lead status and filter
     const getLeadStatus = (lead: any): string => {
