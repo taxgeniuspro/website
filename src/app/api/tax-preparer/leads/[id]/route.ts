@@ -87,11 +87,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Fetch CRM contact by email
+    // Fetch CRM contact by email, but only return it if it's assigned to the same preparer
+    // This prevents showing CRM links that the user can't access
     const crmContact = await prisma.cRMContact.findUnique({
       where: { email: lead.email.toLowerCase() },
-      select: { id: true },
+      select: { id: true, assignedPreparerId: true },
     });
+
+    // Only include CRM contact if it matches the preparer (or user is admin)
+    const canAccessCrmContact =
+      isAdmin ||
+      !crmContact?.assignedPreparerId ||
+      crmContact.assignedPreparerId === preparerProfileId;
 
     // Determine lead status
     const getLeadStatus = (lead: any): string => {
@@ -106,7 +113,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const leadWithStatus = {
       ...lead,
       status: getLeadStatus(lead),
-      crmContactId: crmContact?.id || null,
+      crmContactId: canAccessCrmContact ? (crmContact?.id || null) : null,
     };
 
     logger.info(`Lead ${leadId} fetched by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`);
