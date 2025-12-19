@@ -509,7 +509,9 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
         drivers_license: taxFormData.drivers_license,
         license_expiration: taxFormData.license_expiration,
         // Include driver's license image URL for PDF if available
-        drivers_license_image_url: uploadedFileUrl,
+        drivers_license_url: uploadedFileUrl,
+        // Required for PDF footer
+        created_at: new Date(),
       };
 
       pdfBuffer = await generateTaxIntakePDF(pdfData);
@@ -518,7 +520,12 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
         client: `${taxFormData.first_name} ${taxFormData.last_name}`,
       });
     } catch (pdfError) {
-      logger.error('PDF generation failed', { error: pdfError });
+      logger.error('PDF generation failed', {
+        error: pdfError,
+        errorMessage: pdfError instanceof Error ? pdfError.message : 'Unknown error',
+        errorStack: pdfError instanceof Error ? pdfError.stack : undefined,
+        hasDriversLicenseUrl: !!uploadedFileUrl,
+      });
       // Continue without PDF - don't fail the whole submission
     }
 
