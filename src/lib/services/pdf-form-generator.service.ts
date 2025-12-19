@@ -24,11 +24,18 @@ interface ImageData {
  */
 async function fetchImageAsBase64(url: string): Promise<ImageData | null> {
   try {
+    // Use AbortController for timeout (5 second limit for serverless)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(url, {
       headers: {
         'Accept': 'image/*',
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       logger.warn('Failed to fetch image for PDF', { url, status: response.status });
@@ -108,7 +115,7 @@ function addImagePage(
     const imgDataUri = `data:image/${imageData.format.toLowerCase()};base64,${imageData.base64}`;
 
     // Add image with auto-calculated dimensions
-    // Use 'SLOW' compression to apply grayscale filter effect
+    // Use 'FAST' compression to avoid CPU-intensive processing in serverless
     doc.addImage(
       imgDataUri,
       imageData.format,
@@ -117,7 +124,7 @@ function addImagePage(
       maxWidth,
       maxHeight,
       undefined,
-      'SLOW' // Better compression, works well for documents
+      'FAST' // Fast compression - safer for serverless environments
     );
   } catch (imgError) {
     // If image fails to render, add placeholder text
