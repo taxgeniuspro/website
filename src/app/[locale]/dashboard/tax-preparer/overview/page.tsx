@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,8 +43,18 @@ export default async function PreparerOverviewDashboard() {
     redirect('/forbidden');
   }
 
-  const session = await auth(); const user = session?.user;
-  const preparerId = user?.id || '';
+  const session = await auth();
+  const user = session?.user;
+
+  // Fetch the profile to get the correct Profile.id (not User.id)
+  // Analytics queries filter by Profile.id, not User.id
+  const profile = await prisma.profile.findFirst({
+    where: { userId: user?.id },
+    select: { id: true, firstName: true },
+  });
+
+  const preparerId = profile?.id || '';
+  const firstName = profile?.firstName || user?.name?.split(' ')[0] || 'Preparer';
 
   // Fetch all dashboard data
   const stats = await getPreparerDashboardStats(preparerId);
@@ -57,7 +68,7 @@ export default async function PreparerOverviewDashboard() {
         {/* Header */}
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Preparer Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Welcome back, {user?.firstName || 'Preparer'}</p>
+          <p className="text-sm text-muted-foreground">Welcome back, {firstName}</p>
         </div>
 
         {/* CRITICAL ALERTS - Missed Follow-Ups */}

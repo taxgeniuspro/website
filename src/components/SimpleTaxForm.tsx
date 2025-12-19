@@ -95,6 +95,8 @@ interface PreparerInfo {
   companyName?: string | null;
   licenseNo?: string | null;
   bio?: string | null;
+  phone?: string | null;
+  email?: string | null;
 }
 
 // Component prop types
@@ -533,7 +535,7 @@ const handleSubmit = async () => {
             />
           );
         case 10:
-          return <CongratulationsPage handleSubmit={handleSubmit} />;
+          return <SubmitPage handleSubmit={handleSubmit} />;
         default:
           return null;
       }
@@ -599,7 +601,7 @@ const handleSubmit = async () => {
             />
           );
         case 14:
-          return <CongratulationsPage handleSubmit={handleSubmit} />;
+          return <SubmitPage handleSubmit={handleSubmit} />;
         default:
           return null;
       }
@@ -611,7 +613,7 @@ const handleSubmit = async () => {
     return (
       <Card className="w-full max-w-3xl mx-auto shadow-xl">
         <CardContent className="p-8">
-          <ThankYouPage />
+          <ThankYouPage preparer={preparer} />
         </CardContent>
       </Card>
     );
@@ -684,35 +686,119 @@ const handleSubmit = async () => {
 
 // Individual Page Components
 
-function ThankYouPage() {
+interface ThankYouPageProps {
+  preparer?: PreparerInfo | null;
+}
+
+function ThankYouPage({ preparer }: ThankYouPageProps) {
   const t = useTranslations('forms.taxIntake.thankYou');
+  const tCommon = useTranslations('common');
 
-  useEffect(() => {
-    // Auto-redirect to client dashboard after 3 seconds
-    const timer = setTimeout(() => {
-      window.location.href = '/dashboard/client?tab=referrals';
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, []);
+  const preparerName = preparer
+    ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim()
+    : 'Your Tax Professional';
 
   return (
-    <div className="space-y-8 text-center py-12">
+    <div className="space-y-8 text-center py-8">
+      {/* Success checkmark */}
       <div className="w-20 h-20 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
         <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
       </div>
-      <div className="space-y-4">
-        <h2 className="text-3xl font-bold">{t('title')}</h2>
+
+      {/* Congratulations message */}
+      <div className="space-y-2">
+        <h2 className="text-3xl font-bold text-green-600">Congratulations!</h2>
         <p className="text-xl text-muted-foreground">
-          {t('subtitle')}
-        </p>
-        <p className="text-lg">
-          {t('message')}
+          You&apos;ve completed the tax intake form!
         </p>
       </div>
-      <div className="flex items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">{useTranslations('common')('loading')}</span>
+
+      {/* Tax Preparer Info */}
+      <div className="bg-gradient-to-br from-secondary/50 to-secondary/30 rounded-xl p-6 max-w-md mx-auto">
+        <div className="space-y-4">
+          {/* Preparer Photo */}
+          <div className="flex justify-center">
+            {preparer?.avatarUrl ? (
+              <Image
+                src={preparer.avatarUrl}
+                alt={preparerName}
+                width={120}
+                height={120}
+                className="rounded-full border-4 border-white shadow-lg object-cover"
+              />
+            ) : (
+              <div className="w-[120px] h-[120px] rounded-full border-4 border-white shadow-lg bg-primary/10 flex items-center justify-center">
+                <span className="text-3xl font-bold text-primary">
+                  {preparer?.firstName?.[0] || 'T'}{preparer?.lastName?.[0] || 'P'}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Preparer Name & Title */}
+          <div>
+            <h3 className="text-xl font-bold">{preparerName}</h3>
+            <p className="text-sm text-muted-foreground">Your Tax Professional</p>
+          </div>
+
+          {/* Contact Info */}
+          {(preparer?.phone || preparer?.email) && (
+            <div className="space-y-1 text-sm">
+              {preparer?.phone && (
+                <p>
+                  <a href={`tel:${preparer.phone}`} className="text-primary hover:underline">
+                    {preparer.phone}
+                  </a>
+                </p>
+              )}
+              {preparer?.email && (
+                <p>
+                  <a href={`mailto:${preparer.email}`} className="text-primary hover:underline">
+                    {preparer.email}
+                  </a>
+                </p>
+              )}
+            </div>
+          )}
+
+          <p className="text-sm text-muted-foreground pt-2">
+            {preparerName} will review your information and contact you shortly.
+          </p>
+        </div>
+      </div>
+
+      {/* Referral Program */}
+      <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-8 max-w-2xl mx-auto">
+        <div className="space-y-4">
+          <div className="text-5xl">💰</div>
+          <h3 className="text-2xl font-bold">Earn Money with Referrals!</h3>
+          <p className="text-lg leading-relaxed">
+            Get <span className="font-bold text-primary">$50 for each person</span> who completes
+            their taxes with us.
+          </p>
+          <p className="text-lg leading-relaxed">
+            After your 10th referral, I&apos;ll crank it up to{' '}
+            <span className="font-bold text-primary">$100 per person!</span>
+          </p>
+          <div className="pt-4">
+            <Button size="lg" variant="outline" asChild>
+              <a href="/referral">
+                {tCommon('learnMore')}
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </a>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard Link */}
+      <div className="pt-4">
+        <Button size="lg" asChild>
+          <a href="/dashboard/client?tab=referrals">
+            Go to Dashboard
+            <ArrowRight className="ml-2 w-5 h-5" />
+          </a>
+        </Button>
       </div>
     </div>
   );
@@ -1526,40 +1612,22 @@ function IdDocumentsPage({
   );
 }
 
-function CongratulationsPage({ handleSubmit }: SubmitPageProps) {
+function SubmitPage({ handleSubmit }: SubmitPageProps) {
   const tCommon = useTranslations('common');
 
   return (
     <div className="space-y-8 text-center py-8">
-      <div className="w-32 h-32 bg-gradient-to-br from-success/20 to-success/10 rounded-full mx-auto flex items-center justify-center">
-        <Share2 className="w-16 h-16 text-success" />
+      <div className="w-32 h-32 bg-gradient-to-br from-primary/20 to-primary/10 rounded-full mx-auto flex items-center justify-center">
+        <Upload className="w-16 h-16 text-primary" />
       </div>
       <div className="space-y-4">
-        <h2 className="text-3xl font-bold">Congratulations!</h2>
-        <p className="text-xl text-muted-foreground">You've completed the tax intake form!</p>
-      </div>
-
-      <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-8 max-w-2xl mx-auto">
-        <div className="space-y-4">
-          <div className="text-5xl">💰</div>
-          <h3 className="text-2xl font-bold">Earn Money with Referrals!</h3>
-          <p className="text-lg leading-relaxed">
-            Get <span className="font-bold text-primary">$50 for each person</span> who completes
-            their taxes with us.
-          </p>
-          <p className="text-lg leading-relaxed">
-            After your 10th referral, I'll crank it up to{' '}
-            <span className="font-bold text-primary">$100 per person!</span>
-          </p>
-          <div className="pt-4">
-            <Button size="lg" variant="outline" asChild>
-              <a href="/referral">
-                {tCommon('learnMore')}
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </a>
-            </Button>
-          </div>
-        </div>
+        <h2 className="text-3xl font-bold">Ready to Submit?</h2>
+        <p className="text-xl text-muted-foreground">
+          Review your information and submit your tax intake form.
+        </p>
+        <p className="text-base text-muted-foreground">
+          Your assigned tax professional will review your information and contact you shortly.
+        </p>
       </div>
 
       <Button size="lg" onClick={handleSubmit} className="mt-8">

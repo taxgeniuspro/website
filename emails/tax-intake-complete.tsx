@@ -298,6 +298,25 @@ export function TaxIntakeComplete(props: TaxIntakeCompleteProps) {
               <Text style={detail}>
                 <strong>{t(taxIntakeTranslations.expiration, locale)}:</strong> {licenseExpiration}
               </Text>
+              {props.licenseFileUrl && (
+                <>
+                  <Text style={detail}>
+                    <strong>{locale === 'es' ? 'Documento Adjunto' : 'Document Attached'}:</strong>{' '}
+                    {locale === 'es' ? 'Sí - Ver imagen abajo' : 'Yes - See image below'}
+                  </Text>
+                  <Img
+                    src={props.licenseFileUrl}
+                    alt="Driver's License"
+                    width="400"
+                    style={{ marginTop: '12px', border: '2px solid #e1eaef', borderRadius: '8px', maxWidth: '100%' }}
+                  />
+                  <Text style={{ ...detail, marginTop: '8px' }}>
+                    <a href={props.licenseFileUrl} style={link} target="_blank" rel="noopener noreferrer">
+                      {locale === 'es' ? 'Ver imagen completa' : 'View full image'}
+                    </a>
+                  </Text>
+                </>
+              )}
             </Section>
 
             {/* Attribution */}

@@ -1351,7 +1351,8 @@ export class EmailService {
     },
     ccEmail?: string,
     locale?: 'en' | 'es',
-    pdfAttachment?: { filename: string; content: Buffer }
+    pdfAttachment?: { filename: string; content: Buffer },
+    imageAttachments?: Array<{ filename: string; content: Buffer }>
   ): Promise<boolean> {
     try {
       // Check if preparerId is an email address (for language-based routing)
@@ -1454,9 +1455,12 @@ export class EmailService {
           locale: locale || 'en',
           recipientName,
         }),
-        // PDF attachment for professional print-ready form
-        ...(pdfAttachment && {
-          attachments: [pdfAttachment],
+        // Attachments: PDF form + any image attachments
+        ...((pdfAttachment || (imageAttachments && imageAttachments.length > 0)) && {
+          attachments: [
+            ...(pdfAttachment ? [pdfAttachment] : []),
+            ...(imageAttachments || []),
+          ],
         }),
       });
 
