@@ -500,6 +500,94 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       cloudinaryUrl: uploadedFileUrl,
     });
 
+    // CRITICAL FIX: Update TaxIntakeLead with COMPLETE form data
+    // The lead was created at page 2/3 with basic info only.
+    // Now we update it with ALL tax data (SSN, DOB, filing_status, etc.)
+    try {
+      const existingLead = await prisma.taxIntakeLead.findUnique({
+        where: {
+          email_tax_year: {
+            email: taxFormData.email.toLowerCase(),
+            tax_year: tax_year,
+          },
+        },
+      });
+
+      if (existingLead) {
+        // Merge existing full_form_data with new complete data
+        const existingFormData = (existingLead.full_form_data as Record<string, unknown>) || {};
+
+        await prisma.taxIntakeLead.update({
+          where: { id: existingLead.id },
+          data: {
+            // Mark as complete - this is a FULL intake form with SSN, DOB, filing_status
+            completed: true,
+            // Update full_form_data with ALL fields including sensitive tax data
+            full_form_data: {
+              ...existingFormData,
+              ...taxFormData,
+              // Store driver's license image URL for display in dashboard/CRM
+              drivers_license_image_url: uploadedFileUrl,
+              // Mark submission timestamp
+              submitted_at: new Date().toISOString(),
+            },
+          },
+        });
+
+        logger.info('TaxIntakeLead updated with complete form data', {
+          leadId: existingLead.id,
+          email: taxFormData.email,
+          completed: true,
+          hasSSN: !!taxFormData.ssn,
+          hasDOB: !!taxFormData.date_of_birth,
+          hasFilingStatus: !!taxFormData.filing_status,
+          hasDriversLicenseImage: !!uploadedFileUrl,
+        });
+      } else {
+        // Lead doesn't exist yet - create it with complete data
+        // This can happen if user skipped the intermediate save
+        const newLead = await prisma.taxIntakeLead.create({
+          data: {
+            first_name: taxFormData.first_name,
+            middle_name: taxFormData.middle_name || null,
+            last_name: taxFormData.last_name,
+            email: taxFormData.email.toLowerCase(),
+            phone: taxFormData.phone,
+            country_code: taxFormData.country_code || '+1',
+            address_line_1: taxFormData.address_line_1,
+            address_line_2: taxFormData.address_line_2 || null,
+            city: taxFormData.city,
+            state: taxFormData.state,
+            zip_code: taxFormData.zip_code,
+            tax_year: tax_year,
+            completed: true,
+            assignedPreparerId: preparer.id,
+            referrerUsername: preparerCode,
+            referrerType: 'TAX_PREPARER',
+            attributionMethod: 'ref_param',
+            full_form_data: {
+              ...taxFormData,
+              drivers_license_image_url: uploadedFileUrl,
+              submitted_at: new Date().toISOString(),
+            },
+          },
+        });
+
+        logger.info('TaxIntakeLead created with complete form data', {
+          leadId: newLead.id,
+          email: taxFormData.email,
+          assignedPreparerId: preparer.id,
+        });
+      }
+    } catch (leadUpdateError) {
+      // Log error but don't fail the response - email was already sent
+      logger.error('Failed to update TaxIntakeLead with complete data', {
+        error: leadUpdateError,
+        email: taxFormData.email,
+        tax_year: tax_year,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       emailId: emailResult.id,
