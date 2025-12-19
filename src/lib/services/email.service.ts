@@ -56,8 +56,9 @@ export class EmailService {
    */
   private static async getPreparerNotificationEmail(preparerId: string): Promise<string> {
     try {
-      // Get preparer's user record
-      const user = await prisma.user.findUnique({
+      // preparerId can be either User.id or Profile.id
+      // First try to find by User.id
+      let user = await prisma.user.findUnique({
         where: { id: preparerId },
         select: {
           email: true,
@@ -78,8 +79,49 @@ export class EmailService {
         },
       });
 
+      // If not found by User.id, try Profile.id
       if (!user) {
-        logger.error('User not found for preparer notification email', { preparerId });
+        const profile = await prisma.profile.findUnique({
+          where: { id: preparerId },
+          select: {
+            user: {
+              select: {
+                email: true,
+              },
+            },
+            professionalEmails: {
+              where: {
+                isPrimary: true,
+                status: 'ACTIVE',
+              },
+              select: {
+                emailAddress: true,
+              },
+              take: 1,
+            },
+          },
+        });
+
+        if (profile) {
+          // Found by Profile.id - return professional email or user email
+          const professionalEmail = profile.professionalEmails?.[0]?.emailAddress;
+          if (professionalEmail) {
+            logger.info('Using professional email for preparer notification (via Profile.id)', {
+              preparerId,
+              email: professionalEmail,
+            });
+            return professionalEmail;
+          }
+          logger.info('Using signup email for preparer notification (via Profile.id)', {
+            preparerId,
+            email: profile.user.email,
+          });
+          return profile.user.email;
+        }
+      }
+
+      if (!user) {
+        logger.error('User/Profile not found for preparer notification email', { preparerId });
         throw new Error('User not found');
       }
 
