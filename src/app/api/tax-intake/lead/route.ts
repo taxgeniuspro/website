@@ -159,9 +159,11 @@ export async function POST(req: NextRequest) {
 
           case 'tax_preparer':
             // TAX_PREPARER refers → Assign to THAT tax preparer
-            assignedPreparerId = referrerProfile.userId;
+            // Use Profile.id (not User.id) to match dashboard queries
+            assignedPreparerId = referrerProfile.id;
             logger.info(`Lead from TAX_PREPARER referral assigned to that preparer`, {
               preparerId: assignedPreparerId,
+              profileId: referrerProfile.id,
             });
             break;
 
@@ -507,15 +509,32 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
             city,
             state,
             zip_code,
+            // Identity Information
+            date_of_birth,
+            ssn,
+            // Tax Filing Information
             filing_status,
             employment_type,
             occupation,
+            claimed_as_dependent,
+            in_college,
+            // Dependents
             has_dependents,
             number_of_dependents,
+            dependents_under_24_student_or_disabled,
+            dependents_in_college,
+            child_care_provider,
+            // Property & Tax Credits
             has_mortgage,
-            wants_refund_advance,
             denied_eitc,
+            // IRS & Refund
             has_irs_pin,
+            irs_pin,
+            wants_refund_advance,
+            // Identification Documents
+            drivers_license,
+            license_expiration,
+            // Attribution
             referrerUsername: attributionResult.attribution.referrerUsername,
             referrerType: attributionResult.attribution.referrerType,
             tax_year,
@@ -539,6 +558,34 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
             leadId: lead.id,
             error: pdfError,
           });
+        }
+
+        // Fetch image attachments if driver's license URL exists
+        let imageAttachments: Array<{ filename: string; content: Buffer }> | undefined;
+        if (documentUrls.driversLicenseUrl) {
+          try {
+            const response = await fetch(documentUrls.driversLicenseUrl);
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              const contentType = response.headers.get('content-type') || 'image/jpeg';
+              const ext = contentType.includes('png') ? 'png' : contentType.includes('pdf') ? 'pdf' : 'jpg';
+              imageAttachments = [{
+                filename: `DriversLicense_${last_name}.${ext}`,
+                content: buffer,
+              }];
+              logger.info('Driver license image fetched for email attachment', {
+                leadId: lead.id,
+                size: buffer.length,
+              });
+            }
+          } catch (imgFetchError) {
+            logger.error('Failed to fetch driver license for email attachment', {
+              leadId: lead.id,
+              error: imgFetchError,
+            });
+            // Continue without image attachment
+          }
         }
 
         await EmailService.sendTaxIntakeCompleteEmail(emailRecipient, {
@@ -583,19 +630,20 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
           // Identification
           driversLicense: drivers_license,
           licenseExpiration: license_expiration,
-          licenseFileUrl: undefined, // TODO: Add file upload handling
+          licenseFileUrl: documentUrls.driversLicenseUrl,
           // Attribution
           source: attributionResult.attribution.attributionMethod || 'direct',
           referrerUsername: attributionResult.attribution.referrerUsername,
           referrerType: attributionResult.attribution.referrerType,
           attributionMethod: attributionResult.attribution.attributionMethod,
-        }, ccEmail, (locale as 'en' | 'es') || 'en', pdfAttachment); // Pass CC email, locale, and PDF attachment
-        logger.info('Comprehensive tax intake email sent with PDF attachment', {
+        }, ccEmail, (locale as 'en' | 'es') || 'en', pdfAttachment, imageAttachments);
+        logger.info('Comprehensive tax intake email sent with attachments', {
           leadId: lead.id,
           recipient: emailRecipient,
           cc: ccEmail,
           locale: locale || 'en',
           hasPdfAttachment: !!pdfAttachment,
+          hasImageAttachments: !!imageAttachments && imageAttachments.length > 0,
         });
       } else {
         // Send basic lead notification for incomplete submissions

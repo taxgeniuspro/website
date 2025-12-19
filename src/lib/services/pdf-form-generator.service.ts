@@ -154,15 +154,31 @@ interface TaxIntakeData {
   city?: string | null;
   state?: string | null;
   zip_code?: string | null;
+  // Identity Information
+  date_of_birth?: string | null;
+  ssn?: string | null;
+  // Tax Filing Information
   filing_status?: string | null;
   employment_type?: string | null;
   occupation?: string | null;
-  has_dependents?: boolean | null;
-  number_of_dependents?: number | null;
-  has_mortgage?: boolean | null;
-  wants_refund_advance?: boolean | null;
-  denied_eitc?: boolean | null;
-  has_irs_pin?: boolean | null;
+  claimed_as_dependent?: string | null;
+  in_college?: string | null;
+  // Dependents
+  has_dependents?: boolean | string | null;
+  number_of_dependents?: number | string | null;
+  dependents_under_24_student_or_disabled?: string | null;
+  dependents_in_college?: string | null;
+  child_care_provider?: string | null;
+  // Property & Tax Credits
+  has_mortgage?: boolean | string | null;
+  wants_refund_advance?: boolean | string | null;
+  denied_eitc?: boolean | string | null;
+  has_irs_pin?: boolean | string | null;
+  irs_pin?: string | null;
+  // Identification Documents
+  drivers_license?: string | null;
+  license_expiration?: string | null;
+  // Attribution
   referrerUsername?: string | null;
   referrerType?: string | null;
   tax_year?: number | null;
@@ -215,8 +231,11 @@ function formatDate(date: Date | string): string {
   });
 }
 
-function formatBoolean(value: boolean | null | undefined): string {
+function formatBoolean(value: boolean | string | null | undefined): string {
   if (value === null || value === undefined) return 'Not specified';
+  if (typeof value === 'string') {
+    return value === 'yes' ? 'Yes' : value === 'no' ? 'No' : capitalize(value);
+  }
   return value ? 'Yes' : 'No';
 }
 
@@ -335,6 +354,8 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
       ['Full Name:', titleCase(fullName)],
       ['Email Address:', data.email.toLowerCase()],
       ['Phone Number:', formatPhone(data.phone)],
+      ['Date of Birth:', data.date_of_birth || 'Not provided'],
+      ['SSN:', data.ssn || 'Not provided'],
       ['Tax Year:', data.tax_year?.toString() || 'Current Year'],
     ],
   });
@@ -400,6 +421,8 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
       ['Filing Status:', capitalize(data.filing_status)],
       ['Employment Type:', capitalize(data.employment_type)],
       ['Occupation:', data.occupation || 'Not specified'],
+      ['Claimed as Dependent:', formatBoolean(data.claimed_as_dependent)],
+      ['In College:', formatBoolean(data.in_college)],
     ],
   });
 
@@ -407,6 +430,19 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
 
   // Dependents Section
   y = addSectionHeader(doc, 'DEPENDENTS', y);
+
+  const dependentRows: string[][] = [
+    ['Has Dependents:', formatBoolean(data.has_dependents)],
+    ['Number of Dependents:', data.number_of_dependents?.toString() || '0'],
+  ];
+
+  // Add conditional fields if has dependents
+  const hasDeps = data.has_dependents === 'yes' || data.has_dependents === true;
+  if (hasDeps) {
+    dependentRows.push(['Under 24/Student/Disabled:', formatBoolean(data.dependents_under_24_student_or_disabled)]);
+    dependentRows.push(['Dependents in College:', formatBoolean(data.dependents_in_college)]);
+    dependentRows.push(['Child Care Provider:', formatBoolean(data.child_care_provider)]);
+  }
 
   autoTable(doc, {
     startY: y,
@@ -421,16 +457,13 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
       0: { fontStyle: 'bold', cellWidth: 120 },
       1: { cellWidth: CONTENT_WIDTH - 120 },
     },
-    body: [
-      ['Has Dependents:', formatBoolean(data.has_dependents)],
-      ['Number of Dependents:', data.number_of_dependents?.toString() || '0'],
-    ],
+    body: dependentRows,
   });
 
   y = doc.lastAutoTable.finalY + 16;
 
-  // Additional Information Section
-  y = addSectionHeader(doc, 'ADDITIONAL INFORMATION', y);
+  // Property & Tax Credits Section
+  y = addSectionHeader(doc, 'PROPERTY & TAX CREDITS', y);
 
   autoTable(doc, {
     startY: y,
@@ -448,8 +481,63 @@ export async function generateTaxIntakePDF(data: TaxIntakeData): Promise<Buffer>
     body: [
       ['Has Mortgage:', formatBoolean(data.has_mortgage)],
       ['Previously Denied EITC:', formatBoolean(data.denied_eitc)],
-      ['Has IRS PIN:', formatBoolean(data.has_irs_pin)],
-      ['Wants Refund Advance:', formatBoolean(data.wants_refund_advance)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // IRS Information & Refund Section
+  y = addSectionHeader(doc, 'IRS INFORMATION & REFUND', y);
+
+  const irsRows: string[][] = [
+    ['Has IRS PIN:', formatBoolean(data.has_irs_pin)],
+  ];
+
+  // Add IRS PIN if provided
+  if (data.irs_pin) {
+    irsRows.push(['IRS PIN:', data.irs_pin]);
+  }
+
+  irsRows.push(['Wants Refund Advance:', formatBoolean(data.wants_refund_advance)]);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: irsRows,
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Identification Documents Section
+  y = addSectionHeader(doc, 'IDENTIFICATION DOCUMENTS', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ["Driver's License #:", data.drivers_license || 'Not provided'],
+      ['License Expiration:', data.license_expiration || 'Not provided'],
+      ['Document Uploaded:', data.drivers_license_url ? 'Yes - See attached' : 'No'],
     ],
   });
 
