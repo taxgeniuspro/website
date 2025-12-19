@@ -5,6 +5,9 @@ import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
+import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
+import { CRMService } from '@/lib/services/crm.service';
+import { ContactType, PipelineStage } from '@prisma/client';
 
 // Lazy initialize Cloudinary to avoid build errors
 const getCloudinary = () => {
@@ -468,8 +471,74 @@ Tax Genius Pro
 Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     `;
 
+    // Generate PDF with all form data
+    let pdfBuffer: Buffer | null = null;
+    try {
+      // Generate PDF using the PDF service
+      // Need to find or create a lead ID for the PDF
+      const existingLeadForPdf = await prisma.taxIntakeLead.findUnique({
+        where: {
+          email_tax_year: {
+            email: taxFormData.email.toLowerCase(),
+            tax_year: tax_year,
+          },
+        },
+      });
+
+      const pdfData = {
+        id: existingLeadForPdf?.id || 'new-submission',
+        ...taxFormData,
+        // Map form data to PDF interface
+        date_of_birth: taxFormData.date_of_birth,
+        ssn: taxFormData.ssn,
+        filing_status: taxFormData.filing_status,
+        employment_type: taxFormData.employment_type,
+        occupation: taxFormData.occupation,
+        claimed_as_dependent: taxFormData.claimed_as_dependent,
+        in_college: taxFormData.in_college,
+        has_dependents: taxFormData.has_dependents,
+        number_of_dependents: taxFormData.number_of_dependents,
+        dependents_under_24_student_or_disabled: taxFormData.dependents_under_24_student_or_disabled,
+        dependents_in_college: taxFormData.dependents_in_college,
+        child_care_provider: taxFormData.child_care_provider,
+        has_mortgage: taxFormData.has_mortgage,
+        wants_refund_advance: taxFormData.wants_refund_advance,
+        denied_eitc: taxFormData.denied_eitc,
+        has_irs_pin: taxFormData.has_irs_pin,
+        irs_pin: taxFormData.irs_pin,
+        drivers_license: taxFormData.drivers_license,
+        license_expiration: taxFormData.license_expiration,
+        // Include driver's license image URL for PDF if available
+        drivers_license_image_url: uploadedFileUrl,
+      };
+
+      pdfBuffer = await generateTaxIntakePDF(pdfData);
+      logger.info('PDF generated successfully', {
+        size: pdfBuffer.length,
+        client: `${taxFormData.first_name} ${taxFormData.last_name}`,
+      });
+    } catch (pdfError) {
+      logger.error('PDF generation failed', { error: pdfError });
+      // Continue without PDF - don't fail the whole submission
+    }
+
     // Prepare email attachments - attach from buffer directly (no filesystem)
     const attachments: Array<{ filename: string; content: Buffer }> = [];
+
+    // Add PDF attachment first
+    if (pdfBuffer) {
+      const pdfFilename = `Tax-Intake-${taxFormData.last_name}-${taxFormData.first_name}-${tax_year}.pdf`;
+      attachments.push({
+        filename: pdfFilename,
+        content: pdfBuffer,
+      });
+      logger.info('Adding PDF attachment to email', {
+        filename: pdfFilename,
+        size: pdfBuffer.length,
+      });
+    }
+
+    // Add driver's license image attachment
     if (fileBuffer && licenseFile) {
       attachments.push({
         filename: licenseFile.name,
@@ -588,12 +657,75 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       });
     }
 
+    // Create or update CRM contact for visibility in CRM system
+    let crmContactId: string | null = null;
+    try {
+      // Check if CRM contact already exists for this email
+      const existingContact = await prisma.cRMContact.findUnique({
+        where: { email: taxFormData.email.toLowerCase() },
+      });
+
+      if (existingContact) {
+        // Update existing contact with latest data
+        await prisma.cRMContact.update({
+          where: { id: existingContact.id },
+          data: {
+            firstName: taxFormData.first_name,
+            lastName: taxFormData.last_name,
+            phone: taxFormData.phone,
+            filingStatus: taxFormData.filing_status,
+            taxYear: tax_year,
+            // Don't change stage if already past NEW
+            stage: existingContact.stage === 'NEW' ? PipelineStage.NEW : existingContact.stage,
+            // Update preparer assignment if not already assigned
+            assignedPreparerId: existingContact.assignedPreparerId || preparer.id,
+            lastContactedAt: new Date(),
+          },
+        });
+        crmContactId = existingContact.id;
+        logger.info('CRM contact updated', {
+          contactId: existingContact.id,
+          email: taxFormData.email,
+        });
+      } else {
+        // Create new CRM contact
+        const newContact = await CRMService.createContact({
+          contactType: ContactType.CLIENT,
+          firstName: taxFormData.first_name,
+          lastName: taxFormData.last_name,
+          email: taxFormData.email.toLowerCase(),
+          phone: taxFormData.phone,
+          filingStatus: taxFormData.filing_status,
+          taxYear: tax_year,
+          source: 'tax_intake_form',
+          assignedPreparerId: preparer.id,
+          referrerUsername: preparerCode,
+          referrerType: 'TAX_PREPARER',
+          attributionMethod: 'ref_param',
+        });
+        crmContactId = newContact.id;
+        logger.info('CRM contact created', {
+          contactId: newContact.id,
+          email: taxFormData.email,
+          assignedPreparerId: preparer.id,
+        });
+      }
+    } catch (crmError) {
+      // Log error but don't fail the response - email and lead were already processed
+      logger.error('Failed to create/update CRM contact', {
+        error: crmError,
+        email: taxFormData.email,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       emailId: emailResult.id,
       message: 'Tax form submitted and preparer notified',
       fileUploaded: !!uploadedFileUrl,
       documentId: documentRecord?.id,
+      crmContactId: crmContactId,
+      hasPdfAttachment: !!pdfBuffer,
     });
   } catch (error) {
     logger.error('Error submitting tax form:', error);
