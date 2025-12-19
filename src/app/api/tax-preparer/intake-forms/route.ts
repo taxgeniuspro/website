@@ -5,31 +5,32 @@ import { logger } from '@/lib/logger';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 
 /**
- * GET /api/tax-preparer/leads
- * Fetches TaxIntakeLead records for the authenticated tax preparer
- * These are prospects from the intake forms, not Clerk users yet
+ * GET /api/tax-preparer/intake-forms
+ * Fetches COMPLETE TaxIntakeLead records (intake forms with SSN, DOB, filing status)
+ * These are ready-to-file clients from full intake form submissions
  *
  * Query params:
  *  - preparerId: Filter by assigned preparer (optional, defaults to current user)
- *  - status: Filter by lead status (new, contacted, qualified, converted, all)
+ *  - status: Filter by intake status (new, contacted, converted, all)
  *  - search: Search by name, email, or phone
  *  - taxYear: Filter by tax year (optional, defaults to current filing year, use 'all' for all years)
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const user = session?.user;
+    const session = await auth();
+    const user = session?.user;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' ;
+    const isAdmin = role === 'admin';
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {
       return NextResponse.json(
-        { error: 'Forbidden: Only tax preparers and admins can access leads' },
+        { error: 'Forbidden: Only tax preparers and admins can access intake forms' },
         { status: 403 }
       );
     }
@@ -44,9 +45,9 @@ export async function GET(req: NextRequest) {
     // Build where clause
     const where: any = {};
 
-    // CRITICAL: Only show incomplete leads (basic contact info only)
-    // Complete intake forms (with SSN, DOB, filing status) go to /api/tax-preparer/intake-forms
-    where.completed = false;
+    // CRITICAL: Only show COMPLETE intake forms (full tax data with SSN, DOB, filing status)
+    // Basic leads (incomplete) stay in /api/tax-preparer/leads
+    where.completed = true;
 
     // Filter by tax year (default to current filing year, 'all' shows all years)
     if (taxYearParam !== 'all') {
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       where.tax_year = taxYear;
     }
 
-    // Tax preparers can only see their own assigned leads
+    // Tax preparers can only see their own assigned intake forms
     if (isTaxPreparer) {
       // Get preparer profile ID
       const preparerProfile = await prisma.profile.findUnique({
@@ -85,8 +86,8 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // Fetch all leads (we'll filter by status in memory for derived statuses)
-    const leads = await prisma.taxIntakeLead.findMany({
+    // Fetch all complete intake forms
+    const intakeForms = await prisma.taxIntakeLead.findMany({
       where,
       orderBy: { created_at: 'desc' },
       include: {
@@ -101,11 +102,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Fetch CRM contact IDs for each lead by email
-    const leadEmails = leads.map(l => l.email.toLowerCase());
+    // Fetch CRM contact IDs for each intake by email
+    const intakeEmails = intakeForms.map(i => i.email.toLowerCase());
     const crmContacts = await prisma.cRMContact.findMany({
       where: {
-        email: { in: leadEmails },
+        email: { in: intakeEmails },
       },
       select: {
         id: true,
@@ -118,53 +119,53 @@ export async function GET(req: NextRequest) {
       crmContacts.map(c => [c.email.toLowerCase(), c.id])
     );
 
-    // Determine lead status and filter
-    const getLeadStatus = (lead: any): string => {
-      // Unqualified takes precedence - we can't help this lead
-      if (lead.unqualified) return 'unqualified';
+    // Determine intake status
+    const getIntakeStatus = (intake: any): string => {
+      // Unqualified takes precedence
+      if (intake.unqualified) return 'unqualified';
       // Complete = has convertedAt timestamp (return filed)
-      if (lead.convertedToClient && lead.convertedAt) return 'complete';
-      if (lead.convertedToClient) return 'converted';
-      if (lead.contactNotes && lead.lastContactedAt) return 'qualified';
-      if (lead.lastContactedAt) return 'contacted';
+      if (intake.convertedToClient && intake.convertedAt) return 'complete';
+      if (intake.convertedToClient) return 'converted';
+      if (intake.contactNotes && intake.lastContactedAt) return 'qualified';
+      if (intake.lastContactedAt) return 'contacted';
       return 'new';
     };
 
-    const leadsWithStatus = leads.map(lead => ({
-      ...lead,
-      status: getLeadStatus(lead),
-      crmContactId: emailToCrmId.get(lead.email.toLowerCase()) || null,
+    const intakeFormsWithStatus = intakeForms.map(intake => ({
+      ...intake,
+      status: getIntakeStatus(intake),
+      crmContactId: emailToCrmId.get(intake.email.toLowerCase()) || null,
     }));
 
     // Filter by status if provided
-    const filteredLeads = statusFilter && statusFilter !== 'all'
-      ? leadsWithStatus.filter(lead => lead.status === statusFilter)
-      : leadsWithStatus;
+    const filteredIntakeForms =
+      statusFilter && statusFilter !== 'all'
+        ? intakeFormsWithStatus.filter(intake => intake.status === statusFilter)
+        : intakeFormsWithStatus;
 
     // Calculate stats
     const stats = {
-      total: leads.length,
-      new: leadsWithStatus.filter(l => l.status === 'new').length,
-      contacted: leadsWithStatus.filter(l => l.status === 'contacted').length,
-      qualified: leadsWithStatus.filter(l => l.status === 'qualified').length,
-      converted: leadsWithStatus.filter(l => l.status === 'converted').length,
-      complete: leadsWithStatus.filter(l => l.status === 'complete').length,
-      unqualified: leadsWithStatus.filter(l => l.status === 'unqualified').length,
+      total: intakeForms.length,
+      new: intakeFormsWithStatus.filter(i => i.status === 'new').length,
+      contacted: intakeFormsWithStatus.filter(i => i.status === 'contacted').length,
+      qualified: intakeFormsWithStatus.filter(i => i.status === 'qualified').length,
+      converted: intakeFormsWithStatus.filter(i => i.status === 'converted').length,
+      complete: intakeFormsWithStatus.filter(i => i.status === 'complete').length,
+      unqualified: intakeFormsWithStatus.filter(i => i.status === 'unqualified').length,
     };
 
-    logger.info(`📋 Fetched ${filteredLeads.length} leads for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`);
+    logger.info(
+      `📋 Fetched ${filteredIntakeForms.length} intake forms for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
+    );
 
     return NextResponse.json({
       success: true,
-      leads: filteredLeads,
+      intakeForms: filteredIntakeForms,
       stats,
       currentFilingYear: getCurrentFilingTaxYear(),
     });
   } catch (error) {
-    logger.error('Error fetching tax preparer leads:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch leads' },
-      { status: 500 }
-    );
+    logger.error('Error fetching tax preparer intake forms:', error);
+    return NextResponse.json({ error: 'Failed to fetch intake forms' }, { status: 500 });
   }
 }

@@ -71,6 +71,15 @@ export async function POST(req: NextRequest) {
     // Check if this is a complete tax intake (has SSN and other tax fields) or just basic contact
     const isCompleteTaxIntake = Boolean(ssn && date_of_birth && filing_status);
 
+    // Log intake type detection for debugging
+    logger.info('Tax intake form type detection', {
+      isCompleteTaxIntake,
+      hasSSN: !!ssn,
+      hasDOB: !!date_of_birth,
+      hasFilingStatus: !!filing_status,
+      email,
+    });
+
     // Check for ref parameter in URL
     const refParam = req.nextUrl.searchParams.get('ref');
     let refOverride = null;
@@ -208,6 +217,8 @@ export async function POST(req: NextRequest) {
           state,
           zip_code,
           updated_at: new Date(),
+          // Mark as completed if all tax fields are present
+          completed: isCompleteTaxIntake,
           // EPIC 6: Attribution fields (update on re-submit)
           referrerUsername: attributionResult.attribution.referrerUsername,
           referrerType: attributionResult.attribution.referrerType,
@@ -237,6 +248,8 @@ export async function POST(req: NextRequest) {
           state,
           zip_code,
           tax_year, // Include the tax year
+          // Mark as completed if all tax fields are present (intake form vs lead)
+          completed: isCompleteTaxIntake,
           // EPIC 6: Attribution fields
           referrerUsername: attributionResult.attribution.referrerUsername,
           referrerType: attributionResult.attribution.referrerType,
