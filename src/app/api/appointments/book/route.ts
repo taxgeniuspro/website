@@ -8,6 +8,7 @@ import { trackJourneyStage } from '@/lib/services/journey-tracking.service';
 import { getUTMCookie } from '@/lib/utils/cookie-manager';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { addMinutes } from 'date-fns';
+import { generateAppointmentPDF } from '@/lib/services/pdf-form-generator.service';
 
 /**
  * POST /api/appointments/book - Book an appointment
@@ -362,12 +363,46 @@ export async function POST(req: NextRequest) {
           logger.info('Appointment confirmation email sent', { emailId: data?.id });
         }
 
+        // Generate PDF attachment with all appointment data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateAppointmentPDF({
+            id: appointment.id,
+            clientName,
+            clientEmail,
+            clientPhone,
+            appointmentType,
+            scheduledFor: scheduledDate || undefined,
+            duration,
+            timezone,
+            notes,
+            preparerName,
+            status: appointmentStatus,
+            createdAt: appointment.createdAt,
+          });
+          pdfAttachment = {
+            filename: `Appointment_${firstName}_${appointment.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for appointment', {
+            appointmentId: appointment.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for appointment', {
+            error: pdfError,
+            appointmentId: appointment.id,
+          });
+        }
+
         // Also send notification to business admin using centralized email routing
         const { EMAIL_ROUTING } = await import('@/config/email-routing');
         await getResendClient().emails.send({
           from: fromEmail,
-          to: EMAIL_ROUTING.EN.primary,
-          cc: EMAIL_ROUTING.ADMIN,
+          to: [EMAIL_ROUTING.EN.primary],
+          cc: [EMAIL_ROUTING.ADMIN],
           bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
           subject: `New Appointment Request: ${clientName} - ${appointmentType}`,
           html: `
@@ -381,6 +416,8 @@ export async function POST(req: NextRequest) {
             <p><strong>Appointment ID:</strong> ${appointment.id}</p>
             <p><a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'}/admin/database?search=${clientEmail}">View in Admin Dashboard</a></p>
           `,
+          // Attach PDF with all appointment data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
         });
       }
     } catch (emailError) {

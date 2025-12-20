@@ -5,6 +5,7 @@ import { getResendClient } from '@/lib/resend';
 import { CashAdvanceLeadNotification } from '../../../../../emails/cash-advance-lead-notification';
 import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { getEmailRecipients } from '@/config/email-routing';
+import { generateCashAdvancePDF } from '@/lib/services/pdf-form-generator.service';
 
 /**
  * POST /api/cash-advance/submit - Handle preseason cash advance lead form submissions
@@ -300,6 +301,38 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
           bestTimeToContact,
         });
       } else {
+        // Generate PDF attachment with all form data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateCashAdvancePDF({
+            id: crmContact.id,
+            firstName,
+            phone: phoneDigits,
+            email: email || undefined,
+            zipCode,
+            preferredFiling,
+            bestTimeToContact,
+            referrerUsername: ref || undefined,
+            referrerType: ref ? 'tax_preparer' : undefined,
+            createdAt: new Date(),
+          });
+          pdfAttachment = {
+            filename: `CashAdvanceLead_${firstName}_${crmContact.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for cash advance lead', {
+            contactId: crmContact.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for cash advance lead', {
+            error: pdfError,
+            contactId: crmContact.id,
+          });
+        }
+
         const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
           to: [primaryRecipient],
@@ -320,6 +353,8 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
               ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
               : undefined,
           }),
+          // Attach PDF with all form data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
         });
 
         if (error) {
@@ -329,6 +364,7 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
             emailId: data?.id,
             to: primaryRecipient,
             cc: recipients.cc,
+            hasPdf: !!pdfAttachment,
           });
         }
       }

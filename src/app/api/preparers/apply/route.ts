@@ -5,6 +5,7 @@ import { getResendClient } from '@/lib/resend';
 import { PreparerApplicationConfirmation } from '../../../../../emails/preparer-application-confirmation';
 import { PreparerApplicationNotification } from '../../../../../emails/preparer-application-notification';
 import { getEmailRecipients } from '@/config/email-routing';
+import { generatePreparerApplicationPDF } from '@/lib/services/pdf-form-generator.service';
 
 // POST /api/preparers/apply - Submit tax preparer application
 export async function POST(req: NextRequest) {
@@ -195,39 +196,73 @@ export async function POST(req: NextRequest) {
           ccRecipient: recipients.cc,
         });
 
-        const hiringEmails = [recipients.primary, recipients.cc];
-
-        for (let i = 0; i < hiringEmails.length; i++) {
-          const hiringEmail = hiringEmails[i];
-
-          // Add delay between emails to respect rate limits (2 emails/sec)
-          if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay
-          }
-
-          const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
-            from: fromEmail,
-            to: hiringEmail,
-            bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
-            subject: `🌐 New Tax Preparer Application: ${firstName} ${lastName}`,
-            react: PreparerApplicationNotification({
-              firstName,
-              middleName,
-              lastName,
-              email,
-              phone,
-              languages,
-              experienceLevel,
-              taxSoftware,
-              applicationId: application.id,
-            }),
+        // Generate PDF attachment with all form data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generatePreparerApplicationPDF({
+            id: application.id,
+            firstName,
+            lastName,
+            middleName,
+            email,
+            phone,
+            languages,
+            experienceLevel,
+            taxSoftware,
+            createdAt: application.createdAt,
           });
+          pdfAttachment = {
+            filename: `PreparerApplication_${lastName}_${application.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for preparer application', {
+            applicationId: application.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for preparer application', {
+            error: pdfError,
+            applicationId: application.id,
+          });
+        }
 
-          if (notifyError) {
-            logger.error(`Failed to send hiring team notification to ${hiringEmail}`, notifyError);
-          } else {
-            logger.info(`Hiring team notification sent to ${hiringEmail}`, { emailId: notifyData?.id });
-          }
+        // Send single email with CC instead of looping
+        const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
+          from: fromEmail,
+          to: [recipients.primary],
+          cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
+          subject: `🌐 New Tax Preparer Application: ${firstName} ${lastName}`,
+          react: PreparerApplicationNotification({
+            firstName,
+            middleName,
+            lastName,
+            email,
+            phone,
+            languages,
+            experienceLevel,
+            taxSoftware,
+            applicationId: application.id,
+          }),
+          // Attach PDF with all form data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
+        });
+
+        if (notifyError) {
+          logger.error('Failed to send hiring team notification', {
+            error: notifyError,
+            to: recipients.primary,
+            cc: recipients.cc,
+          });
+        } else {
+          logger.info('Hiring team notification sent', {
+            emailId: notifyData?.id,
+            to: recipients.primary,
+            cc: recipients.cc,
+            hasPdf: !!pdfAttachment,
+          });
         }
       }
     } catch (emailError) {
