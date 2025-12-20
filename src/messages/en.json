@@ -397,7 +397,7 @@
       "additionalInfoTitle": "Additional Information",
       "whyAffiliate": "Why do you want to become an affiliate?",
       "whyAffiliatePlaceholder": "Tell us why you're interested in our affiliate program...",
-      "agreeToTerms": "I agree to the {termsLink} and {privacyLink}. I understand that my application will be reviewed and I'll receive login credentials once approved.",
+      "agreeToTerms": "I agree to the <termsLink>Terms and Conditions</termsLink> and <privacyLink>Privacy Policy</privacyLink>. I understand that my application will be reviewed and I'll receive login credentials once approved.",
       "termsAndConditions": "Terms and Conditions",
       "privacyPolicy": "Privacy Policy",
       "submitButton": "Submit Application",

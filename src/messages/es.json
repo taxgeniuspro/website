@@ -397,7 +397,7 @@
       "additionalInfoTitle": "Información Adicional",
       "whyAffiliate": "¿Por qué quiere convertirse en afiliado?",
       "whyAffiliatePlaceholder": "Cuéntenos por qué está interesado en nuestro programa de afiliados...",
-      "agreeToTerms": "Acepto los {termsLink} y la {privacyLink}. Entiendo que mi solicitud será revisada y recibiré credenciales de inicio de sesión una vez aprobada.",
+      "agreeToTerms": "Acepto los <termsLink>Términos y Condiciones</termsLink> y la <privacyLink>Política de Privacidad</privacyLink>. Entiendo que mi solicitud será revisada y recibiré credenciales de inicio de sesión una vez aprobada.",
       "termsAndConditions": "Términos y Condiciones",
       "privacyPolicy": "Política de Privacidad",
       "submitButton": "Enviar Solicitud",
