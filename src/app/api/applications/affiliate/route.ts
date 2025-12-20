@@ -340,10 +340,12 @@ async function queueAdminNotification(lead: any, bondedPreparerId: string | null
     });
 
     // Send email with CC to ensure both recipients get it
+    // Using array format for 'to' for consistency with other forms
     const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
       from: fromEmail,
-      to: recipients.primary,
+      to: [recipients.primary],
       cc: [recipients.cc],
+      bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
       subject: `🌐 New Affiliate Application: ${lead.firstName} ${lead.lastName}${bondedPreparerId ? ' (Bonding Request)' : ''}`,
       react: AffiliateApplicationNotification({
         firstName: lead.firstName,
@@ -458,13 +460,20 @@ async function queuePreparerNotification(preparerId: string, lead: any) {
       return;
     }
 
-    // Get preparer's email
+    // Get preparer's email from User model (email is on User, not Profile)
     const preparer = await prisma.profile.findUnique({
       where: { id: preparerId },
-      select: { email: true, firstName: true, lastName: true },
+      select: {
+        firstName: true,
+        lastName: true,
+        user: {
+          select: { email: true }
+        }
+      },
     });
 
-    if (!preparer?.email) {
+    const preparerEmail = preparer?.user?.email;
+    if (!preparerEmail) {
       logger.warn('Preparer email not found', { preparerId });
       return;
     }
@@ -473,7 +482,7 @@ async function queuePreparerNotification(preparerId: string, lead: any) {
 
     const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
       from: fromEmail,
-      to: preparer.email,
+      to: preparerEmail,
       subject: `New Affiliate Bonding Request from ${lead.firstName} ${lead.lastName}`,
       html: `
         <h2>New Affiliate Bonding Request</h2>
