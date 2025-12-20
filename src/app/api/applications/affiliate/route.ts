@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     if (!allowDuplicates) {
       const existingLead = await prisma.lead.findFirst({
-        where: { email: validatedData.email, type: 'affiliate' },
+        where: { email: validatedData.email, type: 'AFFILIATE' },
       });
 
       if (existingLead) {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const lead = await prisma.lead.create({
       data: {
-        type: 'affiliate',
+        type: 'AFFILIATE',
         status: 'NEW',
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,

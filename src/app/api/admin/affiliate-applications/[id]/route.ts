@@ -32,7 +32,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     const application = await prisma.lead.findFirst({
-      where: { id, type: 'affiliate' },
+      where: { id, type: 'AFFILIATE' },
     });
 
     if (!application) {
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { action, notes } = body;
 
     const application = await prisma.lead.findFirst({
-      where: { id, type: 'affiliate' },
+      where: { id, type: 'AFFILIATE' },
     });
 
     if (!application) {
@@ -239,7 +239,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     await prisma.lead.delete({
-      where: { id, type: 'affiliate' },
+      where: { id },
     });
 
     logger.info('Affiliate application deleted', { leadId: id });
