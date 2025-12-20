@@ -144,77 +144,66 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // Handle Google OAuth account linking
-      // This fixes OAuthAccountNotLinked error when user exists with same email
+      // For Google OAuth - DO NOT auto-link to existing accounts
+      // Each new Google signup gets their own unique account
       if (account?.provider === 'google' && user?.email) {
         try {
-          // Check if user already exists with this email
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email.toLowerCase() },
+          // Check if this Google account is already linked to a user
+          const existingAccount = await prisma.account.findUnique({
+            where: {
+              provider_providerAccountId: {
+                provider: 'google',
+                providerAccountId: account.providerAccountId,
+              },
+            },
             include: {
-              accounts: true,
-              profile: true,
+              user: {
+                include: { profile: true },
+              },
             },
           });
 
-          if (existingUser) {
-            // Check if Google account is already linked
-            const hasGoogleAccount = existingUser.accounts.some(
-              (acc) => acc.provider === 'google'
-            );
-
-            if (!hasGoogleAccount && account.providerAccountId) {
-              // Manually link the Google account to existing user
-              logger.info('Linking Google account to existing user', {
-                userId: existingUser.id,
-                email: user.email,
-              });
-
-              await prisma.account.create({
-                data: {
-                  userId: existingUser.id,
-                  type: account.type,
-                  provider: account.provider,
-                  providerAccountId: account.providerAccountId,
-                  access_token: account.access_token,
-                  refresh_token: account.refresh_token,
-                  expires_at: account.expires_at,
-                  token_type: account.token_type,
-                  scope: account.scope,
-                  id_token: account.id_token,
-                },
-              });
-
-              // Update user object to use existing user's ID
-              // This is crucial - NextAuth needs to use the existing user's ID
-              (user as NextAuthUser & { id: string }).id = existingUser.id;
-            } else if (hasGoogleAccount) {
-              // Google account already linked - use existing user ID
-              (user as NextAuthUser & { id: string }).id = existingUser.id;
-            }
-
+          if (existingAccount) {
+            // This Google account is already linked - allow sign in
             // Check if user is deactivated
-            if (existingUser.profile?.isActive === false) {
+            if (existingAccount.user.profile?.isActive === false) {
               logger.warn('Deactivated user attempted to sign in', {
-                userId: existingUser.id,
+                userId: existingAccount.user.id,
                 email: user.email,
               });
               return '/suspended';
             }
 
             // Attach role from existing profile
-            if (existingUser.profile?.role) {
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
+            if (existingAccount.user.profile?.role) {
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingAccount.user.profile.role;
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingAccount.user.profile.isActive ?? true;
             } else {
               (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
               (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
             }
 
+            logger.info('Existing Google account signing in', {
+              userId: existingAccount.user.id,
+              email: user.email,
+            });
             return true;
           }
+
+          // This is a NEW Google account - let NextAuth create a new user
+          // DO NOT link to any existing user by email - each Google signup gets their own account
+          logger.info('New Google OAuth signup - creating fresh account', {
+            email: user.email,
+            providerAccountId: account.providerAccountId,
+          });
+
+          // Set default role for new users
+          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
+          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
+
+          return true;
         } catch (error) {
-          logger.error('Error during Google OAuth account linking', { error, email: user.email });
+          logger.error('Error during Google OAuth sign-in check', { error, email: user.email });
           // Continue with normal flow - let NextAuth handle it
         }
       }
