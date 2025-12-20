@@ -395,9 +395,9 @@ function AffiliateApplicationForm() {
                   htmlFor="terms"
                   className="text-sm leading-relaxed peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  {t('agreeToTerms', {
-                    termsLink: <a href="/terms" className="text-primary hover:underline" target="_blank">{t('termsAndConditions')}</a>,
-                    privacyLink: <a href="/privacy" className="text-primary hover:underline" target="_blank">{t('privacyPolicy')}</a>
+                  {t.rich('agreeToTerms', {
+                    termsLink: (chunks) => <a href="/terms" className="text-primary hover:underline" target="_blank">{chunks}</a>,
+                    privacyLink: (chunks) => <a href="/privacy" className="text-primary hover:underline" target="_blank">{chunks}</a>
                   })}
                 </label>
               </div>
