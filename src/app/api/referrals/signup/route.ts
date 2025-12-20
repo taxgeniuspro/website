@@ -4,6 +4,7 @@ import { customAlphabet } from 'nanoid';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { getEmailRecipients } from '@/config/email-routing';
+import { generateReferralSignupPDF } from '@/lib/services/pdf-form-generator.service';
 
 // Generate unique referral codes
 const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 8);
@@ -186,6 +187,36 @@ This person has joined the referral program and can now start earning commission
           referralLink,
         });
       } else {
+        // Generate PDF attachment with all referral signup data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateReferralSignupPDF({
+            id: application.id,
+            firstName,
+            lastName,
+            email,
+            phone,
+            referralCode,
+            referralLink,
+            createdAt: application.createdAt,
+          });
+          pdfAttachment = {
+            filename: `ReferralSignup_${lastName}_${application.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for referral signup', {
+            applicationId: application.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for referral signup', {
+            error: pdfError,
+            applicationId: application.id,
+          });
+        }
+
         // Send notification to admin team (primary + CC)
         const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
@@ -217,6 +248,8 @@ This person has joined the referral program and can now start earning commission
             <hr />
             <p style="color: #666; font-size: 12px;">This is an automated notification from Tax Genius Pro</p>
           `,
+          // Attach PDF with all referral data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
         });
 
         if (error) {
@@ -225,7 +258,8 @@ This person has joined the referral program and can now start earning commission
           logger.info('Referral signup notification email sent', {
             emailId: data?.id,
             to: recipients.primary,
-            cc: recipients.cc
+            cc: recipients.cc,
+            hasPdf: !!pdfAttachment,
           });
         }
       }

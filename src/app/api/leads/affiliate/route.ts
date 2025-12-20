@@ -7,12 +7,13 @@ import {
   handleApiError,
   createLeadSuccessResponse,
   getLeadSuccessMessage,
-  queueAdminNotification,
-  queueConfirmationEmail,
   commonLeadFields,
 } from '@/lib/api-helpers/lead-helpers';
 import { getAttribution } from '@/lib/services/attribution.service';
 import { logger } from '@/lib/logger';
+import { getResendClient } from '@/lib/resend';
+import { getEmailRecipients } from '@/config/email-routing';
+import { generateAffiliateLeadPDF } from '@/lib/services/pdf-form-generator.service';
 
 // Validation schema
 const affiliateLeadSchema = z.object({
@@ -150,11 +151,112 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
       });
     }
 
-    // Queue notifications (async, non-blocking)
-    await Promise.allSettled([
-      queueAdminNotification('affiliate', lead),
-      queueConfirmationEmail('affiliate', lead.email, lead.firstName),
-    ]);
+    // ========================================
+    // EMAIL NOTIFICATION: Send admin notification with PDF
+    // ========================================
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax';
+    const recipients = getEmailRecipients('en'); // Affiliate leads default to English
+
+    try {
+      if (process.env.NODE_ENV !== 'development') {
+        // Generate PDF attachment with all lead data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateAffiliateLeadPDF({
+            id: lead.id,
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            email: lead.email,
+            phone: lead.phone,
+            experience: validatedData.experience,
+            audience: validatedData.audience,
+            message: validatedData.message,
+            source: lead.source,
+            referrerUsername: lead.referrerUsername,
+            referrerType: lead.referrerType,
+            createdAt: lead.createdAt,
+          });
+          pdfAttachment = {
+            filename: `AffiliateLead_${lead.lastName}_${lead.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for affiliate lead', {
+            leadId: lead.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for affiliate lead', {
+            error: pdfError,
+            leadId: lead.id,
+          });
+        }
+
+        // Send admin notification email
+        const { data, error } = await getResendClient().emails.send({
+          from: fromEmail,
+          to: [recipients.primary],
+          cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
+          subject: `🤝 New Affiliate Lead: ${lead.firstName} ${lead.lastName}`,
+          html: `
+            <h2>New Affiliate Lead</h2>
+
+            <h3>Contact Information:</h3>
+            <ul>
+              <li><strong>Name:</strong> ${lead.firstName} ${lead.lastName}</li>
+              <li><strong>Email:</strong> ${lead.email}</li>
+              <li><strong>Phone:</strong> ${lead.phone}</li>
+            </ul>
+
+            <h3>Marketing Details:</h3>
+            <ul>
+              <li><strong>Experience:</strong> ${validatedData.experience || 'Not specified'}</li>
+              <li><strong>Audience:</strong> ${validatedData.audience || 'Not specified'}</li>
+            </ul>
+
+            ${validatedData.message ? `<h3>Message:</h3><p>${validatedData.message}</p>` : ''}
+
+            <h3>Attribution:</h3>
+            <ul>
+              <li><strong>Method:</strong> ${attributionResult.attribution.attributionMethod || 'Direct'}</li>
+              ${attributionResult.attribution.referrerUsername ? `<li><strong>Referrer:</strong> ${attributionResult.attribution.referrerUsername} (${attributionResult.attribution.referrerType})</li>` : ''}
+              <li><strong>Source:</strong> ${lead.source || 'Unknown'}</li>
+            </ul>
+
+            <p><strong>Lead ID:</strong> ${lead.id}</p>
+            <p><a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'}/admin/database?search=${lead.email}">View in Admin Dashboard</a></p>
+
+            <hr />
+            <p style="color: #666; font-size: 12px;">This is an automated notification from Tax Genius Pro</p>
+          `,
+          // Attach PDF with all lead data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
+        });
+
+        if (error) {
+          logger.error('Failed to send affiliate lead notification email', error);
+        } else {
+          logger.info('Affiliate lead notification email sent', {
+            emailId: data?.id,
+            to: recipients.primary,
+            cc: recipients.cc,
+            hasPdf: !!pdfAttachment,
+          });
+        }
+      } else {
+        logger.info('Affiliate lead email (Dev Mode)', {
+          to: recipients.primary,
+          cc: recipients.cc,
+          from: fromEmail,
+          leadId: lead.id,
+        });
+      }
+    } catch (emailError) {
+      logger.error('Error sending affiliate lead email', emailError);
+      // Continue - database save succeeded
+    }
 
     return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('affiliate'));
   } catch (error) {

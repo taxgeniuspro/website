@@ -16,6 +16,7 @@ import { getResendClient } from '@/lib/resend';
 import { AffiliateApplicationConfirmation } from '../../../../../emails/affiliate-application-confirmation';
 import { AffiliateApplicationNotification } from '../../../../../emails/affiliate-application-notification';
 import { getEmailRecipients } from '@/config/email-routing';
+import { generateAffiliateApplicationPDF } from '@/lib/services/pdf-form-generator.service';
 
 // Validation schema
 const affiliateApplicationSchema = z.object({
@@ -339,6 +340,41 @@ async function queueAdminNotification(lead: any, bondedPreparerId: string | null
       ccRecipient: recipients.cc,
     });
 
+    // Generate PDF attachment with all form data
+    let pdfAttachment: { filename: string; content: Buffer } | undefined;
+    try {
+      const pdfBuffer = await generateAffiliateApplicationPDF({
+        id: lead.id,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        email: lead.email,
+        phone: lead.phone,
+        experience: lead.marketingExperience,
+        audience: lead.audience,
+        platforms,
+        website,
+        socialMedia,
+        message: originalMessage,
+        bondedPreparerId,
+        createdAt: lead.createdAt,
+      });
+      pdfAttachment = {
+        filename: `AffiliateApplication_${lead.lastName}_${lead.id.slice(-6).toUpperCase()}.pdf`,
+        content: pdfBuffer,
+      };
+      logger.info('PDF generated for affiliate application', {
+        leadId: lead.id,
+        filename: pdfAttachment.filename,
+        size: pdfBuffer.length,
+      });
+    } catch (pdfError) {
+      // Log error but don't fail - email still sends without attachment
+      logger.error('Failed to generate PDF for affiliate application', {
+        error: pdfError,
+        leadId: lead.id,
+      });
+    }
+
     // Send email with CC to ensure both recipients get it
     // Using array format for 'to' for consistency with other forms
     const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
@@ -363,6 +399,8 @@ async function queueAdminNotification(lead: any, bondedPreparerId: string | null
         locale: (locale as 'en' | 'es') || 'en',
         recipientName: recipients.recipientName,
       }),
+      // Attach PDF with all form data
+      ...(pdfAttachment && { attachments: [pdfAttachment] }),
     });
 
     if (notifyError) {

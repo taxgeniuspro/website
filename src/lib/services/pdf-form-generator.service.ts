@@ -209,6 +209,117 @@ interface ContactFormData {
   createdAt: Date | string;
 }
 
+// Affiliate Application Data
+interface AffiliateApplicationData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  experience?: string | null;
+  audience?: string | null;
+  platforms?: string[] | null;
+  website?: string | null;
+  socialMedia?: {
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+    tiktok?: string;
+    youtube?: string;
+  } | null;
+  message?: string | null;
+  bondedPreparerId?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
+// Preparer Application Data
+interface PreparerApplicationData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string | null;
+  email: string;
+  phone: string;
+  languages: string;
+  experienceLevel: string;
+  taxSoftware?: string[] | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
+// Cash Advance Lead Data
+interface CashAdvanceData {
+  id: string;
+  firstName: string;
+  phone: string;
+  email?: string | null;
+  zipCode: string;
+  preferredFiling?: string | null;
+  bestTimeToContact?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
+// Appointment Booking Data
+interface AppointmentData {
+  id: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  appointmentType: string;
+  scheduledFor?: Date | string | null;
+  duration?: number | null;
+  notes?: string | null;
+  timezone?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
+// Referral Signup Data
+interface ReferralSignupData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  referralCode: string;
+  createdAt: Date | string;
+}
+
+// Customer Lead Data
+interface CustomerLeadData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  taxSituation?: string | null;
+  estimatedIncome?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
+// Affiliate Lead Data (simple form)
+interface AffiliateLeadData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  experience?: string | null;
+  audience?: string | null;
+  message?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  createdAt: Date | string;
+}
+
 // Constants
 const PAGE_WIDTH = 612; // US Letter width in points (8.5")
 const PAGE_HEIGHT = 792; // US Letter height in points (11")
@@ -707,6 +818,756 @@ export async function generateContactFormPDF(data: ContactFormData): Promise<Buf
 
   doc.text(messageLines, MARGIN, y);
   y += messageLines.length * 14 + 16;
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Affiliate Application
+ */
+export async function generateAffiliateApplicationPDF(data: AffiliateApplicationData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Affiliate Application');
+
+  // Personal Information Section
+  y = addSectionHeader(doc, 'PERSONAL INFORMATION', y);
+
+  const fullName = `${data.firstName} ${data.lastName}`;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Full Name:', titleCase(fullName)],
+      ['Email Address:', data.email.toLowerCase()],
+      ['Phone Number:', formatPhone(data.phone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Marketing Experience Section
+  y = addSectionHeader(doc, 'MARKETING EXPERIENCE', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Experience:', data.experience || 'Not specified'],
+      ['Target Audience:', data.audience || 'Not specified'],
+      ['Platforms:', data.platforms?.join(', ') || 'Not specified'],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Online Presence Section
+  y = addSectionHeader(doc, 'ONLINE PRESENCE', y);
+
+  const onlineRows: string[][] = [
+    ['Website:', data.website || 'Not provided'],
+  ];
+
+  if (data.socialMedia) {
+    if (data.socialMedia.facebook) onlineRows.push(['Facebook:', data.socialMedia.facebook]);
+    if (data.socialMedia.instagram) onlineRows.push(['Instagram:', data.socialMedia.instagram]);
+    if (data.socialMedia.twitter) onlineRows.push(['Twitter:', data.socialMedia.twitter]);
+    if (data.socialMedia.tiktok) onlineRows.push(['TikTok:', data.socialMedia.tiktok]);
+    if (data.socialMedia.youtube) onlineRows.push(['YouTube:', data.socialMedia.youtube]);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: onlineRows,
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Message Section
+  if (data.message) {
+    y = addSectionHeader(doc, 'ADDITIONAL MESSAGE', y);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+
+    const messageLines = doc.splitTextToSize(data.message, CONTENT_WIDTH);
+    doc.text(messageLines, MARGIN, y);
+    y += messageLines.length * 14 + 16;
+  }
+
+  // Bonding Information Section
+  if (data.bondedPreparerId) {
+    y = addSectionHeader(doc, 'BONDING REQUEST', y);
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: MARGIN, right: MARGIN },
+      theme: 'plain',
+      styles: {
+        fontSize: 10,
+        cellPadding: 4,
+        textColor: [0, 0, 0],
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 120 },
+        1: { cellWidth: CONTENT_WIDTH - 120 },
+      },
+      body: [
+        ['Bonded to Preparer:', data.bondedPreparerId],
+        ['Status:', 'Pending Approval'],
+      ],
+    });
+
+    y = doc.lastAutoTable.finalY + 16;
+  }
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Tax Preparer Application
+ */
+export async function generatePreparerApplicationPDF(data: PreparerApplicationData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Tax Preparer Application');
+
+  // Personal Information Section
+  y = addSectionHeader(doc, 'PERSONAL INFORMATION', y);
+
+  const fullName = [data.firstName, data.middleName, data.lastName]
+    .filter(Boolean)
+    .join(' ');
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Full Name:', titleCase(fullName)],
+      ['Email Address:', data.email.toLowerCase()],
+      ['Phone Number:', formatPhone(data.phone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Professional Details Section
+  y = addSectionHeader(doc, 'PROFESSIONAL DETAILS', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Languages:', data.languages],
+      ['Experience Level:', capitalize(data.experienceLevel)],
+      ['Tax Software:', data.taxSoftware?.join(', ') || 'Not specified'],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Cash Advance Lead
+ */
+export async function generateCashAdvancePDF(data: CashAdvanceData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Cash Advance Lead');
+
+  // Contact Information Section
+  y = addSectionHeader(doc, 'CONTACT INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['First Name:', titleCase(data.firstName)],
+      ['Phone Number:', formatPhone(data.phone)],
+      ['Email Address:', data.email?.toLowerCase() || 'Not provided'],
+      ['ZIP Code:', data.zipCode],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Preferences Section
+  y = addSectionHeader(doc, 'PREFERENCES', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Preferred Filing:', capitalize(data.preferredFiling)],
+      ['Best Time to Contact:', data.bestTimeToContact || 'Not specified'],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Appointment Booking
+ */
+export async function generateAppointmentPDF(data: AppointmentData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Appointment Booking');
+
+  // Client Information Section
+  y = addSectionHeader(doc, 'CLIENT INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Client Name:', titleCase(data.clientName)],
+      ['Email Address:', data.clientEmail.toLowerCase()],
+      ['Phone Number:', formatPhone(data.clientPhone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Appointment Details Section
+  y = addSectionHeader(doc, 'APPOINTMENT DETAILS', y);
+
+  const appointmentRows: string[][] = [
+    ['Appointment Type:', capitalize(data.appointmentType)],
+  ];
+
+  if (data.scheduledFor) {
+    appointmentRows.push(['Scheduled For:', formatDate(data.scheduledFor)]);
+  }
+
+  if (data.duration) {
+    appointmentRows.push(['Duration:', `${data.duration} minutes`]);
+  }
+
+  if (data.timezone) {
+    appointmentRows.push(['Timezone:', data.timezone]);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: appointmentRows,
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Notes Section
+  if (data.notes) {
+    y = addSectionHeader(doc, 'NOTES', y);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+
+    const notesLines = doc.splitTextToSize(data.notes, CONTENT_WIDTH);
+    doc.text(notesLines, MARGIN, y);
+    y += notesLines.length * 14 + 16;
+  }
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Referral Signup
+ */
+export async function generateReferralSignupPDF(data: ReferralSignupData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Referral Program Signup');
+
+  // Personal Information Section
+  y = addSectionHeader(doc, 'PERSONAL INFORMATION', y);
+
+  const fullName = `${data.firstName} ${data.lastName}`;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Full Name:', titleCase(fullName)],
+      ['Email Address:', data.email.toLowerCase()],
+      ['Phone Number:', formatPhone(data.phone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Referral Code Section
+  y = addSectionHeader(doc, 'REFERRAL CODE', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Assigned Code:', data.referralCode],
+      ['Referral Link:', `taxgeniuspro.tax/go/${data.referralCode}`],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Customer Lead
+ */
+export async function generateCustomerLeadPDF(data: CustomerLeadData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Customer Lead');
+
+  // Contact Information Section
+  y = addSectionHeader(doc, 'CONTACT INFORMATION', y);
+
+  const fullName = `${data.firstName} ${data.lastName}`;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Full Name:', titleCase(fullName)],
+      ['Email Address:', data.email.toLowerCase()],
+      ['Phone Number:', formatPhone(data.phone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Tax Information Section
+  y = addSectionHeader(doc, 'TAX INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Tax Situation:', data.taxSituation || 'Not specified'],
+      ['Estimated Income:', data.estimatedIncome || 'Not specified'],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Attribution Section
+  y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Referred By:', data.referrerUsername || 'Direct'],
+      ['Referrer Type:', capitalize(data.referrerType)],
+    ],
+  });
+
+  // Add footer
+  const refId = data.id.slice(-8).toUpperCase();
+  const submittedDate = formatDate(data.createdAt);
+  addFooter(doc, refId, submittedDate, 1, 1);
+
+  // Convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer');
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generate professional PDF for Affiliate Lead (simple form)
+ */
+export async function generateAffiliateLeadPDF(data: AffiliateLeadData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let y = addHeader(doc, 'Affiliate Lead');
+
+  // Personal Information Section
+  y = addSectionHeader(doc, 'PERSONAL INFORMATION', y);
+
+  const fullName = `${data.firstName} ${data.lastName}`;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Full Name:', titleCase(fullName)],
+      ['Email Address:', data.email.toLowerCase()],
+      ['Phone Number:', formatPhone(data.phone)],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Marketing Experience Section
+  y = addSectionHeader(doc, 'MARKETING EXPERIENCE', y);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: CONTENT_WIDTH - 120 },
+    },
+    body: [
+      ['Experience:', data.experience || 'Not specified'],
+      ['Target Audience:', data.audience || 'Not specified'],
+    ],
+  });
+
+  y = doc.lastAutoTable.finalY + 16;
+
+  // Message Section
+  if (data.message) {
+    y = addSectionHeader(doc, 'ADDITIONAL MESSAGE', y);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+
+    const messageLines = doc.splitTextToSize(data.message, CONTENT_WIDTH);
+    doc.text(messageLines, MARGIN, y);
+    y += messageLines.length * 14 + 16;
+  }
 
   // Attribution Section
   y = addSectionHeader(doc, 'REFERRAL INFORMATION', y);

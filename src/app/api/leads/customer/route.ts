@@ -7,14 +7,15 @@ import {
   handleApiError,
   createLeadSuccessResponse,
   getLeadSuccessMessage,
-  queueAdminNotification,
-  queueConfirmationEmail,
   commonLeadFields,
 } from '@/lib/api-helpers/lead-helpers';
 import { getAttribution, saveLeadAttribution } from '@/lib/services/attribution.service';
 import { checkLeadFraud, addFraudMetadata } from '@/lib/middleware/fraud-check.middleware';
 import { trackLeadSubmission } from '@/lib/analytics/ga4';
 import { logger } from '@/lib/logger';
+import { getResendClient } from '@/lib/resend';
+import { getEmailRecipients } from '@/config/email-routing';
+import { generateCustomerLeadPDF } from '@/lib/services/pdf-form-generator.service';
 
 // Validation schema
 const customerLeadSchema = z.object({
@@ -179,11 +180,109 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
       source: referer,
     });
 
-    // Queue notifications (async, non-blocking)
-    await Promise.allSettled([
-      queueAdminNotification('CUSTOMER', lead),
-      queueConfirmationEmail('CUSTOMER', lead.email, lead.firstName),
-    ]);
+    // ========================================
+    // EMAIL NOTIFICATION: Send admin notification with PDF
+    // ========================================
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax';
+    const recipients = getEmailRecipients('en'); // Customer leads default to English
+
+    try {
+      if (process.env.NODE_ENV !== 'development') {
+        // Generate PDF attachment with all lead data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateCustomerLeadPDF({
+            id: lead.id,
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            email: lead.email,
+            phone: lead.phone,
+            taxSituation: validatedData.taxSituation,
+            estimatedIncome: validatedData.estimatedIncome,
+            source: lead.source,
+            referrerUsername: lead.referrerUsername,
+            referrerType: lead.referrerType,
+            createdAt: lead.createdAt,
+          });
+          pdfAttachment = {
+            filename: `CustomerLead_${lead.lastName}_${lead.id.slice(-6).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for customer lead', {
+            leadId: lead.id,
+            filename: pdfAttachment.filename,
+            size: pdfBuffer.length,
+          });
+        } catch (pdfError) {
+          // Log error but don't fail - email still sends without attachment
+          logger.error('Failed to generate PDF for customer lead', {
+            error: pdfError,
+            leadId: lead.id,
+          });
+        }
+
+        // Send admin notification email
+        const { data, error } = await getResendClient().emails.send({
+          from: fromEmail,
+          to: [recipients.primary],
+          cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
+          subject: `💼 New Customer Lead: ${lead.firstName} ${lead.lastName}`,
+          html: `
+            <h2>New Customer Lead</h2>
+
+            <h3>Contact Information:</h3>
+            <ul>
+              <li><strong>Name:</strong> ${lead.firstName} ${lead.lastName}</li>
+              <li><strong>Email:</strong> ${lead.email}</li>
+              <li><strong>Phone:</strong> ${lead.phone}</li>
+            </ul>
+
+            <h3>Tax Information:</h3>
+            <ul>
+              <li><strong>Tax Situation:</strong> ${validatedData.taxSituation || 'Not specified'}</li>
+              <li><strong>Estimated Income:</strong> ${validatedData.estimatedIncome || 'Not specified'}</li>
+            </ul>
+
+            <h3>Attribution:</h3>
+            <ul>
+              <li><strong>Method:</strong> ${attributionResult.attribution.attributionMethod || 'Direct'}</li>
+              ${attributionResult.attribution.referrerUsername ? `<li><strong>Referrer:</strong> ${attributionResult.attribution.referrerUsername} (${attributionResult.attribution.referrerType})</li>` : ''}
+              <li><strong>Source:</strong> ${lead.source || 'Unknown'}</li>
+            </ul>
+
+            <p><strong>Lead ID:</strong> ${lead.id}</p>
+            <p><a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax'}/admin/database?search=${lead.email}">View in Admin Dashboard</a></p>
+
+            <hr />
+            <p style="color: #666; font-size: 12px;">This is an automated notification from Tax Genius Pro</p>
+          `,
+          // Attach PDF with all lead data
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
+        });
+
+        if (error) {
+          logger.error('Failed to send customer lead notification email', error);
+        } else {
+          logger.info('Customer lead notification email sent', {
+            emailId: data?.id,
+            to: recipients.primary,
+            cc: recipients.cc,
+            hasPdf: !!pdfAttachment,
+          });
+        }
+      } else {
+        logger.info('Customer lead email (Dev Mode)', {
+          to: recipients.primary,
+          cc: recipients.cc,
+          from: fromEmail,
+          leadId: lead.id,
+        });
+      }
+    } catch (emailError) {
+      logger.error('Error sending customer lead email', emailError);
+      // Continue - database save succeeded
+    }
 
     return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('CUSTOMER'));
   } catch (error) {
