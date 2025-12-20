@@ -65,7 +65,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      allowDangerousEmailAccountLinking: true, // Allow linking accounts with same email
+      allowDangerousEmailAccountLinking: false, // Disabled: New users must get their own accounts
       authorization: {
         params: {
           prompt: 'consent',
@@ -304,46 +304,53 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // If new user, create a profile with default client role
       // (Note: tax_preparer and affiliate roles require manual admin upgrade)
       if (isNewUser) {
-        // Parse name into firstName, middleName, lastName
-        const nameParts = user.name?.split(' ').filter(part => part.length > 0) || [];
-        let firstName = '';
-        let middleName: string | undefined;
-        let lastName = '';
-
-        if (nameParts.length === 1) {
-          // Only first name
-          firstName = nameParts[0];
-        } else if (nameParts.length === 2) {
-          // First and last name only
-          firstName = nameParts[0];
-          lastName = nameParts[1];
-        } else if (nameParts.length >= 3) {
-          // First, middle, and last name
-          firstName = nameParts[0];
-          // Take all middle parts except the last one as middle name
-          middleName = nameParts.slice(1, -1).join(' ');
-          lastName = nameParts[nameParts.length - 1];
-        }
-
-        const profile = await prisma.profile.create({
-          data: {
-            userId: user.id,
-            role: 'client',
-            firstName,
-            middleName,
-            lastName,
-            affiliateStatus: 'APPROVED',
-            affiliateApprovedAt: new Date(),
-          },
-        });
-
-        // Assign tracking code and auto-generate referral links
         try {
-          await assignTrackingCodeToUser(profile.id);
-          logger.info('Assigned tracking code to new OAuth user', { userId: user.id, profileId: profile.id });
-        } catch (trackingError) {
-          // Log but don't block signup
-          logger.error('Failed to assign tracking code to OAuth user', { error: trackingError, userId: user.id });
+          // Parse name into firstName, middleName, lastName
+          const nameParts = user.name?.split(' ').filter(part => part.length > 0) || [];
+          let firstName = '';
+          let middleName: string | undefined;
+          let lastName = '';
+
+          if (nameParts.length === 1) {
+            // Only first name
+            firstName = nameParts[0];
+          } else if (nameParts.length === 2) {
+            // First and last name only
+            firstName = nameParts[0];
+            lastName = nameParts[1];
+          } else if (nameParts.length >= 3) {
+            // First, middle, and last name
+            firstName = nameParts[0];
+            // Take all middle parts except the last one as middle name
+            middleName = nameParts.slice(1, -1).join(' ');
+            lastName = nameParts[nameParts.length - 1];
+          }
+
+          const profile = await prisma.profile.create({
+            data: {
+              userId: user.id,
+              role: 'client',
+              firstName,
+              middleName,
+              lastName,
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: new Date(),
+            },
+          });
+
+          logger.info('Created profile for new OAuth user', { userId: user.id, profileId: profile.id, firstName, lastName });
+
+          // Assign tracking code and auto-generate referral links
+          try {
+            await assignTrackingCodeToUser(profile.id);
+            logger.info('Assigned tracking code to new OAuth user', { userId: user.id, profileId: profile.id });
+          } catch (trackingError) {
+            // Log but don't block signup
+            logger.error('Failed to assign tracking code to OAuth user', { error: trackingError, userId: user.id });
+          }
+        } catch (profileError) {
+          // Log profile creation failure - critical issue
+          logger.error('Failed to create profile for new OAuth user', { error: profileError, userId: user.id, email: user.email });
         }
       }
     },
@@ -465,7 +472,13 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
     throw new Error('Insufficient permissions');
   }
 
-  return { user, role: userRole, profile: { id: user.id } };
+  // Fetch actual profile.id from database (user.id != profile.id)
+  const profile = await prisma.profile.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+
+  return { user, role: userRole, profile: { id: profile?.id ?? user.id } };
 }
 
 /**
