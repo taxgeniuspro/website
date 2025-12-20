@@ -65,7 +65,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      allowDangerousEmailAccountLinking: false, // Disabled: New users must get their own accounts
+      allowDangerousEmailAccountLinking: true, // Required for OAuth to work - we control linking in signIn callback
       authorization: {
         params: {
           prompt: 'consent',
