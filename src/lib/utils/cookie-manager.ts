@@ -163,14 +163,14 @@ export async function setAttributionCookie(attribution: AttributionCookie): Prom
  * Get referrer attribution from cookie (server-side)
  */
 export async function getAttributionCookie(): Promise<AttributionCookie | null> {
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(ATTRIBUTION_COOKIE_NAME);
-
-  if (!cookie?.value) {
-    return null;
-  }
-
   try {
+    const cookieStore = await cookies();
+    const cookie = cookieStore.get(ATTRIBUTION_COOKIE_NAME);
+
+    if (!cookie?.value) {
+      return null;
+    }
+
     const attribution = JSON.parse(cookie.value) as AttributionCookie;
 
     // Validate required fields
@@ -187,7 +187,8 @@ export async function getAttributionCookie(): Promise<AttributionCookie | null> 
 
     return attribution;
   } catch (error) {
-    logger.error('Failed to parse attribution cookie:', error);
+    // Cookie access may fail in certain contexts - return null gracefully
+    logger.error('Failed to get/parse attribution cookie:', error);
     return null;
   }
 }
