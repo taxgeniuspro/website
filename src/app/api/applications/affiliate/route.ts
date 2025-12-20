@@ -339,51 +339,46 @@ async function queueAdminNotification(lead: any, bondedPreparerId: string | null
       ccRecipient: recipients.cc,
     });
 
-    const hiringEmails = [recipients.primary, recipients.cc];
+    // Send email with CC to ensure both recipients get it
+    const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
+      from: fromEmail,
+      to: recipients.primary,
+      cc: [recipients.cc],
+      subject: `🌐 New Affiliate Application: ${lead.firstName} ${lead.lastName}${bondedPreparerId ? ' (Bonding Request)' : ''}`,
+      react: AffiliateApplicationNotification({
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        email: lead.email,
+        phone: lead.phone,
+        experience: lead.marketingExperience,
+        audience: lead.audience,
+        platforms,
+        website,
+        socialMedia,
+        message: originalMessage,
+        bondedPreparerId,
+        leadId: lead.id,
+        locale: (locale as 'en' | 'es') || 'en',
+        recipientName: recipients.recipientName,
+      }),
+    });
 
-    for (let i = 0; i < hiringEmails.length; i++) {
-      const hiringEmail = hiringEmails[i];
-
-      // Add delay between emails to respect rate limits (2 emails/sec)
-      if (i > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 600)); // 600ms delay
-      }
-
-      const { data: notifyData, error: notifyError} = await getResendClient().emails.send({
-        from: fromEmail,
-        to: hiringEmail,
-        subject: `🌐 New Affiliate Application: ${lead.firstName} ${lead.lastName}${bondedPreparerId ? ' (Bonding Request)' : ''}`,
-        react: AffiliateApplicationNotification({
-          firstName: lead.firstName,
-          lastName: lead.lastName,
-          email: lead.email,
-          phone: lead.phone,
-          experience: lead.marketingExperience,
-          audience: lead.audience,
-          platforms,
-          website,
-          socialMedia,
-          message: originalMessage,
-          bondedPreparerId,
-          leadId: lead.id,
-          locale: (locale as 'en' | 'es') || 'en',
-          recipientName: recipients.recipientName,
-        }),
+    if (notifyError) {
+      logger.error('Failed to send hiring team notification', {
+        error: notifyError,
+        message: notifyError.message,
+        name: notifyError.name,
+        leadId: lead.id,
+        to: recipients.primary,
+        cc: recipients.cc,
       });
-
-      if (notifyError) {
-        logger.error(`Failed to send hiring team notification to ${hiringEmail}`, {
-          error: notifyError,
-          message: notifyError.message,
-          name: notifyError.name,
-          leadId: lead.id,
-        });
-      } else {
-        logger.info(`Hiring team notification sent to ${hiringEmail}`, {
-          emailId: notifyData?.id,
-          leadId: lead.id,
-        });
-      }
+    } else {
+      logger.info('Hiring team notification sent', {
+        emailId: notifyData?.id,
+        leadId: lead.id,
+        to: recipients.primary,
+        cc: recipients.cc,
+      });
     }
   } catch (error: any) {
     logger.error('Error sending admin notification', {
