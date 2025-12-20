@@ -295,6 +295,7 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
           from: fromEmail,
           to: [primaryRecipient],
           cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
           subject: `🌐 New Contact Form: ${service} - ${name}`,
           react: ContactFormNotification({
             name,

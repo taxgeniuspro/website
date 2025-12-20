@@ -128,6 +128,7 @@ export async function POST(
         const { data, error } = await getResendClient().emails.send({
           from: fromEmail,
           to: appointment.clientEmail,
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all client communications
           subject: `Complete Your Tax Intake Form - ${preparerName}`,
           html: `
 <!DOCTYPE html>

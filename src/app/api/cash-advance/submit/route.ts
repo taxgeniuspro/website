@@ -304,6 +304,7 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
           from: fromEmail,
           to: [primaryRecipient],
           cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
           subject: `💰 URGENT: Preseason Cash Advance Lead - ${firstName}`,
           react: CashAdvanceLeadNotification({
             firstName,

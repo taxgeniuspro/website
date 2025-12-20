@@ -191,6 +191,7 @@ This person has joined the referral program and can now start earning commission
           from: fromEmail,
           to: [recipients.primary],
           cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
           subject: `🌐 New Referral Program Signup: ${firstName} ${lastName}`,
           html: `
             <h2>New Referral Program Signup</h2>
