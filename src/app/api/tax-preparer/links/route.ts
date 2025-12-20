@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { getTaxPreparerLinks } from '@/lib/services/tax-preparer-links.service';
+import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.service';
 
 /**
  * GET /api/tax-preparer/links
- * Fetches the two standard tax preparer links with QR codes
+ *
+ * Fetches marketing links for tax preparers.
+ * Now delegates to unified marketing-links.service for consistency.
+ *
+ * Tax preparers get 4 links: lead, intake, appt, advance
  */
 export async function GET() {
   try {
@@ -33,7 +37,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is tax preparer
+    // Check if user is tax preparer or admin
     const isTaxPreparer = profile.role === 'tax_preparer';
     const isAdmin = profile.role === 'admin';
 
@@ -44,93 +48,42 @@ export async function GET() {
       );
     }
 
-    // If tracking code not finalized, return empty
-    if (!profile.trackingCodeFinalized) {
+    // Use unified service to get or create links
+    const result = await getOrCreateMarketingLinks(profile.id);
+
+    if (!result.success) {
       return NextResponse.json({
         success: true,
         links: [],
-        message: 'Tracking code must be finalized before tax preparer links are available',
+        message: result.message,
       });
     }
 
-    // Get tax preparer links
-    const preparerLinks = await getTaxPreparerLinks(profile.id);
+    // Transform to backward-compatible format
+    const links = result.links.map((link) => ({
+      id: link.id,
+      shortCode: link.code,
+      shortUrl: link.shortUrl,
+      fullUrl: link.url,
+      destination: link.targetPage,
+      title: link.title,
+      description: link.description,
+      qrCodeUrl: link.qrCodeDataUrl,
+      clicks: link.clicks,
+      leads: link.leads,
+      conversions: link.conversions,
+      isActive: link.isActive,
+      type: link.type,
+    }));
 
-    if (!preparerLinks) {
-      return NextResponse.json({
-        success: true,
-        links: [],
-        message: 'No tax preparer links found. They should be generated automatically.',
-      });
-    }
-
-    // Transform to component-friendly format
-    const links = [
-      {
-        id: preparerLinks.leadLink.id,
-        shortCode: preparerLinks.leadLink.code,
-        shortUrl: preparerLinks.leadLink.shortUrl,
-        fullUrl: preparerLinks.leadLink.url,
-        destination: '/contact',
-        title: preparerLinks.leadLink.title,
-        description: 'Quick contact form for potential clients to submit their information',
-        qrCodeUrl: preparerLinks.leadLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'lead',
-      },
-      {
-        id: preparerLinks.intakeLink.id,
-        shortCode: preparerLinks.intakeLink.code,
-        shortUrl: preparerLinks.intakeLink.shortUrl,
-        fullUrl: preparerLinks.intakeLink.url,
-        destination: '/start-filing/form',
-        title: preparerLinks.intakeLink.title,
-        description: 'Complete tax intake form for clients ready to start their tax preparation',
-        qrCodeUrl: preparerLinks.intakeLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'intake',
-      },
-    ];
-
-    // Fetch analytics for each link
-    const linkIds = links.map((l) => l.id);
-    const marketingLinks = await prisma.marketingLink.findMany({
-      where: { id: { in: linkIds } },
-      select: {
-        id: true,
-        clicks: true,
-        uniqueClicks: true,
-        intakeStarts: true,
-        intakeCompletes: true,
-        conversions: true,
-      },
+    logger.info(`Fetched tax preparer links for profile ${profile.id}`, {
+      linkCount: links.length,
     });
-
-    // Merge analytics into links
-    const linksWithAnalytics = links.map((link) => {
-      const analytics = marketingLinks.find((ml) => ml.id === link.id);
-      if (analytics) {
-        return {
-          ...link,
-          clicks: analytics.clicks || 0,
-          leads: analytics.intakeStarts || 0,
-          conversions: analytics.conversions || 0,
-        };
-      }
-      return link;
-    });
-
-    logger.info(`📋 Fetched tax preparer links for profile ${profile.id}`);
 
     return NextResponse.json({
       success: true,
-      links: linksWithAnalytics,
+      links,
+      trackingCode: result.trackingCode,
     });
   } catch (error) {
     logger.error('Error fetching tax preparer links:', error);

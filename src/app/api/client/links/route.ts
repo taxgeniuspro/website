@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { getOrCreateClientLinks } from '@/lib/services/client-links.service';
+import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.service';
 
 /**
  * GET /api/client/links
- * Fetches or auto-generates the two standard client referral links with QR codes.
- * Unlike affiliates, clients don't need to finalize their tracking code -
- * links are generated automatically on first access.
+ *
+ * Fetches or auto-generates client referral links with QR codes.
+ * Now delegates to unified marketing-links.service for consistency.
+ *
+ * Clients get 2 links: lead, intake
  */
 export async function GET() {
   try {
@@ -34,7 +36,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Clients can access this endpoint
+    // Clients and admins can access this endpoint
     const isClient = profile.role === 'client';
     const isAdmin = profile.role === 'admin';
 
@@ -55,76 +57,48 @@ export async function GET() {
       });
     }
 
-    // Get or create client links (auto-generates if they don't exist)
-    const clientLinks = await getOrCreateClientLinks(profile.id);
-
-    // Transform to component-friendly format
-    const links = [
-      {
-        id: clientLinks.leadLink.id,
-        shortCode: clientLinks.leadLink.code,
-        shortUrl: clientLinks.leadLink.shortUrl,
-        fullUrl: clientLinks.leadLink.url,
-        destination: '/contact',
-        title: clientLinks.leadLink.title,
-        description: 'Share this link with friends to earn referral bonuses',
-        qrCodeUrl: clientLinks.leadLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'lead',
-      },
-      {
-        id: clientLinks.intakeLink.id,
-        shortCode: clientLinks.intakeLink.code,
-        shortUrl: clientLinks.intakeLink.shortUrl,
-        fullUrl: clientLinks.intakeLink.url,
-        destination: '/start-filing/form',
-        title: clientLinks.intakeLink.title,
-        description: 'Share this link with friends who are ready to start their taxes',
-        qrCodeUrl: clientLinks.intakeLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'intake',
-      },
-    ];
-
-    // Fetch analytics for each link
-    const linkIds = links.map((l) => l.id);
-    const marketingLinks = await prisma.marketingLink.findMany({
-      where: { id: { in: linkIds } },
-      select: {
-        id: true,
-        clicks: true,
-        uniqueClicks: true,
-        intakeStarts: true,
-        intakeCompletes: true,
-        conversions: true,
-      },
+    // Use unified service to get or create links
+    // Override link types to only generate lead and intake for clients
+    const result = await getOrCreateMarketingLinks(profile.id, {
+      linkTypes: ['lead', 'intake'],
     });
 
-    // Merge analytics into links
-    const linksWithAnalytics = links.map((link) => {
-      const analytics = marketingLinks.find((ml) => ml.id === link.id);
-      if (analytics) {
-        return {
-          ...link,
-          clicks: analytics.clicks || 0,
-          leads: analytics.intakeStarts || 0,
-          conversions: analytics.conversions || 0,
-        };
-      }
-      return link;
-    });
+    if (!result.success) {
+      return NextResponse.json({
+        success: true,
+        links: [],
+        message: result.message,
+      });
+    }
 
-    logger.info(`📋 Fetched client referral links for profile ${profile.id}`);
+    // Transform to backward-compatible format
+    const links = result.links.map((link) => ({
+      id: link.id,
+      shortCode: link.code,
+      shortUrl: link.shortUrl,
+      fullUrl: link.url,
+      destination: link.targetPage,
+      title: link.title,
+      description:
+        link.type === 'lead'
+          ? 'Share this link with friends to earn referral bonuses'
+          : 'Share this link with friends who are ready to start their taxes',
+      qrCodeUrl: link.qrCodeDataUrl,
+      clicks: link.clicks,
+      leads: link.leads,
+      conversions: link.conversions,
+      isActive: link.isActive,
+      type: link.type,
+    }));
+
+    logger.info(`Fetched client referral links for profile ${profile.id}`, {
+      linkCount: links.length,
+    });
 
     return NextResponse.json({
       success: true,
-      links: linksWithAnalytics,
+      links,
+      trackingCode: result.trackingCode,
     });
   } catch (error) {
     logger.error('Error fetching client links:', error);

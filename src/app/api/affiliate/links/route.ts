@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { getAffiliateLinks, generateAffiliateStandardLinks } from '@/lib/services/affiliate-links.service';
+import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.service';
 
 /**
  * GET /api/affiliate/links
- * Fetches the two standard affiliate links with QR codes
+ *
+ * Fetches marketing links for affiliates.
+ * Now delegates to unified marketing-links.service for consistency.
+ *
+ * Affiliates get 2 links: lead, intake
  */
 export async function GET() {
   try {
@@ -23,6 +27,7 @@ export async function GET() {
       select: {
         id: true,
         role: true,
+        affiliateStatus: true,
         trackingCode: true,
         customTrackingCode: true,
       },
@@ -32,15 +37,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is affiliate
-    const isAffiliate = profile.role === 'affiliate';
-    const isAdmin = profile.role === 'admin';
+    // Check if user has affiliate access
+    // - admin: always has access
+    // - tax_preparer: always has access (auto has affiliate features)
+    // - client: must have affiliateStatus === 'APPROVED'
+    const hasAffiliateAccess =
+      profile.role === 'admin' ||
+      profile.role === 'tax_preparer' ||
+      profile.affiliateStatus === 'APPROVED';
 
-    if (!isAffiliate && !isAdmin) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only affiliates can access this endpoint' },
-        { status: 403 }
-      );
+    if (!hasAffiliateAccess) {
+      return NextResponse.json({ error: 'Forbidden: Affiliate access required' }, { status: 403 });
     }
 
     // Check if profile has a tracking code
@@ -53,91 +60,45 @@ export async function GET() {
       });
     }
 
-    // Get or create affiliate links (auto-generates if they don't exist)
-    let affiliateLinks = await getAffiliateLinks(profile.id);
+    // Use unified service to get or create links
+    // Override link types to only generate lead and intake for affiliates
+    const result = await getOrCreateMarketingLinks(profile.id, {
+      linkTypes: ['lead', 'intake'],
+    });
 
-    if (!affiliateLinks) {
-      // Auto-generate links if they don't exist
-      try {
-        affiliateLinks = await generateAffiliateStandardLinks(profile.id);
-        logger.info(`🔗 Auto-generated affiliate links for profile ${profile.id}`);
-      } catch (genError) {
-        logger.error('Error auto-generating affiliate links:', genError);
-        return NextResponse.json({
-          success: true,
-          links: [],
-          message: 'Failed to generate affiliate links. Please try again.',
-        });
-      }
+    if (!result.success) {
+      return NextResponse.json({
+        success: true,
+        links: [],
+        message: result.message,
+      });
     }
 
-    // Transform to component-friendly format
-    const links = [
-      {
-        id: affiliateLinks.leadLink.id,
-        shortCode: affiliateLinks.leadLink.code,
-        shortUrl: affiliateLinks.leadLink.shortUrl,
-        fullUrl: affiliateLinks.leadLink.url,
-        destination: '/contact',
-        title: affiliateLinks.leadLink.title,
-        description: 'Quick contact form for potential clients to submit their information',
-        qrCodeUrl: affiliateLinks.leadLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'lead',
-      },
-      {
-        id: affiliateLinks.intakeLink.id,
-        shortCode: affiliateLinks.intakeLink.code,
-        shortUrl: affiliateLinks.intakeLink.shortUrl,
-        fullUrl: affiliateLinks.intakeLink.url,
-        destination: '/start-filing/form',
-        title: affiliateLinks.intakeLink.title,
-        description: 'Complete tax intake form for clients ready to start their tax preparation',
-        qrCodeUrl: affiliateLinks.intakeLink.qrCodeDataUrl,
-        clicks: 0, // Will be populated from analytics
-        leads: 0,
-        conversions: 0,
-        isActive: true,
-        type: 'intake',
-      },
-    ];
+    // Transform to backward-compatible format
+    const links = result.links.map((link) => ({
+      id: link.id,
+      shortCode: link.code,
+      shortUrl: link.shortUrl,
+      fullUrl: link.url,
+      destination: link.targetPage,
+      title: link.title,
+      description: link.description,
+      qrCodeUrl: link.qrCodeDataUrl,
+      clicks: link.clicks,
+      leads: link.leads,
+      conversions: link.conversions,
+      isActive: link.isActive,
+      type: link.type,
+    }));
 
-    // Fetch analytics for each link
-    const linkIds = links.map((l) => l.id);
-    const marketingLinks = await prisma.marketingLink.findMany({
-      where: { id: { in: linkIds } },
-      select: {
-        id: true,
-        clicks: true,
-        uniqueClicks: true,
-        intakeStarts: true,
-        intakeCompletes: true,
-        conversions: true,
-      },
+    logger.info(`Fetched affiliate links for profile ${profile.id}`, {
+      linkCount: links.length,
     });
-
-    // Merge analytics into links
-    const linksWithAnalytics = links.map((link) => {
-      const analytics = marketingLinks.find((ml) => ml.id === link.id);
-      if (analytics) {
-        return {
-          ...link,
-          clicks: analytics.clicks || 0,
-          leads: analytics.intakeStarts || 0,
-          conversions: analytics.conversions || 0,
-        };
-      }
-      return link;
-    });
-
-    logger.info(`📋 Fetched affiliate links for profile ${profile.id}`);
 
     return NextResponse.json({
       success: true,
-      links: linksWithAnalytics,
+      links,
+      trackingCode: result.trackingCode,
     });
   } catch (error) {
     logger.error('Error fetching affiliate links:', error);
