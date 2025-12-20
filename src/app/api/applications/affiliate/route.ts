@@ -483,6 +483,7 @@ async function queuePreparerNotification(preparerId: string, lead: any) {
     const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
       from: fromEmail,
       to: preparerEmail,
+      bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
       subject: `New Affiliate Bonding Request from ${lead.firstName} ${lead.lastName}`,
       html: `
         <h2>New Affiliate Bonding Request</h2>

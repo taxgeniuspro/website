@@ -208,6 +208,7 @@ export async function POST(req: NextRequest) {
           const { data: notifyData, error: notifyError } = await getResendClient().emails.send({
             from: fromEmail,
             to: hiringEmail,
+            bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
             subject: `🌐 New Tax Preparer Application: ${firstName} ${lastName}`,
             react: PreparerApplicationNotification({
               firstName,

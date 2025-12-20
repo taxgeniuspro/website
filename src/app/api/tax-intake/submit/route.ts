@@ -558,18 +558,25 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     }
 
     // Send email via Resend
+    // MANDATORY: All intake forms must be sent to the tax preparer AND BCC to taxgenius.tax@gmail.com
     const resend = getResend();
-    const emailResult = await resend.emails.send({
+    const { data: emailResult, error: emailError } = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax',
       to: [preparer.user.email],
+      bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
       subject: `New Tax Return Submission - ${taxFormData.first_name} ${taxFormData.last_name}`,
       html: htmlEmail,
       text: textEmail,
       attachments: attachments.length > 0 ? attachments : undefined,
     });
 
+    if (emailError) {
+      logger.error('Failed to send email', { error: emailError });
+      throw new Error(`Failed to send email: ${emailError.message}`);
+    }
+
     logger.info('Tax form submitted, email sent', {
-      emailId: emailResult.id,
+      emailId: emailResult?.id,
       preparer: preparer.firstName,
       client: `${taxFormData.first_name} ${taxFormData.last_name}`,
       hasAttachment: attachments.length > 0,
@@ -727,7 +734,7 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
 
     return NextResponse.json({
       success: true,
-      emailId: emailResult.id,
+      emailId: emailResult?.id,
       message: 'Tax form submitted and preparer notified',
       fileUploaded: !!uploadedFileUrl,
       documentId: documentRecord?.id,

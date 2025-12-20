@@ -368,6 +368,7 @@ export async function POST(req: NextRequest) {
           from: fromEmail,
           to: EMAIL_ROUTING.EN.primary,
           cc: EMAIL_ROUTING.ADMIN,
+          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
           subject: `New Appointment Request: ${clientName} - ${appointmentType}`,
           html: `
             <h2>New Appointment Request</h2>
