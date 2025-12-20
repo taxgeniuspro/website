@@ -164,7 +164,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
 
           if (existingAccount) {
-            // This Google account is already linked - allow sign in
+            // This EXACT Google account (same providerAccountId) is already linked - allow sign in
             // Check if user is deactivated
             if (existingAccount.user.profile?.isActive === false) {
               logger.warn('Deactivated user attempted to sign in', {
@@ -190,8 +190,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return true;
           }
 
-          // This is a NEW Google account - let NextAuth create a new user
-          // DO NOT link to any existing user by email - each Google signup gets their own account
+          // This is a NEW Google account (providerAccountId not in database)
+          // Check if a user with this email already exists - if so, REJECT to prevent hijacking
+          const existingUserByEmail = await prisma.user.findUnique({
+            where: { email: user.email.toLowerCase() },
+          });
+
+          if (existingUserByEmail) {
+            // A user with this email exists but used a DIFFERENT Google account
+            // This could be an attempt to hijack the account - REJECT
+            logger.warn('Blocked Google OAuth attempt - email already exists with different account', {
+              email: user.email,
+              existingUserId: existingUserByEmail.id,
+              newProviderAccountId: account.providerAccountId,
+            });
+            // Redirect to error page explaining the issue
+            return '/auth/error?error=OAuthAccountNotLinked';
+          }
+
+          // Truly new user with new email - allow NextAuth to create fresh account
           logger.info('New Google OAuth signup - creating fresh account', {
             email: user.email,
             providerAccountId: account.providerAccountId,
