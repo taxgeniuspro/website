@@ -63,6 +63,37 @@ import Link from 'next/link';
 import { format, differenceInDays, isBefore } from 'date-fns';
 import { LeadConversionDialog } from './LeadConversionDialog';
 
+// CRMContact interface - matches the new /api/tax-preparer/crm-contacts endpoint
+interface CRMContact {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  contactType: string;
+  stage: string; // NEW, CONTACTED, QUALIFIED, CONVERTED, LOST
+  source: string | null;
+  leadScore: number | null;
+  createdAt: string;
+  lastContactedAt: string | null;
+  lastInteraction: {
+    type: string;
+    subject: string | null;
+    occurredAt: string;
+  } | null;
+  attribution: {
+    referrerUsername: string | null;
+    referrerType: string | null;
+    method: string | null;
+  };
+  taxInfo: {
+    filingStatus: string | null;
+    taxYear: number | null;
+  };
+}
+
+// Legacy interface for TaxIntakeLead - still used for some operations
 interface TaxIntakeLead {
   id: string;
   first_name: string;
@@ -100,12 +131,11 @@ interface TaxIntakeLead {
 
 interface LeadStats {
   total: number;
-  new: number;
-  contacted: number;
-  qualified: number;
-  converted: number;
-  complete: number;
-  unqualified: number;
+  NEW: number;
+  CONTACTED: number;
+  QUALIFIED: number;
+  CONVERTED: number;
+  LOST: number;
 }
 
 interface LeadDashboardProps {
@@ -113,14 +143,17 @@ interface LeadDashboardProps {
   isAdmin?: boolean;
 }
 
-const LEAD_STATUSES = [
-  { value: 'new', label: 'New', color: 'bg-blue-500', icon: AlertCircle },
-  { value: 'contacted', label: 'Contacted', color: 'bg-yellow-500', icon: PhoneCall },
-  { value: 'qualified', label: 'Qualified', color: 'bg-green-500', icon: CheckCircle },
-  { value: 'converted', label: 'Converted', color: 'bg-purple-500', icon: UserCheck },
-  { value: 'complete', label: 'Complete', color: 'bg-emerald-600', icon: CheckCircle },
-  { value: 'unqualified', label: 'Unqualified', color: 'bg-gray-500', icon: XCircle },
+// CRM Pipeline Stages - matches the database enum
+const CRM_STAGES = [
+  { value: 'NEW', label: 'New', color: 'bg-blue-500', icon: AlertCircle },
+  { value: 'CONTACTED', label: 'Contacted', color: 'bg-yellow-500', icon: PhoneCall },
+  { value: 'QUALIFIED', label: 'Qualified', color: 'bg-green-500', icon: CheckCircle },
+  { value: 'CONVERTED', label: 'Converted', color: 'bg-purple-500', icon: UserCheck },
+  { value: 'LOST', label: 'Lost', color: 'bg-gray-500', icon: XCircle },
 ];
+
+// Legacy statuses for old lead system (deprecated)
+const LEAD_STATUSES = CRM_STAGES;
 
 const UNQUALIFIED_REASONS = [
   { value: 'wrong_state', label: 'Wrong State (Cannot File)' },
@@ -153,19 +186,19 @@ function getExpirationInfo(expiresAt: string | null | undefined) {
 }
 
 export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProps) {
-  const [leads, setLeads] = useState<TaxIntakeLead[]>([]);
+  // Use CRMContact as the primary data type
+  const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<string>('all');
   const [stats, setStats] = useState<LeadStats>({
     total: 0,
-    new: 0,
-    contacted: 0,
-    qualified: 0,
-    converted: 0,
-    complete: 0,
-    unqualified: 0,
+    NEW: 0,
+    CONTACTED: 0,
+    QUALIFIED: 0,
+    CONVERTED: 0,
+    LOST: 0,
   });
 
   // Contact dialog state
@@ -192,67 +225,84 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
   const [conversionDialogOpen, setConversionDialogOpen] = useState(false);
   const [conversionLead, setConversionLead] = useState<TaxIntakeLead | null>(null);
 
-  // Fetch leads
+  // Fetch CRM contacts
   useEffect(() => {
-    fetchLeads();
-  }, [preparerId, statusFilter, searchTerm]);
+    fetchContacts();
+  }, [preparerId, stageFilter, searchTerm]);
 
-  const fetchLeads = async () => {
+  const fetchContacts = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
-      if (preparerId && !isAdmin) {
-        params.append('preparerId', preparerId);
-      }
-      if (statusFilter && statusFilter !== 'all') {
-        params.append('status', statusFilter);
+      // Note: preparerId is handled server-side via session for /api/tax-preparer/crm-contacts
+      if (stageFilter && stageFilter !== 'all') {
+        params.append('stage', stageFilter);
       }
       if (searchTerm) {
         params.append('search', searchTerm);
       }
 
-      const response = await fetch(`/api/tax-preparer/leads?${params.toString()}`);
+      // Use the new CRM contacts endpoint
+      const response = await fetch(`/api/tax-preparer/crm-contacts?${params.toString()}`);
 
       if (!response.ok) {
-        throw new Error('Failed to fetch leads');
+        throw new Error('Failed to fetch contacts');
       }
 
       const data = await response.json();
-      setLeads(data.leads || []);
-      setStats(data.stats || stats);
+      setContacts(data.contacts || []);
+
+      // Calculate stats from stageCounts
+      const stageCounts = data.filters?.stageCounts || {};
+      const totalCount = data.pagination?.total || 0;
+      setStats({
+        total: totalCount,
+        NEW: stageCounts['NEW'] || 0,
+        CONTACTED: stageCounts['CONTACTED'] || 0,
+        QUALIFIED: stageCounts['QUALIFIED'] || 0,
+        CONVERTED: stageCounts['CONVERTED'] || 0,
+        LOST: stageCounts['LOST'] || 0,
+      });
     } catch (err: any) {
       setError(err.message);
-      logger.error('Error fetching leads:', err);
+      logger.error('Error fetching CRM contacts:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getLeadStatus = (lead: TaxIntakeLead): string => {
-    // Unqualified takes precedence - we can't help this lead
-    if (lead.unqualified) return 'unqualified';
-    // Complete = converted AND has convertedAt timestamp (return filed)
-    if (lead.convertedToClient && lead.convertedAt) return 'complete';
-    if (lead.convertedToClient) return 'converted';
-    if (lead.contactNotes && lead.lastContactedAt) return 'qualified';
-    if (lead.lastContactedAt) return 'contacted';
-    return 'new';
+  // For CRMContact - stage is already set, just return it
+  const getContactStage = (contact: CRMContact): string => {
+    return contact.stage || 'NEW';
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = LEAD_STATUSES.find((s) => s.value === status);
-    if (!statusConfig) return null;
+  // Legacy function for TaxIntakeLead (deprecated)
+  const getLeadStatus = (lead: TaxIntakeLead): string => {
+    if (lead.unqualified) return 'LOST';
+    if (lead.convertedToClient && lead.convertedAt) return 'CONVERTED';
+    if (lead.convertedToClient) return 'CONVERTED';
+    if (lead.contactNotes && lead.lastContactedAt) return 'QUALIFIED';
+    if (lead.lastContactedAt) return 'CONTACTED';
+    return 'NEW';
+  };
 
-    const Icon = statusConfig.icon;
+  const getStageBadge = (stage: string) => {
+    const stageConfig = CRM_STAGES.find((s) => s.value === stage);
+    if (!stageConfig) return null;
+
+    const Icon = stageConfig.icon;
     return (
-      <Badge className={cn('gap-1', statusConfig.color, 'text-white')}>
+      <Badge className={cn('gap-1', stageConfig.color, 'text-white')}>
         <Icon className="h-3 w-3" />
-        {statusConfig.label}
+        {stageConfig.label}
       </Badge>
     );
   };
+
+  // Alias for backward compatibility
+  const getStatusBadge = getStageBadge;
 
   const handleAddContact = (lead: TaxIntakeLead) => {
     setSelectedLead(lead);
@@ -290,12 +340,8 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
       const data = await response.json();
 
-      // Update the lead in local state with the new folder ID
-      setLeads((prevLeads) =>
-        prevLeads.map((l) =>
-          l.id === lead.id ? { ...l, clientFolderId: data.folder.id } : l
-        )
-      );
+      // Refresh contacts after folder creation
+      await fetchContacts();
 
       // Navigate to the documents page with the new folder
       window.location.href = `/en/dashboard/tax-preparer/documents?folderId=${data.folder.id}`;
@@ -326,8 +372,8 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         throw new Error('Failed to save contact note');
       }
 
-      // Refresh leads
-      await fetchLeads();
+      // Refresh contacts
+      await fetchContacts();
       setContactDialogOpen(false);
       setSelectedLead(null);
       setContactNote('');
@@ -354,7 +400,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
       }
 
       alert('Lead converted to client successfully!');
-      await fetchLeads();
+      await fetchContacts();
     } catch (err: any) {
       logger.error('Error converting lead:', err);
       alert('Failed to convert lead. Please try again.');
@@ -389,7 +435,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         alert('Return filed successfully!');
       }
 
-      await fetchLeads();
+      await fetchContacts();
     } catch (err: any) {
       logger.error('Error completing lead:', err);
       alert(err.message || 'Failed to complete lead. Please try again.');
@@ -431,7 +477,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
       alert('Lead marked as unqualified.');
       setUnqualifiedDialogOpen(false);
       setUnqualifiedLead(null);
-      await fetchLeads();
+      await fetchContacts();
     } catch (err: any) {
       logger.error('Error marking lead as unqualified:', err);
       alert(err.message || 'Failed to mark lead as unqualified. Please try again.');
@@ -459,25 +505,26 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
       }
 
       alert('Lead reopened successfully!');
-      await fetchLeads();
+      await fetchContacts();
     } catch (err: any) {
       logger.error('Error reopening lead:', err);
       alert(err.message || 'Failed to reopen lead. Please try again.');
     }
   };
 
-  const filteredLeads = leads.filter((lead) => {
+  // Filter contacts - search is also handled server-side, but do client-side for instant feedback
+  const filteredContacts = contacts.filter((contact) => {
     const matchesSearch =
       searchTerm === '' ||
-      lead.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.phone.includes(searchTerm);
+      contact.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contact.phone && contact.phone.includes(searchTerm));
 
-    const leadStatus = getLeadStatus(lead);
-    const matchesStatus = statusFilter === 'all' || leadStatus === statusFilter;
+    const contactStage = getContactStage(contact);
+    const matchesStage = stageFilter === 'all' || contactStage === stageFilter;
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStage;
   });
 
   if (loading) {
@@ -503,11 +550,11 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats Cards - Updated for CRM stages */}
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Total Leads</CardDescription>
+            <CardDescription>Total Contacts</CardDescription>
             <CardTitle className="text-3xl">{stats.total}</CardTitle>
           </CardHeader>
           <CardContent>
@@ -518,7 +565,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>New</CardDescription>
-            <CardTitle className="text-3xl text-blue-600">{stats.new}</CardTitle>
+            <CardTitle className="text-3xl text-blue-600">{stats.NEW}</CardTitle>
           </CardHeader>
           <CardContent>
             <AlertCircle className="h-4 w-4 text-blue-600" />
@@ -528,7 +575,7 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Contacted</CardDescription>
-            <CardTitle className="text-3xl text-yellow-600">{stats.contacted}</CardTitle>
+            <CardTitle className="text-3xl text-yellow-600">{stats.CONTACTED}</CardTitle>
           </CardHeader>
           <CardContent>
             <PhoneCall className="h-4 w-4 text-yellow-600" />
@@ -538,352 +585,311 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Qualified</CardDescription>
-            <CardTitle className="text-3xl text-green-600">{stats.qualified}</CardTitle>
+            <CardTitle className="text-3xl text-green-600">{stats.QUALIFIED}</CardTitle>
           </CardHeader>
           <CardContent>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Converted</CardDescription>
+            <CardTitle className="text-3xl text-purple-600">{stats.CONVERTED}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UserCheck className="h-4 w-4 text-purple-600" />
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Updated for CRM stages */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div>
               <CardTitle>My Leads</CardTitle>
-              <CardDescription>Contact and manage your assigned leads</CardDescription>
+              <CardDescription>Contact and manage your CRM contacts</CardDescription>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search leads..."
+                  placeholder="Search contacts..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={stageFilter} onValueChange={setStageFilter}>
                 <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder="Stage" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="contacted">Contacted</SelectItem>
-                  <SelectItem value="qualified">Qualified</SelectItem>
-                  <SelectItem value="converted">Converted</SelectItem>
-                  <SelectItem value="complete">Complete</SelectItem>
-                  <SelectItem value="unqualified">Unqualified</SelectItem>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  <SelectItem value="NEW">New</SelectItem>
+                  <SelectItem value="CONTACTED">Contacted</SelectItem>
+                  <SelectItem value="QUALIFIED">Qualified</SelectItem>
+                  <SelectItem value="CONVERTED">Converted</SelectItem>
+                  <SelectItem value="LOST">Lost</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {filteredLeads.length === 0 ? (
+          {filteredContacts.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No leads found</p>
+              <p>No contacts found</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredLeads.map((lead) => {
-                const status = getLeadStatus(lead);
-                const expirationInfo = !lead.convertedToClient ? getExpirationInfo(lead.expiresAt) : null;
+              {filteredContacts.map((contact) => {
+                const stage = getContactStage(contact);
                 return (
-                  <Card key={lead.id} className="hover:shadow-md transition-shadow">
+                  <Card key={contact.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="pt-6">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                        {/* Lead Info */}
+                        {/* Contact Info */}
                         <div className="flex-1 space-y-3">
                           <div className="flex items-start justify-between">
                             <div>
                               <h3 className="font-semibold text-lg">
-                                {lead.first_name} {lead.middle_name ? lead.middle_name + ' ' : ''}
-                                {lead.last_name}
+                                {contact.firstName} {contact.lastName}
                               </h3>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                {getStatusBadge(status)}
-                                {lead.referrerUsername && (
+                                {getStageBadge(stage)}
+                                {contact.attribution.referrerUsername && (
                                   <a
-                                    href={`https://taxgeniuspro.tax/go/${lead.referrerUsername}-intake`}
+                                    href={`https://taxgeniuspro.tax/go/${contact.attribution.referrerUsername}-intake`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1"
                                   >
                                     <Badge variant="outline" className="text-xs hover:bg-accent cursor-pointer">
-                                      🔗 {lead.referrerUsername}-intake
+                                      🔗 {contact.attribution.referrerUsername}-intake
                                     </Badge>
                                   </a>
                                 )}
-                                {/* Expiration warning badge - show when lead is within 30 days of deletion */}
-                                {expirationInfo && (
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      'text-xs',
-                                      expirationInfo.status === 'expired'
-                                        ? 'bg-red-100 text-red-700 border-red-300'
-                                        : 'bg-orange-100 text-orange-700 border-orange-300'
-                                    )}
-                                    title="Leads are automatically deleted 6 months after creation if not converted to a client"
-                                  >
-                                    <AlertTriangle className="h-3 w-3 mr-1" />
-                                    {expirationInfo.message}
+                                {contact.leadScore !== null && contact.leadScore > 0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Score: {contact.leadScore}
+                                  </Badge>
+                                )}
+                                {contact.source && (
+                                  <Badge variant="outline" className="text-xs capitalize">
+                                    {contact.source.replace(/_/g, ' ')}
                                   </Badge>
                                 )}
                               </div>
                             </div>
                             <span className="text-sm text-muted-foreground">
-                              {format(new Date(lead.created_at), 'MMM d, yyyy')}
+                              {format(new Date(contact.createdAt), 'MMM d, yyyy')}
                             </span>
                           </div>
 
                           <div className="grid gap-2 text-sm">
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Mail className="h-4 w-4" />
-                              <a href={`mailto:${lead.email}`} className="hover:underline">
-                                {lead.email}
+                              <a href={`mailto:${contact.email}`} className="hover:underline">
+                                {contact.email}
                               </a>
                             </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Phone className="h-4 w-4" />
-                              <a href={`tel:${lead.country_code}${lead.phone}`} className="hover:underline">
-                                {lead.country_code} {lead.phone}
-                              </a>
-                            </div>
+                            {contact.phone && (
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <Phone className="h-4 w-4" />
+                                <a href={`tel:${contact.phone}`} className="hover:underline">
+                                  {contact.phone}
+                                </a>
+                              </div>
+                            )}
                             {/* Quick Contact Buttons */}
                             <div className="flex gap-2 mt-2">
+                              {contact.phone && (
+                                <>
+                                  <a
+                                    href={`tel:${contact.phone.replace(/[^0-9+]/g, '')}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                                  >
+                                    <Phone className="h-3 w-3" />
+                                    Call
+                                  </a>
+                                  <a
+                                    href={`sms:${contact.phone.replace(/[^0-9+]/g, '')}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                  >
+                                    <MessageSquare className="h-3 w-3" />
+                                    Text
+                                  </a>
+                                </>
+                              )}
                               <a
-                                href={`tel:${lead.country_code}${lead.phone.replace(/[^0-9]/g, '')}`}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
-                              >
-                                <Phone className="h-3 w-3" />
-                                Call
-                              </a>
-                              <a
-                                href={`sms:${lead.country_code}${lead.phone.replace(/[^0-9]/g, '')}`}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                              >
-                                <MessageSquare className="h-3 w-3" />
-                                Text
-                              </a>
-                              <a
-                                href={`mailto:${lead.email}`}
+                                href={`mailto:${contact.email}`}
                                 className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500 text-gray-900 text-xs rounded hover:bg-yellow-400 transition-colors"
                               >
                                 <Mail className="h-3 w-3" />
                                 Email
                               </a>
                             </div>
-                            {lead.address_line_1 && (
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <MapPin className="h-4 w-4" />
-                                <span>
-                                  {lead.city}, {lead.state} {lead.zip_code}
-                                </span>
-                              </div>
-                            )}
                           </div>
 
-                          {lead.lastContactedAt && (
+                          {contact.lastContactedAt && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Clock className="h-4 w-4" />
-                              Last contacted: {format(new Date(lead.lastContactedAt), 'MMM d, yyyy h:mm a')}
+                              Last contacted: {format(new Date(contact.lastContactedAt), 'MMM d, yyyy h:mm a')}
                             </div>
                           )}
 
-                          {lead.contactNotes && (
+                          {contact.lastInteraction && (
                             <div className="bg-muted p-3 rounded-md text-sm">
-                              <p className="font-medium mb-1">Latest Note:</p>
-                              <p className="text-muted-foreground">{lead.contactNotes}</p>
+                              <p className="font-medium mb-1">Last Interaction ({contact.lastInteraction.type}):</p>
+                              <p className="text-muted-foreground">{contact.lastInteraction.subject || 'No subject'}</p>
+                            </div>
+                          )}
+
+                          {/* Tax Info if available */}
+                          {contact.taxInfo.filingStatus && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <FileText className="h-4 w-4" />
+                              <span className="capitalize">{contact.taxInfo.filingStatus.replace(/_/g, ' ')}</span>
+                              {contact.taxInfo.taxYear && <span>({contact.taxInfo.taxYear})</span>}
                             </div>
                           )}
                         </div>
 
                         {/* Actions */}
                         <div className="flex flex-col gap-2 md:w-48">
-                          {/* View in CRM - Primary action when CRM contact exists */}
-                          {lead.crmContactId && (
+                          {/* View in CRM - Primary action */}
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            asChild
+                          >
+                            <Link href={`/en/crm/contacts/${contact.id}`}>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              View Details
+                            </Link>
+                          </Button>
+
+                          {/* Update Stage */}
+                          <Select
+                            value={stage}
+                            onValueChange={async (newStage) => {
+                              try {
+                                const response = await fetch('/api/tax-preparer/crm-contacts', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ id: contact.id, stage: newStage }),
+                                });
+                                if (response.ok) {
+                                  fetchContacts();
+                                }
+                              } catch (err) {
+                                logger.error('Error updating stage:', err);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Change stage" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CRM_STAGES.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>
+                                  {s.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {/* Contact Actions */}
+                          {contact.phone && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              asChild
+                            >
+                              <a href={`tel:${contact.phone}`}>
+                                <PhoneCall className="h-4 w-4 mr-2" />
+                                Call Contact
+                              </a>
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            asChild
+                          >
+                            <a href={`mailto:${contact.email}`}>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Email Contact
+                            </a>
+                          </Button>
+
+                          {/* Mark as Lost button for non-converted contacts */}
+                          {stage !== 'CONVERTED' && stage !== 'LOST' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-gray-600 hover:bg-gray-100"
+                              onClick={async () => {
+                                if (!confirm(`Mark ${contact.firstName} ${contact.lastName} as Lost?`)) return;
+                                try {
+                                  const response = await fetch('/api/tax-preparer/crm-contacts', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: contact.id, stage: 'LOST', notes: 'Marked as lost' }),
+                                  });
+                                  if (response.ok) {
+                                    fetchContacts();
+                                  }
+                                } catch (err) {
+                                  logger.error('Error marking as lost:', err);
+                                }
+                              }}
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Mark as Lost
+                            </Button>
+                          )}
+
+                          {/* Convert to Client - For qualified leads */}
+                          {stage === 'QUALIFIED' && (
                             <Button
                               variant="default"
                               size="sm"
-                              className="w-full"
-                              asChild
-                            >
-                              <Link href={`/en/crm/contacts/${lead.crmContactId}`}>
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                View in CRM
-                              </Link>
-                            </Button>
-                          )}
-
-                          {lead.full_form_data && (
-                            <Button
-                              variant={lead.crmContactId ? 'outline' : 'default'}
-                              size="sm"
-                              className="w-full"
-                              onClick={() => {
-                                setTaxDetailsLead(lead);
-                                setTaxDetailsDialogOpen(true);
+                              className="w-full bg-purple-600 hover:bg-purple-700"
+                              onClick={async () => {
+                                if (!confirm(`Convert ${contact.firstName} ${contact.lastName} to client?`)) return;
+                                try {
+                                  const response = await fetch('/api/tax-preparer/crm-contacts', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: contact.id, stage: 'CONVERTED', notes: 'Converted to client' }),
+                                  });
+                                  if (response.ok) {
+                                    fetchContacts();
+                                  }
+                                } catch (err) {
+                                  logger.error('Error converting to client:', err);
+                                }
                               }}
                             >
-                              <FileText className="h-4 w-4 mr-2" />
-                              View Tax Details
+                              <UserCheck className="h-4 w-4 mr-2" />
+                              Convert to Client
                             </Button>
                           )}
 
-                          {/* View Documents - links to client's document folder */}
-                          {lead.clientFolderId ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              asChild
-                            >
-                              <Link href={`/en/dashboard/tax-preparer/documents?folderId=${lead.clientFolderId}`}>
-                                <FolderOpen className="h-4 w-4 mr-2" />
-                                View Documents
-                              </Link>
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => handleCreateFolder(lead)}
-                              disabled={creatingFolderId === lead.id}
-                            >
-                              {creatingFolderId === lead.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <FolderPlus className="h-4 w-4 mr-2" />
-                              )}
-                              Create Folder
-                            </Button>
-                          )}
-
-                          {/* For UNQUALIFIED leads - show Reopen button */}
-                          {status === 'unqualified' ? (
-                            <>
-                              <div className="bg-gray-100 p-2 rounded text-xs text-center">
-                                <span className="font-medium">Reason:</span>{' '}
-                                {UNQUALIFIED_REASONS.find(r => r.value === lead.unqualifiedReason)?.label || lead.unqualifiedReason}
-                              </div>
-                              {lead.unqualifiedNotes && (
-                                <div className="bg-muted p-2 rounded-md text-xs">
-                                  <p className="text-muted-foreground">{lead.unqualifiedNotes}</p>
-                                </div>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full"
-                                onClick={() => handleReopenLead(lead.id, `${lead.first_name} ${lead.last_name}`)}
-                              >
-                                <UserPlus className="h-4 w-4 mr-2" />
-                                Reopen Lead
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              {/* For active leads - show standard actions */}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full"
-                                onClick={() => handleAddContact(lead)}
-                                disabled={lead.convertedToClient}
-                              >
-                                <MessageSquare className="h-4 w-4 mr-2" />
-                                Add Note
-                              </Button>
-
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full"
-                                asChild
-                              >
-                                <a href={`tel:${lead.country_code}${lead.phone}`}>
-                                  <PhoneCall className="h-4 w-4 mr-2" />
-                                  Call Lead
-                                </a>
-                              </Button>
-
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full"
-                                asChild
-                              >
-                                <a href={`mailto:${lead.email}`}>
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Email Lead
-                                </a>
-                              </Button>
-
-                              {/* Convert Lead - opens dialog with 3 options */}
-                              {!lead.convertedToClient && (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="w-full bg-purple-600 hover:bg-purple-700"
-                                  onClick={() => {
-                                    setConversionLead(lead);
-                                    setConversionDialogOpen(true);
-                                  }}
-                                >
-                                  <UserCheck className="h-4 w-4 mr-2" />
-                                  Convert Lead
-                                </Button>
-                              )}
-
-                              {/* Mark Unqualified - for non-converted leads */}
-                              {!lead.convertedToClient && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full text-gray-600 hover:bg-gray-100"
-                                  onClick={() => handleOpenUnqualifyDialog(lead)}
-                                >
-                                  <XCircle className="h-4 w-4 mr-2" />
-                                  Mark Unqualified
-                                </Button>
-                              )}
-
-                              {/* Mark Complete - only for converted clients */}
-                              {lead.convertedToClient && !lead.convertedAt && (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="w-full bg-emerald-600 hover:bg-emerald-700"
-                                  onClick={() =>
-                                    handleMarkComplete(
-                                      lead.id,
-                                      `${lead.first_name} ${lead.last_name}`,
-                                      !!lead.referrerUsername
-                                    )
-                                  }
-                                >
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Mark Complete
-                                  {lead.referrerUsername && (
-                                    <span className="ml-1 text-xs opacity-80">(+$)</span>
-                                  )}
-                                </Button>
-                              )}
-
-                              {/* Show Complete badge when lead has been marked complete */}
-                              {lead.convertedAt && (
-                                <Badge className="w-full justify-center bg-emerald-600">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Complete
-                                </Badge>
-                              )}
-                            </>
+                          {/* Converted badge */}
+                          {stage === 'CONVERTED' && (
+                            <Badge className="w-full justify-center bg-purple-600">
+                              <UserCheck className="h-3 w-3 mr-1" />
+                              Converted Client
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -1321,13 +1327,13 @@ export function LeadDashboard({ preparerId, isAdmin = false }: LeadDashboardProp
         </DialogContent>
       </Dialog>
 
-      {/* Lead Conversion Dialog */}
+      {/* Lead Conversion Dialog - legacy component, may need CRMContact version */}
       <LeadConversionDialog
         open={conversionDialogOpen}
         onOpenChange={setConversionDialogOpen}
         lead={conversionLead}
         onConversionComplete={() => {
-          fetchLeads();
+          fetchContacts();
           setConversionLead(null);
         }}
       />

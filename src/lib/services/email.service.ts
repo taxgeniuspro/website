@@ -10,6 +10,9 @@ import { ReturnFiledEmail } from '../../../emails/return-filed';
 import { ReferralInvitationEmail } from '../../../emails/referral-invitation';
 import { CertificationCompleteEmail } from '../../../emails/certification-complete';
 import { TaxPreparerWelcomeEmail } from '../../../emails/TaxPreparerWelcomeEmail';
+import { TaxPreparerWelcome2025 } from '../../../emails/tax-preparer-welcome-2025';
+import { ClientReferral2025 } from '../../../emails/client-referral-2025';
+import { CashAdvancePromo2025 } from '../../../emails/cash-advance-promo-2025';
 import { NewLeadNotification } from '../../../emails/new-lead-notification';
 import { TaxIntakeComplete } from '../../../emails/tax-intake-complete';
 import { AppointmentNotificationPreparer } from '../../../emails/appointment-notification-preparer';
@@ -1687,6 +1690,210 @@ export class EmailService {
       return { success: true, emailId: data?.id };
     } catch (error) {
       logger.error('Error sending client referral invitation email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send Tax Preparer Welcome 2025 email with QR code and marketing links
+   * Used for the 2025 tax season welcome campaign
+   */
+  static async sendTaxPreparerWelcome2025Email(
+    to: string,
+    preparerData: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      trackingCode: string;
+      avatarUrl?: string;
+      qrCodeImageUrl?: string;
+      contactFormLink?: string;
+      intakeFormLink?: string;
+      appointmentLink?: string;
+      hasProfessionalEmail?: boolean;
+      professionalEmail?: string;
+      marketingImages?: Array<{ url: string; alt: string; title: string }>;
+    }
+  ): Promise<{ success: boolean; emailId?: string }> {
+    try {
+      const dashboardUrl = `${this.appUrl}/auth/signin`;
+
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Tax Preparer Welcome 2025 Email (Dev Mode):', {
+          to,
+          firstName: preparerData.firstName,
+          trackingCode: preparerData.trackingCode,
+        });
+        return { success: true };
+      }
+
+      const resend = getResendClient();
+      const { data, error } = await resend.emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `Welcome to Tax Season 2025, ${preparerData.firstName}! Your Dashboard is Ready`,
+        react: TaxPreparerWelcome2025({
+          firstName: preparerData.firstName,
+          lastName: preparerData.lastName,
+          email: preparerData.email,
+          trackingCode: preparerData.trackingCode,
+          avatarUrl: preparerData.avatarUrl,
+          qrCodeImageUrl: preparerData.qrCodeImageUrl,
+          dashboardUrl,
+          contactFormLink: preparerData.contactFormLink || `https://taxgeniuspro.tax/go/${preparerData.trackingCode}-lead`,
+          intakeFormLink: preparerData.intakeFormLink || `https://taxgeniuspro.tax/go/${preparerData.trackingCode}-intake`,
+          appointmentLink: preparerData.appointmentLink || `https://taxgeniuspro.tax/go/${preparerData.trackingCode}-appt`,
+          marketingImages: preparerData.marketingImages,
+          hasProfessionalEmail: preparerData.hasProfessionalEmail,
+          professionalEmail: preparerData.professionalEmail,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending tax preparer welcome 2025 email:', error);
+        return { success: false };
+      }
+
+      logger.info('Tax preparer welcome 2025 email sent:', {
+        emailId: data?.id,
+        to,
+        trackingCode: preparerData.trackingCode,
+      });
+
+      return { success: true, emailId: data?.id };
+    } catch (error) {
+      logger.error('Error sending tax preparer welcome 2025 email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send Client Referral 2025 email with social sharing features
+   * Used for the 2025 referral program with $50 per referral
+   */
+  static async sendClientReferral2025Email(
+    to: string,
+    clientData: {
+      clientName: string;
+      clientFirstName: string;
+      referralLink: string;
+      referralCode: string;
+      qrCodeImageUrl?: string;
+      preparerName?: string;
+      preparerAvatarUrl?: string;
+      images?: Array<{ url: string; alt: string; title: string }>;
+    }
+  ): Promise<{ success: boolean; emailId?: string }> {
+    try {
+      const dashboardUrl = `${this.appUrl}/dashboard/client`;
+
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Client Referral 2025 Email (Dev Mode):', {
+          to,
+          clientName: clientData.clientName,
+          referralCode: clientData.referralCode,
+        });
+        return { success: true };
+      }
+
+      const resend = getResendClient();
+      const { data, error } = await resend.emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `Earn $50 Per Referral, ${clientData.clientFirstName}! Share Tax Genius Pro`,
+        react: ClientReferral2025({
+          clientName: clientData.clientName,
+          clientFirstName: clientData.clientFirstName,
+          referralLink: clientData.referralLink,
+          referralCode: clientData.referralCode,
+          qrCodeImageUrl: clientData.qrCodeImageUrl,
+          dashboardUrl,
+          images: clientData.images,
+          preparerName: clientData.preparerName,
+          preparerAvatarUrl: clientData.preparerAvatarUrl,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending client referral 2025 email:', error);
+        return { success: false };
+      }
+
+      logger.info('Client referral 2025 email sent:', {
+        emailId: data?.id,
+        to,
+        referralCode: clientData.referralCode,
+      });
+
+      return { success: true, emailId: data?.id };
+    } catch (error) {
+      logger.error('Error sending client referral 2025 email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send Cash Advance Promo 2025 email
+   * Used for pre-tax season cash advance promotion with social sharing
+   */
+  static async sendCashAdvancePromo2025Email(
+    to: string,
+    promoData: {
+      recipientName: string;
+      recipientFirstName: string;
+      trackingCode: string;
+      cashAdvanceLink?: string;
+      intakeFormLink?: string;
+      qrCodeImageUrl?: string;
+      preparerName?: string;
+      preparerAvatarUrl?: string;
+      preparerPhone?: string;
+      images?: Array<{ url: string; alt: string; title: string }>;
+    }
+  ): Promise<{ success: boolean; emailId?: string }> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Cash Advance Promo 2025 Email (Dev Mode):', {
+          to,
+          recipientName: promoData.recipientName,
+          trackingCode: promoData.trackingCode,
+        });
+        return { success: true };
+      }
+
+      const resend = getResendClient();
+      const { data, error } = await resend.emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `Get Up To $7,000 Cash Advance, ${promoData.recipientFirstName}! No Credit Check`,
+        react: CashAdvancePromo2025({
+          recipientName: promoData.recipientName,
+          recipientFirstName: promoData.recipientFirstName,
+          trackingCode: promoData.trackingCode,
+          cashAdvanceLink: promoData.cashAdvanceLink || `https://taxgeniuspro.tax/cash-advance?ref=${promoData.trackingCode}`,
+          intakeFormLink: promoData.intakeFormLink || `https://taxgeniuspro.tax/go/${promoData.trackingCode}-intake`,
+          qrCodeImageUrl: promoData.qrCodeImageUrl,
+          preparerName: promoData.preparerName,
+          preparerAvatarUrl: promoData.preparerAvatarUrl,
+          preparerPhone: promoData.preparerPhone,
+          images: promoData.images,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending cash advance promo 2025 email:', error);
+        return { success: false };
+      }
+
+      logger.info('Cash advance promo 2025 email sent:', {
+        emailId: data?.id,
+        to,
+        trackingCode: promoData.trackingCode,
+      });
+
+      return { success: true, emailId: data?.id };
+    } catch (error) {
+      logger.error('Error sending cash advance promo 2025 email:', error);
       return { success: false };
     }
   }
