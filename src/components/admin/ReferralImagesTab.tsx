@@ -1,12 +1,8 @@
 'use client';
 
 /**
- * Admin Referral Images Management Page
- *
- * Redesigned for better UX:
- * - Sidebar with searchable preparer list
- * - Main area with folder management
- * - Clear visual hierarchy
+ * Referral Images Management Tab
+ * Embedded version of the Referral Images page for Marketing Hub
  */
 
 import { useState, useRef, useMemo } from 'react';
@@ -131,7 +127,7 @@ const FOLDER_TYPE_CONFIG: Record<FolderType, {
 
 const ALL_FOLDER_TYPES: FolderType[] = ['preseason_loans', 'tax_season_lead', 'tax_season_intake', 'client_referral'];
 
-export default function AdminReferralImagesPage() {
+export function ReferralImagesTab() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -262,7 +258,7 @@ export default function AdminReferralImagesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-[600px] rounded-lg border overflow-hidden">
         <div className="w-72 border-r p-4 space-y-4">
           <Skeleton className="h-10 w-full" />
           <div className="space-y-2">
@@ -280,15 +276,15 @@ export default function AdminReferralImagesPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-[600px] rounded-lg border overflow-hidden">
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileChange} />
 
       {/* Left Sidebar - Preparer List */}
       <div className="w-72 border-r flex flex-col bg-muted/30">
         <div className="p-4 border-b bg-background">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
             Preparers & Folders
-          </h2>
+          </h3>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -429,14 +425,14 @@ export default function AdminReferralImagesPage() {
             <div className="mb-6">
               <div className="flex items-center gap-3 mb-2">
                 <Building2 className="h-6 w-6 text-primary" />
-                <h1 className="text-2xl font-bold">Tax Genius Default Images</h1>
+                <h2 className="text-xl font-bold">Tax Genius Default Images</h2>
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 These images are used when a preparer&apos;s folder is empty.
               </p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               {ALL_FOLDER_TYPES.map((folderType) => {
                 const config = FOLDER_TYPE_CONFIG[folderType];
                 const folder = defaultFolders.find((f) => f.folderType === folderType);
@@ -462,14 +458,14 @@ export default function AdminReferralImagesPage() {
             <div className="mb-6">
               <div className="flex items-center gap-3 mb-2">
                 <User className="h-6 w-6 text-primary" />
-                <h1 className="text-2xl font-bold">{selectedPreparer.preparerName}</h1>
+                <h2 className="text-xl font-bold">{selectedPreparer.preparerName}</h2>
                 {selectedPreparer.preparerCode && (
                   <Badge variant="outline" className="text-sm">
                     {selectedPreparer.preparerCode}
                   </Badge>
                 )}
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Manage promotional images for all 4 folder types. Empty folders use Tax Genius defaults.
               </p>
             </div>
@@ -481,7 +477,7 @@ export default function AdminReferralImagesPage() {
               </AlertDescription>
             </Alert>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               {ALL_FOLDER_TYPES.map((folderType) => {
                 const config = FOLDER_TYPE_CONFIG[folderType];
                 const folder = selectedPreparer.folders.find((f) => f.folderType === folderType);
@@ -527,41 +523,41 @@ interface FolderCardProps {
   isDeleting: boolean;
 }
 
-function FolderCard({ folder, config, folderType, usesDefault, onUpload, onDeleteImage, isUploading, isDeleting }: FolderCardProps) {
+function FolderCard({ folder, config, usesDefault, onUpload, onDeleteImage, isUploading, isDeleting }: FolderCardProps) {
   const Icon = config.icon;
   const imageCount = folder?.imageCount || 0;
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className={cn('text-white', config.color)}>
+      <CardHeader className={cn('text-white py-3', config.color)}>
         <div className="flex justify-between items-start">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Icon className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Icon className="h-4 w-4" />
             {config.displayName}
           </CardTitle>
-          <Badge variant="secondary" className="bg-white/20 text-white border-0">
+          <Badge variant="secondary" className="bg-white/20 text-white border-0 text-xs">
             {imageCount}/4
           </Badge>
         </div>
-        <CardDescription className="text-white/80 text-sm">
-          {config.dateRange} • {config.description}
+        <CardDescription className="text-white/80 text-xs">
+          {config.dateRange}
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="p-4">
+      <CardContent className="p-3">
         {usesDefault && (
-          <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
+          <div className="mb-3 px-2 py-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs">
             <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-              <Check className="h-4 w-4" />
+              <Check className="h-3 w-3" />
               <span className="font-medium">Using Tax Genius Defaults</span>
             </div>
           </div>
         )}
 
         {/* Image Grid */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-4 gap-1.5 mb-3">
           {folder?.images.map((image) => (
-            <div key={image.id} className="relative aspect-square rounded-lg overflow-hidden bg-muted group">
+            <div key={image.id} className="relative aspect-square rounded overflow-hidden bg-muted group">
               <Image
                 src={image.thumbnailUrl || image.imageUrl}
                 alt={image.altText}
@@ -573,18 +569,18 @@ function FolderCard({ folder, config, folderType, usesDefault, onUpload, onDelet
                   href={image.imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-1.5 bg-white rounded hover:bg-gray-100"
+                  className="p-1 bg-white rounded hover:bg-gray-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <ExternalLink className="h-3.5 w-3.5 text-gray-800" />
+                  <ExternalLink className="h-3 w-3 text-gray-800" />
                 </a>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <button
-                      className="p-1.5 bg-red-500 rounded hover:bg-red-600"
+                      className="p-1 bg-red-500 rounded hover:bg-red-600"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-white" />
+                      <Trash2 className="h-3 w-3 text-white" />
                     </button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
@@ -608,8 +604,8 @@ function FolderCard({ folder, config, folderType, usesDefault, onUpload, onDelet
                 </AlertDialog>
               </div>
               {image.downloadCount > 0 && (
-                <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                  <Download className="h-2.5 w-2.5" />
+                <div className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[10px] px-1 py-0.5 rounded flex items-center gap-0.5">
+                  <Download className="h-2 w-2" />
                   {image.downloadCount}
                 </div>
               )}
@@ -622,9 +618,9 @@ function FolderCard({ folder, config, folderType, usesDefault, onUpload, onDelet
               key={`empty-${i}`}
               onClick={() => folder && onUpload(folder.id)}
               disabled={!folder}
-              className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors flex flex-col items-center justify-center text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="aspect-square rounded border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors flex flex-col items-center justify-center text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ImageIcon className="h-5 w-5" />
+              <ImageIcon className="h-4 w-4" />
             </button>
           ))}
         </div>
@@ -632,24 +628,24 @@ function FolderCard({ folder, config, folderType, usesDefault, onUpload, onDelet
         {/* Upload Button */}
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full h-8 text-xs"
           onClick={() => folder && onUpload(folder.id)}
           disabled={isUploading || imageCount >= 4 || !folder}
         >
           {isUploading ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               Uploading...
             </>
           ) : imageCount >= 4 ? (
             <>
-              <Check className="mr-2 h-4 w-4" />
-              Folder Full
+              <Check className="mr-1.5 h-3 w-3" />
+              Full
             </>
           ) : (
             <>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Images ({4 - imageCount} remaining)
+              <Upload className="mr-1.5 h-3 w-3" />
+              Upload ({4 - imageCount} left)
             </>
           )}
         </Button>

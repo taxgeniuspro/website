@@ -1,17 +1,16 @@
 /**
- * Admin CRM Permissions Management Page
+ * CRM Permissions Tab Component
  *
  * Allows admins to control which tax preparers have access to which CRM features.
  * Supports individual and bulk permission updates.
  *
- * @module app/admin/crm/permissions
+ * Extracted from /admin/crm/permissions for integration into main permissions page.
  */
 
 'use client';
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -37,7 +36,6 @@ import {
   BarChart3,
   TrendingUp,
   Zap,
-  Shield,
   Search,
   CheckCircle2,
   XCircle,
@@ -61,7 +59,7 @@ interface TaxPreparer {
   crmBulkActions: boolean;
 }
 
-export default function AdminCRMPermissionsPage() {
+export function CRMPermissionsTab() {
   const [preparers, setPreparers] = useState<TaxPreparer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -252,25 +250,14 @@ export default function AdminCRMPermissionsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Shield className="h-8 w-8" />
-          CRM Permissions Management
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Control which CRM features each tax preparer can access
-        </p>
-      </div>
-
+    <div className="space-y-6">
       {/* Filters */}
       <Card>
         <CardHeader>
@@ -485,8 +472,8 @@ export default function AdminCRMPermissionsPage() {
               </h4>
               <p className="text-sm text-muted-foreground">Essential CRM tools</p>
               <ul className="text-xs space-y-1">
-                <li>• Activity Timeline</li>
-                <li>• Task Management</li>
+                <li>Activity Timeline</li>
+                <li>Task Management</li>
               </ul>
               <Badge>2 / 7 features</Badge>
             </div>
@@ -498,11 +485,11 @@ export default function AdminCRMPermissionsPage() {
               </h4>
               <p className="text-sm text-muted-foreground">Advanced features without automation</p>
               <ul className="text-xs space-y-1">
-                <li>• Email Automation</li>
-                <li>• Activity Timeline</li>
-                <li>• Advanced Analytics</li>
-                <li>• Task Management</li>
-                <li>• Lead Scoring</li>
+                <li>Email Automation</li>
+                <li>Activity Timeline</li>
+                <li>Advanced Analytics</li>
+                <li>Task Management</li>
+                <li>Lead Scoring</li>
               </ul>
               <Badge>5 / 7 features</Badge>
             </div>

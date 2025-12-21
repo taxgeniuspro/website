@@ -1,13 +1,17 @@
 'use client';
 
+/**
+ * AI Image Generation Tab
+ * Embedded version of the Image Center for Marketing Hub
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { ImagePromptForm, GenerationData } from '@/components/image-center/ImagePromptForm';
 import { ImageHistoryList } from '@/components/image-center/ImageHistoryList';
 import { ImageDetailModal } from '@/components/image-center/ImageDetailModal';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Sparkles } from 'lucide-react';
 
 interface GeneratedImage {
   id: string;
@@ -39,7 +43,7 @@ interface GeneratedImage {
   metadata?: any;
 }
 
-export default function ImageCenterPage() {
+export function AIImagesTab() {
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -80,8 +84,6 @@ export default function ImageCenterPage() {
 
       const result = await response.json();
       toast.success(result.message || 'Images generated successfully');
-
-      // Refresh images list
       await fetchImages();
     } catch (error: any) {
       toast.error(error.message || 'Failed to generate images');
@@ -206,20 +208,7 @@ export default function ImageCenterPage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <Sparkles className="h-8 w-8 text-purple-500" />
-          <h1 className="text-3xl font-bold">AI Image Center</h1>
-        </div>
-        <p className="text-muted-foreground">
-          Generate AI images for your website using OpenAI DALL-E or Replicate Stable Diffusion
-        </p>
-      </div>
-
-      <Separator />
-
+    <div className="space-y-6">
       {/* Generation Form */}
       <ImagePromptForm onGenerate={handleGenerate} isGenerating={generating} />
 
@@ -227,7 +216,7 @@ export default function ImageCenterPage() {
 
       {/* Image History */}
       <div>
-        <h2 className="text-2xl font-semibold mb-4">Generated Images</h2>
+        <h3 className="text-lg font-semibold mb-4">Generated Images</h3>
         {loading ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
