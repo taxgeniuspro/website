@@ -80,12 +80,13 @@ export async function PATCH(
     }
 
     // Update profile information
+    // Note: permissions are role-based (from RolePermissionTemplate), not stored per-user
     const profileData: any = {};
 
     if (firstName !== undefined) profileData.firstName = firstName;
     if (lastName !== undefined) profileData.lastName = lastName;
     if (newRole !== undefined) profileData.role = newRole;
-    if (permissions !== undefined) profileData.customPermissions = permissions;
+    // Permissions are not stored in Profile - they come from the role's default permissions
 
     // Handle user activation/deactivation
     if (isActive !== undefined) {
@@ -147,7 +148,7 @@ export async function PATCH(
         firstName: updatedUser!.profile?.firstName,
         lastName: updatedUser!.profile?.lastName,
         role: updatedUser!.profile?.role,
-        permissions: updatedUser!.profile?.customPermissions,
+        // Permissions are derived from role, not stored per-user
         isActive: updatedUser!.profile?.isActive ?? true,
         deactivatedAt: updatedUser!.profile?.deactivatedAt,
         deactivatedBy: updatedUser!.profile?.deactivatedBy,
