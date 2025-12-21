@@ -184,15 +184,9 @@ export function UserManagementClient({
   const getRoleBadgeColor = (role?: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
-      case 'admin':
         return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
       case 'tax_preparer':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-      case 'lead':
-        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
-      case 'affiliate':
-        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
       case 'client':
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300';
       default:
@@ -255,8 +249,6 @@ export function UserManagementClient({
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
-                <SelectItem value="lead">Lead (Pending)</SelectItem>
-                <SelectItem value="affiliate">Affiliate</SelectItem>
                 <SelectItem value="client">Client</SelectItem>
               </SelectContent>
             </Select>

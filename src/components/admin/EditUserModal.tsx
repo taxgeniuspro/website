@@ -259,12 +259,9 @@ export function EditUserModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="lead">Lead (Pending Approval)</SelectItem>
                   <SelectItem value="client">Client</SelectItem>
-                  <SelectItem value="affiliate">Affiliate</SelectItem>
                   <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
-                  {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
