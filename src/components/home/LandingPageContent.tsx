@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { MessageCircle } from 'lucide-react';
+import Link from 'next/link';
 import { Header } from '@/components/header';
 import { HeroSection } from '@/components/home/HeroSection';
 import { TrustLogosBar } from '@/components/home/TrustLogosBar';
@@ -86,6 +87,31 @@ export function LandingPageContent() {
         <FinalCTASection />
         <OpportunitiesSection />
       </main>
+
+      {/* Footer with Legal Links */}
+      <footer className="bg-muted/50 border-t py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Tax Genius Pro. All rights reserved.
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
+              <Link href="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
+                Terms of Service
+              </Link>
+              <Link href="/security" className="text-muted-foreground hover:text-primary transition-colors">
+                Security
+              </Link>
+              <Link href="/contact" className="text-muted-foreground hover:text-primary transition-colors">
+                Contact
+              </Link>
+            </div>
+          </div>
+        </div>
+      </footer>
 
       {/* Floating Chat Widget */}
       <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 group">
