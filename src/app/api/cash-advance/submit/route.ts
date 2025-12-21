@@ -246,10 +246,10 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
     let primaryRecipient: string;
     let recipientName: string;
 
-    if (assignedPreparerId) {
-      // Get preparer's email address
+    if (assignedPreparerId && preparerProfile) {
+      // Get preparer's email address using preparerProfile.userId (NOT assignedPreparerId which is Profile.id)
       const preparer = await prisma.user.findUnique({
-        where: { id: assignedPreparerId },
+        where: { id: preparerProfile.userId },
         select: {
           email: true,
           profile: {
@@ -269,7 +269,7 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
         preparer?.profile?.professionalEmails?.[0]?.emailAddress ||
         preparer?.email ||
         recipients.primary;
-      recipientName = preparer?.profile?.firstName || 'Tax Preparer';
+      recipientName = preparerProfile.firstName || preparer?.profile?.firstName || 'Tax Preparer';
 
       logger.info('Cash advance lead routed to assigned preparer', {
         ref,
