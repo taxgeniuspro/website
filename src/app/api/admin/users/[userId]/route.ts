@@ -54,6 +54,14 @@ export async function PATCH(
       }
     }
 
+    // Prevent admin from demoting themselves (would lock them out)
+    if (currentUser.id === userId && existingUser.profile?.role === 'admin' && newRole && newRole !== 'admin') {
+      return NextResponse.json(
+        { error: 'You cannot demote yourself from admin. Ask another admin to do this.' },
+        { status: 400 }
+      );
+    }
+
     // Update user email if provided
     if (email && email !== existingUser.email) {
       // Check if email is already taken
@@ -106,9 +114,18 @@ export async function PATCH(
       }
     }
 
-    const updatedProfile = await prisma.profile.update({
+    // Use upsert to handle cases where profile might not exist
+    const updatedProfile = await prisma.profile.upsert({
       where: { userId },
-      data: profileData,
+      update: profileData,
+      create: {
+        userId,
+        role: newRole || 'client',
+        firstName: firstName || '',
+        lastName: lastName || '',
+        isActive: isActive ?? true,
+        ...profileData,
+      },
     });
 
     // Fetch updated user with profile
