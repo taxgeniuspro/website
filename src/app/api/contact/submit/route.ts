@@ -199,10 +199,10 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
     let primaryRecipient: string;
     let recipientName: string;
 
-    if (assignedPreparerId) {
-      // Get preparer's email address
+    if (assignedPreparerId && preparerProfile) {
+      // Get preparer's email address - use preparerProfile.userId (not assignedPreparerId which is Profile.id)
       const preparer = await prisma.user.findUnique({
-        where: { id: assignedPreparerId },
+        where: { id: preparerProfile.userId },
         select: {
           email: true,
           profile: {
