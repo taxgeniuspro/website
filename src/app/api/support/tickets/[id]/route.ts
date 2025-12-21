@@ -17,7 +17,7 @@ import { logger } from '@/lib/logger';
  * GET /api/support/tickets/[id]
  * Get ticket details with messages
  */
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: userId } = await auth();
 
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  * PATCH /api/support/tickets/[id]
  * Update ticket (status, priority, assignment, etc.)
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: userId } = await auth();
 
@@ -168,7 +168,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
  * DELETE /api/support/tickets/[id]
  * Delete a ticket (admin only)
  */
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: userId } = await auth();
 

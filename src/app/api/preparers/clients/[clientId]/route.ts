@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger';
  *
  * Epic 3, Story 3.3: Preparer Client & Document Portal
  */
-export async function GET(req: NextRequest, { params }: { params: { clientId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
   try {
     const session = await auth();
     const user = session?.user;

@@ -16,7 +16,7 @@ import { logger } from '@/lib/logger';
 /**
  * PATCH - Update form data or status
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get user profile
     const profile = await prisma.profile.findUnique({
@@ -188,7 +188,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 /**
  * DELETE - Unassign a tax form (Tax Preparer or Admin only)
  */
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -196,7 +196,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get user profile
     const profile = await prisma.profile.findUnique({

@@ -12,7 +12,7 @@ import sharp from 'sharp';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     // 1. Check admin permissions

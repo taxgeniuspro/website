@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get user profile
     const profile = await prisma.profile.findUnique({

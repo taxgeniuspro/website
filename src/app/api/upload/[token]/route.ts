@@ -13,7 +13,7 @@ import { existsSync } from 'fs';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     const token = params.token;
@@ -132,7 +132,7 @@ export async function GET(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     const token = params.token;

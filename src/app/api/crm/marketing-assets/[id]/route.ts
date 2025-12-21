@@ -12,7 +12,7 @@ import { existsSync } from 'fs';
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth(); const userId = session?.user?.id;

@@ -15,7 +15,7 @@ import { calculateLeadScore } from '@/lib/services/lead-scoring.service';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { leadId: string } }
+  { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
     const session = await auth();

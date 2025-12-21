@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
  * POST /api/support/saved-replies/[id]/apply
  * Apply saved reply to a ticket with variable substitution
  */
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: userId } = await auth();
 

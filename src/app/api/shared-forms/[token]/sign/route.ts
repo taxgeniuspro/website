@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     const session = await auth();

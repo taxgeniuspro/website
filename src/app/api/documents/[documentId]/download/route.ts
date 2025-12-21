@@ -21,7 +21,7 @@ import { logger } from '@/lib/logger';
  * - Rate limited: 30 requests per minute per user
  * - Signed URLs with 15-minute expiry
  */
-export async function GET(req: NextRequest, { params }: { params: { documentId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
     const session = await auth(); const user = session?.user;
 

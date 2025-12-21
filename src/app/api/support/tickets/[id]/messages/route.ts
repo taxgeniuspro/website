@@ -15,7 +15,7 @@ import { logger } from '@/lib/logger';
  * POST /api/support/tickets/[id]/messages
  * Add a message to a ticket
  */
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: userId } = await auth();
 

@@ -37,7 +37,7 @@ import { logTaskCompleted } from '@/lib/services/activity.service';
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
     const session = await auth();
@@ -174,7 +174,7 @@ export async function PATCH(
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
     const session = await auth();
