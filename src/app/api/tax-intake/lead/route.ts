@@ -15,6 +15,7 @@ import {
 } from '@/lib/services/client-referral.service';
 import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
 import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
+import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -455,6 +456,32 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
         leadId: lead.id,
         isComplete: isCompleteTaxIntake,
       });
+
+      // ========================================
+      // LEAD SCORING: Calculate and update score
+      // ========================================
+      try {
+        const scoreBreakdown = await CRMLeadScoringService.updateContactScore(
+          crmContact.id,
+          'tax_intake_form'
+        );
+        logger.info('Lead score calculated for CRM contact', {
+          contactId: crmContact.id,
+          score: scoreBreakdown.total,
+          breakdown: {
+            emailEngagement: scoreBreakdown.emailEngagement,
+            interactions: scoreBreakdown.interactions,
+            stage: scoreBreakdown.stage,
+            recency: scoreBreakdown.recency,
+          },
+        });
+      } catch (scoreError) {
+        // Log error but don't fail - scoring can be recalculated later
+        logger.error('Failed to calculate lead score', {
+          contactId: crmContact.id,
+          error: scoreError,
+        });
+      }
     } catch (crmError) {
       // Log error but don't fail the request - lead was already saved
       logger.error('Failed to create CRM contact/interaction', {
