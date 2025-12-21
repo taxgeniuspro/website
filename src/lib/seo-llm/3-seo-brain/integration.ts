@@ -510,6 +510,7 @@ export class N8NIntegration {
     signature: string,
     secret: string = this.WEBHOOK_SECRET
   ): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const crypto = require('crypto')
     const computedSignature = crypto.createHmac('sha256', secret).update(payload).digest('hex')
 

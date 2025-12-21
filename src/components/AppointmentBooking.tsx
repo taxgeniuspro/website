@@ -141,7 +141,8 @@ export default function AppointmentBooking() {
   // Helper function to convert 12-hour time to 24-hour format
   const convertTo24Hour = (time12h: string): string => {
     const [time, period] = time12h.split(' ');
-    let [hours, minutes] = time.split(':');
+    const [hoursStr, minutes] = time.split(':');
+    let hours = hoursStr;
 
     if (period === 'PM' && hours !== '12') {
       hours = String(parseInt(hours) + 12);

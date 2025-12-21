@@ -58,7 +58,7 @@ export class EmailService {
     try {
       // preparerId can be either User.id or Profile.id
       // First try to find by User.id
-      let user = await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: preparerId },
         select: {
           email: true,
