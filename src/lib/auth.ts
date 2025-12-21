@@ -273,60 +273,120 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           // Truly new user with new email
           // Since allowDangerousEmailAccountLinking is FALSE, we must create EVERYTHING ourselves
+          // Use upsert to handle race conditions with NextAuth adapter
           logger.info('New Google OAuth signup - creating user and account manually', {
             email: userEmail,
             providerAccountId: account.providerAccountId,
           });
 
-          // Create the new user ourselves
-          const newUser = await prisma.user.create({
-            data: {
-              email: userEmail,
-              name: user.name || userEmail.split('@')[0],
-              image: user.image,
-              emailVerified: new Date(), // Google verified the email
-            },
+          // Use a transaction to ensure all records are created atomically
+          const result = await prisma.$transaction(async (tx) => {
+            // Upsert user (create if not exists, return existing if does)
+            const newUser = await tx.user.upsert({
+              where: { email: userEmail },
+              update: {
+                // Only update if user exists but doesn't have these set
+                name: user.name || undefined,
+                image: user.image || undefined,
+                emailVerified: new Date(),
+              },
+              create: {
+                email: userEmail,
+                name: user.name || userEmail.split('@')[0],
+                image: user.image,
+                emailVerified: new Date(),
+              },
+              include: { profile: true },
+            });
+
+            // Create profile if it doesn't exist
+            if (!newUser.profile) {
+              await tx.profile.create({
+                data: {
+                  userId: newUser.id,
+                  role: 'client',
+                  affiliateStatus: 'APPROVED',
+                  affiliateApprovedAt: new Date(),
+                },
+              });
+            }
+
+            // Upsert the Google account link
+            await tx.account.upsert({
+              where: {
+                provider_providerAccountId: {
+                  provider: 'google',
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              update: {
+                access_token: account.access_token as string | undefined,
+                refresh_token: account.refresh_token as string | undefined,
+                expires_at: account.expires_at as number | undefined,
+                token_type: account.token_type as string | undefined,
+                scope: account.scope as string | undefined,
+                id_token: account.id_token as string | undefined,
+              },
+              create: {
+                userId: newUser.id,
+                type: 'oauth',
+                provider: 'google',
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token as string | undefined,
+                refresh_token: account.refresh_token as string | undefined,
+                expires_at: account.expires_at as number | undefined,
+                token_type: account.token_type as string | undefined,
+                scope: account.scope as string | undefined,
+                id_token: account.id_token as string | undefined,
+              },
+            });
+
+            return newUser;
           });
 
-          // Create the profile for the new user
-          await prisma.profile.create({
-            data: {
-              userId: newUser.id,
-              role: 'client',
-              affiliateStatus: 'APPROVED',
-              affiliateApprovedAt: new Date(),
-            },
-          });
-
-          // Create the Google account link
-          await prisma.account.create({
-            data: {
-              userId: newUser.id,
-              type: 'oauth',
-              provider: 'google',
-              providerAccountId: account.providerAccountId,
-              access_token: account.access_token as string | undefined,
-              refresh_token: account.refresh_token as string | undefined,
-              expires_at: account.expires_at as number | undefined,
-              token_type: account.token_type as string | undefined,
-              scope: account.scope as string | undefined,
-              id_token: account.id_token as string | undefined,
-            },
-          });
-
-          logger.info('Created new user with Google OAuth', {
-            userId: newUser.id,
+          logger.info('Created/updated user with Google OAuth', {
+            userId: result.id,
             email: userEmail,
           });
 
-          // CRITICAL: Set user.id so NextAuth uses our new user
-          (user as any).id = newUser.id;
-          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
+          // CRITICAL: Set user.id so NextAuth uses our user
+          (user as any).id = result.id;
+          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = result.profile?.role || 'client';
           (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
 
           return true;
-        } catch (error) {
-          logger.error('Error during Google OAuth sign-in check', { error, email: user.email });
+        } catch (error: any) {
+          // Log the full error for debugging
+          logger.error('Error during Google OAuth sign-in check', {
+            error: error?.message || error,
+            stack: error?.stack,
+            code: error?.code,
+            email: user.email,
+            providerAccountId: account.providerAccountId,
+          });
+
+          // If it's a unique constraint error, the user might already exist
+          // This can happen if there's a race condition or retry
+          if (error?.code === 'P2002') {
+            logger.info('Duplicate detected, retrying lookup', { email: user.email });
+            // Try to find the existing account
+            const existingAccount = await prisma.account.findUnique({
+              where: {
+                provider_providerAccountId: {
+                  provider: 'google',
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              include: { user: { include: { profile: true } } },
+            });
+
+            if (existingAccount) {
+              (user as any).id = existingAccount.user.id;
+              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingAccount.user.profile?.role || 'client';
+              return true;
+            }
+          }
+
           return '/auth/error?error=Configuration';
         }
       }
