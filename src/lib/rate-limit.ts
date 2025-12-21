@@ -197,6 +197,13 @@ export const trackingRateLimit = createRateLimiter({
   prefix: 'ratelimit:tracking',
 });
 
+// Admin role changes: 5 per minute per user (prevent mass role escalation)
+export const adminRoleChangeRateLimit = createRateLimiter({
+  max: 5,
+  windowMs: 60000,
+  prefix: 'ratelimit:admin-role',
+});
+
 // ============ Helper Functions ============
 
 /**

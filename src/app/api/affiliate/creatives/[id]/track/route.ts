@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { trackCreativeUsage } from '@/lib/services/creative.service';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * POST /api/affiliate/creatives/[id]/track
@@ -26,15 +27,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is an affiliate
-    const isAffiliate =
-      profile.role === 'affiliate' ||
-      profile.role === 'tax_preparer' ||
-      profile.role === 'admin' ||
-      profile.role === 'admin';
-
-    if (!isAffiliate) {
-      return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
+      return NextResponse.json({ error: 'Affiliate access required' }, { status: 403 });
     }
 
     const { id } = await params;

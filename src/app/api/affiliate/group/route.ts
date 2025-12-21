@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * GET /api/affiliate/group
@@ -28,15 +29,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is an affiliate
-    const isAffiliate =
-      profile.role === 'affiliate' ||
-      profile.role === 'tax_preparer' ||
-      profile.role === 'admin' ||
-      profile.role === 'admin';
-
-    if (!isAffiliate) {
-      return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
+      return NextResponse.json({ error: 'Affiliate access required' }, { status: 403 });
     }
 
     if (!profile.affiliateGroup) {

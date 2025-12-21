@@ -15,6 +15,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 const MINIMUM_PAYOUT_AMOUNT = Number(process.env.MINIMUM_PAYOUT_AMOUNT) || 50;
 
@@ -39,10 +40,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Only referrers can request payouts
-    if (profile.role !== 'affiliate') {
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
       return NextResponse.json(
-        { error: 'Only referrers can request commission payouts' },
+        { error: 'Only users with affiliate access can request commission payouts' },
         { status: 403 }
       );
     }
@@ -146,10 +147,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Only referrers can request payouts
-    if (profile.role !== 'affiliate') {
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
       return NextResponse.json(
-        { error: 'Only referrers can request commission payouts' },
+        { error: 'Only users with affiliate access can request commission payouts' },
         { status: 403 }
       );
     }

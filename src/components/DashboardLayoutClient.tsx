@@ -120,7 +120,7 @@ export function DashboardLayoutClient({
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto bg-muted/10 p-4 md:p-6">{children}</div>
+        <main id="main-content" className="flex-1 overflow-y-auto bg-muted/10 p-4 md:p-6">{children}</main>
       </SidebarInset>
 
       {/* Tax Assistant Widget - Only for Tax Preparers and Admins */}

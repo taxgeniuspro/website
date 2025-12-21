@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { hasAffiliateAccess } from '@/lib/permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,15 +39,27 @@ export const metadata = {
   description: 'Track your affiliate commissions',
 };
 
-async function isAffiliate() {
-  const session = await auth(); const user = session?.user;
-  if (!user) return false;
-  const role = user?.role;
-  return role === 'affiliate' || role === 'admin';
-}
-
 export default async function AffiliateEarningsPage() {
-  const userIsAffiliate = await isAffiliate();
+  const session = await auth();
+  const user = session?.user;
+
+  if (!user) {
+    redirect('/forbidden');
+  }
+
+  const profile = await prisma.profile.findUnique({
+    where: { userId: user.id },
+    select: { role: true, affiliateStatus: true },
+  });
+
+  if (!profile) {
+    redirect('/forbidden');
+  }
+
+  const userIsAffiliate = hasAffiliateAccess(
+    profile.role as 'admin' | 'client' | 'tax_preparer',
+    profile.affiliateStatus as 'APPROVED' | 'SUSPENDED' | 'INACTIVE' | null
+  );
 
   if (!userIsAffiliate) {
     redirect('/forbidden');

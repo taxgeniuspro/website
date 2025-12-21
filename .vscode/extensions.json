@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "anthropic.claude-code",
+    "bradlc.vscode-tailwindcss",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "github.vscode-github-actions",
+    "github.vscode-pull-request-github",
+    "prisma.prisma",
+    "ms-playwright.playwright",
+    "rangav.vscode-thunder-client",
+    "usernamehw.errorlens",
+    "wix.vscode-import-cost",
+    "mhutchie.git-graph",
+    "ms-vscode-remote.remote-ssh",
+    "redhat.vscode-yaml"
+  ]
+}

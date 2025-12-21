@@ -27,6 +27,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { ReferralProgramToggle } from '@/components/settings/ReferralProgramToggle';
+import { LinkedAccountsCard } from '@/components/settings/LinkedAccountsCard';
 
 export const metadata = {
   title: 'Settings | Tax Genius Pro',
@@ -300,6 +301,9 @@ export default async function ClientSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Linked Accounts */}
+      <LinkedAccountsCard />
 
       {/* Payment Methods */}
       <Card>

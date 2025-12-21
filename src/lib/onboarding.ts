@@ -181,7 +181,7 @@ export const ONBOARDING_STEPS: Record<UserRole, OnboardingStep[]> = {
       icon: 'Link',
       action: {
         label: 'Get Tracking Link',
-        href: '/dashboard/affiliate/tracking',
+        href: '/dashboard/referrals', // Consolidated referrals page
       },
     },
     {
@@ -229,7 +229,7 @@ export const ONBOARDING_STEPS: Record<UserRole, OnboardingStep[]> = {
       icon: 'Link',
       action: {
         label: 'Get Referral Link',
-        href: '/dashboard/referrer/tracking',
+        href: '/dashboard/referrals', // Consolidated referrals page
       },
     },
     {

@@ -4,14 +4,22 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { nanoid } from 'nanoid';
+import { adminRoleChangeRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
-// Authorized emails that can upgrade users to tax_preparer or affiliate
-const AUTHORIZED_ADMIN_EMAILS = [
-  'taxgeniuses.tax@gmail.com',
-  'taxgenius.tax@gmail.com',
-  'iradwatkins@gmail.com',
-  'goldenprotaxes@gmail.com',
-];
+// Authorized emails from environment variable (comma-separated list)
+// Falls back to defaults for backwards compatibility
+const getAuthorizedAdminEmails = (): string[] => {
+  const envEmails = process.env.AUTHORIZED_ADMIN_EMAILS;
+  if (envEmails) {
+    return envEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  }
+  // Fallback to hardcoded values (should move to env in production)
+  return [
+    'taxgenius.tax@gmail.com',
+    'iradwatkins@gmail.com',
+    'goldenprotaxes@gmail.com',
+  ];
+};
 
 /**
  * API endpoint to set admin role for a user
@@ -21,6 +29,29 @@ const AUTHORIZED_ADMIN_EMAILS = [
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - prevent mass role changes (5 per minute per IP)
+    const clientIp = getClientIdentifier(request);
+    const rateLimitResult = await adminRoleChangeRateLimit.limit(clientIp);
+
+    if (!rateLimitResult.success) {
+      logger.warn('Rate limit exceeded for admin role change', {
+        ip: clientIp,
+        remaining: rateLimitResult.remaining,
+        reset: new Date(rateLimitResult.reset).toISOString(),
+      });
+      return NextResponse.json(
+        { error: 'Too many role change requests. Please wait before trying again.' },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': String(rateLimitResult.limit),
+            'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+            'X-RateLimit-Reset': String(rateLimitResult.reset),
+          }
+        }
+      );
+    }
+
     // Authentication check
     const session = await auth();
 
@@ -32,7 +63,8 @@ export async function POST(request: NextRequest) {
     const currentUserRole = session.user.role;
     const currentUserEmail = session.user.email.toLowerCase();
     const isSuperAdmin = currentUserRole === 'admin';
-    const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.includes(currentUserEmail);
+    const authorizedEmails = getAuthorizedAdminEmails();
+    const isAuthorizedAdmin = authorizedEmails.includes(currentUserEmail);
 
     if (!isSuperAdmin && !isAuthorizedAdmin) {
       return NextResponse.json(
@@ -47,7 +79,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
     }
 
-    const validRoles = ['admin', 'lead', 'client', 'tax_preparer', 'affiliate'];
+    // Only 3 valid roles: admin, client, tax_preparer
+    // Note: 'affiliate' is a STATUS (affiliateStatus), not a role
+    // Note: 'lead' is a CRM contact (Lead model), not a user role
+    const validRoles = ['admin', 'client', 'tax_preparer'];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
@@ -55,11 +90,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Authorized admins (non-super admins) can only assign tax_preparer or affiliate roles
+    // Authorized admins (non-super admins) can only assign tax_preparer role
     if (isAuthorizedAdmin && !isSuperAdmin) {
-      if (role !== 'tax_preparer' && role !== 'affiliate') {
+      if (role !== 'tax_preparer') {
         return NextResponse.json(
-          { error: 'Authorized admins can only assign tax_preparer or affiliate roles. Contact a super admin for other role assignments.' },
+          { error: 'Authorized admins can only assign tax_preparer role. Contact a super admin for other role assignments.' },
           { status: 403 }
         );
       }
@@ -135,7 +170,7 @@ export async function POST(request: NextRequest) {
 
       logger.info(`🔄 Client ${email} converted to tax_preparer with account reset`, {
         newTrackingCode,
-        resetDetails,
+        resetDetails: resetDetails.join('; '),
       });
     } else {
       // Standard role update (no reset)

@@ -12,6 +12,7 @@ import { ConditionalFooter } from '@/components/ConditionalFooter';
 import { GoogleAnalytics } from '@/components/GoogleAnalytics';
 import { WebVitals } from '@/components/WebVitals';
 import OrganizationSchema from '@/components/seo/OrganizationSchema';
+import { SkipToMain } from '@/components/accessibility/SkipToMain';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -81,7 +82,8 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
         <GoogleAnalytics />
       </head>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased min-h-screen min-h-[100dvh]`} suppressHydrationWarning>
+        <SkipToMain />
         <OrganizationSchema />
         <ThemeProvider
           attribute="class"

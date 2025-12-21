@@ -63,7 +63,7 @@ export default function AffiliateDashboard() {
       {/* Onboarding Dialog */}
       {user && (
         <OnboardingDialog
-          role={(user?.role as UserRole) || 'affiliate'}
+          role={(user?.role as UserRole) || 'client'}
           userName={user.name || undefined}
         />
       )}

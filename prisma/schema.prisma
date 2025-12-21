@@ -149,6 +149,15 @@ model Profile {
   // QR Code Branding (For Tax Preparers - Epic 6)
   usePhotoInQRCodes Boolean @default(false) // Use profile photo in QR codes instead of Tax Genius logo
 
+  // Google Drive Integration (For Tax Preparers - Private Folders)
+  googleDriveFolderId    String? // Their private folder ID in company Drive
+  googleDriveFolderUrl   String? // Direct link to folder
+  googleSheetsClientsId  String? // Clients spreadsheet ID
+  googleSheetsLeadsId    String? // Leads spreadsheet ID
+  googleSheetsCommissionsId String? // Commissions spreadsheet ID
+  googleSheetsPerformanceId String? // Performance spreadsheet ID
+  googleSheetsLastSync   DateTime? // Last sync timestamp
+
   // Commission Settings (For Tax Preparers - Referral Program)
   // Tax Preparers manage commission rates for their referrers (clients + affiliates)
   // Company defaults: Tier1 (1-5) $50, Tier2 (6-10) $75, Tier3 (11+) $100
@@ -277,6 +286,10 @@ model Profile {
   referralImageSets           ReferralImageSet[]           @relation("PreparerImageSets")
   clientReferralInvitations   ClientReferralInvitation[]   @relation("ClientReferralInvitations")
   preparerReferralInvitations ClientReferralInvitation[]   @relation("PreparerReferralInvitations")
+
+  // Google Integrations (Company Level)
+  googleDriveFolders    GoogleDriveFolder[]    @relation("PreparerDriveFolders")
+  googleCalendarEvents  GoogleCalendarEvent[]  @relation("PreparerCalendarEvents")
 
   @@index([role])
   @@index([vanitySlug])
@@ -579,6 +592,8 @@ model ClientPreparer {
   @@unique([clientId, preparerId])
   @@index([clientId])
   @@index([preparerId])
+  // Composite index for common query: get active clients for a preparer
+  @@index([preparerId, isActive])
   @@map("client_preparers")
 }
 
@@ -789,6 +804,9 @@ model Document {
   // Upload Link tracking (NEW - for shareable folder upload links)
   uploadLinkId String? // If uploaded via shareable link
   uploadLink   FolderUploadLink? @relation("UploadedViaLink", fields: [uploadLinkId], references: [id], onDelete: SetNull)
+
+  // Google Drive backup tracking
+  googleDriveBackup GoogleDriveBackup?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1058,6 +1076,9 @@ model Commission {
   @@index([createdAt])
   @@index([sourceType, sourceId])
   @@index([payoutRequestId])
+  // Composite indexes for common query patterns
+  @@index([referrerId, status]) // Earnings queries: get all pending/paid for a referrer
+  @@index([status, createdAt]) // Admin queries: filter by status with date range
   @@map("commissions")
 }
 
@@ -1580,6 +1601,11 @@ model TaxIntakeLead {
   @@index([clientFolderId])
   @@index([unqualified])
   @@index([expiresAt])
+  // Composite indexes for common query patterns
+  @@index([created_at, completed]) // Analytics: date range with completion filter
+  @@index([convertedToClient, created_at]) // Conversion tracking: filter converted leads by date
+  @@index([assignedPreparerId, completed]) // Preparer workload: assigned leads by status
+  @@index([urgency, assignedPreparerId]) // Priority queue: urgent leads per preparer
   @@map("tax_intake_leads")
 }
 
@@ -2746,7 +2772,7 @@ model AccessAttemptLog {
 // Allows super_admin to customize what each role gets by default
 model RolePermissionTemplate {
   id          String @id @default(cuid())
-  role        String @unique // 'super_admin', 'admin', 'tax_preparer', 'affiliate', 'lead', 'client'
+  role        String @unique // Only 3 roles: 'admin', 'tax_preparer', 'client'
   permissions Json // JSON object of Permission -> boolean mapping
 
   // Audit trail
@@ -3963,4 +3989,119 @@ model ScheduledEmail {
   @@index([status, sendAt])
   @@index([type, status])
   @@map("scheduled_emails")
+}
+
+// ============ Google Integrations (Company Level) ============
+
+// Track Google Sheets sync status
+model GoogleSheetSync {
+  id            String         @id @default(cuid())
+  sheetType     GoogleSheetType
+  spreadsheetId String         // Google Sheets spreadsheet ID
+  sheetName     String         // Sheet tab name
+  spreadsheetUrl String?       // Direct URL to the sheet
+  lastSyncAt    DateTime?
+  lastError     String?
+  rowCount      Int            @default(0)
+  syncStatus    GoogleSyncStatus @default(PENDING)
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([sheetType])
+  @@map("google_sheet_syncs")
+}
+
+// Track Google Drive document backups
+model GoogleDriveBackup {
+  id            String   @id @default(cuid())
+  documentId    String   @unique // Tax Genius document ID
+  driveFileId   String   // Google Drive file ID
+  driveFolderId String   // Parent folder ID in Drive
+  driveFileName String   // File name in Drive
+  driveFileUrl  String?  // Direct URL to the file
+  fileSize      Int?     // File size in bytes
+  mimeType      String?  // File MIME type
+  backedUpAt    DateTime @default(now())
+
+  // Relations
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([driveFolderId])
+  @@map("google_drive_backups")
+}
+
+// Track Google Drive folder structure
+model GoogleDriveFolder {
+  id            String   @id @default(cuid())
+  folderId      String   @unique // Google Drive folder ID
+  folderName    String   // Folder name
+  parentId      String?  // Parent folder ID (null for root)
+  folderPath    String   // Full path like "Client Archives/2024/Gelisa White"
+  folderType    GoogleDriveFolderType
+
+  // For client folders, link to preparer
+  preparerId    String?
+  preparer      Profile? @relation("PreparerDriveFolders", fields: [preparerId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([folderType])
+  @@index([preparerId])
+  @@map("google_drive_folders")
+}
+
+// Track Google Calendar events synced from Tax Genius
+model GoogleCalendarEvent {
+  id              String   @id @default(cuid())
+  appointmentId   String?  @unique // Tax Genius appointment ID (if linked)
+  googleEventId   String   @unique // Google Calendar event ID
+  calendarId      String   // Google Calendar ID (usually 'primary')
+
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  meetLink        String?  // Google Meet link if created
+
+  // For tracking which preparer this is for
+  preparerId      String?
+  preparer        Profile? @relation("PreparerCalendarEvents", fields: [preparerId], references: [id])
+
+  syncStatus      GoogleSyncStatus @default(SYNCED)
+  lastSyncAt      DateTime @default(now())
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([preparerId])
+  @@index([startTime])
+  @@map("google_calendar_events")
+}
+
+enum GoogleSheetType {
+  PAYOUTS
+  COMMISSIONS
+  LEADS
+  PREPARER_PERFORMANCE
+  DAILY_REVENUE
+}
+
+enum GoogleSyncStatus {
+  PENDING
+  SYNCING
+  SYNCED
+  FAILED
+}
+
+enum GoogleDriveFolderType {
+  ROOT              // Tax Genius Pro root folder
+  CLIENT_ARCHIVES   // Client Archives folder
+  YEAR              // Year folder (2024, 2025)
+  PREPARER          // Preparer folder
+  CLIENT            // Individual client folder
+  MARKETING         // Marketing Assets folder
+  FINANCIAL         // Financial Reports folder
+  COMPANY           // Company Documents folder
 }

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       const authorizedFileIds = files
         .filter((file) => {
           // ❌ CLIENTS CANNOT DELETE DOCUMENTS (security requirement)
-          if (profile.role === 'client' || profile.role === 'lead') {
+          if (profile.role === 'client') {
             return false;
           }
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       const authorizedFolderIds = folders
         .filter((folder) => {
           // ❌ CLIENTS CANNOT DELETE FOLDERS (security requirement)
-          if (profile.role === 'client' || profile.role === 'lead') {
+          if (profile.role === 'client') {
             return false;
           }
 

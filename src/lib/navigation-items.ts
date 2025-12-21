@@ -6,16 +6,15 @@
  *
  * CONSOLIDATION NOTES (Dec 2025):
  * - Settings: Only in sidebar footer (removed from nav items to avoid duplicates)
- * - Store: Single entry for tax_preparer + admin
  * - Calendar/CRM Contacts: Consolidated - same /crm/contacts route for all roles
  * - Marketing Assets: Consolidated per role
- * - IRS Forms: Moved to Store & Products section
  * - My Tracking Code: Moved to Dashboard section for tax_preparer
+ * - Professional Email: Moved to Settings sub-page (not in main nav)
  *
- * SIMPLIFIED NAVIGATION (Dec 2025):
- * - Removed: Dashboard section (merged), Tools & Resources, CRM, Quick Share Tools, Business
+ * STREAMLINED NAVIGATION (Dec 2025):
+ * - Removed: Store/Marketplace (physical products), Dashboard section (merged)
  * - Tax Preparer sections: 📊 Dashboard, 💰 Referral Management
- * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
+ * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 📋 IRS Forms, ⚙️ System Controls
  */
 
 import {
@@ -33,7 +32,6 @@ import {
   UserCheck,
   Trophy,
   QrCode,
-  Package,
   BookOpen,
   Shield,
   Ticket,
@@ -62,7 +60,7 @@ export interface NavItem {
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
  * - Tax Preparer: 📊 Dashboard, 💰 Referral Management
- * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 🛒 Store & Products, ⚙️ System Controls
+ * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 📋 IRS Forms, ⚙️ System Controls
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
@@ -97,31 +95,15 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Share & Earn',
-    href: '/dashboard/client/share-earn',
+    href: '/dashboard/referrals',
     icon: Gift,
     permission: 'dashboard',
     section: '📱 My Dashboard',
     roles: ['client'],
   },
   {
-    label: 'My Referrals',
-    href: '/dashboard/client/referrals',
-    icon: Share2,
-    permission: 'trackingCode',
-    section: '📱 My Dashboard',
-    roles: ['client'],
-  },
-  {
-    label: 'Tracking & QR',
-    href: '/dashboard/client/tracking',
-    icon: QrCode,
-    permission: 'trackingCode',
-    section: '📱 My Dashboard',
-    roles: ['client'],
-  },
-  {
     label: 'My Leads',
-    href: '/dashboard/client/leads',
+    href: '/dashboard/affiliate/leads',
     icon: Users,
     permission: 'dashboard',
     section: '📱 My Dashboard',
@@ -129,7 +111,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Analytics',
-    href: '/dashboard/client/analytics',
+    href: '/dashboard/affiliate/analytics',
     icon: BarChart3,
     permission: 'analytics',
     section: '📱 My Dashboard',
@@ -137,7 +119,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Marketing Assets',
-    href: '/dashboard/client/creatives',
+    href: '/dashboard/affiliate/creatives',
     icon: FolderOpen,
     permission: 'marketingAssets',
     section: '📱 My Dashboard',
@@ -154,7 +136,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 📊 TAX PREPARER DASHBOARD SECTION
-  // Order: Overview, Analytics, Share & Earn, Clients, Calendar, Documents, Tax Forms, Training, Store
+  // Order: Overview, Analytics, Share & Earn, Clients, Calendar, Documents, Tax Forms, Training
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Overview',
@@ -174,7 +156,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Share & Earn',
-    href: '/dashboard/tax-preparer/share-earn',
+    href: '/dashboard/referrals',
     icon: Gift,
     permission: 'trackingCode',
     section: '📊 Dashboard',
@@ -244,36 +226,13 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
-  {
-    label: 'Store',
-    href: '/store',
-    icon: Package,
-    permission: 'store',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 💰 TAX PREPARER REFERRAL MANAGEMENT SECTION
   // Manage referrers (clients + affiliates) and their commission rates
   // Tax Preparers do NOT earn commissions - they manage rates for their referrers
+  // Note: Links & QR consolidated into Share & Earn (/dashboard/referrals)
   // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'My Referrals',
-    href: '/dashboard/tax-preparer/referrals',
-    icon: Share2,
-    permission: 'trackingCode',
-    section: '💰 Referral Management',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'My Links & QR',
-    href: '/dashboard/tax-preparer/tracking',
-    icon: QrCode,
-    permission: 'trackingCode',
-    section: '💰 Referral Management',
-    roles: ['tax_preparer'],
-  },
   {
     label: 'Bonded Affiliates',
     href: '/dashboard/tax-preparer/bonded-affiliates',
@@ -461,39 +420,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🛒 STORE & PRODUCTS SECTION (Admin only)
-  // Store access and product management
+  // 📋 IRS FORMS SECTION (Admin only)
   // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Store',
-    href: '/store',
-    icon: Package,
-    permission: 'store',
-    section: '🛒 Store & Products',
-    roles: ['admin'],
-  },
-  {
-    label: 'Product Management',
-    href: '/admin/products',
-    icon: Package,
-    permission: 'database',
-    section: '🛒 Store & Products',
-    roles: ['admin'],
-  },
-  {
-    label: 'Order Management',
-    href: '/admin/orders',
-    icon: Package,
-    permission: 'database',
-    section: '🛒 Store & Products',
-    roles: ['admin'],
-  },
   {
     label: 'IRS Forms Library',
     href: '/admin/tax-forms',
     icon: FileText,
     permission: 'taxForms',
-    section: '🛒 Store & Products',
+    section: '📋 IRS Forms',
     roles: ['admin'],
   },
 
@@ -550,7 +484,7 @@ export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📊 Analytics': ['admin'], // Admin analytics section
   '💰 Financials': ['admin'], // Admin financials
   '📢 Marketing': ['admin'], // Admin marketing hub
-  '🛒 Store & Products': ['admin'], // Admin store management
+  '📋 IRS Forms': ['admin'], // Admin IRS forms library
   '⚙️ System Controls': ['admin'], // Admin system settings
   // 👥 Clients: visible to both tax_preparer and admin (different items shown)
 };

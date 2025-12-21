@@ -347,8 +347,9 @@ async function getCommissionRate(
       return { rate: DEFAULT_COMMISSION_RATE, source: 'default' };
     }
 
-    // If affiliate, check for custom commission structure from bonded preparer
-    if (profile.role === 'affiliate' && profile.affiliateBondedToPreparerId) {
+    // If client with affiliate access, check for custom commission structure from bonded preparer
+    // Note: 'affiliate' is not a role - it's a status (affiliateStatus)
+    if (profile.role === 'client' && profile.affiliateBondedToPreparerId) {
       const bonding = await prisma.affiliateBonding.findFirst({
         where: {
           affiliateId: profile.id,

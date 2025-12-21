@@ -29,11 +29,15 @@ import {
   Upload,
   FileText,
   Clock,
+  Mail,
+  ArrowRight,
 } from 'lucide-react';
+import Link from 'next/link';
 import { MarketingContactForm } from '@/components/settings/MarketingContactForm';
 import { SocialMediaLinksForm } from '@/components/settings/SocialMediaLinksForm';
 import { AvailabilitySettings } from '@/components/settings/AvailabilitySettings';
 import { NotificationSettingsCard } from '@/components/settings/NotificationSettingsCard';
+import { LinkedAccountsCard } from '@/components/settings/LinkedAccountsCard';
 
 export const metadata = {
   title: 'Settings | Tax Genius Pro',
@@ -345,6 +349,38 @@ export default async function TaxPreparerSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Professional Email */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Mail className="w-5 h-5" />
+            <CardTitle>Professional Email</CardTitle>
+          </div>
+          <CardDescription>Get a professional @taxgeniuspro.tax email address</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-gradient-to-r from-primary/5 to-primary/10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Mail className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium">yourname@taxgeniuspro.tax</p>
+                <p className="text-sm text-muted-foreground">
+                  Professional email alias • $29.99/year
+                </p>
+              </div>
+            </div>
+            <Button asChild>
+              <Link href="/dashboard/tax-preparer/settings/professional-email">
+                Get Started
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Documents */}
       <Card>
         <CardHeader>
@@ -419,6 +455,9 @@ export default async function TaxPreparerSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Linked Accounts */}
+      <LinkedAccountsCard />
 
       {/* Marketing Contact Information */}
       <MarketingContactForm />

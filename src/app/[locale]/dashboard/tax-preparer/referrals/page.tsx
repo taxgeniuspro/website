@@ -158,7 +158,7 @@ export default async function PreparerReferralsPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href="/dashboard/tax-preparer/tracking">
+              <Link href="/dashboard/referrals">
                 <QrCode className="w-4 h-4 mr-2" />
                 My Links
               </Link>
@@ -246,7 +246,7 @@ export default async function PreparerReferralsPage() {
             </CardHeader>
             <CardContent>
               <Button className="w-full" asChild>
-                <Link href="/dashboard/tax-preparer/tracking">
+                <Link href="/dashboard/referrals">
                   <Share2 className="w-4 h-4 mr-2" />
                   View & Share Links
                 </Link>
@@ -310,7 +310,7 @@ export default async function PreparerReferralsPage() {
                   Share your referral link to start getting clients
                 </p>
                 <Button className="mt-4" asChild>
-                  <Link href="/dashboard/tax-preparer/tracking">
+                  <Link href="/dashboard/referrals">
                     Get Your Referral Link
                   </Link>
                 </Button>

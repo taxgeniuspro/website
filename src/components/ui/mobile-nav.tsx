@@ -16,8 +16,6 @@ import {
   Share2,
   UserPlus,
   HelpCircle,
-  Calendar,
-  Mail,
 } from 'lucide-react';
 
 interface MobileNavProps {
@@ -34,7 +32,7 @@ const navigationConfig = {
     {
       label: 'Clients',
       icon: Users,
-      href: '/dashboard/tax-preparer/overview',
+      href: '/dashboard/tax-preparer/clients',
     },
     {
       label: 'Leads',
@@ -74,9 +72,9 @@ const navigationConfig = {
       href: '/dashboard/affiliate/leads',
     },
     {
-      label: 'Marketing',
+      label: 'Creatives',
       icon: Share2,
-      href: '/dashboard/affiliate/marketing',
+      href: '/dashboard/affiliate/creatives',
     },
     {
       label: 'Earnings',
@@ -126,9 +124,9 @@ const navigationConfig = {
       href: '/dashboard/client/tickets',
     },
     {
-      label: 'Calendar',
-      icon: Calendar,
-      href: '/dashboard/client/calendar',
+      label: 'Referrals',
+      icon: Share2,
+      href: '/dashboard/client/referrals',
     },
     {
       label: 'Settings',
@@ -170,7 +168,7 @@ const navigationConfig = {
     {
       label: 'Settings',
       icon: Settings,
-      href: '/admin/database',
+      href: '/admin/settings',
     },
   ],
 };

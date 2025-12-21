@@ -40,11 +40,8 @@ export default function AffiliateAnalyticsPage() {
       return;
     }
 
-    const role = session.user.role as string;
-    if (role !== 'affiliate') {
-      router.push('/forbidden');
-      return;
-    }
+    // Check is done server-side via API now - just let the API handle access control
+    // The API checks: admin, tax_preparer, or client with affiliateStatus === 'APPROVED'
 
     // Fetch analytics data
     async function fetchAnalytics() {

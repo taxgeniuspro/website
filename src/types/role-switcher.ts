@@ -63,20 +63,16 @@ export interface RoleDisplayInfo {
 }
 
 /**
- * Role switcher configuration
+ * Role display configuration
+ * Only 3 roles: admin, tax_preparer, client
+ * Note: 'affiliate' is a STATUS (affiliateStatus), not a role
+ * Note: 'lead' is a CRM contact (Lead model), not a user role
  */
 export const ROLE_DISPLAY_CONFIG: Record<UserRole, RoleDisplayInfo> = {
   admin: {
     value: 'admin',
-    label: 'Super Admin',
-    description: 'Full system access',
-    color: 'red',
-    icon: '🛡️',
-  },
-  admin: {
-    value: 'admin',
     label: 'Admin',
-    description: 'Administrative access',
+    description: 'Full system access',
     color: 'orange',
     icon: '👑',
   },
@@ -86,20 +82,6 @@ export const ROLE_DISPLAY_CONFIG: Record<UserRole, RoleDisplayInfo> = {
     description: 'Preparer dashboard',
     color: 'blue',
     icon: '📊',
-  },
-  lead: {
-    value: 'lead',
-    label: 'Lead',
-    description: 'Lead management',
-    color: 'yellow',
-    icon: '🎯',
-  },
-  affiliate: {
-    value: 'affiliate',
-    label: 'Affiliate',
-    description: 'Affiliate marketing',
-    color: 'purple',
-    icon: '🤝',
   },
   client: {
     value: 'client',
@@ -112,11 +94,10 @@ export const ROLE_DISPLAY_CONFIG: Record<UserRole, RoleDisplayInfo> = {
 
 /**
  * Roles that admins can view as
- * - Regular admins can switch to these roles (excludes super_admin for security)
- * - Super admins can switch to any role including admin
- * Note: 'admin' is excluded so regular admins don't see themselves in the switcher
+ * - Admin can switch to tax_preparer or client to preview their experience
+ * Note: 'admin' is excluded so admins don't see themselves in the switcher
  */
-export const VIEWABLE_ROLES: UserRole[] = ['lead', 'tax_preparer', 'affiliate', 'client'];
+export const VIEWABLE_ROLES: UserRole[] = ['tax_preparer', 'client'];
 
 /**
  * Operations that require actual admin role (not viewing role)

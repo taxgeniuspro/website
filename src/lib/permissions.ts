@@ -76,10 +76,9 @@ export type Permission =
   | 'tracking_view'
   | 'tracking_edit'
   | 'tracking_analytics'
-  // 🎛️ MICRO-TOGGLES: Store (3)
+  // 🎛️ MICRO-TOGGLES: Store (2) - store_cart removed since store was removed
   | 'store_view'
   | 'store_purchase'
-  | 'store_cart'
   // 🎛️ MICRO-TOGGLES: Marketing Assets (4)
   | 'marketing_view'
   | 'marketing_upload'
@@ -183,11 +182,10 @@ export const SECTION_PERMISSIONS: Record<SectionPermission, Permission[]> = {
     'marketing_download',
     'marketing_delete',
     'contentGenerator',
-    // 🛒 Store + Micro-Toggles
+    // 🛒 Store + Micro-Toggles (store_cart removed)
     'store',
     'store_view',
     'store_purchase',
-    'store_cart',
   ],
   section_financial: ['payouts', 'earnings'],
   section_system_admin: ['users', 'adminManagement', 'database', 'settings', 'routeAccessControl'],
@@ -234,10 +232,10 @@ export type UserRole = 'admin' | 'tax_preparer' | 'client';
  *    - false: No tax-filing related features
  *
  * 🤝 affiliateStatus (enum):
- *    - NONE: Not an affiliate, no affiliate features
- *    - PENDING: Applied, awaiting admin approval
- *    - APPROVED: Full affiliate features (tracking code, marketing, commissions)
- *    - SUSPENDED: Temporarily disabled
+ *    - APPROVED: All new signups are auto-approved (default)
+ *    - SUSPENDED: Temporarily disabled by admin
+ *    - INACTIVE: Permanently deactivated by admin
+ *    Note: NONE and PENDING are legacy - all new users get APPROVED automatically
  *
  * TAX PREPARERS automatically have all affiliate features (no status check needed).
  *
@@ -350,10 +348,9 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     tracking_view: true,
     tracking_edit: true,
     tracking_analytics: true,
-    // 🎛️ Store Micro-Toggles (ALL ENABLED)
+    // 🎛️ Store Micro-Toggles (ALL ENABLED) - store_cart removed
     store_view: true,
     store_purchase: true,
-    store_cart: true,
     // 🎛️ Marketing Assets Micro-Toggles (ALL ENABLED)
     marketing_view: true,
     marketing_upload: true,
@@ -413,10 +410,9 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     tracking_view: true,
     tracking_edit: true,
     tracking_analytics: true,
-    // 🎛️ Store Micro-Toggles (ALL ENABLED - purchase materials)
+    // 🎛️ Store Micro-Toggles (ALL ENABLED - purchase materials) - store_cart removed
     store_view: true,
     store_purchase: true,
-    store_cart: true,
     // 🎛️ Marketing Assets Micro-Toggles (ALL ENABLED - promote themselves)
     marketing_view: true,
     marketing_upload: true,
@@ -459,10 +455,9 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     tracking_view: true,
     tracking_edit: true,
     tracking_analytics: true,
-    // 🎛️ Store Micro-Toggles (for affiliate features - conditional on affiliateStatus)
+    // 🎛️ Store Micro-Toggles (for affiliate features - conditional on affiliateStatus) - store_cart removed
     store_view: true,
     store_purchase: true,
-    store_cart: true,
     // 🎛️ Marketing Micro-Toggles (for affiliate features - conditional on affiliateStatus)
     marketing_view: true,
     marketing_upload: false, // ⚠️ RESTRICTED: Can't upload marketing materials
@@ -543,10 +538,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   tracking_view: '🔗 Tracking: View Tracking Code',
   tracking_edit: '🔗 Tracking: Edit/Customize Code',
   tracking_analytics: '🔗 Tracking: View Performance',
-  // 🎛️ Store Micro-Toggles
+  // 🎛️ Store Micro-Toggles (store_cart removed)
   store_view: '🛒 Store: Browse Products',
   store_purchase: '🛒 Store: Make Purchases',
-  store_cart: '🛒 Store: Manage Shopping Cart',
   // 🎛️ Marketing Assets Micro-Toggles
   marketing_view: '🎨 Marketing: View Assets Library',
   marketing_upload: '🎨 Marketing: Upload New Assets',
@@ -730,10 +724,6 @@ export function canPurchaseStore(permissions: Partial<UserPermissions>): boolean
   return hasPermission(permissions, 'store_purchase');
 }
 
-export function canManageCart(permissions: Partial<UserPermissions>): boolean {
-  return hasPermission(permissions, 'store_cart');
-}
-
 // Marketing Assets Micro-Permissions
 export function canViewMarketing(permissions: Partial<UserPermissions>): boolean {
   return hasPermission(permissions, 'marketing_view');
@@ -810,10 +800,9 @@ export function getEditablePermissions(role: UserRole): Permission[] {
         'tracking_view',
         'tracking_edit',
         'tracking_analytics',
-        // 🎛️ Store Micro-Toggles
+        // 🎛️ Store Micro-Toggles (store_cart removed)
         'store_view',
         'store_purchase',
-        'store_cart',
         // 🎛️ Marketing Assets Micro-Toggles
         'marketing_view',
         'marketing_upload',
@@ -851,10 +840,9 @@ export function getEditablePermissions(role: UserRole): Permission[] {
         'tracking_view',
         'tracking_edit',
         'tracking_analytics',
-        // 🎛️ Store Micro-Toggles
+        // 🎛️ Store Micro-Toggles (store_cart removed)
         'store_view',
         'store_purchase',
-        'store_cart',
         // 🎛️ Marketing Micro-Toggles
         'marketing_view',
         'marketing_upload',

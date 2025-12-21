@@ -5,7 +5,8 @@ import { logger } from '@/lib/logger';
 
 /**
  * GET /api/preparers/leads
- * Fetches all leads (users with role=lead) from the database
+ * Fetches leads (CRM contacts) from the TaxIntakeLead table
+ * Note: Leads are CRM contacts, NOT users with a 'lead' role
  */
 export async function GET(req: NextRequest) {
   try {
@@ -16,38 +17,62 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const role = user?.role as string;
-    if (role !== 'tax_preparer' && role !== 'admin') {
+    // Get user's profile
+    const profile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { id: true, role: true },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
+
+    // Only tax preparers and admins can access leads
+    if (profile.role !== 'tax_preparer' && profile.role !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden: Only tax preparers and admins can access this endpoint' },
         { status: 403 }
       );
     }
 
-    // Fetch all profiles with role = 'lead'
-    const leadProfiles = await prisma.profile.findMany({
-      where: { role: 'lead' },
-      include: {
-        user: {
-          select: {
-            email: true,
-            createdAt: true,
-          },
-        },
+    // Build query - tax preparers see only their assigned leads, admins see all
+    const where: any = {
+      convertedToClient: false, // Only show unconverted leads
+    };
+
+    if (profile.role === 'tax_preparer') {
+      where.assignedPreparerId = profile.id;
+    }
+
+    // Fetch leads from TaxIntakeLead (CRM contacts)
+    const taxIntakeLeads = await prisma.taxIntakeLead.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        phone: true,
+        referrerUsername: true,
+        referrerType: true,
+        convertedToClient: true,
+        created_at: true,
+        updated_at: true,
       },
-      orderBy: { createdAt: 'desc' },
     });
 
     // Format response
-    const leads = leadProfiles.map((profile) => ({
-      id: profile.id,
-      visitorId: profile.visitorId,
-      email: profile.user.email,
-      firstName: profile.firstName || '',
-      lastName: profile.lastName || '',
-      phone: profile.phone || '',
-      role: 'lead',
-      createdAt: profile.createdAt.toISOString(),
+    const leads = taxIntakeLeads.map((lead) => ({
+      id: lead.id,
+      email: lead.email || '',
+      firstName: lead.first_name || '',
+      lastName: lead.last_name || '',
+      phone: lead.phone || '',
+      referrerUsername: lead.referrerUsername,
+      referrerType: lead.referrerType,
+      status: lead.convertedToClient ? 'converted' : 'new',
+      createdAt: lead.created_at.toISOString(),
     }));
 
     return NextResponse.json({
@@ -63,9 +88,9 @@ export async function GET(req: NextRequest) {
 
 /**
  * PATCH /api/preparers/leads
- * Changes a lead's role to CLIENT (tax preparers can only promote LEAD → CLIENT)
+ * Converts a lead to a client (marks as converted in CRM)
  *
- * Body: { visitorId: string, newRole: 'client' }
+ * Body: { leadId: string }
  */
 export async function PATCH(req: NextRequest) {
   try {
@@ -76,80 +101,68 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const role = user?.role as string;
-    if (role !== 'tax_preparer' && role !== 'admin') {
+    // Get user's profile
+    const profile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { id: true, role: true },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
+
+    if (profile.role !== 'tax_preparer' && profile.role !== 'admin') {
       return NextResponse.json(
-        { error: 'Forbidden: Only tax preparers and admins can change lead roles' },
+        { error: 'Forbidden: Only tax preparers and admins can convert leads' },
         { status: 403 }
       );
     }
 
     const body = await req.json();
-    const { visitorId, profileId, newRole } = body;
+    const { leadId } = body;
 
-    // Accept either visitorId or profileId
-    const identifier = profileId || visitorId;
-    if (!identifier || !newRole) {
-      return NextResponse.json(
-        { error: 'Missing visitorId/profileId or newRole' },
-        { status: 400 }
-      );
+    if (!leadId) {
+      return NextResponse.json({ error: 'Missing leadId' }, { status: 400 });
     }
 
-    // Tax preparers can ONLY change LEAD → CLIENT
-    if (role === 'tax_preparer' && newRole !== 'client') {
-      return NextResponse.json(
-        { error: 'Tax preparers can only change leads to clients' },
-        { status: 403 }
-      );
-    }
-
-    // Find the profile
-    const targetProfile = await prisma.profile.findFirst({
-      where: profileId ? { id: profileId } : { visitorId: identifier },
-      include: {
-        user: {
-          select: { email: true },
-        },
-      },
+    // Find the lead
+    const lead = await prisma.taxIntakeLead.findUnique({
+      where: { id: leadId },
     });
 
-    if (!targetProfile) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    if (!lead) {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    if (targetProfile.role !== 'lead') {
-      return NextResponse.json({ error: 'User is not a lead' }, { status: 400 });
+    if (lead.convertedToClient) {
+      return NextResponse.json({ error: 'Lead already converted' }, { status: 400 });
     }
 
-    // Update the profile's role
-    const updatedProfile = await prisma.profile.update({
-      where: { id: targetProfile.id },
-      data: { role: newRole },
-      include: {
-        user: {
-          select: { email: true },
-        },
+    // Mark lead as converted
+    const updatedLead = await prisma.taxIntakeLead.update({
+      where: { id: leadId },
+      data: {
+        convertedToClient: true,
+        updated_at: new Date(),
       },
     });
 
     logger.info(
-      `🔄 Role changed: ${targetProfile.id} from LEAD to ${newRole.toUpperCase()} by ${user.id} (${role})`
+      `🔄 Lead converted: ${leadId} marked as converted by ${user.id} (${profile.role})`
     );
 
     return NextResponse.json({
       success: true,
-      message: `User role changed from LEAD to ${newRole.toUpperCase()}`,
-      user: {
-        id: updatedProfile.id,
-        email: updatedProfile.user.email,
-        firstName: updatedProfile.firstName,
-        lastName: updatedProfile.lastName,
-        role: newRole,
+      message: 'Lead marked as converted',
+      lead: {
+        id: updatedLead.id,
+        firstName: updatedLead.first_name,
+        lastName: updatedLead.last_name,
+        convertedToClient: true,
       },
     });
   } catch (error) {
-    logger.error('Error changing lead role:', error);
-    return NextResponse.json({ error: 'Failed to change lead role' }, { status: 500 });
+    logger.error('Error converting lead:', error);
+    return NextResponse.json({ error: 'Failed to convert lead' }, { status: 500 });
   }
 }

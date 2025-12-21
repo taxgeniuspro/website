@@ -131,9 +131,9 @@ export async function POST(request: NextRequest) {
       data: {
         profileId: preparer.profile.id,
         emailAddress: emailAddress.toLowerCase(),
+        forwardToEmail: preparer.email, // Forward to their signup email by default
         status: 'ACTIVE',
         isPrimary,
-        verifiedAt: new Date(), // Auto-verified by admin
       },
     });
 
