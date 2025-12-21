@@ -271,13 +271,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return true;
           }
 
-          // Truly new user with new email - allow NextAuth to create fresh account
-          logger.info('New Google OAuth signup - creating fresh account', {
+          // Truly new user with new email
+          // Since allowDangerousEmailAccountLinking is FALSE, we must create EVERYTHING ourselves
+          logger.info('New Google OAuth signup - creating user and account manually', {
             email: userEmail,
             providerAccountId: account.providerAccountId,
           });
 
-          // Set default role for new users
+          // Create the new user ourselves
+          const newUser = await prisma.user.create({
+            data: {
+              email: userEmail,
+              name: user.name || userEmail.split('@')[0],
+              image: user.image,
+              emailVerified: new Date(), // Google verified the email
+            },
+          });
+
+          // Create the profile for the new user
+          await prisma.profile.create({
+            data: {
+              userId: newUser.id,
+              role: 'client',
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: new Date(),
+            },
+          });
+
+          // Create the Google account link
+          await prisma.account.create({
+            data: {
+              userId: newUser.id,
+              type: 'oauth',
+              provider: 'google',
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token as string | undefined,
+              refresh_token: account.refresh_token as string | undefined,
+              expires_at: account.expires_at as number | undefined,
+              token_type: account.token_type as string | undefined,
+              scope: account.scope as string | undefined,
+              id_token: account.id_token as string | undefined,
+            },
+          });
+
+          logger.info('Created new user with Google OAuth', {
+            userId: newUser.id,
+            email: userEmail,
+          });
+
+          // CRITICAL: Set user.id so NextAuth uses our new user
+          (user as any).id = newUser.id;
           (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
           (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
 
