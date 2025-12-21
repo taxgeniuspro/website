@@ -37,19 +37,25 @@ export async function middleware(req: NextRequest) {
   }
 
   // ==================================================================================
-  // AFFILIATE ROLE MIGRATION REDIRECTS
-  // Redirect old /dashboard/affiliate/* routes to /dashboard/client/*
-  // The 'affiliate' role has been removed - affiliates are now clients with
-  // affiliateStatus='APPROVED'. Tax preparers also have all affiliate features.
+  // URL CONSOLIDATION REDIRECTS (Dec 2025)
+  //
+  // IMPORTANT: Only redirect routes that have been consolidated or moved.
+  // Affiliate dashboard pages (/dashboard/affiliate/*) are KEPT as-is because:
+  // - They are the canonical pages for affiliate features
+  // - Clients with affiliateStatus='APPROVED' use these pages
+  // - The pages exist and work correctly
+  //
+  // Tracking routes are consolidated into /dashboard/referrals
+  // Store routes redirect to professional email settings
   // ==================================================================================
-  const affiliateRedirectMap: Record<string, string> = {
-    '/dashboard/affiliate': '/dashboard/client',
-    '/dashboard/affiliate/tracking': '/dashboard/client/tracking',
-    '/dashboard/affiliate/leads': '/dashboard/client/leads',
-    '/dashboard/affiliate/analytics': '/dashboard/client/analytics',
-    '/dashboard/affiliate/creatives': '/dashboard/client/creatives',
-    '/dashboard/affiliate/earnings': '/dashboard/client/earnings',
-    '/dashboard/affiliate/settings': '/dashboard/client/settings',
+  const urlRedirectMap: Record<string, string> = {
+    // Tracking → Unified Referrals page
+    '/dashboard/affiliate/tracking': '/dashboard/referrals',
+    '/dashboard/tax-preparer/tracking': '/dashboard/referrals',
+    '/dashboard/client/tracking': '/dashboard/referrals',
+    // Store → Professional Email settings (store has been removed)
+    '/store': '/dashboard/tax-preparer/settings/professional-email',
+    '/store/professional-email': '/dashboard/tax-preparer/settings/professional-email',
   };
 
   // Check for locale prefix in pathname
@@ -65,8 +71,8 @@ export async function middleware(req: NextRequest) {
     pathnameWithoutLocale = '/' + segments.slice(2).join('/');
   }
 
-  // Check if this is an affiliate dashboard route that needs redirect
-  const redirectPath = affiliateRedirectMap[pathnameWithoutLocale];
+  // Check if this route needs to be redirected
+  const redirectPath = urlRedirectMap[pathnameWithoutLocale];
   if (redirectPath) {
     const newUrl = req.nextUrl.clone();
     newUrl.pathname = pathnameHasLocale ? `${localePrefix}${redirectPath}` : redirectPath;

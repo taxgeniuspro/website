@@ -33,6 +33,8 @@ function SignUpContent() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   // Role-specific content
+  // Note: All signups become 'client' with automatic affiliate features
+  // The 'affiliate' option is kept for marketing purposes but creates same client role
   const roleContent = {
     client: {
       badge: t('client.badge'),
@@ -68,6 +70,8 @@ function SignUpContent() {
       theme: 'from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-800/20',
       accentColor: 'text-blue-600 dark:text-blue-400',
     },
+    // 'affiliate' signup creates a client with auto-approved affiliate status
+    // This is for marketing - users who want to focus on referring
     affiliate: {
       badge: `💰 ${t('affiliate.badge')}`,
       icon: DollarSign,
@@ -94,8 +98,9 @@ function SignUpContent() {
     setError('');
     setIsLoading(true);
     try {
+      // All signups go directly to client dashboard - no role selection needed
       await signIn('google', {
-        callbackUrl: '/auth/select-role',
+        callbackUrl: '/dashboard/client',
         redirect: true,
       });
     } catch (error) {

@@ -68,6 +68,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Validate sensitive data formats when provided
+    // SSN: Must be 9 digits, optionally with dashes (XXX-XX-XXXX or XXXXXXXXX)
+    if (ssn) {
+      const ssnClean = ssn.replace(/[-\s]/g, '');
+      if (!/^\d{9}$/.test(ssnClean)) {
+        logger.warn('Invalid SSN format submitted', { email, ssnLength: ssn.length });
+        return NextResponse.json({ error: 'Invalid SSN format. Please enter 9 digits.' }, { status: 400 });
+      }
+    }
+
+    // Date of Birth: Must be a valid date in reasonable range (1900-current year)
+    if (date_of_birth) {
+      const dob = new Date(date_of_birth);
+      const currentYear = new Date().getFullYear();
+      const dobYear = dob.getFullYear();
+      if (isNaN(dob.getTime()) || dobYear < 1900 || dobYear > currentYear) {
+        logger.warn('Invalid date of birth submitted', { email, date_of_birth });
+        return NextResponse.json({ error: 'Invalid date of birth format.' }, { status: 400 });
+      }
+    }
+
+    // IRS PIN: Must be exactly 6 digits
+    if (irs_pin) {
+      const pinClean = String(irs_pin).replace(/\s/g, '');
+      if (!/^\d{6}$/.test(pinClean)) {
+        logger.warn('Invalid IRS PIN format submitted', { email, pinLength: String(irs_pin).length });
+        return NextResponse.json({ error: 'Invalid IRS PIN format. Must be 6 digits.' }, { status: 400 });
+      }
+    }
+
     // Check if this is a complete tax intake (has SSN and other tax fields) or just basic contact
     const isCompleteTaxIntake = Boolean(ssn && date_of_birth && filing_status);
 
@@ -656,21 +686,21 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
           hasImageAttachments: !!imageAttachments && imageAttachments.length > 0,
         });
       } else {
-        // Send basic lead notification for incomplete submissions
-        await EmailService.sendNewLeadNotificationEmail(emailRecipient, {
+        // PARTIAL SAVE: Don't send email notification for incomplete submissions
+        // Users only want to be notified when the full form with all data is submitted
+        // This prevents confusing "New Lead" emails with only name/phone
+        logger.info('Partial tax intake saved - no email sent (waiting for full submission)', {
           leadId: lead.id,
-          leadName: `${lead.first_name} ${lead.last_name}`,
-          leadEmail: lead.email,
-          leadPhone: lead.phone || undefined,
-          service: 'tax-intake', // Tax intake form submission
-          message: undefined, // No message field in tax intake
-          source: attributionResult.attribution.attributionMethod || 'direct',
-        }, ccEmail, (locale as 'en' | 'es') || 'en'); // Pass CC email and locale
-        logger.info('Basic lead notification email sent', {
-          leadId: lead.id,
-          recipient: emailRecipient,
-          cc: ccEmail,
-          locale: locale || 'en',
+          hasSSN: !!ssn,
+          hasDOB: !!date_of_birth,
+          hasFilingStatus: !!filing_status,
+          savedFields: {
+            first_name: !!first_name,
+            last_name: !!last_name,
+            email: !!email,
+            phone: !!phone,
+            address: !!address_line_1,
+          },
         });
       }
     } catch (emailError) {

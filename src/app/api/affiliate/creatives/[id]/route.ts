@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { CreativePrivacy, CreativeStatus } from '@prisma/client';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * GET /api/affiliate/creatives/[id]
@@ -26,15 +27,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is an affiliate
-    const isAffiliate =
-      profile.role === 'affiliate' ||
-      profile.role === 'tax_preparer' ||
-      profile.role === 'admin' ||
-      profile.role === 'admin';
-
-    if (!isAffiliate) {
-      return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
+      return NextResponse.json({ error: 'Affiliate access required' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -59,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Check if creative is active
     if (creative.status !== CreativeStatus.ACTIVE) {
       // Admins can see all
-      if (profile.role !== 'admin' && profile.role !== 'admin') {
+      if (profile.role !== 'admin') {
         return NextResponse.json({ error: 'Creative not found' }, { status: 404 });
       }
     }
@@ -69,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Check if affiliate is in the allowed list
       if (!creative.affiliateIds.includes(profile.id)) {
         // Admins can see all
-        if (profile.role !== 'admin' && profile.role !== 'admin') {
+        if (profile.role !== 'admin') {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
       }
@@ -81,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       if (!hasAccess) {
         // Admins can see all
-        if (profile.role !== 'admin' && profile.role !== 'admin') {
+        if (profile.role !== 'admin') {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
       }

@@ -412,18 +412,16 @@ export default function PreparerApplicationsPage() {
     SEASONED: '3+ Years',
   };
 
+  // Only 3 valid roles: admin, client, tax_preparer
+  // Note: 'affiliate' is a STATUS (affiliateStatus), not a role
   const roleLabels: Record<string, { label: string; description: string }> = {
     tax_preparer: {
       label: 'Tax Preparer',
       description: 'Full access to prepare tax returns. Gets tracking code + QR codes.',
     },
-    affiliate: {
-      label: 'Affiliate',
-      description: 'Referral commissions only. Gets referral links + QR codes.',
-    },
     client: {
       label: 'Client',
-      description: 'Standard client access. Can refer friends.',
+      description: 'Standard client access with affiliate features. Can refer friends.',
     },
   };
 
@@ -837,7 +835,6 @@ export default function PreparerApplicationsPage() {
                         <div className="flex-1">
                           <Label htmlFor={role} className="font-medium cursor-pointer">
                             {role === 'tax_preparer' && <Briefcase className="h-4 w-4 inline mr-2" />}
-                            {role === 'affiliate' && <Users className="h-4 w-4 inline mr-2" />}
                             {role === 'client' && <UserCheck className="h-4 w-4 inline mr-2" />}
                             {info.label}
                           </Label>

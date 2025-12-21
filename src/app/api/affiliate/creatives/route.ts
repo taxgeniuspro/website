@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { CreativeType } from '@prisma/client';
 import { getAccessibleCreatives } from '@/lib/services/creative.service';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * GET /api/affiliate/creatives
@@ -27,15 +28,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user is an affiliate
-    const isAffiliate =
-      profile.role === 'affiliate' ||
-      profile.role === 'tax_preparer' ||
-      profile.role === 'admin' ||
-      profile.role === 'admin';
-
-    if (!isAffiliate) {
-      return NextResponse.json({ error: 'Not authorized as affiliate' }, { status: 403 });
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
+      return NextResponse.json({ error: 'Affiliate access required' }, { status: 403 });
     }
 
     // Parse query params

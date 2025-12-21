@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { hasAffiliateAccess } from '@/lib/permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -34,21 +36,31 @@ export const metadata = {
   description: 'Manage your affiliate settings',
 };
 
-async function isAffiliate() {
-  const session = await auth(); const user = session?.user;
-  if (!user) return false;
-  const role = user?.role;
-  return role === 'affiliate' || role === 'admin';
-}
-
 export default async function AffiliateSettingsPage() {
-  const userIsAffiliate = await isAffiliate();
+  const session = await auth();
+  const user = session?.user;
+
+  if (!user) {
+    redirect('/forbidden');
+  }
+
+  const profile = await prisma.profile.findUnique({
+    where: { userId: user.id },
+    select: { role: true, affiliateStatus: true },
+  });
+
+  if (!profile) {
+    redirect('/forbidden');
+  }
+
+  const userIsAffiliate = hasAffiliateAccess(
+    profile.role as 'admin' | 'client' | 'tax_preparer',
+    profile.affiliateStatus as 'APPROVED' | 'SUSPENDED' | 'INACTIVE' | null
+  );
 
   if (!userIsAffiliate) {
     redirect('/forbidden');
   }
-
-  const session = await auth(); const user = session?.user;
 
   return (
     <div className="p-6 space-y-6">

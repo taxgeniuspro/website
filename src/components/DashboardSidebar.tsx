@@ -54,13 +54,11 @@ export function DashboardSidebar({ role, permissions, affiliateStatus, hasFiledT
 
   // List of affiliate/referral-feature paths (hidden if user opts out)
   const affiliateFeaturePaths = [
-    '/dashboard/client/tracking',
+    '/dashboard/referrals',
     '/dashboard/client/leads',
     '/dashboard/client/analytics',
     '/dashboard/client/creatives',
     '/dashboard/client/earnings',
-    '/dashboard/client/referrals',
-    '/dashboard/client/share-earn',
   ];
 
   // List of tax-filing paths (only shown if hasFiledTaxes for clients)

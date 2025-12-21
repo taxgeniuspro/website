@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Get user's profile
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
       include: {
         professionalEmails: true,
       },
@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
 
     // Get user's existing aliases count
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
       include: {
         professionalEmails: {
           where: {

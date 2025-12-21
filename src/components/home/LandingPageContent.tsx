@@ -74,16 +74,18 @@ export function LandingPageContent() {
 
       <Header />
 
-      <HeroSection />
-      <TrustLogosBar />
-      <ServicesSection />
-      <HowItWorksSection />
-      <WhyChooseUsSection />
-      <CredentialsSection />
-      <TestimonialsSection />
-      <FAQSection />
-      <FinalCTASection />
-      <OpportunitiesSection />
+      <main id="main-content">
+        <HeroSection />
+        <TrustLogosBar />
+        <ServicesSection />
+        <HowItWorksSection />
+        <WhyChooseUsSection />
+        <CredentialsSection />
+        <TestimonialsSection />
+        <FAQSection />
+        <FinalCTASection />
+        <OpportunitiesSection />
+      </main>
 
       {/* Floating Chat Widget */}
       <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 group">

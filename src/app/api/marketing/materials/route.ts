@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * GET /api/marketing/materials
@@ -27,10 +28,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Only allow REFERRER and ADMIN roles to access marketing materials
-    if (profile.role !== 'affiliate' && profile.role !== 'admin') {
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
       return NextResponse.json(
-        { error: 'Access denied. Only referrers can access marketing materials.' },
+        { error: 'Access denied. Affiliate access required for marketing materials.' },
         { status: 403 }
       );
     }

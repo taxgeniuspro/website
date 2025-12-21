@@ -53,10 +53,9 @@ const LINK_TYPE_CONFIGS = {
 
 type LinkType = keyof typeof LINK_TYPE_CONFIGS;
 
-// Role-based link sets
+// Role-based link sets (no AFFILIATE - it's a status, not a role)
 const ROLE_LINK_SETS: Record<string, LinkType[]> = {
   TAX_PREPARER: ['lead', 'intake', 'appt', 'advance'],
-  AFFILIATE: ['lead', 'intake'],
   CLIENT: ['lead', 'intake'],
   ADMIN: ['lead', 'intake', 'appt', 'advance'],
 };

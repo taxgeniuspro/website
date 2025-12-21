@@ -58,7 +58,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signOut: '/auth/signout',
     error: '/auth/error',
     verifyRequest: '/auth/verify', // Magic link verification page
-    newUser: '/auth/select-role', // Redirect new users to select their role
+    newUser: '/dashboard/client', // New users go directly to client dashboard (role is auto-assigned)
   },
   providers: [
     // Google OAuth Provider (Gmail Login)
@@ -228,10 +228,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Check if user is deactivated (for non-Google login types)
       if (user?.id && account?.provider !== 'google') {
         try {
-          const profile = await prisma.profile.findUnique({
+          let profile = await prisma.profile.findUnique({
             where: { userId: user.id },
             select: { role: true, isActive: true },
           });
+
+          // If no profile exists, create one (edge case recovery)
+          if (!profile) {
+            logger.warn('User without profile detected, creating default profile', { userId: user.id, email: user.email });
+            profile = await prisma.profile.create({
+              data: {
+                userId: user.id,
+                role: 'client',
+                affiliateStatus: 'APPROVED',
+                affiliateApprovedAt: new Date(),
+              },
+              select: { role: true, isActive: true },
+            });
+          }
 
           // Block deactivated users from signing in
           if (profile && profile.isActive === false) {
@@ -332,8 +346,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             lastName = nameParts[nameParts.length - 1];
           }
 
-          const profile = await prisma.profile.create({
-            data: {
+          // Use upsert to handle race conditions - if profile already exists, don't update
+          const profile = await prisma.profile.upsert({
+            where: { userId: user.id },
+            update: {}, // Don't update if exists (handles race condition)
+            create: {
               userId: user.id,
               role: 'client',
               firstName,
@@ -410,21 +427,25 @@ export async function hasRole(role: UserRole | string): Promise<boolean> {
 }
 
 /**
- * Check if current user is a super admin
- * @returns True if user is super_admin
+ * Check if current user is an admin
+ * Admin is the highest privilege role in the system
+ * Valid roles: admin, client, tax_preparer
+ * @returns True if user has 'admin' role
  */
-export async function isSuperAdmin(): Promise<boolean> {
+export async function isAdmin(): Promise<boolean> {
   const userRole = await getUserRole();
   return userRole === 'admin';
 }
 
 /**
- * Check if current user is an admin
- * @returns True if user is admin
+ * Alias for isAdmin() - kept for backwards compatibility
+ * Note: There is no separate 'super_admin' role in the system
+ * 'admin' is the highest privilege level
+ * @returns True if user has 'admin' role
+ * @deprecated Use isAdmin() instead - this function name is misleading
  */
-export async function isAdmin(): Promise<boolean> {
-  const userRole = await getUserRole();
-  return userRole === 'admin';
+export async function isSuperAdmin(): Promise<boolean> {
+  return isAdmin();
 }
 
 /**

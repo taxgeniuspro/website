@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { hasAffiliateAccess } from '@/lib/permissions';
 
 /**
  * GET /api/affiliate/leads
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         role: true,
+        affiliateStatus: true,
         trackingCode: true,
         customTrackingCode: true,
         shortLinkUsername: true,
@@ -32,12 +34,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const isAffiliate = profile.role === 'affiliate';
-    const isAdmin = profile.role === 'admin';
-
-    if (!isAffiliate && !isAdmin) {
+    // Check if user has affiliate access using centralized function
+    if (!hasAffiliateAccess(profile.role as any, profile.affiliateStatus as any)) {
       return NextResponse.json(
-        { error: 'Forbidden: Only affiliates can access this endpoint' },
+        { error: 'Forbidden: Affiliate access required' },
         { status: 403 }
       );
     }

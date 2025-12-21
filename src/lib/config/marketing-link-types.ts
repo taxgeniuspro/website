@@ -86,8 +86,7 @@ export const LINK_TYPE_CONFIGS: Record<LinkTypeValue, LinkTypeConfig> = {
  */
 export const ROLE_LINK_SETS: Record<string, LinkTypeValue[]> = {
   TAX_PREPARER: ['lead', 'intake', 'appt', 'advance'], // All 4 links
-  AFFILIATE: ['lead', 'intake'], // 2 links
-  CLIENT: ['lead', 'intake'], // 2 links
+  CLIENT: ['lead', 'intake'], // 2 links (all clients get these)
   ADMIN: ['lead', 'intake', 'appt', 'advance'], // All 4 links
 };
 

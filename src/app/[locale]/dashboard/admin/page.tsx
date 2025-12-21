@@ -23,6 +23,7 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import Link from 'next/link';
+import { GoogleIntegrationWidget } from '@/components/admin/GoogleIntegrationWidget';
 import {
   getDashboardStats,
   getRecentActivity,
@@ -567,48 +568,53 @@ export default async function AdminDashboardPage() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest platform events</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentActivity.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No recent activity</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentActivity.map((activity, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
-                        <Users className="w-4 h-4" />
+        {/* Recent Activity & Google Integration */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>Latest platform events</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recentActivity.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No recent activity</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentActivity.map((activity, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between py-2 border-b last:border-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{activity.user}</p>
+                          <p className="text-xs text-muted-foreground">{activity.action}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{activity.user}</p>
-                        <p className="text-xs text-muted-foreground">{activity.action}</p>
+                      <div className="text-right">
+                        <Badge
+                          variant={activity.badge === 'success' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {activity.time}
+                        </Badge>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <Badge
-                        variant={activity.badge === 'success' ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {activity.time}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Google Integration Status */}
+          <GoogleIntegrationWidget />
+        </div>
       </div>
     </div>
   );

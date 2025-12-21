@@ -7,10 +7,11 @@ import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.servic
 /**
  * GET /api/affiliate/links
  *
- * Fetches marketing links for affiliates.
+ * Fetches marketing links for clients (all clients are affiliates).
  * Now delegates to unified marketing-links.service for consistency.
  *
- * Affiliates get 2 links: lead, intake
+ * Clients get 2 links: lead, intake
+ * Note: affiliateStatus controls commission tiers, NOT link access
  */
 export async function GET() {
   try {
@@ -27,7 +28,6 @@ export async function GET() {
       select: {
         id: true,
         role: true,
-        affiliateStatus: true,
         trackingCode: true,
         customTrackingCode: true,
       },
@@ -37,17 +37,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check if user has affiliate access
-    // - admin: always has access
-    // - tax_preparer: always has access (auto has affiliate features)
-    // - client: must have affiliateStatus === 'APPROVED'
-    const hasAffiliateAccess =
-      profile.role === 'admin' ||
-      profile.role === 'tax_preparer' ||
-      profile.affiliateStatus === 'APPROVED';
+    // All clients and admins can access affiliate links (all clients are affiliates)
+    const isClient = profile.role === 'client';
+    const isAdmin = profile.role === 'admin';
 
-    if (!hasAffiliateAccess) {
-      return NextResponse.json({ error: 'Forbidden: Affiliate access required' }, { status: 403 });
+    if (!isClient && !isAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Only clients can access this endpoint' },
+        { status: 403 }
+      );
     }
 
     // Check if profile has a tracking code

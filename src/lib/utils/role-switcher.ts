@@ -152,7 +152,6 @@ export function formatRoleName(role: UserRole): string {
   const roleNames: Record<string, string> = {
     admin: 'Admin',
     tax_preparer: 'Tax Preparer',
-    lead: 'Lead',
     client: 'Client',
   };
 
@@ -166,7 +165,6 @@ export function getRoleColor(role: UserRole): string {
   const colors: Record<string, string> = {
     admin: 'orange',
     tax_preparer: 'blue',
-    lead: 'green',
     client: 'gray',
   };
 
@@ -180,7 +178,6 @@ export function getRoleBadgeClasses(role: UserRole): string {
   const classes: Record<string, string> = {
     admin: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
     tax_preparer: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    lead: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
     client: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
   };
 

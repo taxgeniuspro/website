@@ -187,8 +187,8 @@ export const ProfileManager: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Vanity URL Card (for clients and affiliates who can refer) */}
-      {(profile?.role === 'client' || profile?.role === 'affiliate') && !profile?.vanity_slug && (
+      {/* Vanity URL Card (for clients who can refer) */}
+      {profile?.role === 'client' && !profile?.vanity_slug && (
         <Card>
           <CardHeader>
             <CardTitle>Set Your Vanity URL</CardTitle>

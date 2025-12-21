@@ -176,8 +176,9 @@ export class RealtimeService {
       const onlineCount = this.connectedUsers.size;
       socket.emit('users:online', onlineCount);
 
-      // If tax preparer or affiliate, send real-time stats
-      if (userData.role === 'tax_preparer' || userData.role === 'affiliate') {
+      // If tax preparer or client with affiliate access, send real-time stats
+      // Note: 'affiliate' is not a role - it's a status (affiliateStatus)
+      if (userData.role === 'tax_preparer' || userData.role === 'client') {
         await this.sendUpdatedStats(socket, userData);
       }
     } catch (error) {
@@ -355,7 +356,8 @@ export class RealtimeService {
    * Send updated stats to referrer
    */
   private static async sendUpdatedStats(socket: Socket, userData: SocketUser) {
-    if (userData.role !== 'tax_preparer' && userData.role !== 'affiliate') return;
+    // Send stats for tax preparers and clients (who may have affiliate access)
+    if (userData.role !== 'tax_preparer' && userData.role !== 'client') return;
 
     try {
       // Get fresh stats (bypassing cache)
