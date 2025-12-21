@@ -65,9 +65,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      // CRITICAL: Set to false to prevent auto-linking different Google accounts to same user
-      // Each unique Google account (providerAccountId) should only link to ONE user
-      allowDangerousEmailAccountLinking: false,
+      // NOTE: We need this true for NextAuth to work, but we control linking in signIn callback
+      // The signIn callback rejects new Google accounts for existing users
+      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           prompt: 'consent',
@@ -223,21 +223,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 existingProviderAccountId: existingUserByEmail.accounts[0].providerAccountId,
                 attemptedProviderAccountId: account.providerAccountId,
               });
-              return '/auth/error?error=OAuthAccountNotLinked';
+              return false;
             }
 
             // User exists with this email but NO Google account yet
-            // This could be a credential-only user wanting to add Google
-            // For security, we should NOT auto-link - they should log in with credentials first
-            // and then link Google from their account settings
-            logger.warn('Rejecting Google OAuth - user exists without Google linked', {
+            // This is a LEGITIMATE case - user is linking their Google account to their existing account
+            // The email matches, so this is the same person
+            logger.info('Linking Google OAuth to existing user (same email)', {
               email: userEmail,
               existingUserId: existingUserByEmail.id,
               providerAccountId: account.providerAccountId,
             });
 
-            // Redirect to error page explaining they need to log in with existing method
-            return '/auth/error?error=OAuthAccountNotLinked';
+            // Check if user is deactivated
+            if (existingUserByEmail.profile?.isActive === false) {
+              logger.warn('Deactivated user attempted to sign in with Google', {
+                userId: existingUserByEmail.id,
+                email: userEmail,
+              });
+              return '/suspended';
+            }
+
+            // Set role on user object for JWT callback
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUserByEmail.profile?.role || 'client';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUserByEmail.profile?.isActive ?? true;
+
+            // Allow NextAuth to link this Google account to the existing user
+            return true;
           }
 
           // Truly new user with new email - allow NextAuth to create fresh account
