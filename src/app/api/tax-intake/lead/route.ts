@@ -488,7 +488,7 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
       // Send comprehensive tax intake email if all tax details are provided
       if (isCompleteTaxIntake) {
         // Query for any documents uploaded for this lead (e.g., driver's license)
-        let documentUrls: { driversLicenseUrl?: string; additionalDocUrls?: string[] } = {};
+        const documentUrls: { driversLicenseUrl?: string; additionalDocUrls?: string[] } = {};
         try {
           if (lead.clientFolderId) {
             const documents = await prisma.document.findMany({

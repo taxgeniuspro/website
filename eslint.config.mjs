@@ -34,6 +34,10 @@ export default [
       "regenerate_*.mjs",
       "uploads/**", // Uploaded test files
       "Ira Folder/**", // Additional third-party reference files
+      ".archive/**", // Archived legacy scripts
+      "check-user-role.js", // Root legacy script
+      "test-login.js", // Root legacy test script
+      "test-nav-links.js", // Root legacy test script
     ],
   },
   ...tseslint.configs.recommended,

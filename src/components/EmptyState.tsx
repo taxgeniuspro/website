@@ -215,6 +215,7 @@ export function EmptyState({
 /**
  * Pre-configured empty states for common scenarios
  */
+/* eslint-disable @typescript-eslint/no-require-imports */
 export const EmptyStates = {
   /**
    * No clients empty state

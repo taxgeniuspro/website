@@ -228,6 +228,7 @@ export function verifyWebhookSignature(
 ): boolean {
   // Implement Square webhook signature verification
   // This is a placeholder - actual implementation requires crypto verification
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const crypto = require('crypto');
   const hash = crypto.createHmac('sha256', webhookSignatureKey).update(body).digest('base64');
 
