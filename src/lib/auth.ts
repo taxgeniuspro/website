@@ -65,9 +65,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      // NOTE: We need this true for NextAuth to work, but we control linking in signIn callback
-      // The signIn callback rejects new Google accounts for existing users
-      allowDangerousEmailAccountLinking: true,
+      // CRITICAL: Set to false to prevent NextAuth from auto-linking
+      // We manually handle account linking in the signIn callback
+      allowDangerousEmailAccountLinking: false,
       authorization: {
         params: {
           prompt: 'consent',
@@ -227,15 +227,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             }
 
             // User exists with this email but NO Google account yet
-            // This is a LEGITIMATE case - user is linking their Google account to their existing account
-            // The email matches, so this is the same person
-            logger.info('Linking Google OAuth to existing user (same email)', {
-              email: userEmail,
-              existingUserId: existingUserByEmail.id,
-              providerAccountId: account.providerAccountId,
-            });
+            // Since allowDangerousEmailAccountLinking is FALSE, we must manually link
+            // This is safe: same email = same person adding Google to their account
 
-            // Check if user is deactivated
+            // Check if user is deactivated FIRST
             if (existingUserByEmail.profile?.isActive === false) {
               logger.warn('Deactivated user attempted to sign in with Google', {
                 userId: existingUserByEmail.id,
@@ -244,11 +239,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               return '/suspended';
             }
 
-            // Set role on user object for JWT callback
+            // MANUALLY create the Google account link
+            // This prevents NextAuth from auto-linking to wrong users
+            await prisma.account.create({
+              data: {
+                userId: existingUserByEmail.id,
+                type: 'oauth',
+                provider: 'google',
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token as string | undefined,
+                refresh_token: account.refresh_token as string | undefined,
+                expires_at: account.expires_at as number | undefined,
+                token_type: account.token_type as string | undefined,
+                scope: account.scope as string | undefined,
+                id_token: account.id_token as string | undefined,
+              },
+            });
+
+            logger.info('Manually linked Google OAuth to existing user', {
+              email: userEmail,
+              existingUserId: existingUserByEmail.id,
+              providerAccountId: account.providerAccountId,
+            });
+
+            // CRITICAL: Set user.id so NextAuth uses the EXISTING user, not create new one
+            (user as any).id = existingUserByEmail.id;
             (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUserByEmail.profile?.role || 'client';
             (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUserByEmail.profile?.isActive ?? true;
 
-            // Allow NextAuth to link this Google account to the existing user
+            // Return true - NextAuth will see the account already exists and use it
             return true;
           }
 

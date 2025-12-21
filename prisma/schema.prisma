@@ -54,6 +54,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([provider, providerAccountId])
+  @@unique([userId, provider]) // Prevent duplicate providers per user
   @@map("accounts")
 }
 
