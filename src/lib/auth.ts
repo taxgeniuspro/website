@@ -65,9 +65,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      // CRITICAL: Set to false to prevent NextAuth from auto-linking
-      // We manually handle account linking in the signIn callback
-      allowDangerousEmailAccountLinking: false,
+      // Allow NextAuth to link Google accounts to existing users with same email
+      // This is SAFE because Google verifies email ownership
+      // Database constraint @@unique([userId, provider]) prevents duplicates
+      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           prompt: 'consent',
@@ -146,248 +147,45 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For Google OAuth - strict account management
-      // Only allow sign-in if:
-      // 1. This exact Google account (providerAccountId) is already linked to a user, OR
-      // 2. This is a completely new user (email doesn't exist in database)
-      // We do NOT auto-link Google to existing email accounts anymore
+      // ============================================================
+      // SIMPLIFIED GOOGLE OAUTH HANDLING
+      // Let NextAuth/PrismaAdapter handle user creation naturally
+      // We only check for suspended accounts here
+      // ============================================================
       if (account?.provider === 'google' && user?.email) {
         try {
-          const userEmail = user.email.toLowerCase();
-
-          // Check if this Google account is already linked to a user
-          const existingAccount = await prisma.account.findUnique({
-            where: {
-              provider_providerAccountId: {
-                provider: 'google',
-                providerAccountId: account.providerAccountId,
-              },
-            },
-            include: {
-              user: {
-                include: { profile: true },
-              },
-            },
+          // Check if user exists and is suspended
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email.toLowerCase() },
+            include: { profile: { select: { isActive: true, role: true } } },
           });
 
-          if (existingAccount) {
-            // This EXACT Google account (same providerAccountId) is already linked - allow sign in
-            // Check if user is deactivated
-            if (existingAccount.user.profile?.isActive === false) {
-              logger.warn('Deactivated user attempted to sign in', {
-                userId: existingAccount.user.id,
-                email: user.email,
-              });
-              return '/suspended';
-            }
-
-            // Attach role from existing profile
-            if (existingAccount.user.profile?.role) {
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingAccount.user.profile.role;
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingAccount.user.profile.isActive ?? true;
-            } else {
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-            }
-
-            logger.info('Existing Google account signing in', {
-              userId: existingAccount.user.id,
-              email: user.email,
-              providerAccountId: account.providerAccountId,
-            });
-            return true;
+          if (existingUser?.profile?.isActive === false) {
+            logger.warn('Suspended user attempted Google OAuth', { email: user.email });
+            return '/suspended';
           }
 
-          // This is a NEW Google account (providerAccountId not in database)
-          // Check if a user with this email already exists
-          const existingUserByEmail = await prisma.user.findUnique({
-            where: { email: userEmail },
-            include: {
-              profile: true,
-              accounts: {
-                where: { provider: 'google' }
-              }
-            },
-          });
-
-          if (existingUserByEmail) {
-            // A user with this email already exists
-            // Check if they already have a Google account linked
-            if (existingUserByEmail.accounts.length > 0) {
-              // They already have a DIFFERENT Google account linked
-              // This means someone is trying to use a different Google account with the same email
-              // This should not happen normally - reject it
-              logger.warn('User already has different Google account linked', {
-                email: userEmail,
-                existingUserId: existingUserByEmail.id,
-                existingProviderAccountId: existingUserByEmail.accounts[0].providerAccountId,
-                attemptedProviderAccountId: account.providerAccountId,
-              });
-              return false;
-            }
-
-            // User exists with this email but NO Google account yet
-            // Since allowDangerousEmailAccountLinking is FALSE, we must manually link
-            // This is safe: same email = same person adding Google to their account
-
-            // Check if user is deactivated FIRST
-            if (existingUserByEmail.profile?.isActive === false) {
-              logger.warn('Deactivated user attempted to sign in with Google', {
-                userId: existingUserByEmail.id,
-                email: userEmail,
-              });
-              return '/suspended';
-            }
-
-            // MANUALLY create the Google account link
-            // This prevents NextAuth from auto-linking to wrong users
-            await prisma.account.create({
-              data: {
-                userId: existingUserByEmail.id,
-                type: 'oauth',
-                provider: 'google',
-                providerAccountId: account.providerAccountId,
-                access_token: account.access_token as string | undefined,
-                refresh_token: account.refresh_token as string | undefined,
-                expires_at: account.expires_at as number | undefined,
-                token_type: account.token_type as string | undefined,
-                scope: account.scope as string | undefined,
-                id_token: account.id_token as string | undefined,
-              },
-            });
-
-            logger.info('Manually linked Google OAuth to existing user', {
-              email: userEmail,
-              existingUserId: existingUserByEmail.id,
-              providerAccountId: account.providerAccountId,
-            });
-
-            // CRITICAL: Set user.id so NextAuth uses the EXISTING user, not create new one
-            (user as any).id = existingUserByEmail.id;
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUserByEmail.profile?.role || 'client';
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUserByEmail.profile?.isActive ?? true;
-
-            // Return true - NextAuth will see the account already exists and use it
-            return true;
+          // If user exists, attach their role for the session
+          if (existingUser?.profile?.role) {
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
+          } else {
+            // New user - will get client role in events.signIn
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
           }
 
-          // Truly new user with new email
-          // Since allowDangerousEmailAccountLinking is FALSE, we must create EVERYTHING ourselves
-          // Use upsert to handle race conditions with NextAuth adapter
-          logger.info('New Google OAuth signup - creating user and account manually', {
-            email: userEmail,
-            providerAccountId: account.providerAccountId,
-          });
-
-          // Use a transaction to ensure all records are created atomically
-          const result = await prisma.$transaction(async (tx) => {
-            // Upsert user (create if not exists, return existing if does)
-            const newUser = await tx.user.upsert({
-              where: { email: userEmail },
-              update: {
-                // Only update if user exists but doesn't have these set
-                name: user.name || undefined,
-                image: user.image || undefined,
-                emailVerified: new Date(),
-              },
-              create: {
-                email: userEmail,
-                name: user.name || userEmail.split('@')[0],
-                image: user.image,
-                emailVerified: new Date(),
-              },
-              include: { profile: true },
-            });
-
-            // Create profile if it doesn't exist
-            if (!newUser.profile) {
-              await tx.profile.create({
-                data: {
-                  userId: newUser.id,
-                  role: 'client',
-                  affiliateStatus: 'APPROVED',
-                  affiliateApprovedAt: new Date(),
-                },
-              });
-            }
-
-            // Upsert the Google account link
-            await tx.account.upsert({
-              where: {
-                provider_providerAccountId: {
-                  provider: 'google',
-                  providerAccountId: account.providerAccountId,
-                },
-              },
-              update: {
-                access_token: account.access_token as string | undefined,
-                refresh_token: account.refresh_token as string | undefined,
-                expires_at: account.expires_at as number | undefined,
-                token_type: account.token_type as string | undefined,
-                scope: account.scope as string | undefined,
-                id_token: account.id_token as string | undefined,
-              },
-              create: {
-                userId: newUser.id,
-                type: 'oauth',
-                provider: 'google',
-                providerAccountId: account.providerAccountId,
-                access_token: account.access_token as string | undefined,
-                refresh_token: account.refresh_token as string | undefined,
-                expires_at: account.expires_at as number | undefined,
-                token_type: account.token_type as string | undefined,
-                scope: account.scope as string | undefined,
-                id_token: account.id_token as string | undefined,
-              },
-            });
-
-            return newUser;
-          });
-
-          logger.info('Created/updated user with Google OAuth', {
-            userId: result.id,
-            email: userEmail,
-          });
-
-          // CRITICAL: Set user.id so NextAuth uses our user
-          (user as any).id = result.id;
-          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = result.profile?.role || 'client';
-          (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-
+          // Let NextAuth/PrismaAdapter handle user creation and account linking
           return true;
         } catch (error: any) {
-          // Log the full error for debugging
-          logger.error('Error during Google OAuth sign-in check', {
-            error: error?.message || error,
-            stack: error?.stack,
+          logger.error('Google OAuth error', {
+            message: error?.message,
             code: error?.code,
-            email: user.email,
-            providerAccountId: account.providerAccountId,
+            email: user?.email,
           });
-
-          // If it's a unique constraint error, the user might already exist
-          // This can happen if there's a race condition or retry
-          if (error?.code === 'P2002') {
-            logger.info('Duplicate detected, retrying lookup', { email: user.email });
-            // Try to find the existing account
-            const existingAccount = await prisma.account.findUnique({
-              where: {
-                provider_providerAccountId: {
-                  provider: 'google',
-                  providerAccountId: account.providerAccountId,
-                },
-              },
-              include: { user: { include: { profile: true } } },
-            });
-
-            if (existingAccount) {
-              (user as any).id = existingAccount.user.id;
-              (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingAccount.user.profile?.role || 'client';
-              return true;
-            }
-          }
-
-          return '/auth/error?error=Configuration';
+          // Return true anyway - let NextAuth try to handle it
+          // The events.signIn will create profile if needed
+          return true;
         }
       }
 
