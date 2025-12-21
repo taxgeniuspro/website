@@ -124,7 +124,6 @@ export async function PATCH(
         firstName: firstName || '',
         lastName: lastName || '',
         isActive: isActive ?? true,
-        ...profileData,
       },
     });
 
@@ -154,10 +153,15 @@ export async function PATCH(
         deactivatedBy: updatedUser!.profile?.deactivatedBy,
       },
     });
-  } catch (error) {
-    logger.error('Error updating user:', error);
+  } catch (error: any) {
+    logger.error('Error updating user:', {
+      error: error?.message,
+      code: error?.code,
+      meta: error?.meta,
+      stack: error?.stack,
+    });
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error?.message || 'Internal server error' },
       { status: 500 }
     );
   }
