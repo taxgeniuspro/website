@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import Link from 'next/link';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -97,6 +98,16 @@ export default function RootLayout({
                 <WebVitals />
                 {children}
                 <ConditionalFooter />
+                {/* Server-rendered legal links for SEO/crawlers (Google OAuth requires visible privacy link) */}
+                <div className="border-t bg-muted/30 py-4">
+                  <div className="container mx-auto px-4 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
+                    <Link href="/en/privacy" className="hover:text-primary hover:underline">Privacy Policy</Link>
+                    <span className="hidden sm:inline">|</span>
+                    <Link href="/en/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
+                    <span className="hidden sm:inline">|</span>
+                    <span>© {new Date().getFullYear()} Tax Genius Pro</span>
+                  </div>
+                </div>
                 <Toaster />
                 <Sonner />
               </TooltipProvider>
