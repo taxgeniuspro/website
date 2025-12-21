@@ -77,7 +77,11 @@ export default async function ClientsStatusPage({
         id: true,
         firstName: true,
         lastName: true,
-        email: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
       },
       orderBy: {
         firstName: 'asc',
@@ -94,7 +98,7 @@ export default async function ClientsStatusPage({
       clientsWhere.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
         { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
         { phone: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -103,6 +107,11 @@ export default async function ClientsStatusPage({
     clients = await prisma.profile.findMany({
       where: clientsWhere,
       include: {
+        user: {
+          select: {
+            email: true,
+          },
+        },
         taxReturns: {
           where: statusFilter ? { status: statusFilter.toUpperCase() as any } : undefined,
           orderBy: {

@@ -116,8 +116,12 @@ export async function GET(req: NextRequest) {
             id: true,
             firstName: true,
             lastName: true,
-            email: true,
             avatarUrl: true,
+            user: {
+              select: {
+                email: true,
+              },
+            },
           },
         },
       },
@@ -245,7 +249,7 @@ export async function GET(req: NextRequest) {
         ? {
             id: clientPreparer.preparer.id,
             name: `${clientPreparer.preparer.firstName || ''} ${clientPreparer.preparer.lastName || ''}`.trim(),
-            email: clientPreparer.preparer.email,
+            email: clientPreparer.preparer.user?.email || '',
             avatarUrl: clientPreparer.preparer.avatarUrl,
           }
         : null,
