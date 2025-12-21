@@ -460,12 +460,13 @@ export async function getAllAffiliatesLeadPerformance(period: Period = '30d') {
   const startDate = getPeriodStartDate(period);
   const baseWhere = startDate ? { createdAt: { gte: startDate } } : {};
 
-  // Get all profiles with affiliate status APPROVED, excluding tax preparers
+  // Get all profiles with affiliate status APPROVED, excluding tax preparers and admins
   // Tax preparers have their own dedicated analytics page
+  // Admins are not affiliates - they manage the system
   const affiliates = await prisma.profile.findMany({
     where: {
       affiliateStatus: 'APPROVED',
-      role: { not: 'tax_preparer' }, // Exclude tax preparers - they have their own page
+      role: { notIn: ['tax_preparer', 'admin'] }, // Exclude tax preparers and admins
     },
     select: {
       id: true,
