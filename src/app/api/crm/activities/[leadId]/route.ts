@@ -33,7 +33,7 @@ import { ActivityType } from '@prisma/client';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { leadId: string } }
+  { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
     const session = await auth();
@@ -140,7 +140,7 @@ export async function GET(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { leadId: string } }
+  { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
     const session = await auth();

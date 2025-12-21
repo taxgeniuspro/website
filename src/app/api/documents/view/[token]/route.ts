@@ -17,7 +17,7 @@ import { logger } from '@/lib/logger';
  * - Token contains documentId, userId, and fileUrl
  * - No authentication required (token IS the authentication)
  */
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const token = params.token;
 

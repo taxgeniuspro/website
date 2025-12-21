@@ -6,7 +6,7 @@ import { UserRole, UserPermissions } from '@/lib/permissions';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const session = await auth();
@@ -24,7 +24,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const body = await req.json();
     const { email, firstName, lastName, role: newRole, permissions, isActive } = body;
 

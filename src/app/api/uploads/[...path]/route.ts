@@ -11,7 +11,7 @@ import { logger } from '@/lib/logger';
  * Serve uploaded files with authorization
  * Only allows users to access their own files or files they have permission to view
  */
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 

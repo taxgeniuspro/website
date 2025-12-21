@@ -20,7 +20,7 @@ import {
 /**
  * GET - Get short link details
  */
-export async function GET(req: Request, { params }: { params: { code: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -56,7 +56,7 @@ export async function GET(req: Request, { params }: { params: { code: string } }
 /**
  * PATCH - Update short link
  */
-export async function PATCH(req: Request, { params }: { params: { code: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -98,7 +98,7 @@ export async function PATCH(req: Request, { params }: { params: { code: string }
 /**
  * DELETE - Delete short link
  */
-export async function DELETE(req: Request, { params }: { params: { code: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 

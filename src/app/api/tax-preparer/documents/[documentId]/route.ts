@@ -11,7 +11,7 @@ import { existsSync } from 'fs';
  * Update document status, review notes
  * Only for assigned clients
  */
-export async function PATCH(req: NextRequest, { params }: { params: { documentId: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { documentId
       );
     }
 
-    const { documentId } = params;
+    const { documentId } = await params;
 
     // Get the document
     const document = await prisma.document.findUnique({
@@ -117,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { documentId
  * DELETE /api/tax-preparer/documents/[documentId]
  * Delete a document (only for assigned clients)
  */
-export async function DELETE(req: NextRequest, { params }: { params: { documentId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -143,7 +143,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { documentI
       );
     }
 
-    const { documentId } = params;
+    const { documentId } = await params;
 
     // Get the document with full info
     const document = await prisma.document.findUnique({
@@ -203,7 +203,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { documentI
  * GET /api/tax-preparer/documents/[documentId]
  * Get a specific document (for assigned clients only)
  */
-export async function GET(req: NextRequest, { params }: { params: { documentId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
     const session = await auth(); const userId = session?.user?.id;
 
@@ -229,7 +229,7 @@ export async function GET(req: NextRequest, { params }: { params: { documentId: 
       );
     }
 
-    const { documentId } = params;
+    const { documentId } = await params;
 
     // Get the document
     const document = await prisma.document.findUnique({
