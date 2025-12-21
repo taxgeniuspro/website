@@ -20,14 +20,46 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's profile
-    const profile = await prisma.profile.findUnique({
+    // Get user's profile - create one if it doesn't exist (new OAuth users)
+    let profile = await prisma.profile.findUnique({
       where: { userId: userId },
     });
 
     if (!profile) {
-      logger.error(`Profile not found for user ID: ${userId}`);
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+      // New user - create profile on-the-fly
+      // This handles the race condition where dashboard loads before events.signIn completes
+      logger.info('Creating profile for new user on dashboard access', { userId });
+
+      const user = session.user;
+      const nameParts = user?.name?.split(' ').filter((part: string) => part.length > 0) || [];
+      let firstName = '';
+      let middleName: string | undefined;
+      let lastName = '';
+
+      if (nameParts.length === 1) {
+        firstName = nameParts[0];
+      } else if (nameParts.length === 2) {
+        firstName = nameParts[0];
+        lastName = nameParts[1];
+      } else if (nameParts.length >= 3) {
+        firstName = nameParts[0];
+        middleName = nameParts.slice(1, -1).join(' ');
+        lastName = nameParts[nameParts.length - 1];
+      }
+
+      profile = await prisma.profile.create({
+        data: {
+          userId: userId,
+          role: 'client',
+          firstName,
+          middleName,
+          lastName,
+          affiliateStatus: 'APPROVED',
+          affiliateApprovedAt: new Date(),
+        },
+      });
+
+      logger.info('Created profile for new user', { userId, profileId: profile.id });
     }
 
     // Get tax year from query param or use current filing year
