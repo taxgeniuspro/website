@@ -65,7 +65,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      allowDangerousEmailAccountLinking: true, // Required for OAuth to work - we control linking in signIn callback
+      // CRITICAL: Set to false to prevent auto-linking different Google accounts to same user
+      // Each unique Google account (providerAccountId) should only link to ONE user
+      allowDangerousEmailAccountLinking: false,
       authorization: {
         params: {
           prompt: 'consent',
@@ -73,14 +75,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           response_type: 'code',
         },
       },
-      // Fix for OAuthAccountNotLinked error - ensure profile has consistent id
-      // See: https://github.com/nextauthjs/next-auth/issues/12456
+      // Profile callback - ensure we get the email correctly
       profile(profile) {
         return {
           id: profile.sub, // Use Google's sub (subject) as the user ID
           name: profile.name,
           email: profile.email,
           image: profile.picture,
+          role: 'client' as UserRole, // Default role for new OAuth users
         };
       },
     }),
@@ -144,10 +146,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For Google OAuth - DO NOT auto-link to existing accounts
-      // Each new Google signup gets their own unique account
+      // For Google OAuth - strict account management
+      // Only allow sign-in if:
+      // 1. This exact Google account (providerAccountId) is already linked to a user, OR
+      // 2. This is a completely new user (email doesn't exist in database)
+      // We do NOT auto-link Google to existing email accounts anymore
       if (account?.provider === 'google' && user?.email) {
         try {
+          const userEmail = user.email.toLowerCase();
+
           // Check if this Google account is already linked to a user
           const existingAccount = await prisma.account.findUnique({
             where: {
@@ -186,71 +193,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             logger.info('Existing Google account signing in', {
               userId: existingAccount.user.id,
               email: user.email,
+              providerAccountId: account.providerAccountId,
             });
             return true;
           }
 
           // This is a NEW Google account (providerAccountId not in database)
-          // Check if a user with this email already exists - if so, REJECT to prevent hijacking
+          // Check if a user with this email already exists
           const existingUserByEmail = await prisma.user.findUnique({
-            where: { email: user.email.toLowerCase() },
+            where: { email: userEmail },
+            include: {
+              profile: true,
+              accounts: {
+                where: { provider: 'google' }
+              }
+            },
           });
 
           if (existingUserByEmail) {
-            // A user with this email already exists (e.g., from credential signup)
-            // With allowDangerousEmailAccountLinking=true, NextAuth will auto-link.
-            //
-            // We just need to:
-            // 1. Check if user is active
-            // 2. Get their role for the session
-            // 3. Return true to allow the linking
+            // A user with this email already exists
+            // Check if they already have a Google account linked
+            if (existingUserByEmail.accounts.length > 0) {
+              // They already have a DIFFERENT Google account linked
+              // This means someone is trying to use a different Google account with the same email
+              // This should not happen normally - reject it
+              logger.warn('User already has different Google account linked', {
+                email: userEmail,
+                existingUserId: existingUserByEmail.id,
+                existingProviderAccountId: existingUserByEmail.accounts[0].providerAccountId,
+                attemptedProviderAccountId: account.providerAccountId,
+              });
+              return '/auth/error?error=OAuthAccountNotLinked';
+            }
 
-            logger.info('Google OAuth for existing user - will auto-link', {
-              email: user.email,
+            // User exists with this email but NO Google account yet
+            // This could be a credential-only user wanting to add Google
+            // For security, we should NOT auto-link - they should log in with credentials first
+            // and then link Google from their account settings
+            logger.warn('Rejecting Google OAuth - user exists without Google linked', {
+              email: userEmail,
               existingUserId: existingUserByEmail.id,
               providerAccountId: account.providerAccountId,
             });
 
-            // Get the user's profile
-            const profile = await prisma.profile.findUnique({
-              where: { userId: existingUserByEmail.id },
-              select: { role: true, isActive: true },
-            });
-
-            // Check if user is deactivated
-            if (profile?.isActive === false) {
-              logger.warn('Deactivated user attempted to sign in with Google', {
-                userId: existingUserByEmail.id,
-                email: user.email,
-              });
-              return '/suspended';
-            }
-
-            // Update user's image from Google if not already set
-            if (!existingUserByEmail.image && user.image) {
-              await prisma.user.update({
-                where: { id: existingUserByEmail.id },
-                data: { image: user.image },
-              });
-            }
-
-            // Set role on user object for JWT callback
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = profile?.role || 'client';
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = profile?.isActive ?? true;
-
-            logger.info('Allowing Google OAuth link to existing user', {
-              email: user.email,
-              existingUserId: existingUserByEmail.id,
-              role: profile?.role,
-            });
-
-            // allowDangerousEmailAccountLinking will handle the rest
-            return true;
+            // Redirect to error page explaining they need to log in with existing method
+            return '/auth/error?error=OAuthAccountNotLinked';
           }
 
           // Truly new user with new email - allow NextAuth to create fresh account
           logger.info('New Google OAuth signup - creating fresh account', {
-            email: user.email,
+            email: userEmail,
             providerAccountId: account.providerAccountId,
           });
 
@@ -261,7 +253,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return true;
         } catch (error) {
           logger.error('Error during Google OAuth sign-in check', { error, email: user.email });
-          // Continue with normal flow - let NextAuth handle it
+          return '/auth/error?error=Configuration';
         }
       }
 
