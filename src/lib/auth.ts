@@ -197,15 +197,60 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
 
           if (existingUserByEmail) {
-            // A user with this email exists but used a DIFFERENT Google account
-            // This could be an attempt to hijack the account - REJECT
-            logger.warn('Blocked Google OAuth attempt - email already exists with different account', {
+            // A user with this email already exists (e.g., from credential signup)
+            // LINK the Google account to this existing user instead of blocking
+            // This allows existing tax preparers to migrate to Google OAuth login
+            logger.info('Linking Google OAuth to existing user', {
               email: user.email,
               existingUserId: existingUserByEmail.id,
               newProviderAccountId: account.providerAccountId,
             });
-            // Redirect to error page explaining the issue
-            return '/auth/error?error=OAuthAccountNotLinked';
+
+            // Create the Account record to link Google OAuth to this user
+            await prisma.account.create({
+              data: {
+                userId: existingUserByEmail.id,
+                type: 'oauth',
+                provider: 'google',
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            });
+
+            // Update user's name/image from Google if not already set
+            if (!existingUserByEmail.name || !existingUserByEmail.image) {
+              await prisma.user.update({
+                where: { id: existingUserByEmail.id },
+                data: {
+                  name: existingUserByEmail.name || user.name,
+                  image: existingUserByEmail.image || user.image,
+                },
+              });
+            }
+
+            // Get the user's profile to set the role on the token
+            const profile = await prisma.profile.findUnique({
+              where: { userId: existingUserByEmail.id },
+              select: { role: true, isActive: true },
+            });
+
+            // Set the user object to match the existing user (for JWT callback)
+            user.id = existingUserByEmail.id;
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = profile?.role || 'client';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = profile?.isActive ?? true;
+
+            logger.info('Successfully linked Google OAuth to existing user', {
+              email: user.email,
+              userId: existingUserByEmail.id,
+              role: profile?.role,
+            });
+
+            return true;
           }
 
           // Truly new user with new email - allow NextAuth to create fresh account
