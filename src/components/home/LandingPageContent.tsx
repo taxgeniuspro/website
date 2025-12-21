@@ -96,7 +96,7 @@ export function LandingPageContent() {
               © {new Date().getFullYear()} Tax Genius Pro. All rights reserved.
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
-              <Link href="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
+              <Link href="/privacy-policy" className="text-muted-foreground hover:text-primary transition-colors">
                 Privacy Policy
               </Link>
               <Link href="/terms" className="text-muted-foreground hover:text-primary transition-colors">

@@ -101,7 +101,7 @@ export default function RootLayout({
                 {/* Server-rendered legal links for SEO/crawlers (Google OAuth requires visible privacy link with absolute URL) */}
                 <div className="border-t bg-muted/30 py-4">
                   <div className="container mx-auto px-4 flex flex-wrap justify-center gap-4 text-sm text-muted-foreground">
-                    <a href="https://taxgeniuspro.tax/en/privacy" className="hover:text-primary hover:underline">Privacy Policy</a>
+                    <a href="https://taxgeniuspro.tax/en/privacy-policy" className="hover:text-primary hover:underline">Privacy Policy</a>
                     <span>|</span>
                     <a href="https://taxgeniuspro.tax/en/terms" className="hover:text-primary hover:underline">Terms of Service</a>
                     <span>|</span>
