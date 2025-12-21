@@ -134,8 +134,8 @@ interface Contact {
   taxIntakeLead?: TaxIntakeLead | null;
 }
 
-// Pipeline stages
-const PIPELINE_STAGES = ['NEW', 'CONTACTED', 'DOCUMENTS', 'PREPARING', 'COMPLETE'];
+// Pipeline stages - must match PipelineStage enum in Prisma schema
+const PIPELINE_STAGES = ['NEW', 'CONTACTED', 'QUALIFIED', 'DOCUMENTS', 'FILED', 'CLOSED', 'LOST'];
 
 export default function ContactDetailPage() {
   const router = useRouter();
@@ -445,9 +445,11 @@ export default function ContactDetailPage() {
                         className={cn(
                           contact.stage === 'NEW' && 'bg-blue-500',
                           contact.stage === 'CONTACTED' && 'bg-purple-500',
+                          contact.stage === 'QUALIFIED' && 'bg-indigo-500',
                           contact.stage === 'DOCUMENTS' && 'bg-yellow-500',
-                          contact.stage === 'PREPARING' && 'bg-orange-500',
-                          contact.stage === 'COMPLETE' && 'bg-green-500'
+                          contact.stage === 'FILED' && 'bg-orange-500',
+                          contact.stage === 'CLOSED' && 'bg-green-500',
+                          contact.stage === 'LOST' && 'bg-red-500'
                         )}
                       >
                         {contact.stage}
@@ -461,9 +463,11 @@ export default function ContactDetailPage() {
                           className={cn(
                             stage === 'NEW' && 'bg-blue-500',
                             stage === 'CONTACTED' && 'bg-purple-500',
+                            stage === 'QUALIFIED' && 'bg-indigo-500',
                             stage === 'DOCUMENTS' && 'bg-yellow-500',
-                            stage === 'PREPARING' && 'bg-orange-500',
-                            stage === 'COMPLETE' && 'bg-green-500'
+                            stage === 'FILED' && 'bg-orange-500',
+                            stage === 'CLOSED' && 'bg-green-500',
+                            stage === 'LOST' && 'bg-red-500'
                           )}
                         >
                           {stage}

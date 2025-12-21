@@ -10,10 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ShieldCheck, Users, AlertCircle, UserCog, Settings } from 'lucide-react';
+import { ShieldCheck, Users, AlertCircle, UserCog, Settings, BookOpen } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { PermissionManager } from '@/components/admin/PermissionManager';
 import { PermissionPresets } from '@/components/admin/PermissionPresets';
+import { CRMPermissionsTab } from '@/components/admin/CRMPermissionsTab';
 import { logger } from '@/lib/logger';
 
 export default async function PermissionsPage() {
@@ -110,8 +111,9 @@ export default async function PermissionsPage() {
         </div>
 
         <Tabs defaultValue="role-permissions" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="role-permissions">Role Permissions</TabsTrigger>
+            <TabsTrigger value="crm-permissions">CRM Features</TabsTrigger>
             <TabsTrigger value="admin-users">Admin Users ({adminUsers.length})</TabsTrigger>
             <TabsTrigger value="permission-presets">Permission Presets</TabsTrigger>
           </TabsList>
@@ -156,6 +158,25 @@ export default async function PermissionsPage() {
                     );
                   })}
                 </Tabs>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* CRM Permissions Tab */}
+          <TabsContent value="crm-permissions">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  CRM Feature Permissions
+                </CardTitle>
+                <CardDescription>
+                  Control which CRM features each tax preparer can access. These are feature-level
+                  permissions that control advanced CRM capabilities.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CRMPermissionsTab />
               </CardContent>
             </Card>
           </TabsContent>

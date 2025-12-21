@@ -4,17 +4,18 @@
  * Single source of truth for dashboard navigation across mobile and desktop.
  * Used by both DashboardSidebar and MobileSidebar components.
  *
- * CONSOLIDATION NOTES (Dec 2025):
- * - Settings: Only in sidebar footer (removed from nav items to avoid duplicates)
- * - Calendar/CRM Contacts: Consolidated - same /crm/contacts route for all roles
- * - Marketing Assets: Consolidated per role
- * - My Tracking Code: Moved to Dashboard section for tax_preparer
- * - Professional Email: Moved to Settings sub-page (not in main nav)
+ * ADMIN NAVIGATION REDESIGN (Dec 2025):
+ * Reduced from 6 sections to 4 for better usability:
+ * - 🎯 Command Center: Lead Analytics, CRM Contacts, Tax Intake Leads, Calendar, Clients Status
+ * - 👥 People: Preparer/Affiliate Performance, User Management, Applications, Referrals Status
+ * - 📢 Marketing: Marketing Hub, Content Generator, Tracking Codes
+ * - ⚙️ Settings: Permissions, Earnings, Payouts, File Center, IRS Forms, Content Restrictions
  *
- * STREAMLINED NAVIGATION (Dec 2025):
- * - Removed: Store/Marketplace (physical products), Dashboard section (merged)
- * - Tax Preparer sections: 📊 Dashboard, 💰 Referral Management
- * - Admin sections: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 📋 IRS Forms, ⚙️ System Controls
+ * OTHER ROLES:
+ * - Client: 📱 My Dashboard
+ * - Tax Preparer: 📊 Dashboard, 💰 Referral Management
+ *
+ * Settings: Only in sidebar footer (removed from nav items to avoid duplicates)
  */
 
 import {
@@ -60,7 +61,7 @@ export interface NavItem {
  * SECTIONS BY ROLE:
  * - Client: 📱 My Dashboard
  * - Tax Preparer: 📊 Dashboard, 💰 Referral Management
- * - Admin: 👥 Clients, 📊 Analytics, 💰 Financials, 📢 Marketing, 📋 IRS Forms, ⚙️ System Controls
+ * - Admin: 🎯 Command Center, 👥 People, 📢 Marketing, ⚙️ Settings
  */
 export const ALL_NAV_ITEMS: NavItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
@@ -258,58 +259,16 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
 
-  {
-    label: 'Clients Status',
-    href: '/admin/clients-status',
-    icon: UserCheck,
-    permission: 'clientsStatus',
-    section: '👥 Clients',
-    roles: ['admin'],
-  },
-  {
-    label: 'Referrals Status',
-    href: '/admin/referrals-status',
-    icon: Users,
-    permission: 'referralsStatus',
-    section: '👥 Clients',
-    roles: ['admin'],
-  },
-
   // ═══════════════════════════════════════════════════════════════════════════
-  // 📊 ANALYTICS SECTION (Admin)
-  // Platform-wide analytics and performance tracking
+  // 🎯 COMMAND CENTER (Admin) - Primary daily operations
+  // Most-used features for day-to-day admin work
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Lead Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
     permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['admin'],
-  },
-  {
-    label: 'Preparer Performance',
-    href: '/admin/analytics/preparers',
-    icon: Users,
-    permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['admin'],
-  },
-  {
-    label: 'Affiliate Performance',
-    href: '/admin/analytics/affiliates',
-    icon: Trophy,
-    permission: 'analytics',
-    section: '📊 Analytics',
-    roles: ['admin'],
-  },
-
-  {
-    label: 'Calendar',
-    href: '/admin/calendar',
-    icon: Calendar,
-    permission: 'calendar',
-    section: '👥 Clients',
+    section: '🎯 Command Center',
     roles: ['admin'],
   },
   {
@@ -317,23 +276,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/crm/contacts',
     icon: BookOpen,
     permission: 'addressBook',
-    section: '👥 Clients',
-    roles: ['admin'],
-  },
-  {
-    label: 'Client File Center',
-    href: '/admin/file-center',
-    icon: FolderOpen,
-    permission: 'clientFileCenter',
-    section: '👥 Clients',
-    roles: ['admin'],
-  },
-  {
-    label: 'Tax Preparer Applications',
-    href: '/admin/applications/preparers',
-    icon: Users,
-    permission: 'users',
-    section: '👥 Clients',
+    section: '🎯 Command Center',
     roles: ['admin'],
   },
   {
@@ -341,47 +284,77 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/leads',
     icon: UserPlus,
     permission: 'users',
-    section: '👥 Clients',
+    section: '🎯 Command Center',
+    roles: ['admin'],
+  },
+  {
+    label: 'Calendar',
+    href: '/admin/calendar',
+    icon: Calendar,
+    permission: 'calendar',
+    section: '🎯 Command Center',
+    roles: ['admin'],
+  },
+  {
+    label: 'Clients Status',
+    href: '/admin/clients-status',
+    icon: UserCheck,
+    permission: 'clientsStatus',
+    section: '🎯 Command Center',
     roles: ['admin'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 💰 FINANCIALS SECTION (Admin)
-  // Earnings and payouts management
+  // 👥 PEOPLE (Admin) - Team & user management
   // ═══════════════════════════════════════════════════════════════════════════
   {
-    label: 'Earnings Overview',
-    href: '/admin/earnings',
-    icon: DollarSign,
-    permission: 'earnings',
-    section: '💰 Financials',
+    label: 'Preparer Performance',
+    href: '/admin/analytics/preparers',
+    icon: Users,
+    permission: 'analytics',
+    section: '👥 People',
     roles: ['admin'],
   },
   {
-    label: 'Payouts',
-    href: '/admin/payouts',
-    icon: DollarSign,
-    permission: 'payouts',
-    section: '💰 Financials',
+    label: 'Affiliate Performance',
+    href: '/admin/analytics/affiliates',
+    icon: Trophy,
+    permission: 'analytics',
+    section: '👥 People',
+    roles: ['admin'],
+  },
+  {
+    label: 'User Management',
+    href: '/admin/users',
+    icon: Users,
+    permission: 'users',
+    section: '👥 People',
+    roles: ['admin'],
+  },
+  {
+    label: 'Preparer Applications',
+    href: '/admin/applications/preparers',
+    icon: UserCheck,
+    permission: 'users',
+    section: '👥 People',
+    roles: ['admin'],
+  },
+  {
+    label: 'Referrals Status',
+    href: '/admin/referrals-status',
+    icon: Share2,
+    permission: 'referralsStatus',
+    section: '👥 People',
     roles: ['admin'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 📢 MARKETING SECTION (Admin)
-  // Company-wide marketing management
+  // 📢 MARKETING (Admin) - Creative tools & content
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Marketing Hub',
     href: '/admin/marketing-hub',
     icon: Megaphone,
-    permission: 'marketingHub',
-    section: '📢 Marketing',
-    roles: ['admin'],
-  },
-  {
-    label: 'Tracking Codes Overview',
-    href: '/admin/tracking-codes',
-    icon: QrCode,
     permission: 'marketingHub',
     section: '📢 Marketing',
     roles: ['admin'],
@@ -395,61 +368,55 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
-    label: 'AI Image Center',
-    href: '/admin/image-center',
-    icon: Image,
-    permission: 'contentGenerator',
-    section: '📢 Marketing',
-    roles: ['admin'],
-  },
-  {
-    label: 'Marketing Assets',
-    href: '/crm/marketing-assets',
-    icon: FolderOpen,
-    permission: 'marketingAssets',
-    section: '📢 Marketing',
-    roles: ['admin'],
-  },
-  {
-    label: 'Referral Images',
-    href: '/admin/referral-images',
-    icon: Image,
+    label: 'Tracking Codes',
+    href: '/admin/tracking-codes',
+    icon: QrCode,
     permission: 'marketingHub',
     section: '📢 Marketing',
     roles: ['admin'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 📋 IRS FORMS SECTION (Admin only)
+  // ⚙️ SETTINGS (Admin) - Configuration & system
   // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'IRS Forms Library',
-    href: '/admin/tax-forms',
-    icon: FileText,
-    permission: 'taxForms',
-    section: '📋 IRS Forms',
-    roles: ['admin'],
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ⚙️ SYSTEM CONTROLS SECTION (Admin)
-  // User management and permissions
-  // NOTE: Settings is NOT here - it's only in sidebar footer to avoid duplicates
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'User Management',
-    href: '/admin/users',
-    icon: Users,
-    permission: 'users',
-    section: '⚙️ System Controls',
-    roles: ['admin'],
-  },
   {
     label: 'Permissions',
     href: '/admin/permissions',
     icon: ShieldCheck,
     permission: 'users',
-    section: '⚙️ System Controls',
+    section: '⚙️ Settings',
+    roles: ['admin'],
+  },
+  {
+    label: 'Earnings Overview',
+    href: '/admin/earnings',
+    icon: DollarSign,
+    permission: 'earnings',
+    section: '⚙️ Settings',
+    roles: ['admin'],
+  },
+  {
+    label: 'Payouts',
+    href: '/admin/payouts',
+    icon: DollarSign,
+    permission: 'payouts',
+    section: '⚙️ Settings',
+    roles: ['admin'],
+  },
+  {
+    label: 'Client File Center',
+    href: '/admin/file-center',
+    icon: FolderOpen,
+    permission: 'clientFileCenter',
+    section: '⚙️ Settings',
+    roles: ['admin'],
+  },
+  {
+    label: 'IRS Forms Library',
+    href: '/admin/tax-forms',
+    icon: FileText,
+    permission: 'taxForms',
+    section: '⚙️ Settings',
     roles: ['admin'],
   },
   {
@@ -457,7 +424,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/content-restrictions',
     icon: Shield,
     permission: 'users',
-    section: '⚙️ System Controls',
+    section: '⚙️ Settings',
     roles: ['admin'],
   },
 ];
@@ -476,15 +443,20 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
  * Section visibility by role
  * Defines which sections should be visible to which roles
  * If a section is not listed, it's visible to all roles (with proper permissions)
+ *
+ * STREAMLINED ADMIN NAVIGATION (Dec 2025):
+ * - Reduced from 6 sections to 4: Command Center, People, Marketing, Settings
+ * - Command Center: Lead Analytics, CRM, Leads, Calendar, Clients Status
+ * - People: Preparer/Affiliate Performance, Users, Applications, Referrals
+ * - Marketing: Marketing Hub, Content Generator, Tracking Codes
+ * - Settings: Permissions, Earnings, Payouts, File Center, IRS Forms, Restrictions
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
   '📱 My Dashboard': ['client'], // Client dashboard items
   '📊 Dashboard': ['tax_preparer'], // Tax preparer dashboard section
   '💰 Referral Management': ['tax_preparer'], // Tax preparer referral tracking
-  '📊 Analytics': ['admin'], // Admin analytics section
-  '💰 Financials': ['admin'], // Admin financials
+  '🎯 Command Center': ['admin'], // Admin primary operations
+  '👥 People': ['admin'], // Admin team management
   '📢 Marketing': ['admin'], // Admin marketing hub
-  '📋 IRS Forms': ['admin'], // Admin IRS forms library
-  '⚙️ System Controls': ['admin'], // Admin system settings
-  // 👥 Clients: visible to both tax_preparer and admin (different items shown)
+  '⚙️ Settings': ['admin'], // Admin configuration
 };
