@@ -14,7 +14,7 @@ import Google from 'next-auth/providers/google';
 import Resend from 'next-auth/providers/resend';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { UserRole } from '@prisma/client';
+import { UserRole, ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 
@@ -334,6 +334,52 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           } catch (trackingError) {
             // Log but don't block signup
             logger.error('Failed to assign tracking code to OAuth user', { error: trackingError, userId: user.id });
+          }
+
+          // Create or link CRM contact for unified People Hub view
+          // This ensures all OAuth users appear in CRM
+          try {
+            const existingCrmContact = await prisma.cRMContact.findUnique({
+              where: { email: user.email?.toLowerCase() },
+            });
+
+            if (existingCrmContact) {
+              // Link existing CRM contact to this user
+              await prisma.cRMContact.update({
+                where: { id: existingCrmContact.id },
+                data: {
+                  userId: user.id,
+                  firstName: firstName || existingCrmContact.firstName,
+                  lastName: lastName || existingCrmContact.lastName,
+                  contactType: ContactType.CLIENT,
+                  lastContactedAt: new Date(),
+                },
+              });
+              logger.info('Linked existing CRM contact to OAuth user', {
+                userId: user.id,
+                crmContactId: existingCrmContact.id,
+              });
+            } else {
+              // Create new CRM contact
+              await prisma.cRMContact.create({
+                data: {
+                  userId: user.id,
+                  email: user.email?.toLowerCase() || '',
+                  firstName: firstName || 'Unknown',
+                  lastName: lastName || '',
+                  contactType: ContactType.CLIENT,
+                  stage: 'NEW',
+                  source: 'google_oauth',
+                },
+              });
+              logger.info('Created CRM contact for OAuth user', { userId: user.id });
+            }
+          } catch (crmError) {
+            // Log but don't block signup
+            logger.error('Failed to create/link CRM contact for OAuth user', {
+              error: crmError instanceof Error ? crmError.message : 'Unknown error',
+              userId: user.id,
+            });
           }
         } catch (profileError) {
           // Log profile creation failure - critical issue
