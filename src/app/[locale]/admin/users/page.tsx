@@ -68,6 +68,7 @@ export default async function AdminUsersPage() {
     isActive: user.profile?.isActive ?? true,
     deactivatedAt: user.profile?.deactivatedAt?.toISOString() || null,
     deactivatedBy: user.profile?.deactivatedBy || null,
+    affiliateStatus: user.profile?.affiliateStatus as 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE' | undefined,
   }));
 
   // Count users by role

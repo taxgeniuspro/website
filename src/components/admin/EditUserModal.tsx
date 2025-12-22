@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Shield, AlertTriangle, Loader2, User, Settings } from 'lucide-react';
+import { Shield, AlertTriangle, Loader2, User, Settings, Users } from 'lucide-react';
 import {
   UserRole,
   UserPermissions,
@@ -31,6 +31,17 @@ import {
   PERMISSION_LABELS,
   DEFAULT_PERMISSIONS,
 } from '@/lib/permissions';
+
+// Affiliate status options
+type AffiliateStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE';
+
+const AFFILIATE_STATUS_OPTIONS: { value: AffiliateStatus; label: string; description: string }[] = [
+  { value: 'APPROVED', label: 'Approved', description: 'Can refer others and earn commissions' },
+  { value: 'SUSPENDED', label: 'Suspended', description: 'Temporarily blocked from earning commissions' },
+  { value: 'INACTIVE', label: 'Inactive', description: 'Permanently deactivated as affiliate' },
+  { value: 'PENDING', label: 'Pending', description: 'Awaiting approval (legacy)' },
+  { value: 'NONE', label: 'None', description: 'Not an affiliate (legacy)' },
+];
 
 interface EditUserModalProps {
   open: boolean;
@@ -45,6 +56,7 @@ interface EditUserModalProps {
     isActive?: boolean;
     deactivatedAt?: string | Date | null;
     deactivatedBy?: string | null;
+    affiliateStatus?: AffiliateStatus;
   };
   onSave: (userData: {
     userId: string;
@@ -54,6 +66,7 @@ interface EditUserModalProps {
     role: UserRole;
     permissions: Partial<UserPermissions>;
     isActive?: boolean;
+    affiliateStatus?: AffiliateStatus;
   }) => Promise<void>;
   isSuperAdmin?: boolean;
 }
@@ -73,6 +86,9 @@ export function EditUserModal({
     user.permissions || DEFAULT_PERMISSIONS[user.role] || {}
   );
   const [isActive, setIsActive] = useState(user.isActive ?? true);
+  const [affiliateStatus, setAffiliateStatus] = useState<AffiliateStatus>(
+    user.affiliateStatus || 'APPROVED'
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +120,7 @@ export function EditUserModal({
         role: selectedRole,
         permissions,
         isActive: isActive !== (user.isActive ?? true) ? isActive : undefined,
+        affiliateStatus: affiliateStatus !== user.affiliateStatus ? affiliateStatus : undefined,
       });
 
       onOpenChange(false);
@@ -137,7 +154,7 @@ export function EditUserModal({
         )}
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="profile">
               <User className="w-4 h-4 mr-2" />
               Profile
@@ -145,6 +162,10 @@ export function EditUserModal({
             <TabsTrigger value="permissions">
               <Settings className="w-4 h-4 mr-2" />
               Role & Permissions
+            </TabsTrigger>
+            <TabsTrigger value="affiliate">
+              <Users className="w-4 h-4 mr-2" />
+              Affiliate
             </TabsTrigger>
           </TabsList>
 
@@ -327,6 +348,78 @@ export function EditUserModal({
                   </AlertDescription>
                 </Alert>
               )}
+            </div>
+          </TabsContent>
+
+          {/* Affiliate Tab */}
+          <TabsContent value="affiliate" className="space-y-4 mt-4">
+            <div className="space-y-4">
+              {/* Affiliate Status */}
+              <div className="space-y-2">
+                <Label htmlFor="affiliateStatus" className="text-sm font-medium">
+                  Affiliate Status
+                </Label>
+                <Select
+                  value={affiliateStatus}
+                  onValueChange={(value) => setAffiliateStatus(value as AffiliateStatus)}
+                >
+                  <SelectTrigger id="affiliateStatus">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AFFILIATE_STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div className="flex flex-col">
+                          <span>{option.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {AFFILIATE_STATUS_OPTIONS.find((o) => o.value === affiliateStatus)?.description}
+                </p>
+              </div>
+
+              {/* Status Badges */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Current Status:</span>
+                <Badge
+                  variant={
+                    affiliateStatus === 'APPROVED'
+                      ? 'default'
+                      : affiliateStatus === 'SUSPENDED'
+                        ? 'destructive'
+                        : 'secondary'
+                  }
+                >
+                  {affiliateStatus}
+                </Badge>
+              </div>
+
+              {/* Warning for suspension/deactivation */}
+              {(affiliateStatus === 'SUSPENDED' || affiliateStatus === 'INACTIVE') && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {affiliateStatus === 'SUSPENDED'
+                      ? 'This user will not be able to earn commissions until reactivated.'
+                      : 'This user has been permanently removed from the affiliate program.'}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Info about affiliate capabilities */}
+              <Alert>
+                <AlertDescription className="text-xs">
+                  <strong>Affiliate capabilities:</strong>
+                  <ul className="list-disc ml-4 mt-1 space-y-1">
+                    <li>Approved affiliates can refer new clients and earn commissions</li>
+                    <li>Suspended affiliates keep their referral history but cannot earn new commissions</li>
+                    <li>Inactive affiliates are permanently removed from the program</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
             </div>
           </TabsContent>
         </Tabs>

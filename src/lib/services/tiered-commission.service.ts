@@ -3,41 +3,123 @@
  * Handles commission rate calculation with support for:
  * - Percentage-based rates
  * - Flat rate commissions
- * - Tiered rates based on conversion count
+ * - Tiered rates based on conversion count (flexible 1-5 tiers)
  * - Rate hierarchy (custom > bonding > group tiered > group base > default)
  */
 
 import { prisma } from '@/lib/prisma';
-import { CommissionType, type Profile, type AffiliateGroup } from '@prisma/client';
+import { CommissionType, Prisma, type Profile, type AffiliateGroup } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import {
+  FlexibleTierStructure,
+  LegacyTierStructure,
+  isLegacyFormat,
+  normalizeToFlexible,
+  DEFAULT_COMPANY_TIERS,
+} from '@/lib/types/commission-tiers';
 
 // Default commission rate if no other rate applies
 const DEFAULT_COMMISSION_RATE = 10; // 10%
 const DEFAULT_COMMISSION_TYPE = CommissionType.PERCENTAGE;
 
-// Tax Genius Company Default Tiers
-// These are the built-in tiers that apply when a preparer uses company defaults
-export const COMPANY_DEFAULT_TIERS = {
-  tier1: { max: 5, rate: 50 },   // Referrals 1-5: $50 each
-  tier2: { max: 10, rate: 75 },  // Referrals 6-10: $75 each
-  tier3: { rate: 100 },          // Referrals 11+: $100 each
-};
+// System settings key for company default tiers
+const COMMISSION_DEFAULTS_KEY = 'commission_default_tiers';
 
-// Calculate commission from tier structure based on completed referral count
+/**
+ * Get company default tiers from database (with fallback)
+ */
+export async function getCompanyDefaultTiers(): Promise<FlexibleTierStructure> {
+  try {
+    const setting = await prisma.systemSettings.findUnique({
+      where: { key: COMMISSION_DEFAULTS_KEY },
+    });
+
+    if (setting) {
+      const parsed = JSON.parse(setting.value);
+      // Handle legacy format in database
+      if (isLegacyFormat(parsed)) {
+        return normalizeToFlexible(parsed);
+      }
+      return parsed as FlexibleTierStructure;
+    }
+  } catch (error) {
+    console.error('Error fetching company default tiers:', error);
+  }
+
+  // Fallback to hardcoded defaults
+  return DEFAULT_COMPANY_TIERS;
+}
+
+/**
+ * Update company default tiers in database
+ */
+export async function updateCompanyDefaultTiers(
+  tiers: FlexibleTierStructure,
+  updatedById?: string
+): Promise<void> {
+  await prisma.systemSettings.upsert({
+    where: { key: COMMISSION_DEFAULTS_KEY },
+    update: {
+      value: JSON.stringify(tiers),
+      updatedById,
+      updatedAt: new Date(),
+    },
+    create: {
+      key: COMMISSION_DEFAULTS_KEY,
+      value: JSON.stringify(tiers),
+      category: 'commission',
+      description: 'Company-wide default commission tier structure for referrals',
+      updatedById,
+    },
+  });
+}
+
+/**
+ * Calculate commission from tier structure based on completed referral count
+ * Supports both legacy (tier1/tier2/tier3) and flexible (array) formats
+ */
 export function calculateTierCommission(
-  tierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } },
+  tierStructure: FlexibleTierStructure | LegacyTierStructure | unknown,
   completedReferralCount: number
 ): number {
-  const { tier1, tier2, tier3 } = tierStructure;
+  // Normalize to flexible format
+  const tiers = normalizeToFlexible(tierStructure as FlexibleTierStructure | LegacyTierStructure);
 
-  // Determine which tier applies based on count
-  if (tier3 && completedReferralCount > (tier2?.max ?? tier1?.max ?? 5)) {
-    return tier3.rate;
+  // Find the applicable tier based on referral count
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const tierMin = i === 0 ? 1 : (tiers[i - 1].max ?? 0) + 1;
+    const tierMax = tier.max ?? Infinity;
+
+    if (completedReferralCount >= tierMin && completedReferralCount <= tierMax) {
+      return tier.rate;
+    }
   }
-  if (tier2 && completedReferralCount > (tier1?.max ?? 5)) {
-    return tier2.rate;
+
+  // If beyond all tiers (shouldn't happen with proper unlimited last tier), use last tier rate
+  return tiers.length > 0 ? tiers[tiers.length - 1].rate : 50;
+}
+
+/**
+ * Get tier name based on referral count for flexible tier structure
+ */
+export function getTierNameFromCountFlexible(
+  count: number,
+  tierStructure: FlexibleTierStructure | LegacyTierStructure | unknown
+): string {
+  const tiers = normalizeToFlexible(tierStructure as FlexibleTierStructure | LegacyTierStructure);
+
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const tierMin = i === 0 ? 1 : (tiers[i - 1].max ?? 0) + 1;
+    const tierMax = tier.max ?? Infinity;
+
+    if (count >= tierMin && count <= tierMax) {
+      return `Tier ${i + 1}`;
+    }
   }
-  return tier1?.rate ?? 50;
+
+  return `Tier ${tiers.length}`;
 }
 
 // Tier configuration interface
@@ -150,7 +232,7 @@ export async function getEffectiveCommissionRate(
     // 3a. Check for tiered rate based on conversions
     if (group.commissionType === CommissionType.TIERED && group.tieredRates) {
       const tieredRate = calculateTieredRate(
-        group.tieredRates as TierConfig[],
+        group.tieredRates as unknown as TierConfig[],
         conversions
       );
 
@@ -319,8 +401,8 @@ export async function lockCommissionRateForLead(
 ): Promise<void> {
   const effectiveRate = await getEffectiveCommissionRate(referrerProfileId);
 
-  // Store the rate in the lead record
-  await prisma.taxIntakeLead.update({
+  // Store the rate in the lead record (Lead model has commissionRate field)
+  await prisma.lead.update({
     where: { id: leadId },
     data: {
       commissionRate: effectiveRate.rate,
@@ -366,7 +448,7 @@ export async function getTierProgress(
     };
   }
 
-  const tieredRates = group.tieredRates as TierConfig[];
+  const tieredRates = group.tieredRates as unknown as TierConfig[];
   const sortedTiers = [...tieredRates].sort(
     (a, b) => a.minConversions - b.minConversions
   );
@@ -476,7 +558,7 @@ export async function updateGroupStats(groupId: string): Promise<void> {
  * Commission Hierarchy:
  * 1. VIP Rate - Individual rate set for this specific referrer in AffiliateBonding.commissionStructure
  * 2. Preparer's Custom Tiers - If preparer has useCompanyCommissionDefaults=false and customTierStructure set
- * 3. Company Default Tiers - $50 (1-5), $75 (6-10), $100 (11+)
+ * 3. Company Default Tiers - Fetched from database (flexible 1-5 tiers)
  *
  * @param preparerId - The tax preparer's profile ID
  * @param referrerId - The referrer's profile ID (client or affiliate)
@@ -533,14 +615,9 @@ export async function calculateReferrerCommission(
 
   // Use custom tiers if preparer has them configured
   if (preparer && !preparer.useCompanyCommissionDefaults && preparer.customTierStructure) {
-    const customTiers = preparer.customTierStructure as {
-      tier1?: { max: number; rate: number };
-      tier2?: { max: number; rate: number };
-      tier3?: { rate: number };
-    };
-
+    const customTiers = preparer.customTierStructure;
     const rate = calculateTierCommission(customTiers, completedReferralCount);
-    const tierName = getTierNameFromCount(completedReferralCount, customTiers);
+    const tierName = getTierNameFromCountFlexible(completedReferralCount, customTiers);
 
     return {
       amount: rate,
@@ -550,9 +627,10 @@ export async function calculateReferrerCommission(
     };
   }
 
-  // 3. Use Company Default Tiers
-  const rate = calculateTierCommission(COMPANY_DEFAULT_TIERS, completedReferralCount);
-  const tierName = getTierNameFromCount(completedReferralCount, COMPANY_DEFAULT_TIERS);
+  // 3. Use Company Default Tiers (from database)
+  const companyTiers = await getCompanyDefaultTiers();
+  const rate = calculateTierCommission(companyTiers, completedReferralCount);
+  const tierName = getTierNameFromCountFlexible(completedReferralCount, companyTiers);
 
   return {
     amount: rate,
@@ -563,28 +641,13 @@ export async function calculateReferrerCommission(
 }
 
 /**
- * Get tier name based on referral count
- */
-function getTierNameFromCount(
-  count: number,
-  tierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } }
-): string {
-  const { tier1, tier2 } = tierStructure;
-  const tier1Max = tier1?.max ?? 5;
-  const tier2Max = tier2?.max ?? 10;
-
-  if (count > tier2Max) return 'Tier 3';
-  if (count > tier1Max) return 'Tier 2';
-  return 'Tier 1';
-}
-
-/**
  * Get preparer's commission settings
+ * Returns flexible tier structure format (auto-converts legacy format)
  */
 export async function getPreparerCommissionSettings(preparerId: string): Promise<{
   useCompanyDefaults: boolean;
-  customTierStructure: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } } | null;
-  companyDefaultTiers: typeof COMPANY_DEFAULT_TIERS;
+  customTierStructure: FlexibleTierStructure | null;
+  companyDefaultTiers: FlexibleTierStructure;
 }> {
   const preparer = await prisma.profile.findUnique({
     where: { id: preparerId },
@@ -594,28 +657,43 @@ export async function getPreparerCommissionSettings(preparerId: string): Promise
     },
   });
 
+  // Get company defaults from database
+  const companyDefaultTiers = await getCompanyDefaultTiers();
+
+  // Normalize custom tier structure if it exists
+  let customTierStructure: FlexibleTierStructure | null = null;
+  if (preparer?.customTierStructure) {
+    customTierStructure = normalizeToFlexible(
+      preparer.customTierStructure as unknown as FlexibleTierStructure | LegacyTierStructure
+    );
+  }
+
   return {
     useCompanyDefaults: preparer?.useCompanyCommissionDefaults ?? true,
-    customTierStructure: preparer?.customTierStructure as { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } } | null,
-    companyDefaultTiers: COMPANY_DEFAULT_TIERS,
+    customTierStructure,
+    companyDefaultTiers,
   };
 }
 
 /**
  * Update preparer's commission settings
+ * Accepts flexible tier structure (1-5 tiers)
  */
 export async function updatePreparerCommissionSettings(
   preparerId: string,
   settings: {
     useCompanyDefaults: boolean;
-    customTierStructure?: { tier1?: { max: number; rate: number }; tier2?: { max: number; rate: number }; tier3?: { rate: number } };
+    customTierStructure?: FlexibleTierStructure;
   }
 ): Promise<void> {
   await prisma.profile.update({
     where: { id: preparerId },
     data: {
       useCompanyCommissionDefaults: settings.useCompanyDefaults,
-      customTierStructure: settings.useCompanyDefaults ? null : settings.customTierStructure,
+      // Prisma Json type requires InputJsonValue
+      customTierStructure: settings.useCompanyDefaults
+        ? undefined
+        : JSON.parse(JSON.stringify(settings.customTierStructure)),
     },
   });
 }
@@ -645,7 +723,7 @@ export async function setReferrerVIPRate(
       where: { id: existingBonding.id },
       data: {
         commissionStructure: vipRate === null
-          ? null
+          ? Prisma.JsonNull
           : { ...currentStructure, vipRate },
       },
     });
@@ -697,9 +775,9 @@ export async function getPreparerReferrersWithRates(preparerId: string): Promise
       // Get completed referral count for this referrer
       const completedReferrals = await prisma.taxIntakeLead.count({
         where: {
-          taxPreparerId: preparerId,
-          referrerCode: affiliate.customTrackingCode ?? undefined,
-          status: { in: ['FILED', 'CONVERTED'] },
+          assignedPreparerId: preparerId,
+          referrerUsername: affiliate.customTrackingCode ?? undefined,
+          convertedToClient: true,
         },
       });
 

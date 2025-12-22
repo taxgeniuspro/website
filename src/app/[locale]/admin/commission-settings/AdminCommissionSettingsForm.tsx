@@ -4,18 +4,23 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Save, RotateCcw, Check, Plus, Trash2 } from 'lucide-react';
+import { Save, RotateCcw, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FlexibleTierStructure, FlexibleTier } from '@/lib/types/commission-tiers';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-interface CommissionSettingsFormProps {
-  initialSettings: {
-    useCompanyDefaults: boolean;
-    customTierStructure: FlexibleTierStructure | null;
-  };
-  companyDefaultTiers: FlexibleTierStructure;
+interface AdminCommissionSettingsFormProps {
+  initialTiers: FlexibleTierStructure;
 }
 
 const TIER_COLORS = [
@@ -37,30 +42,13 @@ const TIER_BADGE_COLORS = [
 const MAX_TIERS = 5;
 const MIN_TIERS = 1;
 
-export function CommissionSettingsForm({
-  initialSettings,
-  companyDefaultTiers,
-}: CommissionSettingsFormProps) {
-  const [useCompanyDefaults, setUseCompanyDefaults] = useState(
-    initialSettings.useCompanyDefaults
-  );
-
-  // Initialize tiers from saved settings or company defaults
-  const [tiers, setTiers] = useState<FlexibleTierStructure>(() => {
-    if (initialSettings.customTierStructure && initialSettings.customTierStructure.length > 0) {
-      return initialSettings.customTierStructure;
-    }
-    // Start with company defaults
-    return companyDefaultTiers;
-  });
-
+export function AdminCommissionSettingsForm({
+  initialTiers,
+}: AdminCommissionSettingsFormProps) {
+  const [tiers, setTiers] = useState<FlexibleTierStructure>(initialTiers);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-
-  const handleToggleDefaults = (checked: boolean) => {
-    setUseCompanyDefaults(checked);
-    setHasChanges(true);
-  };
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const handleTierChange = (
     index: number,
@@ -83,19 +71,16 @@ export function CommissionSettingsForm({
   const handleAddTier = () => {
     if (tiers.length >= MAX_TIERS) return;
 
-    // Get the last tier's max value to set new tier's starting point
     const lastTier = tiers[tiers.length - 1];
     const previousMax = tiers.length > 1 ? tiers[tiers.length - 2].max ?? 0 : 0;
 
-    // Insert new tier before the last (unlimited) tier
     const newTier: FlexibleTier = {
-      max: (previousMax || 0) + 10 + 10, // Suggest a reasonable range
-      rate: lastTier.rate, // Same rate as current last tier
+      max: (previousMax || 0) + 10 + 10,
+      rate: lastTier.rate,
     };
 
     setTiers((prev) => {
       const updated = [...prev];
-      // Insert before the last tier
       updated.splice(prev.length - 1, 0, newTier);
       return updated;
     });
@@ -114,25 +99,23 @@ export function CommissionSettingsForm({
   };
 
   const handleReset = () => {
-    setUseCompanyDefaults(initialSettings.useCompanyDefaults);
-    setTiers(
-      initialSettings.customTierStructure && initialSettings.customTierStructure.length > 0
-        ? initialSettings.customTierStructure
-        : companyDefaultTiers
-    );
+    setTiers(initialTiers);
     setHasChanges(false);
   };
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowConfirmDialog(false);
     setIsSaving(true);
+
     try {
-      const response = await fetch('/api/tax-preparer/commission-settings', {
+      const response = await fetch('/api/admin/commission-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          useCompanyDefaults,
-          customTierStructure: useCompanyDefaults ? null : tiers,
-        }),
+        body: JSON.stringify({ tiers }),
       });
 
       const data = await response.json();
@@ -141,7 +124,7 @@ export function CommissionSettingsForm({
         throw new Error(data.error || 'Failed to save settings');
       }
 
-      toast.success('Commission settings saved successfully');
+      toast.success('Company commission settings saved successfully');
       setHasChanges(false);
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -167,13 +150,11 @@ export function CommissionSettingsForm({
         errors.push(`Tier ${i + 1} rate must be greater than 0`);
       }
 
-      // All tiers except last must have a max
       if (i < tiers.length - 1) {
         if (tier.max === null || tier.max === undefined || tier.max <= 0) {
           errors.push(`Tier ${i + 1} must have a max value greater than 0`);
         }
 
-        // Check ascending order
         if (i > 0 && tiers[i - 1].max !== null && tier.max !== null) {
           if (tier.max <= tiers[i - 1].max!) {
             errors.push(`Tier ${i + 1} max must be greater than Tier ${i} max`);
@@ -182,9 +163,7 @@ export function CommissionSettingsForm({
       }
     });
 
-    // Last tier must have null max
     if (tiers.length > 0 && tiers[tiers.length - 1].max !== null) {
-      // Auto-fix: set last tier max to null
       setTiers((prev) => {
         const updated = [...prev];
         updated[updated.length - 1] = { ...updated[updated.length - 1], max: null };
@@ -229,7 +208,6 @@ export function CommissionSettingsForm({
     return { breakdown, total };
   };
 
-  // Calculate preview for a reasonable number based on tier ranges
   const getPreviewCount = (): number => {
     if (tiers.length === 0) return 10;
     const lastNonUnlimited = tiers.find((t, i) => i < tiers.length - 1 && t.max !== null);
@@ -242,37 +220,33 @@ export function CommissionSettingsForm({
   const previewCount = getPreviewCount();
   const preview = calculatePreviewEarnings(previewCount);
 
-  // Helper to get tier min value
   const getTierMin = (index: number): number => {
     if (index === 0) return 1;
     return (tiers[index - 1].max ?? 0) + 1;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Toggle for Company Defaults */}
-      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
-        <div className="space-y-0.5">
-          <Label className="text-base font-medium">Use Company Default Rates</Label>
-          <p className="text-sm text-muted-foreground">
-            When enabled, referrers earn commissions based on Tax Genius standard tiers
-          </p>
+    <>
+      <div className="space-y-6">
+        {/* Warning Banner */}
+        <div className="flex items-start gap-3 p-4 bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-200 rounded-lg">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+              Changes affect all tax preparers using company defaults
+            </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+              Existing referral rates will be recalculated based on the new tier structure.
+              Tax preparers with custom tiers will not be affected.
+            </p>
+          </div>
         </div>
-        <Switch
-          checked={useCompanyDefaults}
-          onCheckedChange={handleToggleDefaults}
-        />
-      </div>
 
-      {/* Custom Tier Configuration */}
-      {!useCompanyDefaults && (
-        <div className="space-y-4 p-4 border rounded-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium">Custom Tier Configuration</h3>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">Custom rates active</Badge>
-              <Badge variant="secondary">{tiers.length} / {MAX_TIERS} tiers</Badge>
-            </div>
+        {/* Tier Configuration */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium">Tier Configuration</h3>
+            <Badge variant="secondary">{tiers.length} / {MAX_TIERS} tiers</Badge>
           </div>
 
           {/* Tier Rows */}
@@ -288,12 +262,10 @@ export function CommissionSettingsForm({
                 className={`grid gap-4 p-4 border rounded-lg ${colorClass}`}
                 style={{ gridTemplateColumns: 'auto 1fr 1fr auto' }}
               >
-                {/* Tier Badge */}
                 <div className="flex items-center gap-2">
                   <Badge className={badgeColor}>Tier {index + 1}</Badge>
                 </div>
 
-                {/* Range */}
                 <div className="space-y-2">
                   <Label className="text-sm">
                     Referrals {tierMin} to
@@ -314,7 +286,6 @@ export function CommissionSettingsForm({
                   )}
                 </div>
 
-                {/* Rate */}
                 <div className="space-y-2">
                   <Label className="text-sm">
                     Rate per referral ($)
@@ -329,7 +300,6 @@ export function CommissionSettingsForm({
                   />
                 </div>
 
-                {/* Remove Button */}
                 <div className="flex items-end">
                   <Button
                     type="button"
@@ -385,49 +355,45 @@ export function CommissionSettingsForm({
             </p>
           </div>
         </div>
-      )}
 
-      {/* Company Defaults Preview (when using defaults) */}
-      {useCompanyDefaults && (
-        <div className="p-4 border rounded-lg bg-green-50/50 dark:bg-green-950/20 border-green-200">
-          <div className="flex items-center gap-2 mb-2">
-            <Check className="w-4 h-4 text-green-600" />
-            <span className="font-medium text-green-800 dark:text-green-200">
-              Using Tax Genius Company Defaults
-            </span>
-          </div>
-          <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
-            {companyDefaultTiers.map((tier, i) => {
-              const tierMin = i === 0 ? 1 : (companyDefaultTiers[i - 1].max ?? 0) + 1;
-              const tierMax = tier.max === null ? '+' : tier.max;
-              return (
-                <p key={i}>
-                  Tier {i + 1}: ${tier.rate} (referrals {tierMin}-{tierMax})
-                </p>
-              );
-            })}
-          </div>
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={!hasChanges || isSaving}
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset
+          </Button>
+          <Button
+            onClick={handleSaveClick}
+            disabled={!hasChanges || isSaving || !validation.valid}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? 'Saving...' : 'Save Company Defaults'}
+          </Button>
         </div>
-      )}
-
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button
-          variant="outline"
-          onClick={handleReset}
-          disabled={!hasChanges || isSaving}
-        >
-          <RotateCcw className="w-4 h-4 mr-2" />
-          Reset
-        </Button>
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || isSaving || (!useCompanyDefaults && !validation.valid)}
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save Settings'}
-        </Button>
       </div>
-    </div>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Company Commission Defaults?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will update the commission tier structure for all tax preparers using company defaults.
+              Their referrers&apos; rates will be recalculated based on the new tiers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSave}>
+              Update Defaults
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

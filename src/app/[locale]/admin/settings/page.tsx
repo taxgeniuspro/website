@@ -30,6 +30,7 @@ import {
   Image,
   Lock,
   ExternalLink,
+  DollarSign,
 } from 'lucide-react';
 
 export const metadata = {
@@ -76,6 +77,12 @@ export default async function AdminSettingsPage() {
       description: 'Manage user accounts, roles, and access',
       icon: <Users className="h-5 w-5" />,
       href: '/admin/users',
+    },
+    {
+      title: 'Commission Settings',
+      description: 'Configure company-wide commission tiers',
+      icon: <DollarSign className="h-5 w-5" />,
+      href: '/admin/commission-settings',
     },
     {
       title: 'Permissions',

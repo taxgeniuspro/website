@@ -14,7 +14,6 @@ import {
 import {
   getPreparerCommissionSettings,
   getPreparerReferrersWithRates,
-  COMPANY_DEFAULT_TIERS,
 } from '@/lib/services/tiered-commission.service';
 import { CommissionSettingsForm } from '@/components/commission/CommissionSettingsForm';
 import { ReferrerRatesTable } from '@/components/commission/ReferrerRatesTable';
@@ -56,7 +55,7 @@ export default async function CommissionSettingsPage() {
     redirect('/login');
   }
 
-  // Get commission settings
+  // Get commission settings (now returns flexible tier structure)
   const settings = await getPreparerCommissionSettings(profile.id);
 
   // Get referrers with their rates
@@ -66,6 +65,10 @@ export default async function CommissionSettingsPage() {
   const totalReferrers = referrers.length;
   const vipReferrers = referrers.filter(r => r.vipRate !== null).length;
   const totalPaidOut = referrers.reduce((sum, r) => sum + r.totalEarnings, 0);
+
+  // Format tier display for info card
+  const companyTiers = settings.companyDefaultTiers;
+  const tierRatesDisplay = companyTiers.map(t => `$${t.rate}`).join('/');
 
   return (
     <div className="min-h-screen bg-background">
@@ -148,8 +151,8 @@ export default async function CommissionSettingsPage() {
             </p>
             <ol className="list-decimal list-inside space-y-2 ml-2">
               <li><strong>VIP Rate</strong> - Individual rate you set for specific referrers (highest priority)</li>
-              <li><strong>Your Custom Tiers</strong> - If you've configured custom rates below</li>
-              <li><strong>Company Default Tiers</strong> - Tax Genius standard rates (${COMPANY_DEFAULT_TIERS.tier1.rate}/${COMPANY_DEFAULT_TIERS.tier2.rate}/${COMPANY_DEFAULT_TIERS.tier3.rate})</li>
+              <li><strong>Your Custom Tiers</strong> - If you&apos;ve configured custom rates below</li>
+              <li><strong>Company Default Tiers</strong> - Tax Genius standard rates ({tierRatesDisplay})</li>
             </ol>
             <p className="text-sm mt-4">
               <strong>Important:</strong> Commission is credited when you mark the referral as COMPLETE after filing their return.
@@ -165,7 +168,7 @@ export default async function CommissionSettingsPage() {
               Commission Tier Settings
             </CardTitle>
             <CardDescription>
-              Choose whether to use Tax Genius company default rates or configure your own custom tiers
+              Choose whether to use Tax Genius company default rates or configure your own custom tiers (up to 5)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -174,7 +177,7 @@ export default async function CommissionSettingsPage() {
                 useCompanyDefaults: settings.useCompanyDefaults,
                 customTierStructure: settings.customTierStructure,
               }}
-              companyDefaultTiers={COMPANY_DEFAULT_TIERS}
+              companyDefaultTiers={settings.companyDefaultTiers}
             />
           </CardContent>
         </Card>
@@ -191,22 +194,29 @@ export default async function CommissionSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div className="p-4 border rounded-lg text-center">
-                <Badge className="mb-2 bg-amber-100 text-amber-800">Tier 1</Badge>
-                <p className="text-2xl font-bold text-amber-600">${COMPANY_DEFAULT_TIERS.tier1.rate}</p>
-                <p className="text-sm text-muted-foreground">Referrals 1-{COMPANY_DEFAULT_TIERS.tier1.max}</p>
-              </div>
-              <div className="p-4 border rounded-lg text-center">
-                <Badge className="mb-2 bg-slate-100 text-slate-800">Tier 2</Badge>
-                <p className="text-2xl font-bold text-slate-600">${COMPANY_DEFAULT_TIERS.tier2.rate}</p>
-                <p className="text-sm text-muted-foreground">Referrals {COMPANY_DEFAULT_TIERS.tier1.max + 1}-{COMPANY_DEFAULT_TIERS.tier2.max}</p>
-              </div>
-              <div className="p-4 border rounded-lg text-center">
-                <Badge className="mb-2 bg-yellow-100 text-yellow-800">Tier 3</Badge>
-                <p className="text-2xl font-bold text-yellow-600">${COMPANY_DEFAULT_TIERS.tier3.rate}</p>
-                <p className="text-sm text-muted-foreground">Referrals {COMPANY_DEFAULT_TIERS.tier2.max + 1}+</p>
-              </div>
+            <div className={`grid gap-4 ${companyTiers.length <= 3 ? 'sm:grid-cols-3' : companyTiers.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-5'}`}>
+              {companyTiers.map((tier, index) => {
+                const tierMin = index === 0 ? 1 : (companyTiers[index - 1].max ?? 0) + 1;
+                const tierMax = tier.max === null ? '+' : tier.max;
+                const colors = [
+                  { badge: 'bg-amber-100 text-amber-800', text: 'text-amber-600' },
+                  { badge: 'bg-slate-100 text-slate-800', text: 'text-slate-600' },
+                  { badge: 'bg-yellow-100 text-yellow-800', text: 'text-yellow-600' },
+                  { badge: 'bg-emerald-100 text-emerald-800', text: 'text-emerald-600' },
+                  { badge: 'bg-purple-100 text-purple-800', text: 'text-purple-600' },
+                ];
+                const color = colors[index % colors.length];
+
+                return (
+                  <div key={index} className="p-4 border rounded-lg text-center">
+                    <Badge className={`mb-2 ${color.badge}`}>Tier {index + 1}</Badge>
+                    <p className={`text-2xl font-bold ${color.text}`}>${tier.rate}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Referrals {tierMin}-{tierMax}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

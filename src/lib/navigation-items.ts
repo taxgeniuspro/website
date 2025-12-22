@@ -404,6 +404,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
+    label: 'Commission Settings',
+    href: '/admin/commission-settings',
+    icon: DollarSign,
+    permission: 'payouts',
+    section: '⚙️ Settings',
+    roles: ['admin'],
+  },
+  {
     label: 'Client File Center',
     href: '/admin/file-center',
     icon: FolderOpen,

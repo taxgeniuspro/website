@@ -340,7 +340,7 @@ function SignInContent() {
               value={magicLinkEmail}
               onChange={(e) => setMagicLinkEmail(e.target.value)}
               disabled={isLoading || isMagicLinkLoading || isCredentialsLoading || magicLinkSent}
-              className="h-12"
+              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
             />
             <Button
               type="button"
@@ -388,7 +388,7 @@ function SignInContent() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isCredentialsLoading}
-              className="h-12"
+              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
               autoComplete="email"
             />
             <div className="relative">
@@ -398,7 +398,7 @@ function SignInContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isCredentialsLoading}
-                className="h-12 pr-10"
+                className="h-12 pr-10 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
                 autoComplete="current-password"
               />
               <Button
