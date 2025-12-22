@@ -12,6 +12,7 @@ import { hashPassword } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { createClientFromPreparerApplication } from '@/lib/services/lead-conversion.service';
+import { ContactType } from '@prisma/client';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -152,6 +153,53 @@ export async function POST(req: NextRequest) {
     } catch (trackingError) {
       // Log but don't block signup
       logger.error('[Signup] Failed to assign tracking code', { error: trackingError, userId: user.id });
+    }
+
+    // Create or link CRM contact for unified People Hub view
+    // This ensures all users appear in CRM regardless of how they signed up
+    try {
+      // Check if CRM contact already exists (from previous form submission)
+      const existingCrmContact = await prisma.cRMContact.findUnique({
+        where: { email: email.toLowerCase() },
+      });
+
+      if (existingCrmContact) {
+        // Link existing CRM contact to this user
+        await prisma.cRMContact.update({
+          where: { id: existingCrmContact.id },
+          data: {
+            userId: user.id,
+            firstName: firstName || existingCrmContact.firstName,
+            lastName: lastName || existingCrmContact.lastName,
+            contactType: ContactType.CLIENT, // Signed up = Client
+            lastContactedAt: new Date(),
+          },
+        });
+        logger.info('[Signup] Linked existing CRM contact to new user', {
+          userId: user.id,
+          crmContactId: existingCrmContact.id,
+        });
+      } else {
+        // Create new CRM contact
+        await prisma.cRMContact.create({
+          data: {
+            userId: user.id,
+            email: email.toLowerCase(),
+            firstName: firstName || 'Unknown',
+            lastName: lastName || '',
+            contactType: ContactType.CLIENT,
+            stage: 'NEW',
+            source: 'signup',
+          },
+        });
+        logger.info('[Signup] Created CRM contact for new user', { userId: user.id });
+      }
+    } catch (crmError) {
+      // Log but don't block signup - user account was created successfully
+      logger.error('[Signup] Failed to create/link CRM contact', {
+        error: crmError instanceof Error ? crmError.message : 'Unknown error',
+        userId: user.id,
+      });
     }
 
     // Check for pending preparer application conversions

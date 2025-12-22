@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { nanoid } from 'nanoid';
 import { adminRoleChangeRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+
+// Map user role to CRM contact type
+function roleToContactType(role: string): ContactType {
+  switch (role) {
+    case 'admin':
+      return ContactType.PREPARER; // Admins are treated as preparers in CRM
+    case 'tax_preparer':
+      return ContactType.PREPARER;
+    case 'affiliate':
+      return ContactType.AFFILIATE;
+    case 'client':
+    default:
+      return ContactType.CLIENT;
+  }
+}
 
 // Authorized emails from environment variable (comma-separated list)
 // Falls back to defaults for backwards compatibility
@@ -181,6 +196,46 @@ export async function POST(request: NextRequest) {
     }
 
     logger.info(`✅ Successfully set ${role} role for ${email}`);
+
+    // Sync CRM contact type to match new role
+    // This keeps CRM People Hub in sync with User Management role changes
+    try {
+      const crmContact = await prisma.cRMContact.findFirst({
+        where: { userId: user.id },
+      });
+
+      if (crmContact) {
+        await prisma.cRMContact.update({
+          where: { id: crmContact.id },
+          data: {
+            contactType: roleToContactType(role),
+            lastContactedAt: new Date(),
+          },
+        });
+        logger.info(`✅ Synced CRM contact type to ${roleToContactType(role)} for ${email}`);
+      } else {
+        // User doesn't have a CRM contact yet - create one
+        await prisma.cRMContact.create({
+          data: {
+            userId: user.id,
+            email: email.toLowerCase(),
+            firstName: user.profile?.firstName || 'Unknown',
+            lastName: user.profile?.lastName || '',
+            contactType: roleToContactType(role),
+            stage: 'NEW',
+            source: 'admin_role_change',
+          },
+        });
+        logger.info(`✅ Created CRM contact for user ${email} during role change`);
+      }
+    } catch (crmError) {
+      // Log but don't fail - role change was successful
+      logger.error('Failed to sync CRM contact during role change', {
+        error: crmError instanceof Error ? crmError.message : 'Unknown error',
+        userId: user.id,
+        newRole: role,
+      });
+    }
 
     return NextResponse.json({
       success: true,
