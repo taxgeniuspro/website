@@ -194,16 +194,16 @@ export const SECTION_PERMISSIONS: Record<SectionPermission, Permission[]> = {
 export type UserPermissions = Record<Permission, boolean>;
 
 // TypeScript best practice: lowercase with underscores (matches Prisma enum)
-// NOTE: Only 3 roles exist:
+// NOTE: 4 roles exist:
 // - admin: Platform administrator
 // - tax_preparer: Tax professional (auto has affiliate features)
 // - client: DEFAULT for all signups (tax filing + optional affiliate features via affiliateStatus)
+// - affiliate: Referral-only role (can refer others for commission, CANNOT file taxes)
 //
 // REMOVED ROLES:
-// - 'affiliate': merged into client with affiliateStatus field
 // - 'super_admin': merged into 'admin' role
 // - 'lead': removed - leads are CRM contacts without accounts, signups become 'client'
-export type UserRole = 'admin' | 'tax_preparer' | 'client';
+export type UserRole = 'admin' | 'tax_preparer' | 'client' | 'affiliate';
 
 /**
  * Default permissions for each role
@@ -461,6 +461,40 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Partial<UserPermissions>> = {
     // 🎛️ Marketing Micro-Toggles (for affiliate features - conditional on affiliateStatus)
     marketing_view: true,
     marketing_upload: false, // ⚠️ RESTRICTED: Can't upload marketing materials
+    marketing_download: true,
+    marketing_delete: false, // ⚠️ RESTRICTED: Can't delete materials
+  },
+  affiliate: {
+    // AFFILIATE role: Referral-only - can refer others for commission, CANNOT file taxes
+    // This is different from clients who CAN file taxes AND refer
+    dashboard: true,
+    // ❌ NO tax filing features
+    uploadDocuments: false,
+    documents: false,
+    clientFileCenter: false,
+    taxForms: false,
+    // ✅ Full affiliate/referral features
+    store: true,
+    analytics: true,
+    trackingCode: true,
+    marketing: true,
+    marketingAssets: true,
+    earnings: true, // Can view their commission earnings
+    quickShareLinks: true,
+    // 🎛️ Analytics Micro-Toggles (view their referral performance)
+    analytics_view: true,
+    analytics_export: true,
+    analytics_detailed: true,
+    // 🎛️ Tracking Micro-Toggles (manage their tracking code)
+    tracking_view: true,
+    tracking_edit: true,
+    tracking_analytics: true,
+    // 🎛️ Store Micro-Toggles (purchase marketing materials)
+    store_view: true,
+    store_purchase: true,
+    // 🎛️ Marketing Micro-Toggles (download marketing assets)
+    marketing_view: true,
+    marketing_upload: false, // ⚠️ RESTRICTED: Can't upload materials
     marketing_download: true,
     marketing_delete: false, // ⚠️ RESTRICTED: Can't delete materials
   },
@@ -810,9 +844,34 @@ export function getEditablePermissions(role: UserRole): Permission[] {
         'marketing_delete',
       ];
 
-    // NOTE: 'affiliate' case removed - affiliate features are now part of client role
-    // controlled by affiliateStatus field
     // NOTE: 'lead' case removed - leads are CRM contacts, not users with accounts
+
+    case 'affiliate':
+      // Affiliate role: Referral-only features, NO tax filing
+      return [
+        'dashboard',
+        'store',
+        'analytics',
+        'trackingCode',
+        'marketing',
+        'marketingAssets',
+        'earnings',
+        'quickShareLinks',
+        // 🎛️ Analytics Micro-Toggles
+        'analytics_view',
+        'analytics_export',
+        'analytics_detailed',
+        // 🎛️ Tracking Micro-Toggles
+        'tracking_view',
+        'tracking_edit',
+        'tracking_analytics',
+        // 🎛️ Store Micro-Toggles
+        'store_view',
+        'store_purchase',
+        // 🎛️ Marketing Micro-Toggles
+        'marketing_view',
+        'marketing_download',
+      ];
 
     case 'client':
       // Client now includes all affiliate features (controlled by affiliateStatus)
@@ -927,22 +986,24 @@ export async function getRolePermissionTemplate(role: UserRole): Promise<Partial
 /**
  * Get role display names for UI
  * Note: Display 'Member' instead of 'Client' in user-facing contexts
- * Only 3 roles: admin, tax_preparer, client
+ * 4 roles: admin, tax_preparer, client, affiliate
  */
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   admin: 'Admin',
   tax_preparer: 'Tax Preparer',
   client: 'Member', // Display as 'Member' to users
+  affiliate: 'Affiliate', // Referral-only role
 };
 
 /**
  * Get role descriptions for UI
- * Only 3 roles: admin, tax_preparer, client
+ * 4 roles: admin, tax_preparer, client, affiliate
  */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: 'Full system control - Database, Permissions, All Client Files',
   tax_preparer: 'Independent tax professional - Manages clients, auto has affiliate features',
   client: 'General member - Tax filing (if hasFiledTaxes), affiliate features (if approved)',
+  affiliate: 'Referral-only - Can refer others for commission, cannot file taxes',
 };
 
 /**
@@ -954,12 +1015,17 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 
 /**
  * Check if user has access to affiliate features
- * Tax preparers always have access, clients need APPROVED status
+ * Affiliates and Tax preparers always have access, clients need APPROVED status
  */
 export function hasAffiliateAccess(
   role: UserRole,
   affiliateStatus?: AffiliateStatus | null
 ): boolean {
+  // Affiliates always have affiliate features (that's their only purpose)
+  if (role === 'affiliate') {
+    return true;
+  }
+
   // Tax preparers always have affiliate features
   if (role === 'tax_preparer') {
     return true;
@@ -981,11 +1047,17 @@ export function hasAffiliateAccess(
 /**
  * Check if user has access to tax filing features (documents, returns, tickets)
  * Only clients with hasFiledTaxes flag can access
+ * Affiliates CANNOT file taxes - they are referral-only
  */
 export function hasTaxFilingAccess(
   role: UserRole,
   hasFiledTaxes?: boolean | null
 ): boolean {
+  // Affiliates CANNOT file taxes - referral only
+  if (role === 'affiliate') {
+    return false;
+  }
+
   // Only clients can have tax filing features
   if (role === 'client') {
     return hasFiledTaxes === true;
