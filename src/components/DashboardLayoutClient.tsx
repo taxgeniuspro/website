@@ -13,6 +13,7 @@ import { UserRole, UserPermissions } from '@/lib/permissions';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { type UserRole as MobileNavRole } from '@/lib/mobile-navigation-config';
 import type { AffiliateStatus } from '@prisma/client';
+import { ViewModeProvider } from '@/context/ViewModeContext';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -90,7 +91,10 @@ export function DashboardLayoutClient({
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  return (
+  // Only provide ViewModeContext for admin and tax_preparer roles
+  const showViewModeToggle = effectiveRole === 'admin' || effectiveRole === 'tax_preparer';
+
+  const dashboardContent = (
     <SidebarProvider defaultOpen={true}>
       {/* Sidebar - uses effective role-based navigation with permissions */}
       <DashboardSidebar
@@ -108,6 +112,7 @@ export function DashboardLayoutClient({
           actualRole={actualRole}
           effectiveRole={effectiveRole}
           isViewingAsOtherRole={isViewingAsOtherRole}
+          showViewModeToggle={showViewModeToggle}
         />
 
         {/* Viewing As Bar - shows when admin is viewing as another role */}
@@ -156,4 +161,11 @@ export function DashboardLayoutClient({
       <SearchDrawer open={searchOpen} onOpenChange={setSearchOpen} />
     </SidebarProvider>
   );
+
+  // Wrap with ViewModeProvider for admin/tax_preparer roles
+  if (showViewModeToggle) {
+    return <ViewModeProvider>{dashboardContent}</ViewModeProvider>;
+  }
+
+  return dashboardContent;
 }

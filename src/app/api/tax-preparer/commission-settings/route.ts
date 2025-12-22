@@ -4,6 +4,8 @@
  * Allows tax preparers to manage their commission tier settings for referrers.
  * Tax Preparers do NOT earn commissions - they manage rates for their referrers.
  *
+ * Supports flexible 1-5 tier commission structures.
+ *
  * GET: Retrieve current commission settings
  * PUT: Update commission tier settings
  */
@@ -15,10 +17,14 @@ import {
   getPreparerCommissionSettings,
   updatePreparerCommissionSettings,
   getPreparerReferrersWithRates,
-  setReferrerVIPRate,
-  COMPANY_DEFAULT_TIERS,
 } from '@/lib/services/tiered-commission.service';
 import { logger } from '@/lib/logger';
+import {
+  FlexibleTierStructure,
+  validateTierStructure,
+  isLegacyFormat,
+  normalizeToFlexible,
+} from '@/lib/types/commission-tiers';
 
 /**
  * GET /api/tax-preparer/commission-settings
@@ -48,7 +54,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Get commission settings
+    // Get commission settings (already normalized to flexible format)
     const settings = await getPreparerCommissionSettings(profile.id);
 
     // Get referrers with their rates
@@ -58,7 +64,7 @@ export async function GET() {
       settings: {
         useCompanyDefaults: settings.useCompanyDefaults,
         customTierStructure: settings.customTierStructure,
-        companyDefaultTiers: COMPANY_DEFAULT_TIERS,
+        companyDefaultTiers: settings.companyDefaultTiers,
       },
       referrers,
     });
@@ -72,6 +78,7 @@ export async function GET() {
  * PUT /api/tax-preparer/commission-settings
  *
  * Updates the preparer's commission tier settings
+ * Accepts flexible tier structure (1-5 tiers) or legacy format for backward compatibility
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -108,29 +115,25 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate custom tier structure if not using company defaults
+    let normalizedTiers: FlexibleTierStructure | undefined;
     if (!useCompanyDefaults && customTierStructure) {
-      const { tier1, tier2, tier3 } = customTierStructure;
-
-      // Validate tier1
-      if (tier1 && (typeof tier1.max !== 'number' || typeof tier1.rate !== 'number')) {
+      // Handle legacy format for backward compatibility
+      if (isLegacyFormat(customTierStructure)) {
+        normalizedTiers = normalizeToFlexible(customTierStructure);
+      } else if (Array.isArray(customTierStructure)) {
+        normalizedTiers = customTierStructure as FlexibleTierStructure;
+      } else {
         return NextResponse.json(
-          { error: 'tier1 must have max and rate as numbers' },
+          { error: 'customTierStructure must be an array of tiers' },
           { status: 400 }
         );
       }
 
-      // Validate tier2
-      if (tier2 && (typeof tier2.max !== 'number' || typeof tier2.rate !== 'number')) {
+      // Validate the tier structure
+      const validation = validateTierStructure(normalizedTiers);
+      if (!validation.valid) {
         return NextResponse.json(
-          { error: 'tier2 must have max and rate as numbers' },
-          { status: 400 }
-        );
-      }
-
-      // Validate tier3
-      if (tier3 && typeof tier3.rate !== 'number') {
-        return NextResponse.json(
-          { error: 'tier3 must have rate as a number' },
+          { error: `Invalid tier structure: ${validation.errors.join(', ')}` },
           { status: 400 }
         );
       }
@@ -139,12 +142,13 @@ export async function PUT(request: NextRequest) {
     // Update settings
     await updatePreparerCommissionSettings(profile.id, {
       useCompanyDefaults,
-      customTierStructure: useCompanyDefaults ? undefined : customTierStructure,
+      customTierStructure: useCompanyDefaults ? undefined : normalizedTiers,
     });
 
     logger.info('Commission settings updated', {
       preparerId: profile.id,
       useCompanyDefaults,
+      tierCount: normalizedTiers?.length,
     });
 
     // Return updated settings
@@ -155,7 +159,7 @@ export async function PUT(request: NextRequest) {
       settings: {
         useCompanyDefaults: updatedSettings.useCompanyDefaults,
         customTierStructure: updatedSettings.customTierStructure,
-        companyDefaultTiers: COMPANY_DEFAULT_TIERS,
+        companyDefaultTiers: updatedSettings.companyDefaultTiers,
       },
     });
   } catch (error) {

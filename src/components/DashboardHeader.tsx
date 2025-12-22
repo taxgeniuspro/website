@@ -21,17 +21,20 @@ import { KeyboardShortcutsDialog } from '@/components/KeyboardShortcutsDialog';
 import { RecentItemsDropdown } from '@/components/RecentItems';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Logo } from '@/components/Logo';
+import { AffiliateOnlyModeToggle } from '@/components/dashboard/AffiliateOnlyModeToggle';
 
 interface DashboardHeaderProps {
   actualRole?: UserRole;
   effectiveRole?: UserRole;
   isViewingAsOtherRole?: boolean;
+  showViewModeToggle?: boolean;
 }
 
 export function DashboardHeader({
   actualRole,
   effectiveRole,
   isViewingAsOtherRole = false,
+  showViewModeToggle = false,
 }: DashboardHeaderProps) {
   const { data: session } = useSession();
   const user = session?.user;
@@ -104,6 +107,13 @@ export function DashboardHeader({
 
         {/* Right Side Actions */}
         <div className="flex items-center gap-2">
+          {/* Affiliate-Only Mode Toggle - For admins and tax preparers */}
+          {showViewModeToggle && (
+            <div className="hidden md:block">
+              <AffiliateOnlyModeToggle showLabel={false} />
+            </div>
+          )}
+
           {/* Role Switcher - Only for admins */}
           {displayRealRole === 'admin' && (
             <RoleSwitcher

@@ -271,12 +271,12 @@ function SignUpContent() {
               value={magicLinkEmail}
               onChange={(e) => setMagicLinkEmail(e.target.value)}
               disabled={isLoading || isMagicLinkLoading || magicLinkSent}
-              className="h-12"
+              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
             />
             <Button
               type="button"
               variant="outline"
-              className="w-full h-12 text-base"
+              className="w-full h-12 text-base font-semibold border-2 border-primary/50 hover:border-primary hover:bg-primary/10"
               onClick={handleMagicLinkSignUp}
               disabled={isLoading || isMagicLinkLoading || magicLinkSent}
             >

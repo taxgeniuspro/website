@@ -41,6 +41,8 @@ import { logger } from '@/lib/logger';
 // Owliver Owl's profile ID - cannot be terminated
 const OWLIVER_PROFILE_ID = 'p_086ccd7b-6a51-406a-b157-bfc8a743c676';
 
+type AffiliateStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE';
+
 interface User {
   id: string;
   email: string;
@@ -52,6 +54,7 @@ interface User {
   isActive?: boolean;
   deactivatedAt?: string | null;
   deactivatedBy?: string | null;
+  affiliateStatus?: AffiliateStatus;
 }
 
 interface UserManagementClientProps {
@@ -87,6 +90,7 @@ export function UserManagementClient({
     role: UserRole;
     permissions: Partial<UserPermissions>;
     isActive?: boolean;
+    affiliateStatus?: AffiliateStatus;
   }) => {
     try {
       const response = await fetch(`/api/admin/users/${userData.userId}`, {
@@ -101,6 +105,7 @@ export function UserManagementClient({
           role: userData.role,
           permissions: userData.permissions,
           isActive: userData.isActive,
+          affiliateStatus: userData.affiliateStatus,
         }),
       });
 
@@ -125,6 +130,7 @@ export function UserManagementClient({
                 isActive: data.user.isActive,
                 deactivatedAt: data.user.deactivatedAt,
                 deactivatedBy: data.user.deactivatedBy,
+                affiliateStatus: data.user.affiliateStatus,
               }
             : user
         )
@@ -385,6 +391,7 @@ export function UserManagementClient({
             isActive: selectedUser.isActive,
             deactivatedAt: selectedUser.deactivatedAt,
             deactivatedBy: selectedUser.deactivatedBy,
+            affiliateStatus: selectedUser.affiliateStatus,
           }}
           onSave={handleSaveUser}
           isSuperAdmin={isSuperAdmin}

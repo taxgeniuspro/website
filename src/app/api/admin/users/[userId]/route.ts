@@ -26,7 +26,7 @@ export async function PATCH(
 
     const { userId } = await params;
     const body = await req.json();
-    const { email, firstName, lastName, role: newRole, permissions, isActive } = body;
+    const { email, firstName, lastName, role: newRole, permissions, isActive, affiliateStatus } = body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -86,6 +86,7 @@ export async function PATCH(
     if (firstName !== undefined) profileData.firstName = firstName;
     if (lastName !== undefined) profileData.lastName = lastName;
     if (newRole !== undefined) profileData.role = newRole;
+    if (affiliateStatus !== undefined) profileData.affiliateStatus = affiliateStatus;
     // Permissions are not stored in Profile - they come from the role's default permissions
 
     // Handle user activation/deactivation
@@ -137,7 +138,7 @@ export async function PATCH(
     logger.info('User updated', {
       userId,
       updatedBy: currentUser.id,
-      changes: { email, firstName, lastName, role: newRole, isActive },
+      changes: { email, firstName, lastName, role: newRole, isActive, affiliateStatus },
     });
 
     return NextResponse.json({
@@ -152,6 +153,7 @@ export async function PATCH(
         isActive: updatedUser!.profile?.isActive ?? true,
         deactivatedAt: updatedUser!.profile?.deactivatedAt,
         deactivatedBy: updatedUser!.profile?.deactivatedBy,
+        affiliateStatus: updatedUser!.profile?.affiliateStatus,
       },
     });
   } catch (error: any) {

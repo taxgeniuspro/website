@@ -1612,8 +1612,11 @@
         "signingIn": "Signing in..."
       },
       "errors": {
+        "emailRequired": "Please enter your email address",
+        "passwordRequired": "Please enter your password",
         "invalidCredentials": "Invalid email or password. Please try again.",
-        "unexpectedError": "An unexpected error occurred. Please try again."
+        "unexpectedError": "An unexpected error occurred. Please try again.",
+        "magicLinkFailed": "Failed to send magic link. Please try again."
       },
       "imagePlaceholder": {
         "replaceWith": "[Replace with image]",
