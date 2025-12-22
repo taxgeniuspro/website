@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Users, Search, Filter, Download, UserPlus, Trash2 } from 'lucide-react';
+import { Users, Search, Filter, Download, UserPlus, Trash2, ExternalLink } from 'lucide-react';
 import { EditUserModal } from '@/components/admin/EditUserModal';
 import { CreateTaxPreparerModal } from '@/components/admin/CreateTaxPreparerModal';
 import { UserRole, UserPermissions } from '@/lib/permissions';
@@ -193,6 +193,8 @@ export function UserManagementClient({
         return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
       case 'tax_preparer':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+      case 'affiliate':
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
       case 'client':
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300';
       default:
@@ -255,6 +257,7 @@ export function UserManagementClient({
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
+                <SelectItem value="affiliate">Affiliate</SelectItem>
                 <SelectItem value="client">Client</SelectItem>
               </SelectContent>
             </Select>
@@ -340,6 +343,15 @@ export function UserManagementClient({
                       <TableCell className="text-muted-foreground">{createdAt}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push(`/crm/contacts?search=${encodeURIComponent(user.email)}`)}
+                            title="View in People Hub"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            CRM
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

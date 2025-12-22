@@ -483,12 +483,19 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
         });
       }
     } catch (crmError) {
-      // Log error but don't fail the request - lead was already saved
-      logger.error('Failed to create CRM contact/interaction', {
-        error: crmError,
+      // CRITICAL: Enhanced logging for CRM creation failures
+      // This helps debug why CRM contacts might not be appearing in the admin view
+      logger.error('CRITICAL: Failed to create CRM contact/interaction', {
+        error: crmError instanceof Error ? crmError.message : String(crmError),
+        stack: crmError instanceof Error ? crmError.stack : undefined,
         leadId: lead.id,
         email: email,
+        assignedPreparerId: assignedPreparerId,
+        referrerUsername: referrerUsername,
+        timestamp: new Date().toISOString(),
       });
+      // Note: We silently continue so leads are saved even if CRM creation fails
+      // Run the backfill script if CRM contacts are missing: npx tsx scripts/backfill-crm-contacts.ts
     }
 
     // ========================================

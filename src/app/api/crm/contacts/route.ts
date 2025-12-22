@@ -103,14 +103,25 @@ export async function GET(request: NextRequest) {
       taxIntakeLeads.map((lead) => [lead.email.toLowerCase(), lead])
     );
 
-    // Enrich contacts with folder data
+    // Fetch user roles for contacts with userId
+    const contactsWithUsers = result.contacts.filter((c: any) => c.userId);
+    const userIds = contactsWithUsers.map((c: any) => c.userId);
+    const profiles = await prisma.profile.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, role: true },
+    });
+    const profilesByUserId = new Map(profiles.map((p) => [p.userId, p]));
+
+    // Enrich contacts with folder data and user role
     const enrichedContacts = result.contacts.map((contact: any) => {
       const lead = leadsByEmail.get(contact.email.toLowerCase());
+      const profile = contact.userId ? profilesByUserId.get(contact.userId) : null;
       return {
         ...contact,
         clientFolderId: lead?.clientFolderId || null,
         folderPath: lead?.clientFolder?.path || null,
         folderName: lead?.clientFolder?.name || null,
+        userRole: profile?.role || null,
       };
     });
 

@@ -281,6 +281,7 @@ export function EditUserModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="client">Client</SelectItem>
+                  <SelectItem value="affiliate">Affiliate</SelectItem>
                   <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>

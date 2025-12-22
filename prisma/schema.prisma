@@ -99,8 +99,8 @@ enum UserRole {
   admin // Administrator with full system access
   client // DEFAULT role for all signups (can have tax filing + affiliate features)
   tax_preparer // Tax professional (auto has affiliate features)
+  affiliate // Referral-only role: can refer others for commission, CANNOT file taxes
   // NOTE: 'lead' REMOVED - leads are CRM contacts without accounts, not users
-  // NOTE: 'affiliate' REMOVED - affiliate is now a status (affiliateStatus), not a role
 }
 
 model Profile {

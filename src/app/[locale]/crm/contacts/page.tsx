@@ -67,6 +67,7 @@ import {
   MessageCircle,
   Eye,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 /**
@@ -101,6 +102,8 @@ interface Contact {
   clientFolderId?: string;
   folderPath?: string;
   folderName?: string;
+  userId?: string; // Link to User account (if exists)
+  userRole?: string; // User's role from Profile (if linked)
   _count?: {
     interactions: number;
     tasks: number;
@@ -118,6 +121,11 @@ export default function CRMContactsPage() {
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [creatingUser, setCreatingUser] = useState<string | null>(null);
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [contactForUserCreation, setContactForUserCreation] = useState<Contact | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string>('client');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -218,9 +226,108 @@ export default function CRMContactsPage() {
     }
   };
 
+  // Handle role change (admin only)
+  const handleRoleChange = async (contactId: string, newRole: string) => {
+    try {
+      setUpdatingRole(contactId);
+
+      const response = await fetch(`/api/crm/contacts/${contactId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update the contact in the local state
+        setContacts((prev) =>
+          prev.map((c) => (c.id === contactId ? { ...c, userRole: newRole } : c))
+        );
+
+        toast({
+          title: 'Role Updated',
+          description: `Role changed to ${newRole}. User must sign out and back in for changes to take effect.`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to update user role',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      logger.error('Error updating user role:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to update user role',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingRole(null);
+    }
+  };
+
   const handleDeleteClick = (contact: Contact) => {
     setContactToDelete(contact);
     setDeleteDialogOpen(true);
+  };
+
+  // Handle opening create user dialog
+  const handleCreateUserClick = (contact: Contact) => {
+    setContactForUserCreation(contact);
+    setSelectedRole('client');
+    setCreateUserDialogOpen(true);
+  };
+
+  // Handle creating user from contact
+  const confirmCreateUser = async () => {
+    if (!contactForUserCreation) return;
+
+    try {
+      setCreatingUser(contactForUserCreation.id);
+
+      const response = await fetch(`/api/crm/contacts/${contactForUserCreation.id}/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: selectedRole, sendInviteEmail: true }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update the contact in the local state
+        setContacts((prev) =>
+          prev.map((c) =>
+            c.id === contactForUserCreation.id
+              ? { ...c, userId: data.data.userId, userRole: selectedRole }
+              : c
+          )
+        );
+
+        toast({
+          title: 'User Account Created',
+          description: `Account created for ${contactForUserCreation.firstName} ${contactForUserCreation.lastName} with role: ${selectedRole}`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to create user account',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      logger.error('Error creating user account:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to create user account',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingUser(null);
+      setCreateUserDialogOpen(false);
+      setContactForUserCreation(null);
+    }
   };
 
   const confirmDelete = async () => {
@@ -298,6 +405,20 @@ export default function CRMContactsPage() {
       'manual': Pencil,
     };
     return sourceIcons[source.toLowerCase()] || FileText;
+  };
+
+  // Helper function to get the next stage in the pipeline
+  const getNextStage = (currentStage: string): { stage: string; label: string } | null => {
+    const stageOrder: { stage: string; label: string }[] = [
+      { stage: 'NEW', label: 'Contacted' },
+      { stage: 'CONTACTED', label: 'Qualified' },
+      { stage: 'QUALIFIED', label: 'Documents' },
+      { stage: 'DOCUMENTS', label: 'Filed' },
+      { stage: 'FILED', label: 'Closed' },
+    ];
+    const currentIndex = stageOrder.findIndex((s) => s.stage === currentStage);
+    if (currentIndex === -1 || currentIndex >= stageOrder.length - 1) return null;
+    return { stage: stageOrder[currentIndex + 1].stage, label: stageOrder[currentIndex + 1].label };
   };
 
   if (!isLoaded || loading) {
@@ -740,6 +861,7 @@ export default function CRMContactsPage() {
                       <TableHead className="font-semibold">Contact</TableHead>
                       <TableHead className="font-semibold">Contact Info</TableHead>
                       <TableHead className="font-semibold">Stage</TableHead>
+                      {role === 'admin' && <TableHead className="font-semibold">Role</TableHead>}
                       <TableHead className="font-semibold">Source</TableHead>
                       <TableHead className="font-semibold">Documents</TableHead>
                       <TableHead className="font-semibold">Last Contact</TableHead>
@@ -787,6 +909,7 @@ export default function CRMContactsPage() {
                         {/* Stage */}
                         <TableCell>
                           {canEdit ? (
+                            <div className="flex items-center">
                             <Select
                               value={contact.stage}
                               onValueChange={(value) => handleStatusChange(contact.id, value)}
@@ -842,12 +965,70 @@ export default function CRMContactsPage() {
                                 </SelectItem>
                               </SelectContent>
                             </Select>
+                            {/* Quick toggle button for next stage */}
+                            {getNextStage(contact.stage) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 ml-1"
+                                title={`Move to ${getNextStage(contact.stage)?.label}`}
+                                onClick={() => {
+                                  const next = getNextStage(contact.stage);
+                                  if (next) handleStatusChange(contact.id, next.stage);
+                                }}
+                                disabled={updatingStatus === contact.id}
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                           ) : (
                             <Badge variant="outline" className={cn('text-xs font-medium', getStageBadgeClass(contact.stage))}>
                               {contact.stage}
                             </Badge>
                           )}
                         </TableCell>
+                        {/* Role (Admin only) */}
+                        {role === 'admin' && (
+                          <TableCell>
+                            {contact.userId ? (
+                              <Select
+                                value={contact.userRole || 'client'}
+                                onValueChange={(value) => handleRoleChange(contact.id, value)}
+                                disabled={updatingRole === contact.id}
+                              >
+                                <SelectTrigger className="w-[120px] h-8 text-xs">
+                                  {updatingRole === contact.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <SelectValue />
+                                  )}
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="client">Client</SelectItem>
+                                  <SelectItem value="affiliate">Affiliate</SelectItem>
+                                  <SelectItem value="tax_preparer">Tax Preparer</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={() => handleCreateUserClick(contact)}
+                                disabled={creatingUser === contact.id}
+                              >
+                                {creatingUser === contact.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                )}
+                                Create Account
+                              </Button>
+                            )}
+                          </TableCell>
+                        )}
                         {/* Source/Form Type */}
                         <TableCell>
                           {(() => {
@@ -989,6 +1170,51 @@ export default function CRMContactsPage() {
                 </>
               ) : (
                 'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Create User Account Dialog */}
+      <AlertDialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+        <AlertDialogContent className="max-w-[90vw] sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create User Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create a user account for{' '}
+              <strong>
+                {contactForUserCreation?.firstName} {contactForUserCreation?.lastName}
+              </strong>{' '}
+              ({contactForUserCreation?.email}). Select a role for the new account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">Role</label>
+            <Select value={selectedRole} onValueChange={setSelectedRole}>
+              <SelectTrigger className="w-full mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="client">Client - Can file taxes</SelectItem>
+                <SelectItem value="affiliate">Affiliate - Referral only, no tax filing</SelectItem>
+                <SelectItem value="tax_preparer">Tax Preparer - Full preparer access</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={creatingUser !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCreateUser}
+              disabled={creatingUser !== null}
+            >
+              {creatingUser !== null ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Account'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

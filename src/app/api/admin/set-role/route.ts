@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
     }
 
-    // Only 3 valid roles: admin, client, tax_preparer
-    // Note: 'affiliate' is a STATUS (affiliateStatus), not a role
+    // Valid roles: admin, client, tax_preparer, affiliate
+    // Note: 'affiliate' is now a proper role (referral-only, cannot file taxes)
     // Note: 'lead' is a CRM contact (Lead model), not a user role
-    const validRoles = ['admin', 'client', 'tax_preparer'];
+    const validRoles = ['admin', 'client', 'tax_preparer', 'affiliate'];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },

@@ -4,15 +4,21 @@
  * Single source of truth for dashboard navigation across mobile and desktop.
  * Used by both DashboardSidebar and MobileSidebar components.
  *
- * ADMIN NAVIGATION REDESIGN (Dec 2025):
- * Reduced from 6 sections to 4 for better usability:
- * - 🎯 Command Center: Lead Analytics, CRM Contacts, Tax Intake Leads, Calendar, Clients Status
- * - 👥 People: Preparer/Affiliate Performance, User Management, Applications, Referrals Status
+ * ADMIN NAVIGATION CONSOLIDATION (Dec 2025):
+ * Reduced from 20+ items to 14 items for better usability:
+ * - 🎯 Command Center: People Hub (unified CRM), Analytics, Calendar, Clients Status
+ * - 👥 Team: User Management, Preparer Applications, Preparer Performance
+ * - 💰 Financial: Earnings Overview, Payouts, Commission Settings
  * - 📢 Marketing: Marketing Hub, Content Generator, Tracking Codes
- * - ⚙️ Settings: Permissions, Earnings, Payouts, File Center, IRS Forms, Content Restrictions
+ * - ⚙️ Settings: Permissions, File Center, IRS Forms, Content Restrictions
+ *
+ * KEY CHANGE: "People Hub" replaces separate CRM Contacts, User Management, Tax Intake Leads
+ * - Admin can now change user roles directly from CRM
+ * - Admin can create user accounts from CRM contacts
  *
  * OTHER ROLES:
  * - Client: 📱 My Dashboard
+ * - Affiliate: 🤝 Affiliate Dashboard (referral-only, cannot file taxes)
  * - Tax Preparer: 📊 Dashboard, 💰 Referral Management
  *
  * Settings: Only in sidebar footer (removed from nav items to avoid duplicates)
@@ -136,38 +142,67 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // 🤝 AFFILIATE DASHBOARD SECTION
+  // Referral-only: Can refer others for commission, CANNOT file taxes
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'Overview',
+    href: '/dashboard/affiliate',
+    icon: Home,
+    permission: 'dashboard',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+  {
+    label: 'Share & Earn',
+    href: '/dashboard/referrals',
+    icon: Gift,
+    permission: 'dashboard',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+  {
+    label: 'My Leads',
+    href: '/dashboard/affiliate/leads',
+    icon: Users,
+    permission: 'dashboard',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+  {
+    label: 'Analytics',
+    href: '/dashboard/affiliate/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+  {
+    label: 'Marketing Assets',
+    href: '/dashboard/affiliate/creatives',
+    icon: FolderOpen,
+    permission: 'marketingAssets',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+  {
+    label: 'My Earnings',
+    href: '/dashboard/affiliate/earnings',
+    icon: DollarSign,
+    permission: 'earnings',
+    section: '🤝 Affiliate Dashboard',
+    roles: ['affiliate'],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // 📊 TAX PREPARER DASHBOARD SECTION
-  // Order: Overview, Analytics, Share & Earn, Clients, Calendar, Documents, Tax Forms, Training
+  // STREAMLINED: Core daily operations
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Overview',
     href: '/dashboard/tax-preparer',
     icon: Home,
     permission: 'dashboard',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Analytics',
-    href: '/dashboard/tax-preparer/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Share & Earn',
-    href: '/dashboard/referrals',
-    icon: Gift,
-    permission: 'trackingCode',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Promotional Images',
-    href: '/dashboard/tax-preparer/promotional-images',
-    icon: Image,
-    permission: 'trackingCode',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
@@ -180,10 +215,10 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
-    label: 'Calendar',
-    href: '/dashboard/tax-preparer/calendar',
-    icon: Calendar,
-    permission: 'calendar',
+    label: 'My Leads',
+    href: '/dashboard/tax-preparer/leads',
+    icon: UserPlus,
+    permission: 'dashboard',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
@@ -196,50 +231,40 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['tax_preparer'],
   },
   {
-    label: 'My Leads',
-    href: '/dashboard/tax-preparer/leads',
-    icon: UserPlus,
-    permission: 'dashboard',
+    label: 'Calendar',
+    href: '/dashboard/tax-preparer/calendar',
+    icon: Calendar,
+    permission: 'calendar',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
   {
-    label: 'Intake Forms',
-    href: '/dashboard/tax-preparer/intake-forms',
-    icon: FileText,
-    permission: 'dashboard',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'Academy',
-    href: '/app/academy',
-    icon: GraduationCap,
-    permission: 'academy',
-    section: '📊 Dashboard',
-    roles: ['tax_preparer'],
-  },
-  {
-    label: 'IRS Forms Library',
-    href: '/dashboard/tax-preparer/tax-forms',
-    icon: FileText,
-    permission: 'taxForms',
+    label: 'Analytics',
+    href: '/dashboard/tax-preparer/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
     section: '📊 Dashboard',
     roles: ['tax_preparer'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 💰 TAX PREPARER REFERRAL MANAGEMENT SECTION
-  // Manage referrers (clients + affiliates) and their commission rates
-  // Tax Preparers do NOT earn commissions - they manage rates for their referrers
-  // Note: Links & QR consolidated into Share & Earn (/dashboard/referrals)
+  // 💰 TAX PREPARER REFERRAL & EARNINGS SECTION
+  // Consolidated: Referrals, bonded affiliates, commissions, payouts
   // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'Share & Earn',
+    href: '/dashboard/referrals',
+    icon: Gift,
+    permission: 'trackingCode',
+    section: '💰 Earnings',
+    roles: ['tax_preparer'],
+  },
   {
     label: 'Bonded Affiliates',
     href: '/dashboard/tax-preparer/bonded-affiliates',
     icon: Users,
     permission: 'trackingCode',
-    section: '💰 Referral Management',
+    section: '💰 Earnings',
     roles: ['tax_preparer'],
   },
   {
@@ -247,43 +272,56 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/tax-preparer/commission-settings',
     icon: Settings,
     permission: 'trackingCode',
-    section: '💰 Referral Management',
+    section: '💰 Earnings',
+    roles: ['tax_preparer'],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📚 TAX PREPARER RESOURCES SECTION
+  // Academy, IRS Forms, Promotional materials
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'Academy',
+    href: '/app/academy',
+    icon: GraduationCap,
+    permission: 'academy',
+    section: '📚 Resources',
     roles: ['tax_preparer'],
   },
   {
-    label: 'Payout Obligations',
-    href: '/dashboard/tax-preparer/payout-obligations',
-    icon: Wallet,
+    label: 'IRS Forms Library',
+    href: '/dashboard/tax-preparer/tax-forms',
+    icon: FileText,
+    permission: 'taxForms',
+    section: '📚 Resources',
+    roles: ['tax_preparer'],
+  },
+  {
+    label: 'Promotional Images',
+    href: '/dashboard/tax-preparer/promotional-images',
+    icon: Image,
     permission: 'trackingCode',
-    section: '💰 Referral Management',
+    section: '📚 Resources',
     roles: ['tax_preparer'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🎯 COMMAND CENTER (Admin) - Primary daily operations
-  // Most-used features for day-to-day admin work
+  // CONSOLIDATED: People Hub replaces CRM Contacts, User Management, Tax Intake Leads
   // ═══════════════════════════════════════════════════════════════════════════
   {
-    label: 'Lead Analytics',
-    href: '/admin/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
-    section: '🎯 Command Center',
-    roles: ['admin'],
-  },
-  {
-    label: 'CRM Contacts',
+    label: 'People Hub',
     href: '/crm/contacts',
-    icon: BookOpen,
+    icon: Users,
     permission: 'addressBook',
     section: '🎯 Command Center',
     roles: ['admin'],
   },
   {
-    label: 'Tax Intake Leads',
-    href: '/admin/leads',
-    icon: UserPlus,
-    permission: 'users',
+    label: 'Analytics',
+    href: '/admin/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
     section: '🎯 Command Center',
     roles: ['admin'],
   },
@@ -305,30 +343,14 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 👥 PEOPLE (Admin) - Team & user management
+  // 👥 TEAM (Admin) - Team & user management
   // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Preparer Performance',
-    href: '/admin/analytics/preparers',
-    icon: Users,
-    permission: 'analytics',
-    section: '👥 People',
-    roles: ['admin'],
-  },
-  {
-    label: 'Affiliate Performance',
-    href: '/admin/analytics/affiliates',
-    icon: Trophy,
-    permission: 'analytics',
-    section: '👥 People',
-    roles: ['admin'],
-  },
   {
     label: 'User Management',
     href: '/admin/users',
     icon: Users,
     permission: 'users',
-    section: '👥 People',
+    section: '👥 Team',
     roles: ['admin'],
   },
   {
@@ -336,15 +358,43 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/applications/preparers',
     icon: UserCheck,
     permission: 'users',
-    section: '👥 People',
+    section: '👥 Team',
     roles: ['admin'],
   },
   {
-    label: 'Referrals Status',
-    href: '/admin/referrals-status',
-    icon: Share2,
-    permission: 'referralsStatus',
-    section: '👥 People',
+    label: 'Preparer Performance',
+    href: '/admin/analytics/preparers',
+    icon: Trophy,
+    permission: 'analytics',
+    section: '👥 Team',
+    roles: ['admin'],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 💰 FINANCIAL (Admin) - Earnings, payouts, commissions
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    label: 'Earnings Overview',
+    href: '/admin/earnings',
+    icon: DollarSign,
+    permission: 'earnings',
+    section: '💰 Financial',
+    roles: ['admin'],
+  },
+  {
+    label: 'Payouts',
+    href: '/admin/payouts',
+    icon: Wallet,
+    permission: 'payouts',
+    section: '💰 Financial',
+    roles: ['admin'],
+  },
+  {
+    label: 'Commission Settings',
+    href: '/admin/commission-settings',
+    icon: Settings,
+    permission: 'payouts',
+    section: '💰 Financial',
     roles: ['admin'],
   },
 
@@ -388,30 +438,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
-    label: 'Earnings Overview',
-    href: '/admin/earnings',
-    icon: DollarSign,
-    permission: 'earnings',
-    section: '⚙️ Settings',
-    roles: ['admin'],
-  },
-  {
-    label: 'Payouts',
-    href: '/admin/payouts',
-    icon: DollarSign,
-    permission: 'payouts',
-    section: '⚙️ Settings',
-    roles: ['admin'],
-  },
-  {
-    label: 'Commission Settings',
-    href: '/admin/commission-settings',
-    icon: DollarSign,
-    permission: 'payouts',
-    section: '⚙️ Settings',
-    roles: ['admin'],
-  },
-  {
     label: 'Client File Center',
     href: '/admin/file-center',
     icon: FolderOpen,
@@ -445,6 +471,7 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
   admin: '/dashboard/admin',
   tax_preparer: '/dashboard/tax-preparer',
   client: '/dashboard/client',
+  affiliate: '/dashboard/affiliate',
 };
 
 /**
@@ -460,11 +487,18 @@ export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
  * - Settings: Permissions, Earnings, Payouts, File Center, IRS Forms, Restrictions
  */
 export const SECTION_ROLE_RESTRICTIONS: Record<string, UserRole[]> = {
-  '📱 My Dashboard': ['client'], // Client dashboard items
-  '📊 Dashboard': ['tax_preparer'], // Tax preparer dashboard section
-  '💰 Referral Management': ['tax_preparer'], // Tax preparer referral tracking
-  '🎯 Command Center': ['admin'], // Admin primary operations
-  '👥 People': ['admin'], // Admin team management
-  '📢 Marketing': ['admin'], // Admin marketing hub
-  '⚙️ Settings': ['admin'], // Admin configuration
+  // Client sections
+  '📱 My Dashboard': ['client'],
+  // Affiliate sections
+  '🤝 Affiliate Dashboard': ['affiliate'],
+  // Tax preparer sections (streamlined to 3 sections)
+  '📊 Dashboard': ['tax_preparer'], // Core daily operations
+  '💰 Earnings': ['tax_preparer'], // Referrals, affiliates, commissions
+  '📚 Resources': ['tax_preparer'], // Academy, IRS forms, promotional materials
+  // Admin sections (consolidated to 5 sections)
+  '🎯 Command Center': ['admin'], // People Hub, Analytics, Calendar, Clients Status
+  '👥 Team': ['admin'], // User Management, Applications, Performance
+  '💰 Financial': ['admin'], // Earnings, Payouts, Commission Settings
+  '📢 Marketing': ['admin'], // Marketing Hub, Content Generator, Tracking Codes
+  '⚙️ Settings': ['admin'], // Permissions, File Center, IRS Forms, Restrictions
 };
