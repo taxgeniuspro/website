@@ -8,6 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Table,
@@ -129,6 +138,16 @@ export default function CRMContactsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Add Contact dialog state
+  const [addContactDialogOpen, setAddContactDialogOpen] = useState(false);
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [newContactData, setNewContactData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    contactType: 'LEAD' as 'CLIENT' | 'LEAD' | 'AFFILIATE' | 'PREPARER',
+  });
   const { toast } = useToast();
   const isMobile = useIsMobile(); // Must be called before any conditional returns
 
@@ -330,6 +349,83 @@ export default function CRMContactsPage() {
     }
   };
 
+  // Handle adding a new contact
+  const handleAddContact = async () => {
+    // Validate required fields
+    if (!newContactData.firstName.trim() || !newContactData.lastName.trim() || !newContactData.email.trim()) {
+      toast({
+        title: 'Error',
+        description: 'First name, last name, and email are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newContactData.email)) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsAddingContact(true);
+
+      const response = await fetch('/api/crm/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: newContactData.firstName.trim(),
+          lastName: newContactData.lastName.trim(),
+          email: newContactData.email.trim().toLowerCase(),
+          phone: newContactData.phone.trim() || undefined,
+          contactType: newContactData.contactType,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Add the new contact to the list
+        setContacts((prev) => [data.data, ...prev]);
+
+        // Reset form and close dialog
+        setNewContactData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          contactType: 'LEAD',
+        });
+        setAddContactDialogOpen(false);
+
+        toast({
+          title: 'Contact Created',
+          description: `Successfully added ${newContactData.firstName} ${newContactData.lastName}`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to create contact',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      logger.error('Error creating contact:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to create contact',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAddingContact(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!contactToDelete) return;
 
@@ -457,7 +553,7 @@ export default function CRMContactsPage() {
           </p>
         </div>
         {canCreate && (
-          <Button className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto" onClick={() => setAddContactDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Add Contact
           </Button>
@@ -1220,6 +1316,101 @@ export default function CRMContactsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Contact Dialog */}
+      <Dialog open={addContactDialogOpen} onOpenChange={setAddContactDialogOpen}>
+        <DialogContent className="max-w-[90vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Contact</DialogTitle>
+            <DialogDescription>
+              Create a new contact in the CRM. Fill in the required information below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name *</Label>
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  value={newContactData.firstName}
+                  onChange={(e) => setNewContactData((prev) => ({ ...prev, firstName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name *</Label>
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  value={newContactData.lastName}
+                  onChange={(e) => setNewContactData((prev) => ({ ...prev, lastName: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="john.doe@example.com"
+                value={newContactData.email}
+                onChange={(e) => setNewContactData((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="(555) 123-4567"
+                value={newContactData.phone}
+                onChange={(e) => setNewContactData((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="contactType">Contact Type</Label>
+              <Select
+                value={newContactData.contactType}
+                onValueChange={(value: 'CLIENT' | 'LEAD' | 'AFFILIATE' | 'PREPARER') =>
+                  setNewContactData((prev) => ({ ...prev, contactType: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LEAD">Lead - Potential customer</SelectItem>
+                  <SelectItem value="CLIENT">Client - Active customer</SelectItem>
+                  <SelectItem value="AFFILIATE">Affiliate - Referral partner</SelectItem>
+                  <SelectItem value="PREPARER">Preparer - Tax preparer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddContactDialogOpen(false)}
+              disabled={isAddingContact}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddContact} disabled={isAddingContact}>
+              {isAddingContact ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Contact
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
