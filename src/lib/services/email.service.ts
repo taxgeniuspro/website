@@ -17,6 +17,9 @@ import { NewLeadNotification } from '../../../emails/new-lead-notification';
 import { TaxIntakeComplete } from '../../../emails/tax-intake-complete';
 import { AppointmentNotificationPreparer } from '../../../emails/appointment-notification-preparer';
 import { PreparerApplicationRejected } from '../../../emails/preparer-application-rejected';
+import { EmailVerificationEmail } from '../../../emails/email-verification';
+import { AppointmentRescheduledEmail } from '../../../emails/appointment-rescheduled';
+import { AppointmentCancelledEmail } from '../../../emails/appointment-cancelled';
 import { logger } from '@/lib/logger';
 
 // Lazy-initialize Resend to avoid build-time errors when API key is not set
@@ -2027,6 +2030,182 @@ export class EmailService {
       return true;
     } catch (error) {
       logger.error('Error sending appointment reminder email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send email verification email
+   * Triggered after user signs up with credentials
+   */
+  static async sendEmailVerificationEmail(
+    to: string,
+    verificationUrl: string,
+    name?: string,
+    locale?: 'en' | 'es'
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Email Verification Email (Dev Mode):', {
+          to,
+          verificationUrl,
+          name,
+        });
+        return true;
+      }
+
+      const { data, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject: locale === 'es' ? 'Verifica tu cuenta de Tax Genius' : 'Verify Your Tax Genius Account',
+        react: EmailVerificationEmail({
+          name,
+          verificationUrl,
+          locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending email verification email:', error);
+        return false;
+      }
+
+      logger.info('Email verification email sent:', data?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending email verification email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send appointment rescheduled notification email
+   * Sent to both client and preparer when an appointment is rescheduled
+   */
+  static async sendAppointmentRescheduledEmail(
+    to: string,
+    data: {
+      recipientName: string;
+      recipientType: 'client' | 'preparer';
+      appointmentType: string;
+      oldDate: Date;
+      newDate: Date;
+      duration: number;
+      preparerName?: string;
+      clientName?: string;
+      meetingLink?: string;
+      location?: string;
+      reason?: string;
+      locale?: 'en' | 'es';
+    }
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Appointment Rescheduled Email (Dev Mode):', {
+          to,
+          ...data,
+        });
+        return true;
+      }
+
+      const subject = data.locale === 'es'
+        ? `Cita Reprogramada - ${data.appointmentType}`
+        : `Appointment Rescheduled - ${data.appointmentType}`;
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject,
+        react: AppointmentRescheduledEmail({
+          recipientName: data.recipientName,
+          recipientType: data.recipientType,
+          appointmentType: data.appointmentType,
+          oldDate: data.oldDate,
+          newDate: data.newDate,
+          duration: data.duration,
+          preparerName: data.preparerName,
+          clientName: data.clientName,
+          meetingLink: data.meetingLink,
+          location: data.location,
+          reason: data.reason,
+          locale: data.locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending appointment rescheduled email:', error);
+        return false;
+      }
+
+      logger.info('Appointment rescheduled email sent:', emailData?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment rescheduled email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send appointment cancelled notification email
+   * Sent to both client and preparer when an appointment is cancelled
+   */
+  static async sendAppointmentCancelledEmail(
+    to: string,
+    data: {
+      recipientName: string;
+      recipientType: 'client' | 'preparer';
+      appointmentType: string;
+      scheduledFor: Date;
+      duration: number;
+      preparerName?: string;
+      clientName?: string;
+      cancelledBy: 'client' | 'preparer' | 'admin';
+      reason?: string;
+      rebookUrl?: string;
+      locale?: 'en' | 'es';
+    }
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Appointment Cancelled Email (Dev Mode):', {
+          to,
+          ...data,
+        });
+        return true;
+      }
+
+      const subject = data.locale === 'es'
+        ? `Cita Cancelada - ${data.appointmentType}`
+        : `Appointment Cancelled - ${data.appointmentType}`;
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject,
+        react: AppointmentCancelledEmail({
+          recipientName: data.recipientName,
+          recipientType: data.recipientType,
+          appointmentType: data.appointmentType,
+          scheduledFor: data.scheduledFor,
+          duration: data.duration,
+          preparerName: data.preparerName,
+          clientName: data.clientName,
+          cancelledBy: data.cancelledBy,
+          reason: data.reason,
+          rebookUrl: data.rebookUrl,
+          locale: data.locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending appointment cancelled email:', error);
+        return false;
+      }
+
+      logger.info('Appointment cancelled email sent:', emailData?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment cancelled email:', error);
       return false;
     }
   }

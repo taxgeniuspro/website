@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { AvailabilityService } from '@/lib/services/availability.service';
+import { EmailService } from '@/lib/services/email.service';
 import { addMinutes, parseISO } from 'date-fns';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
@@ -46,11 +47,18 @@ export async function PATCH(
       );
     }
 
-    // Get existing appointment
+    // Get existing appointment with client and preparer info for emails
     const appointment = await prisma.appointment.findUnique({
       where: { id },
       include: {
-        // We'll need preparer info for validation
+        preparer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            user: { select: { email: true } },
+          },
+        },
       },
     });
 
@@ -112,8 +120,53 @@ export async function PATCH(
       },
     });
 
-    // TODO: Send reschedule notification emails to both client and preparer
-    // This will be implemented in Phase 6 with email templates
+    // Send reschedule notification emails to both client and preparer
+    const oldScheduledFor = appointment.scheduledFor!;
+    const preparerName = appointment.preparer
+      ? `${appointment.preparer.firstName || ''} ${appointment.preparer.lastName || ''}`.trim() || 'Tax Preparer'
+      : 'Tax Preparer';
+    const preparerEmail = appointment.preparer?.user?.email;
+    const appointmentType = formatAppointmentType(appointment.type);
+
+    // Send email to client
+    try {
+      await EmailService.sendAppointmentRescheduledEmail(appointment.clientEmail, {
+        recipientName: appointment.clientName,
+        recipientType: 'client',
+        appointmentType,
+        oldDate: oldScheduledFor,
+        newDate: scheduledFor,
+        duration,
+        preparerName,
+        meetingLink: appointment.meetingLink || undefined,
+        location: appointment.location || undefined,
+        reason,
+      });
+      logger.info('Reschedule email sent to client', { appointmentId: id, clientEmail: appointment.clientEmail });
+    } catch (emailError) {
+      logger.error('Failed to send reschedule email to client', { appointmentId: id, error: emailError });
+    }
+
+    // Send email to preparer
+    if (preparerEmail) {
+      try {
+        await EmailService.sendAppointmentRescheduledEmail(preparerEmail, {
+          recipientName: preparerName,
+          recipientType: 'preparer',
+          appointmentType,
+          oldDate: oldScheduledFor,
+          newDate: scheduledFor,
+          duration,
+          clientName: appointment.clientName,
+          meetingLink: appointment.meetingLink || undefined,
+          location: appointment.location || undefined,
+          reason,
+        });
+        logger.info('Reschedule email sent to preparer', { appointmentId: id, preparerEmail });
+      } catch (emailError) {
+        logger.error('Failed to send reschedule email to preparer', { appointmentId: id, error: emailError });
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -136,4 +189,15 @@ export async function PATCH(
       { status: 500 }
     );
   }
+}
+
+function formatAppointmentType(type: string): string {
+  const typeLabels: Record<string, string> = {
+    PHONE_CALL: 'Phone Call',
+    VIDEO_CALL: 'Video Call',
+    IN_PERSON: 'In-Person Meeting',
+    TAX_CONSULTATION: 'Tax Consultation',
+    FOLLOW_UP: 'Follow-Up',
+  };
+  return typeLabels[type] || type;
 }
