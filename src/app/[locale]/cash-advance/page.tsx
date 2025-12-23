@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle, Phone, DollarSign, FileText, Clock, CreditCard, ArrowRight, Zap } from 'lucide-react';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
+import { ReferralBanner } from '@/components/ReferralBanner';
 import { logger } from '@/lib/logger';
 import Image from 'next/image';
 
@@ -58,22 +59,23 @@ function CashAdvancePageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Always fetch preparer info - API returns Owliver as default
   useEffect(() => {
-    if (refCode) {
-      fetchPreparerInfo(refCode);
-    } else {
-      setHasCustomPreparer(false);
-    }
+    fetchPreparerInfo(refCode || undefined);
   }, [refCode]);
 
-  const fetchPreparerInfo = async (code: string) => {
+  const fetchPreparerInfo = async (code?: string) => {
     try {
-      const response = await fetch(`/api/preparer/by-code?code=${encodeURIComponent(code)}`);
+      const url = code
+        ? `/api/preparer/by-code?code=${encodeURIComponent(code)}`
+        : '/api/preparer/by-code';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (data.preparer) {
-          setPreparer({ ...data.preparer, trackingCode: data.preparer.trackingCode || code });
-          setHasCustomPreparer(true);
+          setPreparer({ ...data.preparer, trackingCode: data.preparer.trackingCode || code || 'ow' });
+          // Only mark as custom if we have a ref code that resolved to a specific preparer
+          setHasCustomPreparer(!!code && data.preparer.trackingCode !== 'ow');
         }
       }
     } catch (error) {
@@ -148,6 +150,14 @@ function CashAdvancePageContent() {
               height={55}
               className="hidden dark:block h-auto"
               priority
+            />
+          </div>
+
+          {/* Referral Banner - Shows preparer who will help */}
+          <div className="mt-6 max-w-xl mx-auto">
+            <ReferralBanner
+              preparerName={preparerName}
+              preparerAvatar={preparer.avatarUrl}
             />
           </div>
         </div>

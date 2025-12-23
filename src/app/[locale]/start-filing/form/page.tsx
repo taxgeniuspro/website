@@ -2,7 +2,19 @@ import { Metadata } from 'next';
 import { Suspense } from 'react';
 import SimpleTaxForm from '@/components/SimpleTaxForm';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
+import { ReferralBanner } from '@/components/ReferralBanner';
 import { prisma } from '@/lib/prisma';
+
+// Default preparer (Owliver Owl)
+const DEFAULT_PREPARER = {
+  firstName: 'Owliver',
+  lastName: 'Owl',
+  phone: '1 (404) 627-1015',
+  email: 'taxgenius.tax@gmail.com',
+  avatarUrl:
+    'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg',
+  trackingCode: 'ow',
+};
 
 export const metadata: Metadata = {
   title: 'File Your Tax Return - Tax Genius Pro',
@@ -19,44 +31,86 @@ interface PageProps {
 }
 
 async function getPreparerByRef(ref: string | undefined) {
-  if (!ref) return null;
+  // If no ref, return default preparer (Owliver)
+  if (!ref) return DEFAULT_PREPARER;
 
   try {
-    const profile = await prisma.profile.findFirst({
+    // First try to find a tax preparer or admin with this code
+    const preparerProfile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { trackingCode: ref },
+          { customTrackingCode: ref },
+          { shortLinkUsername: ref },
+        ],
+        role: { in: ['tax_preparer', 'admin'] },
+      },
+      include: {
+        user: { select: { email: true } },
+      },
+    });
+
+    if (preparerProfile && preparerProfile.firstName && preparerProfile.lastName) {
+      return {
+        firstName: preparerProfile.firstName,
+        lastName: preparerProfile.lastName,
+        avatarUrl: preparerProfile.avatarUrl,
+        phone: preparerProfile.phone,
+        email: preparerProfile.user?.email,
+        trackingCode: preparerProfile.customTrackingCode || preparerProfile.trackingCode,
+      };
+    }
+
+    // Check if it's an affiliate code - if so, return default preparer (Owliver)
+    const affiliateProfile = await prisma.profile.findFirst({
       where: {
         OR: [
           { trackingCode: ref },
           { customTrackingCode: ref },
         ],
+        role: { in: ['client', 'affiliate'] },
       },
-      include: {
-        user: {
-          select: {
-            email: true,
-          },
-        },
+      select: {
+        id: true,
+        affiliateBondedToPreparerId: true,
       },
     });
 
-    if (!profile) return null;
+    if (affiliateProfile) {
+      // If affiliate is bonded to a preparer, return that preparer
+      if (affiliateProfile.affiliateBondedToPreparerId) {
+        const bondedPreparer = await prisma.profile.findUnique({
+          where: { id: affiliateProfile.affiliateBondedToPreparerId },
+          include: { user: { select: { email: true } } },
+        });
 
-    return {
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      avatarUrl: profile.avatarUrl,
-      phone: profile.phone,
-      email: profile.user?.email,
-    };
+        if (bondedPreparer && bondedPreparer.firstName && bondedPreparer.lastName) {
+          return {
+            firstName: bondedPreparer.firstName,
+            lastName: bondedPreparer.lastName,
+            avatarUrl: bondedPreparer.avatarUrl,
+            phone: bondedPreparer.phone,
+            email: bondedPreparer.user?.email,
+            trackingCode: bondedPreparer.customTrackingCode || bondedPreparer.trackingCode,
+          };
+        }
+      }
+      // Affiliate not bonded - return default preparer
+      return DEFAULT_PREPARER;
+    }
+
+    // Code not found - return default preparer
+    return DEFAULT_PREPARER;
   } catch (error) {
     console.error('Error fetching preparer:', error);
-    return null;
+    return DEFAULT_PREPARER;
   }
 }
 
 export default async function TaxFormPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const preparer = await getPreparerByRef(params.ref);
-  const preparerName = preparer ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() : null;
+  const preparerName = `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim();
 
   return (
     <div className="min-h-screen bg-background py-12">
@@ -66,46 +120,18 @@ export default async function TaxFormPage({ searchParams }: PageProps) {
       </Suspense>
 
       <div className="container mx-auto px-4">
-        {/* Mobile-first: Preparer card prominently at top on mobile */}
-        {preparer && (
-          <div className="lg:hidden max-w-4xl mx-auto mb-6">
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-              <div className="flex items-center gap-4">
-                {preparer.avatarUrl ? (
-                  <img
-                    src={preparer.avatarUrl}
-                    alt={preparerName || 'Tax Preparer'}
-                    className="w-16 h-16 rounded-full object-cover border-3 border-primary/30 shadow-lg flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border-3 border-primary/30 flex-shrink-0">
-                    <span className="text-lg font-bold text-primary">
-                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
-                    </span>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">Your Tax Professional</p>
-                  <p className="font-bold text-lg text-foreground truncate">{preparerName}</p>
-                  {preparer.phone && (
-                    <a
-                      href={`tel:${preparer.phone.replace(/[^+\d]/g, '')}`}
-                      className="text-sm text-primary hover:underline"
-                    >
-                      {preparer.phone}
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="max-w-4xl mx-auto mb-8 text-center">
           <h1 className="text-4xl font-bold mb-3">Start Your Tax Return</h1>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-muted-foreground mb-6">
             Answer a few quick questions. No signup required to start.
           </p>
+
+          {/* Referral Banner - Shows preparer who will help */}
+          <ReferralBanner
+            preparerName={preparerName}
+            preparerAvatar={preparer.avatarUrl}
+            className="max-w-xl mx-auto"
+          />
         </div>
 
         <SimpleTaxForm preparer={preparer} />

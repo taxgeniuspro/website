@@ -28,6 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/header';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { ReferralBanner } from '@/components/ReferralBanner';
 import {
   Calendar,
   Phone,
@@ -379,18 +380,12 @@ function BookingPageContent() {
               Book Your Appointment
             </Badge>
 
-            {/* Preparer Avatar */}
-            {preferences.preparer.avatarUrl && (
-              <div className="flex justify-center mb-4">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden border-4 border-primary/20 shadow-lg">
-                  <img
-                    src={preferences.preparer.avatarUrl}
-                    alt={preferences.preparer.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            )}
+            {/* Referral Banner - Shows preparer who will help */}
+            <ReferralBanner
+              preparerName={preferences.preparer.name}
+              preparerAvatar={preferences.preparer.avatarUrl}
+              className="max-w-xl mx-auto mb-6"
+            />
 
             <h1 className="text-2xl lg:text-4xl font-bold text-foreground mb-2">
               Schedule with <span className="text-primary">{preferences.preparer.name}</span>
