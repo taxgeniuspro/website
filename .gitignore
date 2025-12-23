@@ -83,3 +83,4 @@ Ira folder/
 *.tar.gz
 *.tar.gz.crdownload
 .env*.local
+test-results/

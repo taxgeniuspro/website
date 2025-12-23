@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create account. Please try again.' },
+      { error: `Signup failed: ${errorMessage}` },
       { status: 500 }
     );
   }
