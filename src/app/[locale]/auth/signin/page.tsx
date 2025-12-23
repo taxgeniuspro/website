@@ -211,7 +211,14 @@ function SignInContent() {
       });
 
       if (result?.error) {
-        setError(t('errors.invalidCredentials', { defaultValue: 'Invalid email or password. Please check your credentials and try again.' }));
+        // Check for specific error types from the server
+        if (result.error.includes('Account temporarily locked')) {
+          setError(result.error);
+        } else if (result.error === 'Account suspended') {
+          setError(t('errors.accountSuspended', { defaultValue: 'Your account has been suspended. Please contact support.' }));
+        } else {
+          setError(t('errors.invalidCredentials', { defaultValue: 'Invalid email or password. Please check your credentials and try again.' }));
+        }
         setIsCredentialsLoading(false);
         return;
       }
@@ -444,11 +451,14 @@ function SignInContent() {
             </div>
           </form>
 
-          <div className="text-center text-sm text-muted-foreground pt-4">
-            {t('form.dontHaveAccount')}{' '}
+          {/* Sign Up CTA - Made more prominent */}
+          <div className="mt-6 p-4 bg-muted/50 rounded-lg border border-muted text-center">
+            <p className="text-sm text-muted-foreground mb-3">
+              {t('form.dontHaveAccount')}
+            </p>
             <a
               href={`/auth/signup${role ? `?role=${role}` : ''}`}
-              className="text-primary hover:underline font-semibold"
+              className="inline-flex items-center justify-center w-full px-6 py-3 text-base font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm"
             >
               {t('form.signUp')}
             </a>

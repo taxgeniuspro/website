@@ -208,6 +208,13 @@ export function Header() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/signin">{t('login')}</Link>
             </Button>
+            <Button
+              size="sm"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-sm"
+              asChild
+            >
+              <Link href="/auth/signup">{t('signUp')}</Link>
+            </Button>
             <StartTaxReturnButton size="sm" />
           </div>
 
@@ -388,6 +395,13 @@ export function Header() {
             <div className="px-2 pt-3 space-y-2 border-t">
               <Button variant="outline" className="w-full" size="sm" asChild>
                 <Link href="/auth/signin">{t('login')}</Link>
+              </Button>
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-sm"
+                size="sm"
+                asChild
+              >
+                <Link href="/auth/signup">{t('signUp')}</Link>
               </Button>
               <div className="w-full">
                 <StartTaxReturnButton size="sm" className="w-full" />

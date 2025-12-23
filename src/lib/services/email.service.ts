@@ -17,6 +17,9 @@ import { NewLeadNotification } from '../../../emails/new-lead-notification';
 import { TaxIntakeComplete } from '../../../emails/tax-intake-complete';
 import { AppointmentNotificationPreparer } from '../../../emails/appointment-notification-preparer';
 import { PreparerApplicationRejected } from '../../../emails/preparer-application-rejected';
+import { EmailVerificationEmail } from '../../../emails/email-verification';
+import { AppointmentRescheduledEmail } from '../../../emails/appointment-rescheduled';
+import { AppointmentCancelledEmail } from '../../../emails/appointment-cancelled';
 import { logger } from '@/lib/logger';
 
 // Lazy-initialize Resend to avoid build-time errors when API key is not set
@@ -1895,6 +1898,464 @@ export class EmailService {
     } catch (error) {
       logger.error('Error sending cash advance promo 2025 email:', error);
       return { success: false };
+    }
+  }
+
+  /**
+   * Send appointment reminder email to client
+   * Used by the appointment-reminders cron job
+   */
+  static async sendAppointmentReminderEmail(
+    to: string,
+    data: {
+      clientName: string;
+      preparerName: string;
+      appointmentType: string;
+      scheduledFor: Date;
+      duration: number;
+      reminderType: '24h' | '1h';
+      meetingLink?: string;
+      location?: string;
+    }
+  ): Promise<boolean> {
+    try {
+      const resend = getResendClient();
+
+      // Format date and time
+      const dateOptions: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      };
+      const timeOptions: Intl.DateTimeFormatOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      };
+      const formattedDate = data.scheduledFor.toLocaleDateString('en-US', dateOptions);
+      const formattedTime = data.scheduledFor.toLocaleTimeString('en-US', timeOptions);
+
+      const reminderText = data.reminderType === '24h'
+        ? 'Your appointment is tomorrow!'
+        : 'Your appointment is in 1 hour!';
+
+      const { error, data: emailData } = await resend.emails.send({
+        from: `Tax Genius Pro <${this.fromEmail}>`,
+        to,
+        subject: `${reminderText} - ${data.appointmentType} with ${data.preparerName}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <img src="https://taxgeniuspro.tax/images/wordpress-assets/taxgenius-logo.png" alt="Tax Genius Pro" style="max-width: 200px; height: auto;">
+            </div>
+
+            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 20px;">${reminderText}</h1>
+
+            <p>Hi ${data.clientName},</p>
+
+            <p>This is a friendly reminder about your upcoming appointment:</p>
+
+            <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Type:</td>
+                  <td style="padding: 8px 0;">${data.appointmentType}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">With:</td>
+                  <td style="padding: 8px 0;">${data.preparerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Date:</td>
+                  <td style="padding: 8px 0;">${formattedDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Time:</td>
+                  <td style="padding: 8px 0;">${formattedTime}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Duration:</td>
+                  <td style="padding: 8px 0;">${data.duration} minutes</td>
+                </tr>
+                ${data.location ? `
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Location:</td>
+                  <td style="padding: 8px 0;">${data.location}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+
+            ${data.meetingLink ? `
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${data.meetingLink}" style="display: inline-block; background-color: #ff6b35; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                Join Video Call
+              </a>
+            </div>
+            ` : ''}
+
+            <p style="color: #666; font-size: 14px;">
+              Need to reschedule? Please contact us as soon as possible to make changes to your appointment.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              &copy; ${new Date().getFullYear()} Tax Genius Pro. All rights reserved.<br>
+              1632 Jonesboro Rd SE, Atlanta, GA 30315
+            </p>
+          </body>
+          </html>
+        `,
+      });
+
+      if (error) {
+        logger.error('Error sending appointment reminder email:', error);
+        return false;
+      }
+
+      logger.info('Appointment reminder email sent:', {
+        emailId: emailData?.id,
+        to,
+        reminderType: data.reminderType,
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment reminder email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send email verification email
+   * Triggered after user signs up with credentials
+   */
+  static async sendEmailVerificationEmail(
+    to: string,
+    verificationUrl: string,
+    name?: string,
+    locale?: 'en' | 'es'
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Email Verification Email (Dev Mode):', {
+          to,
+          verificationUrl,
+          name,
+        });
+        return true;
+      }
+
+      const { data, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject: locale === 'es' ? 'Verifica tu cuenta de Tax Genius' : 'Verify Your Tax Genius Account',
+        react: EmailVerificationEmail({
+          name,
+          verificationUrl,
+          locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending email verification email:', error);
+        return false;
+      }
+
+      logger.info('Email verification email sent:', data?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending email verification email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send appointment rescheduled notification email
+   * Sent to both client and preparer when an appointment is rescheduled
+   */
+  static async sendAppointmentRescheduledEmail(
+    to: string,
+    data: {
+      recipientName: string;
+      recipientType: 'client' | 'preparer';
+      appointmentType: string;
+      oldDate: Date;
+      newDate: Date;
+      duration: number;
+      preparerName?: string;
+      clientName?: string;
+      meetingLink?: string;
+      location?: string;
+      reason?: string;
+      locale?: 'en' | 'es';
+    }
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Appointment Rescheduled Email (Dev Mode):', {
+          to,
+          ...data,
+        });
+        return true;
+      }
+
+      const subject = data.locale === 'es'
+        ? `Cita Reprogramada - ${data.appointmentType}`
+        : `Appointment Rescheduled - ${data.appointmentType}`;
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject,
+        react: AppointmentRescheduledEmail({
+          recipientName: data.recipientName,
+          recipientType: data.recipientType,
+          appointmentType: data.appointmentType,
+          oldDate: data.oldDate,
+          newDate: data.newDate,
+          duration: data.duration,
+          preparerName: data.preparerName,
+          clientName: data.clientName,
+          meetingLink: data.meetingLink,
+          location: data.location,
+          reason: data.reason,
+          locale: data.locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending appointment rescheduled email:', error);
+        return false;
+      }
+
+      logger.info('Appointment rescheduled email sent:', emailData?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment rescheduled email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send appointment cancelled notification email
+   * Sent to both client and preparer when an appointment is cancelled
+   */
+  static async sendAppointmentCancelledEmail(
+    to: string,
+    data: {
+      recipientName: string;
+      recipientType: 'client' | 'preparer';
+      appointmentType: string;
+      scheduledFor: Date;
+      duration: number;
+      preparerName?: string;
+      clientName?: string;
+      cancelledBy: 'client' | 'preparer' | 'admin';
+      reason?: string;
+      rebookUrl?: string;
+      locale?: 'en' | 'es';
+    }
+  ): Promise<boolean> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Appointment Cancelled Email (Dev Mode):', {
+          to,
+          ...data,
+        });
+        return true;
+      }
+
+      const subject = data.locale === 'es'
+        ? `Cita Cancelada - ${data.appointmentType}`
+        : `Appointment Cancelled - ${data.appointmentType}`;
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject,
+        react: AppointmentCancelledEmail({
+          recipientName: data.recipientName,
+          recipientType: data.recipientType,
+          appointmentType: data.appointmentType,
+          scheduledFor: data.scheduledFor,
+          duration: data.duration,
+          preparerName: data.preparerName,
+          clientName: data.clientName,
+          cancelledBy: data.cancelledBy,
+          reason: data.reason,
+          rebookUrl: data.rebookUrl,
+          locale: data.locale,
+        }),
+      });
+
+      if (error) {
+        logger.error('Error sending appointment cancelled email:', error);
+        return false;
+      }
+
+      logger.info('Appointment cancelled email sent:', emailData?.id);
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment cancelled email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send security alert email to admin
+   * Triggered when suspicious activity is detected (e.g., 15+ failed login attempts)
+   */
+  static async sendSecurityAlertEmail(
+    to: string,
+    data: {
+      type: 'excessive_failed_logins' | 'suspicious_activity' | 'account_lockout';
+      targetEmail: string;
+      ipAddress: string;
+      attempts: number;
+      timestamp: Date;
+    }
+  ): Promise<boolean> {
+    try {
+      const alertTypes: Record<string, { title: string; description: string; severity: string }> = {
+        excessive_failed_logins: {
+          title: '🚨 Excessive Failed Login Attempts',
+          description: 'An account has exceeded the failed login attempt threshold.',
+          severity: 'HIGH',
+        },
+        suspicious_activity: {
+          title: '⚠️ Suspicious Activity Detected',
+          description: 'Unusual login behavior has been detected for this account.',
+          severity: 'MEDIUM',
+        },
+        account_lockout: {
+          title: '🔒 Account Locked',
+          description: 'An account has been automatically locked due to security concerns.',
+          severity: 'HIGH',
+        },
+      };
+
+      const alertInfo = alertTypes[data.type] || alertTypes.suspicious_activity;
+      const formattedDate = data.timestamp.toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short',
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Security Alert Email (Dev Mode):', {
+          to,
+          ...data,
+          alertInfo,
+        });
+        return true;
+      }
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `[SECURITY ALERT] ${alertInfo.title} - ${data.targetEmail}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+            <div style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              <!-- Header -->
+              <div style="background-color: ${alertInfo.severity === 'HIGH' ? '#dc2626' : '#f59e0b'}; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">${alertInfo.title}</h1>
+              </div>
+
+              <!-- Content -->
+              <div style="padding: 30px;">
+                <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                  <p style="margin: 0; font-weight: 600; color: #991b1b;">Severity: ${alertInfo.severity}</p>
+                  <p style="margin: 5px 0 0; color: #991b1b;">${alertInfo.description}</p>
+                </div>
+
+                <h2 style="color: #333; font-size: 18px; margin-top: 25px; margin-bottom: 15px;">Alert Details</h2>
+
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Target Email:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${data.targetEmail}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">IP Address:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${data.ipAddress}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Failed Attempts:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb;"><strong style="color: #dc2626;">${data.attempts}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600;">Timestamp:</td>
+                    <td style="padding: 10px; background-color: #ffffff;">${formattedDate}</td>
+                  </tr>
+                </table>
+
+                <div style="margin-top: 25px; padding: 15px; background-color: #fef3c7; border-radius: 6px;">
+                  <h3 style="color: #92400e; margin: 0 0 10px;">Recommended Actions</h3>
+                  <ul style="color: #92400e; margin: 0; padding-left: 20px;">
+                    <li>Review the login attempts from this IP address</li>
+                    <li>Consider blocking the IP if malicious activity is confirmed</li>
+                    <li>Contact the account owner if they are legitimate</li>
+                    <li>Check for similar patterns from other accounts</li>
+                  </ul>
+                </div>
+
+                <p style="margin-top: 25px; text-align: center;">
+                  <a href="${this.appUrl}/dashboard/admin/security"
+                     style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+                    View Security Dashboard
+                  </a>
+                </p>
+              </div>
+
+              <!-- Footer -->
+              <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="margin: 0; color: #6b7280; font-size: 12px;">
+                  This is an automated security alert from Tax Genius Pro.<br>
+                  Do not reply to this email.
+                </p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+      });
+
+      if (error) {
+        logger.error('Error sending security alert email:', error);
+        return false;
+      }
+
+      logger.info('Security alert email sent:', {
+        emailId: emailData?.id,
+        to,
+        alertType: data.type,
+        targetEmail: data.targetEmail,
+      });
+      return true;
+    } catch (error) {
+      logger.error('Error sending security alert email:', error);
+      return false;
     }
   }
 }

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { EmailService } from '@/lib/services/email.service';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
@@ -22,9 +23,19 @@ export async function PATCH(
     const body = await request.json();
     const { reason, cancelledBy } = body;
 
-    // Get existing appointment
+    // Get existing appointment with preparer info for emails
     const appointment = await prisma.appointment.findUnique({
       where: { id },
+      include: {
+        preparer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
     });
 
     if (!appointment) {
@@ -84,8 +95,53 @@ export async function PATCH(
       },
     });
 
-    // TODO: Send cancellation notification emails to both client and preparer
-    // This will be implemented in Phase 6 with email templates
+    // Send cancellation notification emails to both client and preparer
+    const preparerName = appointment.preparer
+      ? `${appointment.preparer.firstName || ''} ${appointment.preparer.lastName || ''}`.trim() || 'Tax Preparer'
+      : 'Tax Preparer';
+    const preparerEmail = appointment.preparer?.user?.email;
+    const appointmentType = formatAppointmentType(appointment.type);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
+    const rebookUrl = appointment.preparerId
+      ? `${appUrl}/book?preparer=${appointment.preparerId}`
+      : `${appUrl}/book`;
+
+    // Send email to client
+    try {
+      await EmailService.sendAppointmentCancelledEmail(appointment.clientEmail, {
+        recipientName: appointment.clientName,
+        recipientType: 'client',
+        appointmentType,
+        scheduledFor: appointment.scheduledFor!,
+        duration: appointment.duration || 30,
+        preparerName,
+        cancelledBy: canceller as 'client' | 'preparer' | 'admin',
+        reason,
+        rebookUrl,
+      });
+      logger.info('Cancellation email sent to client', { appointmentId: id, clientEmail: appointment.clientEmail });
+    } catch (emailError) {
+      logger.error('Failed to send cancellation email to client', { appointmentId: id, error: emailError });
+    }
+
+    // Send email to preparer
+    if (preparerEmail) {
+      try {
+        await EmailService.sendAppointmentCancelledEmail(preparerEmail, {
+          recipientName: preparerName,
+          recipientType: 'preparer',
+          appointmentType,
+          scheduledFor: appointment.scheduledFor!,
+          duration: appointment.duration || 30,
+          clientName: appointment.clientName,
+          cancelledBy: canceller as 'client' | 'preparer' | 'admin',
+          reason,
+        });
+        logger.info('Cancellation email sent to preparer', { appointmentId: id, preparerEmail });
+      } catch (emailError) {
+        logger.error('Failed to send cancellation email to preparer', { appointmentId: id, error: emailError });
+      }
+    }
 
     // TODO: Remove from external calendars (Google Calendar, Outlook)
     // This will be implemented in Phase 5 with calendar sync
@@ -111,4 +167,15 @@ export async function PATCH(
       { status: 500 }
     );
   }
+}
+
+function formatAppointmentType(type: string): string {
+  const typeLabels: Record<string, string> = {
+    PHONE_CALL: 'Phone Call',
+    VIDEO_CALL: 'Video Call',
+    IN_PERSON: 'In-Person Meeting',
+    TAX_CONSULTATION: 'Tax Consultation',
+    FOLLOW_UP: 'Follow-Up',
+  };
+  return typeLabels[type] || type;
 }

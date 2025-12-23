@@ -181,12 +181,35 @@ export async function POST(req: NextRequest) {
         // Business Rule: Assign lead based on referrer role
         switch (referrerProfile.role) {
           case 'client':
-            // CLIENT refers → Assign to Tax Genius (null = corporate)
-            // TODO: Look up client's assigned preparer via CRMContact or ClientPreparer relation
-            assignedPreparerId = null;
-            logger.info(`Lead from CLIENT referral assigned to Tax Genius corporate`, {
-              referrerId: referrerProfile.id,
-            });
+            // CLIENT refers → Assign to the client's assigned preparer (for commission tracking)
+            // Look up client's assigned preparer via CRMContact relation
+            try {
+              const clientCrmContact = await prisma.cRMContact.findFirst({
+                where: { userId: referrerProfile.userId },
+                select: { assignedPreparerId: true },
+              });
+              if (clientCrmContact?.assignedPreparerId) {
+                assignedPreparerId = clientCrmContact.assignedPreparerId;
+                logger.info(`Lead from CLIENT referral assigned to client's preparer`, {
+                  referrerId: referrerProfile.id,
+                  clientUserId: referrerProfile.userId,
+                  assignedPreparerId: assignedPreparerId,
+                });
+              } else {
+                // Fallback to corporate if client has no assigned preparer
+                assignedPreparerId = null;
+                logger.info(`Lead from CLIENT referral assigned to Tax Genius corporate (no preparer found)`, {
+                  referrerId: referrerProfile.id,
+                });
+              }
+            } catch (lookupError) {
+              // Log error and fallback to corporate
+              logger.error('Failed to look up client preparer assignment', {
+                referrerId: referrerProfile.id,
+                error: lookupError,
+              });
+              assignedPreparerId = null;
+            }
             break;
 
           case 'affiliate':

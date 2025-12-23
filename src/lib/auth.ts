@@ -17,6 +17,7 @@ import bcrypt from 'bcryptjs';
 import { UserRole, ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
+import { FailedLoginService } from '@/lib/services/failed-login.service';
 
 // Extend NextAuth types to include our custom role field
 declare module 'next-auth' {
@@ -100,21 +101,34 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        ipAddress: { label: 'IP Address', type: 'hidden' }, // Passed from signin form
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Missing email or password');
         }
 
+        const email = (credentials.email as string).toLowerCase();
+        const ipAddress = (credentials.ipAddress as string) || 'unknown';
+
+        // Check if account is locked out due to failed attempts
+        const lockStatus = await FailedLoginService.isLocked(email);
+        if (lockStatus.locked) {
+          logger.warn('Login attempt on locked account', { email, ipAddress, lockoutMinutes: lockStatus.lockoutMinutes });
+          throw new Error(`Account temporarily locked. Please try again in ${lockStatus.lockoutMinutes} minutes.`);
+        }
+
         // Find user by email
         const user = await prisma.user.findUnique({
-          where: { email: (credentials.email as string).toLowerCase() },
+          where: { email },
           include: {
             profile: true, // Include profile to get role
           },
         });
 
         if (!user || !user.hashedPassword) {
+          // Record failed attempt - user not found
+          await FailedLoginService.recordFailedAttempt(email, ipAddress, 'User not found');
           throw new Error('Invalid email or password');
         }
 
@@ -125,6 +139,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         );
 
         if (!isValidPassword) {
+          // Record failed attempt - wrong password
+          const failResult = await FailedLoginService.recordFailedAttempt(email, ipAddress, 'Invalid password');
+          if (failResult.locked) {
+            throw new Error(`Account temporarily locked due to too many failed attempts. Please try again in ${failResult.lockoutMinutes} minutes.`);
+          }
           throw new Error('Invalid email or password');
         }
 
@@ -132,6 +151,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (user.profile?.isActive === false) {
           throw new Error('Account suspended');
         }
+
+        // Successful login - clear any failed attempts
+        await FailedLoginService.recordSuccessfulLogin(email, ipAddress);
 
         // Return user with role from profile
         return {

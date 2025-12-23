@@ -12,7 +12,10 @@ import { hashPassword } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { createClientFromPreparerApplication } from '@/lib/services/lead-conversion.service';
+import { EmailService } from '@/lib/services/email.service';
 import { ContactType } from '@prisma/client';
+import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
+import crypto from 'crypto';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -42,6 +45,24 @@ function validatePassword(password: string): { valid: boolean; errors: string[] 
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting: 10 requests per minute per IP
+    const clientIp = getClientIdentifier(req);
+    const rateLimitResult = await authRateLimit.limit(clientIp);
+
+    if (!rateLimitResult.success) {
+      logger.warn('[Signup] Rate limit exceeded', { ip: clientIp });
+      return NextResponse.json(
+        { error: 'Too many signup attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            ...getRateLimitHeaders(rateLimitResult),
+            'Retry-After': Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const { name, email, password } = await req.json();
 
     // Validation - required fields
@@ -278,6 +299,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Send email verification email
+    try {
+      // Generate verification token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Delete any existing tokens for this email
+      await prisma.verificationToken.deleteMany({
+        where: { identifier: email.toLowerCase() },
+      });
+
+      // Store verification token
+      await prisma.verificationToken.create({
+        data: {
+          identifier: email.toLowerCase(),
+          token: verificationToken,
+          expires: tokenExpiry,
+        },
+      });
+
+      // Build verification URL
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
+      const verificationUrl = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+      // Send verification email
+      await EmailService.sendEmailVerificationEmail(email.toLowerCase(), verificationUrl, trimmedName);
+
+      logger.info('[Signup] Verification email sent', { userId: user.id, email: email.toLowerCase() });
+    } catch (verificationError) {
+      // Log but don't block signup - user can request resend from dashboard
+      logger.error('[Signup] Failed to send verification email', {
+        error: verificationError instanceof Error ? verificationError.message : 'Unknown error',
+        userId: user.id,
+      });
+    }
+
     // Return success (without password)
     return NextResponse.json(
       {
@@ -287,6 +344,7 @@ export async function POST(req: NextRequest) {
           name: user.name,
           email: user.email,
         },
+        emailVerificationSent: true,
       },
       { status: 201 }
     );
