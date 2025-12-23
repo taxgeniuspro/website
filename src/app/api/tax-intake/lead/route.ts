@@ -3,9 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { trackJourneyStage } from '@/lib/services/journey-tracking.service';
 import { getUTMCookie } from '@/lib/utils/cookie-manager';
 import { getAttribution, saveTaxIntakeAttribution } from '@/lib/services/attribution.service';
-import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
-import { getEmailRecipients } from '@/config/email-routing';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { addMonths } from 'date-fns';
@@ -14,48 +12,8 @@ import {
   buildReferralLink,
 } from '@/lib/services/client-referral.service';
 import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
-import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
-
-/**
- * Get Owliver Owl's Profile.id as the default preparer assignment.
- * All leads MUST be assigned to a preparer - Owliver is the fallback.
- */
-async function getDefaultPreparerId(): Promise<string | null> {
-  try {
-    const owliver = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { customTrackingCode: 'ow' },
-          { trackingCode: 'ow' },
-          { user: { email: 'taxgenius.tax@gmail.com' } },
-        ],
-        role: { in: ['admin', 'tax_preparer'] },
-      },
-      select: { id: true },
-    });
-
-    if (owliver) {
-      return owliver.id;
-    }
-
-    // Fallback: find any admin with booking enabled
-    const fallbackAdmin = await prisma.profile.findFirst({
-      where: {
-        role: 'admin',
-        bookingEnabled: true,
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-
-    return fallbackAdmin?.id || null;
-  } catch (error) {
-    logger.error('Failed to get default preparer ID', { error });
-    return null;
-  }
-}
 
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
@@ -605,7 +563,7 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
         leadId: lead.id,
         email: email,
         assignedPreparerId: assignedPreparerId,
-        referrerUsername: referrerUsername,
+        referrerUsername: attributionResult.attribution.referrerUsername,
         timestamp: new Date().toISOString(),
       });
       // Note: We silently continue so leads are saved even if CRM creation fails
@@ -613,253 +571,16 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
     }
 
     // ========================================
-    // LANGUAGE-BASED EMAIL ROUTING (using centralized config)
-    // Spanish → Goldenprotaxes@gmail.com (Ale Hamilton) + CC to taxgenius.tax@gmail.com (Owliver Owl)
-    // English → taxgenius.taxes@gmail.com (Ray Hamilton) + CC to taxgenius.tax@gmail.com (Owliver Owl)
+    // EMAIL NOTIFICATION REMOVED
+    // Email is now ONLY sent from /api/tax-intake/submit endpoint
+    // This prevents duplicate emails when users navigate through the form
+    // The /submit endpoint handles the final submission with PDF attachments
     // ========================================
-
-    // Determine primary recipient based on locale
-    const recipients = getEmailRecipients((locale as 'en' | 'es') || 'en');
-    const ccEmail = recipients.cc; // Always CC to Owliver Owl
-
-    logger.info('Language-based email routing', {
-      locale: locale || 'en',
-      primaryRecipient: recipients.primary,
-      ccRecipient: ccEmail,
-      assignedPreparerId: assignedPreparerId || 'None (using language-based routing)',
+    logger.info('Lead saved - email will be sent on final submit via /api/tax-intake/submit', {
+      leadId: lead.id,
+      isCompleteTaxIntake,
+      assignedPreparerId,
     });
-
-    // Send email notification to assigned preparer (if assigned) OR to language-based recipient
-    const emailRecipient = assignedPreparerId || recipients.primary;
-
-    try {
-      // Send comprehensive tax intake email if all tax details are provided
-      if (isCompleteTaxIntake) {
-        // Query for any documents uploaded for this lead (e.g., driver's license)
-        const documentUrls: { driversLicenseUrl?: string; additionalDocUrls?: string[] } = {};
-        try {
-          if (lead.clientFolderId) {
-            const documents = await prisma.document.findMany({
-              where: {
-                folderId: lead.clientFolderId,
-                isDeleted: false,
-              },
-              select: {
-                fileUrl: true,
-                metadata: true,
-                type: true,
-              },
-            });
-
-            // Categorize documents by type
-            for (const doc of documents) {
-              const metadata = doc.metadata as { documentType?: string } | null;
-              if (metadata?.documentType === 'drivers_license' || doc.type === 'OTHER') {
-                // First ID document found becomes driver's license
-                if (!documentUrls.driversLicenseUrl) {
-                  documentUrls.driversLicenseUrl = doc.fileUrl;
-                } else {
-                  // Additional documents
-                  if (!documentUrls.additionalDocUrls) {
-                    documentUrls.additionalDocUrls = [];
-                  }
-                  documentUrls.additionalDocUrls.push(doc.fileUrl);
-                }
-              }
-            }
-
-            logger.info('Found documents for PDF embedding', {
-              leadId: lead.id,
-              folderId: lead.clientFolderId,
-              documentCount: documents.length,
-              hasDriversLicense: !!documentUrls.driversLicenseUrl,
-              additionalDocs: documentUrls.additionalDocUrls?.length || 0,
-            });
-          }
-        } catch (docError) {
-          logger.error('Failed to query documents for PDF', { leadId: lead.id, error: docError });
-          // Continue without documents
-        }
-
-        // Generate professional PDF form for email attachment
-        let pdfAttachment: { filename: string; content: Buffer } | undefined;
-        try {
-          const pdfBuffer = await generateTaxIntakePDF({
-            id: lead.id,
-            first_name,
-            middle_name,
-            last_name,
-            email,
-            phone,
-            country_code,
-            address_line_1,
-            address_line_2,
-            city,
-            state,
-            zip_code,
-            // Identity Information
-            date_of_birth,
-            ssn,
-            // Tax Filing Information
-            filing_status,
-            employment_type,
-            occupation,
-            claimed_as_dependent,
-            in_college,
-            // Dependents
-            has_dependents,
-            number_of_dependents,
-            dependents_under_24_student_or_disabled,
-            dependents_in_college,
-            child_care_provider,
-            // Property & Tax Credits
-            has_mortgage,
-            denied_eitc,
-            // IRS & Refund
-            has_irs_pin,
-            irs_pin,
-            wants_refund_advance,
-            // Identification Documents
-            drivers_license,
-            license_expiration,
-            // Attribution
-            referrerUsername: attributionResult.attribution.referrerUsername,
-            referrerType: attributionResult.attribution.referrerType,
-            tax_year,
-            created_at: lead.created_at,
-            // Include document URLs for PDF embedding
-            drivers_license_url: documentUrls.driversLicenseUrl,
-            additional_document_urls: documentUrls.additionalDocUrls,
-          });
-          pdfAttachment = {
-            filename: `TaxIntake_${last_name}_${lead.id.slice(-6).toUpperCase()}.pdf`,
-            content: pdfBuffer,
-          };
-          logger.info('PDF form generated for tax intake', {
-            leadId: lead.id,
-            filename: pdfAttachment.filename,
-            size: pdfBuffer.length,
-          });
-        } catch (pdfError) {
-          // Log error but don't fail - email will be sent without attachment
-          logger.error('Failed to generate PDF form for tax intake', {
-            leadId: lead.id,
-            error: pdfError,
-          });
-        }
-
-        // Fetch image attachments if driver's license URL exists
-        let imageAttachments: Array<{ filename: string; content: Buffer }> | undefined;
-        if (documentUrls.driversLicenseUrl) {
-          try {
-            const response = await fetch(documentUrls.driversLicenseUrl);
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer();
-              const buffer = Buffer.from(arrayBuffer);
-              const contentType = response.headers.get('content-type') || 'image/jpeg';
-              const ext = contentType.includes('png') ? 'png' : contentType.includes('pdf') ? 'pdf' : 'jpg';
-              imageAttachments = [{
-                filename: `DriversLicense_${last_name}.${ext}`,
-                content: buffer,
-              }];
-              logger.info('Driver license image fetched for email attachment', {
-                leadId: lead.id,
-                size: buffer.length,
-              });
-            }
-          } catch (imgFetchError) {
-            logger.error('Failed to fetch driver license for email attachment', {
-              leadId: lead.id,
-              error: imgFetchError,
-            });
-            // Continue without image attachment
-          }
-        }
-
-        await EmailService.sendTaxIntakeCompleteEmail(emailRecipient, {
-          leadId: lead.id,
-          // Personal Information
-          firstName: first_name,
-          middleName: middle_name,
-          lastName: last_name,
-          email: email,
-          phone: phone,
-          countryCode: country_code || '+1',
-          dateOfBirth: date_of_birth,
-          ssn: ssn,
-          // Address
-          addressLine1: address_line_1,
-          addressLine2: address_line_2,
-          city: city,
-          state: state,
-          zipCode: zip_code,
-          // Tax Filing Details
-          filingStatus: filing_status,
-          employmentType: employment_type,
-          occupation: occupation,
-          claimedAsDependent: claimed_as_dependent,
-          // Education
-          inCollege: in_college,
-          // Dependents
-          hasDependents: has_dependents,
-          numberOfDependents: number_of_dependents,
-          dependentsUnder24StudentOrDisabled: dependents_under_24_student_or_disabled,
-          dependentsInCollege: dependents_in_college,
-          childCareProvider: child_care_provider,
-          // Property
-          hasMortgage: has_mortgage,
-          // Tax Credits
-          deniedEitc: denied_eitc,
-          // IRS Information
-          hasIrsPin: has_irs_pin,
-          irsPin: irs_pin,
-          // Refund Preferences
-          wantsRefundAdvance: wants_refund_advance,
-          // Identification
-          driversLicense: drivers_license,
-          licenseExpiration: license_expiration,
-          licenseFileUrl: documentUrls.driversLicenseUrl,
-          // Attribution
-          source: attributionResult.attribution.attributionMethod || 'direct',
-          referrerUsername: attributionResult.attribution.referrerUsername,
-          referrerType: attributionResult.attribution.referrerType,
-          attributionMethod: attributionResult.attribution.attributionMethod,
-        }, ccEmail, (locale as 'en' | 'es') || 'en', pdfAttachment, imageAttachments);
-        logger.info('Comprehensive tax intake email sent with attachments', {
-          leadId: lead.id,
-          recipient: emailRecipient,
-          cc: ccEmail,
-          locale: locale || 'en',
-          hasPdfAttachment: !!pdfAttachment,
-          hasImageAttachments: !!imageAttachments && imageAttachments.length > 0,
-        });
-      } else {
-        // PARTIAL SAVE: Don't send email notification for incomplete submissions
-        // Users only want to be notified when the full form with all data is submitted
-        // This prevents confusing "New Lead" emails with only name/phone
-        logger.info('Partial tax intake saved - no email sent (waiting for full submission)', {
-          leadId: lead.id,
-          hasSSN: !!ssn,
-          hasDOB: !!date_of_birth,
-          hasFilingStatus: !!filing_status,
-          savedFields: {
-            first_name: !!first_name,
-            last_name: !!last_name,
-            email: !!email,
-            phone: !!phone,
-            address: !!address_line_1,
-          },
-        });
-      }
-    } catch (emailError) {
-      // Log error but don't fail the request
-      logger.error('Failed to send email notification', {
-        error: emailError,
-        leadId: lead.id,
-        recipient: emailRecipient,
-        isCompleteTaxIntake,
-      });
-    }
 
     // Track journey stage: INTAKE_COMPLETED (Epic 6)
     const attribution = await getUTMCookie();

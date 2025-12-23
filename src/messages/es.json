@@ -1699,8 +1699,17 @@
       "pleaseWait": "Por favor espere mientras cerramos su sesión"
     },
     "verify": {
-      "title": "Verificación de Correo Electrónico",
-      "description": "La verificación de correo electrónico ahora se maneja automáticamente por nuestro proveedor de autenticación",
+      "title": "Revisa tu correo electrónico",
+      "description": "Se ha enviado un enlace de inicio de sesión a tu dirección de correo electrónico.",
+      "clickLink": "Haz clic en el enlace del correo electrónico para iniciar sesión en tu cuenta. El enlace expirará en 24 horas.",
+      "tips": {
+        "title": "¿No recibiste el correo electrónico?",
+        "checkSpam": "Revisa tu carpeta de spam o correo no deseado",
+        "checkTypo": "Asegúrate de haber ingresado la dirección de correo electrónico correcta",
+        "wait": "Espera unos minutos para que llegue el correo electrónico"
+      },
+      "backToSignIn": "Volver a Iniciar Sesión",
+      "footer": "Este enlace fue enviado desde un servidor seguro de Tax Genius Pro.",
       "alertMessage": "Cuando se registre, recibirá un correo electrónico de verificación automáticamente. Haga clic en el enlace de ese correo electrónico para verificar su cuenta.",
       "signUpButton": "Registrarse",
       "signInButton": "¿Ya tiene una cuenta? Iniciar Sesión"

@@ -1700,8 +1700,17 @@
       "pleaseWait": "Please wait while we sign you out"
     },
     "verify": {
-      "title": "Email Verification",
-      "description": "Email verification is now handled automatically by our authentication provider",
+      "title": "Check your email",
+      "description": "A sign-in link has been sent to your email address.",
+      "clickLink": "Click the link in the email to sign in to your account. The link will expire in 24 hours.",
+      "tips": {
+        "title": "Didn't receive the email?",
+        "checkSpam": "Check your spam or junk folder",
+        "checkTypo": "Make sure you entered the correct email address",
+        "wait": "Wait a few minutes for the email to arrive"
+      },
+      "backToSignIn": "Back to Sign In",
+      "footer": "This link was sent from a secure Tax Genius Pro server.",
       "alertMessage": "When you sign up, you'll receive a verification email automatically. Click the link in that email to verify your account.",
       "signUpButton": "Sign Up",
       "signInButton": "Already have an account? Sign In"
