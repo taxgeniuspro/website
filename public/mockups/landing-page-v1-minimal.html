@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tax Genius Pro - Minimal Landing Page Mockup (V1)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /*
+     * TAX GENIUS PRO - Minimal Landing Page Mockup (Version 1)
+     * Based on: https://taxgeniuspro.tax/en/cash-advance style
+     * Reference: audit-notes/systems/tax-preparer-system.md
+     *
+     * Brand Colors:
+     * - Primary (Yellow): #f9d938
+     * - Secondary (Green): #408851
+     * - Background Light: #f2f7ff
+     * - Foreground: #30394b
+     * - Card: #f7f8f8
+     * - Border: #e1eaef
+     */
+
+    :root {
+      --primary: #f9d938;
+      --primary-foreground: #30394b;
+      --secondary: #408851;
+      --secondary-foreground: #ffffff;
+      --background: #f2f7ff;
+      --foreground: #30394b;
+      --card: #f7f8f8;
+      --muted: #e5e5e6;
+      --muted-foreground: #6b7280;
+      --border: #e1eaef;
+      --accent: #e3ecf6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Open Sans', sans-serif;
+      color: var(--foreground);
+      background: var(--background);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* HEADER */
+    header {
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+
+    .logo-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+
+    .logo-img {
+      height: 55px;
+      width: auto;
+    }
+
+    /* REFERRAL BANNER */
+    .referral-banner {
+      max-width: 400px;
+      margin: 0 auto;
+      background: white;
+      border: 2px solid var(--secondary);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .referral-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--secondary);
+    }
+
+    .referral-text {
+      flex: 1;
+    }
+
+    .referral-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+      letter-spacing: 0.05em;
+    }
+
+    .referral-name {
+      font-weight: 600;
+      color: var(--foreground);
+      font-size: 0.9rem;
+    }
+
+    /* HERO */
+    .hero {
+      padding: 2rem 1rem 3rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(64,136,81,0.15) 0%, transparent 70%);
+      z-index: -1;
+    }
+
+    .urgency-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--secondary);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 12px rgba(64,136,81,0.3);
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 800;
+      color: var(--foreground);
+      line-height: 1.1;
+      margin-bottom: 0.5rem;
+    }
+
+    .hero-amount {
+      font-size: clamp(4rem, 12vw, 8rem);
+      font-weight: 900;
+      color: var(--secondary);
+      line-height: 1;
+      position: relative;
+      display: inline-block;
+    }
+
+    .hero-amount-badge {
+      position: absolute;
+      top: -8px;
+      right: -30px;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.25rem 0.5rem;
+      border-radius: 20px;
+      transform: rotate(12deg);
+    }
+
+    .hero-sub {
+      font-size: 1.1rem;
+      color: var(--muted-foreground);
+      max-width: 500px;
+      margin: 1.5rem auto;
+    }
+
+    .hero-sub strong {
+      color: var(--foreground);
+    }
+
+    /* BENEFITS */
+    .benefits {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+
+    .benefit {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: white;
+      padding: 0.6rem 1rem;
+      border-radius: 50px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
+    }
+
+    .benefit svg {
+      width: 18px;
+      height: 18px;
+      color: var(--secondary);
+    }
+
+    /* CTA BUTTON */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1rem 2.5rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      border-radius: 50px;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--secondary);
+      color: white;
+      box-shadow: 0 8px 24px rgba(64,136,81,0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(64,136,81,0.45);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--secondary);
+      border: 2px solid var(--secondary);
+    }
+
+    .btn-secondary:hover {
+      background: var(--accent);
+    }
+
+    .ctas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      margin: 2rem 0;
+    }
+
+    .trust-note {
+      font-size: 0.8rem;
+      color: var(--muted-foreground);
+      margin-top: 1rem;
+    }
+
+    /* FORM SECTION */
+    .form-section {
+      padding: 3rem 1rem;
+      background: linear-gradient(180deg, rgba(64,136,81,0.05) 0%, var(--background) 100%);
+    }
+
+    .form-card {
+      max-width: 480px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+      border: 2px solid rgba(64,136,81,0.2);
+    }
+
+    .form-header {
+      background: linear-gradient(135deg, var(--secondary) 0%, #357346 100%);
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .form-header h2 {
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+
+    .form-header p {
+      color: rgba(255,255,255,0.85);
+      font-size: 0.9rem;
+    }
+
+    .form-body {
+      padding: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 0.4rem;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      font-size: 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: var(--background);
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--secondary);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .form-submit {
+      margin-top: 1.5rem;
+    }
+
+    .form-submit .btn {
+      width: 100%;
+      padding: 1.1rem;
+      font-size: 1.1rem;
+    }
+
+    .form-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      margin-top: 1rem;
+    }
+
+    /* STEPS */
+    .steps {
+      padding: 3rem 1rem;
+    }
+
+    .steps h2 {
+      text-align: center;
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .step {
+      text-align: center;
+      padding: 1.5rem 1rem;
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      background: var(--secondary);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 auto 1rem;
+    }
+
+    .step h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .step p {
+      font-size: 0.85rem;
+      color: var(--muted-foreground);
+    }
+
+    /* FINAL CTA */
+    .final-cta {
+      padding: 3rem 1rem;
+      background: var(--secondary);
+      text-align: center;
+    }
+
+    .final-cta h2 {
+      color: white;
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+    }
+
+    .final-cta .btn-primary {
+      background: white;
+      color: var(--secondary);
+    }
+
+    .final-cta .btn-primary:hover {
+      box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+    }
+
+    /* FOOTER */
+    footer {
+      padding: 2rem 1rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .disclaimer {
+      max-width: 700px;
+      margin: 0 auto 1rem;
+      font-size: 0.7rem;
+      color: var(--muted-foreground);
+      line-height: 1.6;
+    }
+
+    .footer-brand {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 0.25rem;
+    }
+
+    .footer-copy {
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+    }
+
+    /* SVG Icons */
+    .icon-check {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-container">
+      <!-- Tax Genius Pro Logo -->
+      <img src="/images/logo-light-theme.png" alt="Tax Genius Pro" class="logo-img">
+    </div>
+
+    <!-- Referral Banner with Owliver -->
+    <div class="referral-banner">
+      <img
+        src="https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg"
+        alt="Owliver Owl"
+        class="referral-avatar"
+      >
+      <div class="referral-text">
+        <div class="referral-label">Your Tax Professional</div>
+        <div class="referral-name">Owliver Owl</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <span class="urgency-badge">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      LIMITED TIME - PRESEASON 2025
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    </span>
+
+    <h1>Get Up To</h1>
+    <div class="hero-amount">
+      $7,000
+      <span class="hero-amount-badge">TAX ADVANCE*</span>
+    </div>
+
+    <p class="hero-sub">
+      Available starting <strong>January 2</strong> - Fast approval* - File in-person or remotely
+    </p>
+
+    <div class="benefits">
+      <div class="benefit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        No Credit Check
+      </div>
+      <div class="benefit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Same-Day Funding*
+      </div>
+      <div class="benefit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        0% APR
+      </div>
+    </div>
+
+    <div class="ctas">
+      <a href="#form" class="btn btn-primary">
+        CHECK MY ELIGIBILITY
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </div>
+
+    <p class="trust-note">Secure & Confidential - Takes only 60 seconds</p>
+  </section>
+
+  <!-- FORM -->
+  <section class="form-section" id="form">
+    <div class="form-card">
+      <div class="form-header">
+        <h2>Get Your Cash Advance</h2>
+        <p>Fill out the form - We call you same day</p>
+      </div>
+      <div class="form-body">
+        <form>
+          <div class="form-row">
+            <div class="form-group">
+              <label>First Name *</label>
+              <input type="text" placeholder="John">
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input type="text" placeholder="Smith">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Phone Number *</label>
+            <input type="tel" placeholder="(555) 123-4567">
+          </div>
+
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" placeholder="you@email.com">
+          </div>
+
+          <div class="form-group">
+            <label>Zip Code *</label>
+            <input type="text" placeholder="30315" maxlength="5">
+          </div>
+
+          <div class="form-submit">
+            <button type="submit" class="btn btn-primary">
+              GET MY CASH ADVANCE
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+
+          <p class="form-note">Your information is secure and will never be shared</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEPS -->
+  <section class="steps">
+    <h2>What Happens Next</h2>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>We Contact You</h4>
+        <p>Same-day call or text</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>Submit Documents</h4>
+        <p>W-2, ID, SSN card, bank info</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>We E-File</h4>
+        <p>Accurate professional filing</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h4>Get Your Money</h4>
+        <p>Advance or refund</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final-cta">
+    <h2>Ready to Get Your Advance?</h2>
+    <a href="#form" class="btn btn-primary">
+      CHECK MY ELIGIBILITY NOW
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </a>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <p class="disclaimer">
+      *Advance amounts based on eligibility, IRS acceptance, and bank approval. Not all applicants qualify for the maximum amount. Funding timing varies by bank. 0% APR and $0 loan fees. Tax preparation fees apply.
+    </p>
+    <div class="footer-brand">Tax Genius Pro</div>
+    <div class="footer-copy">&copy; 2025 All rights reserved.</div>
+  </footer>
+
+</body>
+</html>

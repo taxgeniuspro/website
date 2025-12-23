@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tax Genius Pro - Full Landing Page Mockup (V2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    /*
+     * TAX GENIUS PRO - Full Landing Page Mockup (Version 2)
+     * Complete implementation with all sections
+     * Reference: audit-notes/systems/tax-preparer-system.md
+     *
+     * Brand Colors (from globals.css):
+     * - Primary (Yellow): #f9d938
+     * - Secondary (Green): #408851
+     * - Background Light: #f2f7ff
+     * - Foreground: #30394b
+     * - Card: #f7f8f8
+     * - Border: #e1eaef
+     * - Muted: #e5e5e6
+     * - Accent: #e3ecf6
+     *
+     * Tax Preparer System Reference:
+     * - Owliver Owl (default mascot): tracking code "ow"
+     * - All preparers have: avatarUrl, trackingCode, shortLinkUsername
+     * - Marketing links: {code}-lead, {code}-intake, {code}-appt
+     * - QR codes with preparer photo in center
+     */
+
+    :root {
+      --primary: #f9d938;
+      --primary-foreground: #30394b;
+      --primary-hover: #e8c82a;
+      --secondary: #408851;
+      --secondary-light: #5a9968;
+      --secondary-dark: #357346;
+      --secondary-foreground: #ffffff;
+      --background: #f2f7ff;
+      --background-alt: #f7f8f8;
+      --foreground: #30394b;
+      --card: #ffffff;
+      --card-alt: #f7f8f8;
+      --muted: #e5e5e6;
+      --muted-foreground: #6b7280;
+      --accent: #e3ecf6;
+      --border: #e1eaef;
+      --border-strong: rgba(64,136,81,0.3);
+      --shadow-color: rgba(48,57,75,0.1);
+      --gradient-hero: linear-gradient(165deg, #2d6940 0%, #408851 50%, #5a9968 100%);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Open Sans', sans-serif;
+      color: var(--foreground);
+      background: var(--background);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: 'Playfair Display', serif;
+      line-height: 1.2;
+    }
+
+    /* ========================================
+       HERO SECTION
+       ======================================== */
+    .hero {
+      background: var(--gradient-hero);
+      padding: 2rem 1.5rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 80%, rgba(249, 217, 56, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.08) 0%, transparent 40%);
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-img {
+      height: 48px;
+      width: auto;
+    }
+
+    .logo-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    .logo-text span { color: var(--primary); }
+
+    .badges {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .badge {
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(10px);
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: white;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .hero-content {
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Owliver Contact Card */
+    .preparer-card {
+      max-width: 380px;
+      margin: 0 auto 2rem;
+      background: rgba(255,255,255,0.95);
+      border-radius: 16px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      border: 2px solid rgba(249,217,56,0.5);
+    }
+
+    .preparer-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid var(--primary);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .preparer-info {
+      flex: 1;
+      text-align: left;
+    }
+
+    .preparer-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted-foreground);
+      margin-bottom: 0.15rem;
+    }
+
+    .preparer-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--foreground);
+      margin-bottom: 0.25rem;
+    }
+
+    .preparer-title {
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      margin-bottom: 0.5rem;
+    }
+
+    .preparer-phone {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--secondary);
+      color: white;
+      padding: 0.4rem 0.75rem;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .preparer-phone:hover {
+      background: var(--secondary-dark);
+      transform: scale(1.02);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 600;
+      color: white;
+      line-height: 1.15;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--primary);
+    }
+
+    .hero-sub {
+      font-size: 1.15rem;
+      color: rgba(255,255,255,0.9);
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+
+    .bullets {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .bullet {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: rgba(255,255,255,0.95);
+      font-size: 0.95rem;
+    }
+
+    .bullet svg {
+      width: 18px;
+      height: 18px;
+      color: var(--primary);
+    }
+
+    .ctas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 8px;
+      text-decoration: none;
+      min-width: 240px;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(249,217,56,0.4);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: white;
+      border: 2px solid rgba(255,255,255,0.4);
+    }
+
+    .btn-secondary:hover {
+      border-color: white;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .hero-note {
+      margin-top: 1.5rem;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.7);
+    }
+
+    /* ========================================
+       PATHS SECTION
+       ======================================== */
+    .paths {
+      padding: 5rem 1.5rem;
+      background: var(--card-alt);
+    }
+
+    .paths-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .section-header h2 {
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+      font-weight: 600;
+      color: var(--secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-header p {
+      color: var(--muted-foreground);
+      font-size: 1.1rem;
+    }
+
+    .paths-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+    }
+
+    .path-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 2.5rem;
+      position: relative;
+      border: 2px solid transparent;
+      box-shadow: 0 4px 24px var(--shadow-color);
+      transition: all 0.3s;
+    }
+
+    .path-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(48,57,75,0.15);
+    }
+
+    .path-card.featured {
+      border-color: var(--primary);
+    }
+
+    .path-card.featured::before {
+      content: 'MOST POPULAR';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: var(--primary-foreground);
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.35rem 1rem;
+      border-radius: 20px;
+    }
+
+    .path-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .featured .path-icon {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+    }
+
+    .path-card:not(.featured) .path-icon {
+      background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-light) 100%);
+    }
+
+    .path-icon svg {
+      width: 28px;
+      height: 28px;
+      color: white;
+    }
+
+    .path-card h3 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .path-card p {
+      color: var(--muted-foreground);
+      margin-bottom: 1.5rem;
+    }
+
+    .path-card .btn { width: 100%; }
+
+    /* ========================================
+       FORM SECTION
+       ======================================== */
+    .form-section {
+      padding: 5rem 1.5rem;
+      background: var(--card);
+    }
+
+    .form-container {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .form-box {
+      background: var(--card-alt);
+      border-radius: 20px;
+      padding: 2.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .form-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .form-header h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .form-header p {
+      color: var(--muted-foreground);
+      font-size: 0.95rem;
+    }
+
+    .toggle-label {
+      display: block;
+      font-weight: 600;
+      color: var(--foreground);
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .toggle-options {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .toggle-option {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-option:hover {
+      border-color: var(--secondary);
+    }
+
+    .toggle-option.active {
+      border-color: var(--secondary);
+      background: var(--secondary);
+      color: white;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .input-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    .input-group input {
+      padding: 0.9rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+      background: var(--card);
+      transition: border-color 0.2s;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--secondary);
+    }
+
+    .form-submit { margin-top: 1.5rem; }
+    .form-submit .btn { width: 100%; padding: 1.1rem 2rem; }
+
+    .form-note {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--muted-foreground);
+    }
+
+    /* ========================================
+       STEPS SECTION
+       ======================================== */
+    .steps {
+      padding: 5rem 1.5rem;
+      background: var(--secondary);
+      position: relative;
+    }
+
+    .steps::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 80% 50%, rgba(249,217,56,0.1) 0%, transparent 50%);
+    }
+
+    .steps-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .steps .section-header h2 { color: white; }
+    .steps .section-header p { color: rgba(255,255,255,0.7); }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .step {
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 auto 1rem;
+    }
+
+    .step h4 {
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .step p {
+      color: rgba(255,255,255,0.7);
+      font-size: 0.9rem;
+    }
+
+    .step-note {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 1rem 1.5rem;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.85);
+      font-size: 0.95rem;
+      margin-top: 1rem;
+    }
+
+    /* ========================================
+       FAQ SECTION
+       ======================================== */
+    .faq {
+      padding: 5rem 1.5rem;
+      background: var(--card-alt);
+    }
+
+    .faq-inner {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .faq-item {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .faq-item h4 {
+      font-family: 'Open Sans', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .faq-item p {
+      color: var(--muted-foreground);
+      font-size: 0.95rem;
+    }
+
+    /* ========================================
+       TESTIMONIALS
+       ======================================== */
+    .testimonials {
+      padding: 5rem 1.5rem;
+      background: var(--card);
+    }
+
+    .testimonials-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .testimonial {
+      background: var(--card-alt);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .testimonial-stars {
+      display: flex;
+      gap: 0.2rem;
+      margin-bottom: 1rem;
+    }
+
+    .testimonial-stars span {
+      color: var(--primary);
+      font-size: 1.1rem;
+    }
+
+    .testimonial-quote {
+      font-style: italic;
+      color: var(--muted-foreground);
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+
+    .testimonial-name {
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    /* ========================================
+       BOTTOM CTA
+       ======================================== */
+    .bottom-cta {
+      padding: 5rem 1.5rem;
+      background: var(--gradient-hero);
+      text-align: center;
+    }
+
+    .bottom-cta h2 {
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+      color: white;
+      margin-bottom: 2rem;
+    }
+
+    /* ========================================
+       FOOTER
+       ======================================== */
+    footer {
+      padding: 3rem 1.5rem;
+      background: var(--foreground);
+      text-align: center;
+    }
+
+    .disclaimer {
+      max-width: 800px;
+      margin: 0 auto 2rem;
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.8;
+    }
+
+    .footer-logo {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .footer-logo img {
+      height: 40px;
+      width: auto;
+      opacity: 0.9;
+    }
+
+    .footer-brand {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: rgba(255,255,255,0.8);
+      margin-bottom: 0.5rem;
+    }
+
+    .footer-copy {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* ========================================
+       RESPONSIVE
+       ======================================== */
+    @media (max-width: 768px) {
+      .badges { display: none; }
+
+      .preparer-card {
+        flex-direction: column;
+        text-align: center;
+        padding: 1.25rem;
+      }
+
+      .preparer-info { text-align: center; }
+
+      .form-row { grid-template-columns: 1fr; }
+
+      .toggle-options { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========================================
+       HERO SECTION
+       ======================================== -->
+  <section class="hero">
+    <nav>
+      <div class="logo-container">
+        <!-- Tax Genius Pro Logo -->
+        <img src="/images/logo-dark-theme.png" alt="Tax Genius Pro" class="logo-img">
+      </div>
+      <div class="badges">
+        <span class="badge">IRS Authorized</span>
+        <span class="badge">BBB A+</span>
+      </div>
+    </nav>
+
+    <div class="hero-content">
+      <!-- Owliver Contact Card -->
+      <div class="preparer-card">
+        <img
+          src="https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg"
+          alt="Owliver Owl - Tax Genius Pro Mascot"
+          class="preparer-avatar"
+        >
+        <div class="preparer-info">
+          <div class="preparer-label">Your Tax Professional</div>
+          <div class="preparer-name">Owliver Owl</div>
+          <div class="preparer-title">Tax Genius Pro Mascot</div>
+          <a href="tel:+14046271015" class="preparer-phone">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            (404) 627-1015
+          </a>
+        </div>
+      </div>
+
+      <h1>Need cash now - or just want your taxes <em>done right?</em></h1>
+      <p class="hero-sub">File with Tax Genius Pro in-person or remotely. If you want it, we'll help you check eligibility for a tax advance up to $7,000*. If you don't, we'll still file your return quickly and professionally.</p>
+
+      <div class="bullets">
+        <div class="bullet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          <span>No credit check required*</span>
+        </div>
+        <div class="bullet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          <span>Same-day or next business day funding*</span>
+        </div>
+        <div class="bullet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          <span>Serving clients since 1999</span>
+        </div>
+      </div>
+
+      <div class="ctas">
+        <a href="#form" class="btn btn-primary">Check Advance Eligibility</a>
+        <a href="#form" class="btn btn-secondary">File My Taxes (No Advance)</a>
+      </div>
+
+      <p class="hero-note">Tax advances available starting January 2. Filing options: in-person or remote.</p>
+    </div>
+  </section>
+
+  <!-- ========================================
+       CHOOSE PATH SECTION
+       ======================================== -->
+  <section class="paths">
+    <div class="paths-inner">
+      <div class="section-header">
+        <h2>Pick what you need - we've got you either way.</h2>
+        <p>Two ways to work with us. Same professional service.</p>
+      </div>
+
+      <div class="paths-grid">
+        <div class="path-card featured">
+          <div class="path-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          </div>
+          <h3>I want a tax advance</h3>
+          <p>Get considered for an advance of up to $7,000*. We'll confirm your docs, prepare your return, e-file, and if you're approved you can get funds fast.*</p>
+          <a href="#form" class="btn btn-primary">Check My Eligibility</a>
+        </div>
+
+        <div class="path-card">
+          <div class="path-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          </div>
+          <h3>I don't need an advance</h3>
+          <p>Just want a pro to file it right and help you avoid mistakes? We'll prepare and e-file your return with a smooth process - no pressure, no confusion.</p>
+          <a href="#form" class="btn btn-primary">File My Return</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================
+       FORM SECTION
+       ======================================== -->
+  <section class="form-section" id="form">
+    <div class="form-container">
+      <div class="form-box">
+        <div class="form-header">
+          <h2>Get Started in 60 Seconds</h2>
+          <p>Tell us how you want to file and whether you're interested in an advance.</p>
+        </div>
+
+        <form>
+          <label class="toggle-label">Are you interested in a tax advance?</label>
+          <div class="toggle-options">
+            <div class="toggle-option active">Yes</div>
+            <div class="toggle-option">No</div>
+            <div class="toggle-option">Not sure</div>
+          </div>
+
+          <div class="form-row">
+            <div class="input-group">
+              <label>First Name</label>
+              <input type="text" placeholder="John">
+            </div>
+            <div class="input-group">
+              <label>Last Name</label>
+              <input type="text" placeholder="Smith">
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label>Phone Number</label>
+            <input type="tel" placeholder="(555) 123-4567">
+          </div>
+
+          <div class="input-group">
+            <label>Email Address</label>
+            <input type="email" placeholder="john@email.com">
+          </div>
+
+          <div class="form-submit">
+            <button type="submit" class="btn btn-primary">Get Started Now</button>
+          </div>
+
+          <p class="form-note">We'll contact you same day by call or text to confirm the next steps.</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================
+       STEPS SECTION
+       ======================================== -->
+  <section class="steps">
+    <div class="steps-inner">
+      <div class="section-header">
+        <h2>What Happens Next</h2>
+        <p>A simple 4-step process to get your taxes filed.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h4>We Contact You</h4>
+          <p>Same-day call or text to answer questions</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h4>Submit Documents</h4>
+          <p>W-2, ID, SSN card, and bank info</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h4>We Prepare & E-File</h4>
+          <p>Our pros file your return accurately</p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h4>Get Your Money</h4>
+          <p>Advance funds or IRS refund</p>
+        </div>
+        <div class="step-note">Not approved for an advance? No worries - we still file your return as normal.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================
+       TESTIMONIALS
+       ======================================== -->
+  <section class="testimonials">
+    <div class="testimonials-inner">
+      <div class="section-header">
+        <h2>What Clients Say</h2>
+      </div>
+
+      <div class="testimonials-grid">
+        <div class="testimonial">
+          <div class="testimonial-stars">
+            <span>*</span><span>*</span><span>*</span><span>*</span><span>*</span>
+          </div>
+          <p class="testimonial-quote">"I had the money on my card by the time I got home. So easy!"</p>
+          <p class="testimonial-name">- Donna</p>
+        </div>
+
+        <div class="testimonial">
+          <div class="testimonial-stars">
+            <span>*</span><span>*</span><span>*</span><span>*</span><span>*</span>
+          </div>
+          <p class="testimonial-quote">"Fast and simple. Love that there are no fees."</p>
+          <p class="testimonial-name">- Marcus T.</p>
+        </div>
+
+        <div class="testimonial">
+          <div class="testimonial-stars">
+            <span>*</span><span>*</span><span>*</span><span>*</span><span>*</span>
+          </div>
+          <p class="testimonial-quote">"Got a jumpstart on the new year. Paid my bills early!"</p>
+          <p class="testimonial-name">- Vernisha A.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================
+       FAQ SECTION
+       ======================================== -->
+  <section class="faq">
+    <div class="faq-inner">
+      <div class="section-header">
+        <h2>Common Questions</h2>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <h4>Do I have to get an advance to file with you?</h4>
+          <p>No. You can file with Tax Genius Pro with or without an advance.</p>
+        </div>
+        <div class="faq-item">
+          <h4>How does the up to $7,000 advance work?</h4>
+          <p>If you choose it, we apply after preparing your return. If approved, you can receive a portion of your expected refund early.</p>
+        </div>
+        <div class="faq-item">
+          <h4>When is it available?</h4>
+          <p>Funds are available starting January 2 (timing depends on eligibility and bank processing).</p>
+        </div>
+        <div class="faq-item">
+          <h4>What do I need to get started?</h4>
+          <p>W-2s/1099s, valid ID, Social Security card, and bank account info for direct deposit.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================
+       BOTTOM CTA
+       ======================================== -->
+  <section class="bottom-cta">
+    <h2>Ready to get started?</h2>
+    <div class="ctas">
+      <a href="#form" class="btn btn-primary">Check Advance Eligibility</a>
+      <a href="#form" class="btn btn-secondary">File My Taxes (No Advance)</a>
+    </div>
+  </section>
+
+  <!-- ========================================
+       FOOTER
+       ======================================== -->
+  <footer>
+    <p class="disclaimer">*Advance amounts based on eligibility, IRS acceptance, and bank approval. Not all applicants qualify for the maximum amount. Funding timing varies by bank. 0% APR and $0 loan fees. Tax preparation fees apply.</p>
+    <div class="footer-logo">
+      <img src="/images/logo-dark-theme.png" alt="Tax Genius Pro">
+    </div>
+    <div class="footer-brand">Tax Genius Pro</div>
+    <div class="footer-copy">&copy; 2025 All rights reserved.</div>
+  </footer>
+
+  <!--
+    ========================================
+    TAX PREPARER SYSTEM REFERENCE
+    ========================================
+
+    This mockup integrates with the Tax Genius Pro Tax Preparer System:
+
+    OWLIVER OWL (Default Mascot):
+    - Tracking Code: "ow"
+    - Avatar: https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg
+    - Email: taxgenius.tax@gmail.com
+    - Phone: (404) 627-1015
+
+    SHORT LINKS (per preparer):
+    - Lead capture: /go/{code}-lead -> /contact?ref={code}
+    - Intake form: /go/{code}-intake -> /start-filing/form?ref={code}
+    - Appointment: /go/{code}-appt -> /book?preparer={id}
+
+    QR CODES:
+    - Generated with preparer's photo in center
+    - High error correction (H level)
+    - Stored as base64 in qrCodeImageUrl field
+
+    For full documentation, see:
+    audit-notes/systems/tax-preparer-system.md
+    ========================================
+  -->
+
+</body>
+</html>
