@@ -8,6 +8,45 @@ import { getEmailRecipients } from '@/config/email-routing';
 import { generateCashAdvancePDF } from '@/lib/services/pdf-form-generator.service';
 
 /**
+ * Get Owliver Owl's Profile.id as the default preparer assignment.
+ * All leads MUST be assigned to a preparer - Owliver is the fallback.
+ */
+async function getDefaultPreparerId(): Promise<string | null> {
+  try {
+    const owliver = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { customTrackingCode: 'ow' },
+          { trackingCode: 'ow' },
+          { user: { email: 'taxgenius.tax@gmail.com' } },
+        ],
+        role: { in: ['admin', 'tax_preparer'] },
+      },
+      select: { id: true },
+    });
+
+    if (owliver) {
+      return owliver.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const fallbackAdmin = await prisma.profile.findFirst({
+      where: {
+        role: 'admin',
+        bookingEnabled: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return fallbackAdmin?.id || null;
+  } catch (error) {
+    logger.error('Failed to get default preparer ID', { error });
+    return null;
+  }
+}
+
+/**
  * POST /api/cash-advance/submit - Handle preseason cash advance lead form submissions
  *
  * This endpoint:
@@ -128,8 +167,39 @@ export async function POST(req: NextRequest) {
           profileId: preparerProfile.id,
         });
       } else {
-        logger.warn('Cash advance form ref parameter did not match any preparer', { ref });
+        // Ref didn't match a tax_preparer - check if it's an affiliate/admin
+        const anyProfile = await prisma.profile.findFirst({
+          where: {
+            OR: [
+              { trackingCode: ref },
+              { customTrackingCode: ref },
+              { shortLinkUsername: ref },
+            ],
+          },
+          select: { id: true, role: true },
+        });
+
+        if (anyProfile?.role === 'admin') {
+          assignedPreparerId = anyProfile.id;
+          logger.info('Cash advance lead attributed to admin', { ref, preparerId: assignedPreparerId });
+        } else {
+          // Affiliate or unknown code → assign to Owliver
+          assignedPreparerId = await getDefaultPreparerId();
+          logger.info('Cash advance lead assigned to default preparer (Owliver)', {
+            ref,
+            preparerId: assignedPreparerId,
+            reason: anyProfile ? 'affiliate_referral' : 'unknown_ref',
+          });
+        }
       }
+    }
+
+    // If no ref code at all → assign to Owliver (default preparer)
+    if (!assignedPreparerId) {
+      assignedPreparerId = await getDefaultPreparerId();
+      logger.info('Cash advance lead assigned to default preparer (no ref)', {
+        preparerId: assignedPreparerId,
+      });
     }
 
     // ========================================
