@@ -93,6 +93,21 @@ model MagicLink {
   @@map("magic_links")
 }
 
+// Login attempt tracking for security (failed login detection, account lockout)
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ipAddress String
+  success   Boolean
+  reason    String?  // e.g., "Invalid credentials", "Account locked", "User not found"
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([email, createdAt])
+  @@index([ipAddress])
+  @@map("login_attempts")
+}
+
 // ============ User Profiles ============
 
 enum UserRole {

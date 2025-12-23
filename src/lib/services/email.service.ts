@@ -2209,4 +2209,153 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Send security alert email to admin
+   * Triggered when suspicious activity is detected (e.g., 15+ failed login attempts)
+   */
+  static async sendSecurityAlertEmail(
+    to: string,
+    data: {
+      type: 'excessive_failed_logins' | 'suspicious_activity' | 'account_lockout';
+      targetEmail: string;
+      ipAddress: string;
+      attempts: number;
+      timestamp: Date;
+    }
+  ): Promise<boolean> {
+    try {
+      const alertTypes: Record<string, { title: string; description: string; severity: string }> = {
+        excessive_failed_logins: {
+          title: '🚨 Excessive Failed Login Attempts',
+          description: 'An account has exceeded the failed login attempt threshold.',
+          severity: 'HIGH',
+        },
+        suspicious_activity: {
+          title: '⚠️ Suspicious Activity Detected',
+          description: 'Unusual login behavior has been detected for this account.',
+          severity: 'MEDIUM',
+        },
+        account_lockout: {
+          title: '🔒 Account Locked',
+          description: 'An account has been automatically locked due to security concerns.',
+          severity: 'HIGH',
+        },
+      };
+
+      const alertInfo = alertTypes[data.type] || alertTypes.suspicious_activity;
+      const formattedDate = data.timestamp.toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short',
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        logger.info('Security Alert Email (Dev Mode):', {
+          to,
+          ...data,
+          alertInfo,
+        });
+        return true;
+      }
+
+      const { data: emailData, error } = await getResendClient().emails.send({
+        from: this.fromEmail,
+        to,
+        subject: `[SECURITY ALERT] ${alertInfo.title} - ${data.targetEmail}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+            <div style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              <!-- Header -->
+              <div style="background-color: ${alertInfo.severity === 'HIGH' ? '#dc2626' : '#f59e0b'}; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">${alertInfo.title}</h1>
+              </div>
+
+              <!-- Content -->
+              <div style="padding: 30px;">
+                <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                  <p style="margin: 0; font-weight: 600; color: #991b1b;">Severity: ${alertInfo.severity}</p>
+                  <p style="margin: 5px 0 0; color: #991b1b;">${alertInfo.description}</p>
+                </div>
+
+                <h2 style="color: #333; font-size: 18px; margin-top: 25px; margin-bottom: 15px;">Alert Details</h2>
+
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Target Email:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${data.targetEmail}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">IP Address:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb; font-family: monospace;">${data.ipAddress}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">Failed Attempts:</td>
+                    <td style="padding: 10px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb;"><strong style="color: #dc2626;">${data.attempts}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; background-color: #f9fafb; font-weight: 600;">Timestamp:</td>
+                    <td style="padding: 10px; background-color: #ffffff;">${formattedDate}</td>
+                  </tr>
+                </table>
+
+                <div style="margin-top: 25px; padding: 15px; background-color: #fef3c7; border-radius: 6px;">
+                  <h3 style="color: #92400e; margin: 0 0 10px;">Recommended Actions</h3>
+                  <ul style="color: #92400e; margin: 0; padding-left: 20px;">
+                    <li>Review the login attempts from this IP address</li>
+                    <li>Consider blocking the IP if malicious activity is confirmed</li>
+                    <li>Contact the account owner if they are legitimate</li>
+                    <li>Check for similar patterns from other accounts</li>
+                  </ul>
+                </div>
+
+                <p style="margin-top: 25px; text-align: center;">
+                  <a href="${this.appUrl}/dashboard/admin/security"
+                     style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+                    View Security Dashboard
+                  </a>
+                </p>
+              </div>
+
+              <!-- Footer -->
+              <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="margin: 0; color: #6b7280; font-size: 12px;">
+                  This is an automated security alert from Tax Genius Pro.<br>
+                  Do not reply to this email.
+                </p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+      });
+
+      if (error) {
+        logger.error('Error sending security alert email:', error);
+        return false;
+      }
+
+      logger.info('Security alert email sent:', {
+        emailId: emailData?.id,
+        to,
+        alertType: data.type,
+        targetEmail: data.targetEmail,
+      });
+      return true;
+    } catch (error) {
+      logger.error('Error sending security alert email:', error);
+      return false;
+    }
+  }
 }

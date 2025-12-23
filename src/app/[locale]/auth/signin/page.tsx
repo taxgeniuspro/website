@@ -211,7 +211,14 @@ function SignInContent() {
       });
 
       if (result?.error) {
-        setError(t('errors.invalidCredentials', { defaultValue: 'Invalid email or password. Please check your credentials and try again.' }));
+        // Check for specific error types from the server
+        if (result.error.includes('Account temporarily locked')) {
+          setError(result.error);
+        } else if (result.error === 'Account suspended') {
+          setError(t('errors.accountSuspended', { defaultValue: 'Your account has been suspended. Please contact support.' }));
+        } else {
+          setError(t('errors.invalidCredentials', { defaultValue: 'Invalid email or password. Please check your credentials and try again.' }));
+        }
         setIsCredentialsLoading(false);
         return;
       }
