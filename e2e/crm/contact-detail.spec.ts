@@ -20,6 +20,7 @@ import {
   expectToast,
   takeScreenshot,
   hasValidCredentials,
+  ensureTestContactExists,
   PIPELINE_STAGES,
 } from './crm-setup';
 
@@ -33,9 +34,13 @@ test.describe('CRM Contact Detail Page', () => {
     await page.setViewportSize({ width: 1920, height: 1080 });
   });
 
-  // Helper to get first contact ID
+  // Helper to get first contact ID - ensures a contact exists first
   async function getFirstContactId(page: any): Promise<string | null> {
     await loginAs(page, DEFAULT_TEST_ROLE);
+
+    // Ensure at least one contact exists
+    await ensureTestContactExists(page);
+
     await goToContacts(page);
     await waitForPageLoad(page);
 

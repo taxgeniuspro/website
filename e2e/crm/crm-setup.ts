@@ -418,3 +418,63 @@ export function generateTestContact() {
     contactType: 'LEAD' as const,
   };
 }
+
+/**
+ * Ensure at least one test contact exists for the tax preparer
+ * This creates a contact via the UI if no contacts exist
+ */
+export async function ensureTestContactExists(page: Page): Promise<boolean> {
+  await goToContacts(page);
+  await waitForPageLoad(page);
+
+  // Check if any contacts exist
+  const noContactsMessage = page.locator('text=No contacts found');
+  const hasNoContacts = (await noContactsMessage.count()) > 0;
+
+  if (hasNoContacts) {
+    // Create a test contact
+    const testContact = generateTestContact();
+
+    await openAddContactDialog(page);
+    await fillContactForm(page, testContact);
+    await submitDialog(page);
+
+    // Wait for creation
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('networkidle');
+
+    // Refresh to see new contact
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await waitForPageLoad(page);
+
+    return true; // Contact was created
+  }
+
+  return false; // Contacts already exist
+}
+
+/**
+ * Get the first contact ID from the contacts list
+ * Returns null if no contacts exist
+ */
+export async function getFirstContactId(page: Page): Promise<string | null> {
+  await goToContacts(page);
+  await waitForPageLoad(page);
+
+  const rows = page.locator('table tbody tr, [data-contact-row]');
+  if ((await rows.count()) === 0) {
+    return null;
+  }
+
+  // Click first row to navigate to detail
+  const firstRow = rows.first();
+  const contactCell = firstRow.locator('td').first();
+  await contactCell.click();
+
+  // Wait for navigation and extract ID from URL
+  await page.waitForURL(/\/crm\/contacts\/[a-zA-Z0-9-]+/, { timeout: 10000 });
+  const url = page.url();
+  const match = url.match(/\/crm\/contacts\/([a-zA-Z0-9-]+)/);
+  return match ? match[1] : null;
+}

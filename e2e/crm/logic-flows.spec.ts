@@ -27,6 +27,7 @@ import {
   generateTestContact,
   generateTestEmail,
   hasValidCredentials,
+  ensureTestContactExists,
   PIPELINE_STAGES,
 } from './crm-setup';
 
@@ -102,6 +103,10 @@ test.describe('CRM Critical Business Logic Flows', () => {
 
     test('Pipeline stage can progress through all stages', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -148,6 +153,10 @@ test.describe('CRM Critical Business Logic Flows', () => {
   test.describe('Contact-User Sync', () => {
     test('Create User button is available for contacts without users', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -215,8 +224,12 @@ test.describe('CRM Critical Business Logic Flows', () => {
     });
 
     test('Tax preparer cannot access unassigned contact via direct URL', async ({ page }) => {
-      // First, login as admin to get a contact ID
+      // First, login as tax preparer to get a contact ID
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -286,6 +299,10 @@ test.describe('CRM Critical Business Logic Flows', () => {
   test.describe('Tax Intake Lead Linking', () => {
     test('Contact detail shows Tax Details tab when intake exists', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -323,6 +340,10 @@ test.describe('CRM Critical Business Logic Flows', () => {
   test.describe('Duplicate Email Handling', () => {
     test('Creating contact with duplicate email shows error', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -409,6 +430,10 @@ test.describe('CRM Critical Business Logic Flows', () => {
   test.describe('API Business Logic', () => {
     test('Contact stage change triggers API call', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 

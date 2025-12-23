@@ -32,6 +32,7 @@ import {
   generateTestContact,
   generateTestEmail,
   hasValidCredentials,
+  ensureTestContactExists,
   PIPELINE_STAGES,
   CONTACT_TYPES,
 } from './crm-setup';
@@ -449,6 +450,10 @@ test.describe('CRM Contacts List Page', () => {
   test.describe('Contact Row Actions', () => {
     test('Clicking contact row navigates to detail page', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -473,6 +478,10 @@ test.describe('CRM Contacts List Page', () => {
 
     test('Actions menu opens on click', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -499,6 +508,10 @@ test.describe('CRM Contacts List Page', () => {
 
     test('View Details action works', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -530,6 +543,10 @@ test.describe('CRM Contacts List Page', () => {
 
     test('Delete action shows confirmation dialog', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
@@ -572,6 +589,10 @@ test.describe('CRM Contacts List Page', () => {
   test.describe('Pipeline Stage', () => {
     test('Pipeline stage dropdown is visible on contact row', async ({ page }) => {
       await loginAs(page, DEFAULT_TEST_ROLE);
+
+      // Ensure at least one contact exists
+      await ensureTestContactExists(page);
+
       await goToContacts(page);
       await waitForPageLoad(page);
 
