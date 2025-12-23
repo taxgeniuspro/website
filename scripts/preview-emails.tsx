@@ -87,7 +87,7 @@ async function generatePreviews() {
       clientName: 'Ira',
       preparerName: 'Owliver',
       taxYear: 2024,
-      referralLink: 'https://taxgeniuspro.tax/en/landing?ref=ow',
+      referralLink: 'https://taxgeniuspro.tax/en/landing?ref=ow&r=1',
       referralCode: 'Fw8jWm9',
     })
   );
@@ -102,7 +102,7 @@ async function generatePreviews() {
       preparerName: 'Gelisa White',
       taxYear: 2024,
       refundAmount: 3250,
-      referralLink: 'https://taxgeniuspro.tax/en/landing?ref=gw',
+      referralLink: 'https://taxgeniuspro.tax/en/landing?ref=gw&r=1',
       referralCode: 'Abc123X',
       images: [
         { url: 'https://via.placeholder.com/400x400?text=Tax+Genius+1', alt: 'Promotional Image 1' },

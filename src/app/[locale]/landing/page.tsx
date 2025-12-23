@@ -38,6 +38,7 @@ function LandingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams?.get('ref');
+  const isClientReferral = searchParams?.get('r') === '1';
 
   const [preparer, setPreparer] = useState<PreparerInfo>(DEFAULT_PREPARER);
   const [hasCustomPreparer, setHasCustomPreparer] = useState(false);
@@ -264,6 +265,13 @@ function LandingPageContent() {
             PRESEASON 2025
             <Zap className="w-4 h-4" />
           </span>
+
+          {/* Referral Message - only show when client shares link (r=1) */}
+          {hasCustomPreparer && isClientReferral && (
+            <p className="text-2xl sm:text-3xl lg:text-4xl text-green-500 font-black mb-6">
+              &ldquo;I just got my taxes done by {preparerName}.&rdquo;
+            </p>
+          )}
 
           {/* Headline */}
           <h1 className="text-3xl sm:text-4xl lg:text-6xl font-black text-foreground mb-4 leading-tight">

@@ -60,14 +60,15 @@ export function generateReferralCode(): string {
 
 /**
  * Build a personalized referral link for a client
+ * Links to the landing page with preparer's ref code
+ * Includes r=1 to indicate this is a client referral (shows social proof)
  */
 export function buildReferralLink(
   preparerCode: string,
-  clientFirstName: string,
-  referralCode: string
+  _clientFirstName: string,
+  _referralCode: string
 ): string {
-  const encodedName = encodeURIComponent(clientFirstName);
-  return `${APP_URL}/new/?tp=${preparerCode}&cl=${encodedName}&co=${referralCode}`;
+  return `${APP_URL}/en/landing?ref=${preparerCode}&r=1`;
 }
 
 /**
@@ -82,18 +83,30 @@ export function buildShortReferralLink(referralCode: string): string {
  */
 export function generateSocialMediaCopy(
   preparerName: string,
-  platform: 'instagram' | 'facebook' | 'sms' | 'twitter' = 'instagram'
+  platform: 'instagram' | 'facebook' | 'sms' | 'twitter' = 'instagram',
+  referralLink?: string
 ): string {
+  const link = referralLink || 'https://taxgeniuspro.tax/en/landing';
+
   const templates: Record<string, string> = {
-    instagram: `Just got my taxes done by ${preparerName} at Tax Genius, and the process was smooth as ever! 💼✨ Fast refunds and even faster service. Let ${preparerName} hook you up with a great refund quote in minutes. 💰 Don't wait—get yours done today!
+    instagram: `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right?
+
+They're offering $7,000 in tax advances and the process is super fast.
+
+Use my personal link: ${link}
+
 @taxgeniusig
-#taxgenius #taxpreparer #refundready #fasttaxes #filetoday`,
+#TaxGenius #TaxSeason2025 #GetYourRefund #MoneyMoves`,
 
-    facebook: `Just got my taxes done by ${preparerName} at Tax Genius! The process was smooth and easy. Fast refunds and professional service. Let ${preparerName} help you get a great refund quote in minutes. Don't wait—get yours done today! 💰`,
+    facebook: `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right?
 
-    twitter: `Just got my taxes done by ${preparerName} @TaxGeniusPro! Fast refunds, smooth process. Get your refund quote today 💰 #taxgenius #refundready`,
+They're offering $7,000 in tax advances and the process is super fast.
 
-    sms: `Hey! I just used Tax Genius for my taxes - super easy and fast refunds. ${preparerName} took care of everything. Use my link to get started:`,
+Use my personal link: ${link}`,
+
+    twitter: `I just got my taxes done by ${preparerName}! Need cash now or taxes done right? $7,000 in advances available! ${link} #TaxGenius #TaxSeason2025`,
+
+    sms: `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right? They're offering $7,000 in tax advances. Use my link: ${link}`,
   };
 
   return templates[platform] || templates.instagram;

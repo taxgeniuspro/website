@@ -34,27 +34,35 @@ export const ReferralInvitationEmail = ({
   preparerName = 'Owliver',
   taxYear = 2024,
   refundAmount,
-  referralLink = 'https://taxgeniuspro.tax/en/landing?ref=ow',
-  referralCode = 'Abc123',
+  referralLink = 'https://taxgeniuspro.tax/en/landing?ref=ow&r=1',
+  referralCode = 'ow',
   socialMediaCopy,
   images = [],
 }: ReferralInvitationEmailProps) => {
+  // Social copy WITHOUT the link (they copy text, link is separate)
   const defaultSocialCopy = `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right?
 
 They're offering $7,000 in tax advances and the process is super fast.
-
-Use my personal link: ${referralLink}
 
 @taxgeniusig
 #TaxGenius #TaxSeason2025 #GetYourRefund #MoneyMoves`;
 
   const socialCopy = socialMediaCopy || defaultSocialCopy;
 
+  // Build share URLs for one-click sharing
+  const shareText = `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right? They're offering $7,000 in tax advances!`;
+  const encodedText = encodeURIComponent(shareText);
+  const encodedUrl = encodeURIComponent(referralLink);
+
+  const facebookShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`;
+  const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`;
+  const smsShareUrl = `sms:?body=${encodeURIComponent(`${shareText} ${referralLink}`)}`;
+
   return (
     <Html>
       <Head />
       <Preview>
-        Earn up to $100 per referral - $1,125 for 10 referrals! - Tax Genius Pro
+        While you wait on your refund, let Tax Genius help you make some money! Earn up to $1,125!
       </Preview>
       <Body style={main}>
         <Container style={container}>
@@ -67,62 +75,68 @@ Use my personal link: ${referralLink}
             />
           </Section>
 
-          {/* Header with Green Gradient */}
-          <Section style={header}>
-            <Heading style={h1}>🎉 Your {taxYear} Return is Complete!</Heading>
-            <Text style={headerSubtext}>Thank you for trusting Tax Genius!</Text>
+          {/* Hero Header - Big & Bold */}
+          <Section style={heroHeader}>
+            <Text style={preseasonBadge}>
+              PRESEASON 2025
+            </Text>
+            <Heading style={heroHeadline}>
+              Your {taxYear} Return is Complete!
+            </Heading>
           </Section>
 
           {/* Main Content */}
           <Section style={content}>
-            <Text style={greeting}>Dear {clientName},</Text>
+            <Text style={greeting}>Hey {clientName}!</Text>
 
-            <Text style={paragraph}>
-              Thank you for trusting Tax Genius to make your tax season a breeze!
-              {refundAmount && refundAmount > 0 && (
-                <> Your estimated refund of <strong>${refundAmount.toLocaleString()}</strong> should
-                arrive within 21 days.</>
-              )}
+            <Text style={bigMessage}>
+              Now while you&apos;re waiting on your money...
             </Text>
 
-            <Text style={paragraph}>
-              Now that your taxes are expertly handled, we&apos;ve got some exciting news...
-            </Text>
+            <Heading style={earnHeadline}>
+              Let Tax Genius help you <span style={greenText}>MAKE</span> some money!
+            </Heading>
 
             <Hr style={hr} />
 
-            {/* Tiered Rewards Section */}
+            {/* Tiered Rewards - More Exciting */}
             <Section style={rewardsSection}>
-              <Heading style={h2}>💰 Start Earning Today!</Heading>
+              <Heading style={sectionTitle}>Start Earning Today!</Heading>
 
               <Text style={rewardsIntro}>
-                You can start earning money by sharing Tax Genius with your friends and family:
+                Share Tax Genius with your friends and family and get PAID:
               </Text>
 
               <Section style={tierContainer}>
-                <Section style={tierBox}>
-                  <Text style={tierAmount}>$50</Text>
-                  <Text style={tierLabel}>per person</Text>
-                  <Text style={tierDescription}>First 5 referrals</Text>
-                </Section>
-
-                <Section style={tierBox}>
-                  <Text style={tierAmount}>$75</Text>
-                  <Text style={tierLabel}>per person</Text>
-                  <Text style={tierDescription}>6-10 referrals</Text>
-                </Section>
-
-                <Section style={tierBoxHighlight}>
-                  <Text style={tierAmount}>$100</Text>
-                  <Text style={tierLabel}>per person</Text>
-                  <Text style={tierDescription}>After 10 referrals</Text>
-                </Section>
+                <table style={tierTable} cellPadding="0" cellSpacing="0">
+                  <tr>
+                    <td style={tierCell}>
+                      <div style={tierBox}>
+                        <Text style={tierAmount}>$50</Text>
+                        <Text style={tierLabel}>per person</Text>
+                        <Text style={tierDescription}>First 5 referrals</Text>
+                      </div>
+                    </td>
+                    <td style={tierCell}>
+                      <div style={tierBox}>
+                        <Text style={tierAmount}>$75</Text>
+                        <Text style={tierLabel}>per person</Text>
+                        <Text style={tierDescription}>6-10 referrals</Text>
+                      </div>
+                    </td>
+                    <td style={tierCell}>
+                      <div style={tierBoxHighlight}>
+                        <Text style={tierAmountWhite}>$100</Text>
+                        <Text style={tierLabelWhite}>per person</Text>
+                        <Text style={tierDescriptionWhite}>After 10 referrals</Text>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
               </Section>
 
               <Section style={earningsHighlight}>
-                <Text style={earningsText}>
-                  🍎 How do you like those apples?
-                </Text>
+                <Text style={earningsEmoji}>How do you like those apples?</Text>
                 <Text style={earningsBig}>
                   Get <strong>$1,125</strong> for just 10 referrals!
                 </Text>
@@ -131,63 +145,83 @@ Use my personal link: ${referralLink}
 
             <Hr style={hr} />
 
-            {/* Your Personal Link */}
+            {/* Your Link - Super Simple */}
             <Section style={linkSection}>
-              <Heading style={h2}>🔗 Your Personal Referral Link</Heading>
+              <Heading style={sectionTitle}>Your Personal Referral Link</Heading>
 
-              <Text style={paragraph}>
-                Share your personalized referral link with friends, family, co-workers, or that old lady
-                who still uses a calculator from the 70s!
+              <Text style={linkInstructions}>
+                All you have to do is <strong>copy this link</strong> and share it on social media or send it to a friend!
               </Text>
 
-              <Section style={linkBox}>
-                <Link href={referralLink} style={linkDisplay}>
+              <Section style={linkBoxBig}>
+                <Link href={referralLink} style={linkDisplayBig}>
                   {referralLink}
                 </Link>
               </Section>
 
               <Section style={buttonContainer}>
-                <Link style={button} href={referralLink}>
-                  Click Here - Customized to Make You Money 💸
+                <Link style={bigButton} href={referralLink}>
+                  SHARE THIS LINK
                 </Link>
               </Section>
-
-              <Text style={linkNote}>
-                Your referral code: <strong>{referralCode}</strong>
-              </Text>
             </Section>
 
             <Hr style={hr} />
 
-            {/* Social Media Section */}
+            {/* Social Media Copy - Easy to Use */}
             <Section style={socialSection}>
-              <Heading style={h2}>📱 Ready-to-Post Social Media Copy</Heading>
+              <Heading style={sectionTitle}>Your Ready-Made Post</Heading>
 
-              <Text style={paragraph}>
-                While you&apos;re waiting on that check, make some money posting this on your IG, Facebook,
-                or send it as an SMS. We&apos;re making it easy for you!
+              <Text style={socialInstructions}>
+                Copy this caption for your social media post:
               </Text>
 
-              <Section style={socialCopyBox}>
-                <Text style={socialCopyLabel}>COPY AND PASTE THIS TEXT:</Text>
-                <Text style={socialCopyText}>{socialCopy}</Text>
+              {/* Caption to Copy */}
+              <Section style={socialCopyBoxNew}>
+                <Text style={socialCopyTextNew}>{socialCopy}</Text>
               </Section>
 
-              <Text style={socialTip}>
-                💡 Pro tip: Add your referral link when you post!
-              </Text>
+              {/* Separate Link Box */}
+              <Text style={linkLabel}>Your Link (copy this too):</Text>
+              <Section style={separateLinkBox}>
+                <Link href={referralLink} style={separateLinkText}>
+                  {referralLink}
+                </Link>
+              </Section>
+
+              {/* One-Click Share Buttons */}
+              <Text style={shareButtonsLabel}>Or share with one tap:</Text>
+              <table style={shareButtonsTable} cellPadding="0" cellSpacing="0">
+                <tr>
+                  <td style={shareButtonCell}>
+                    <Link href={facebookShareUrl} style={facebookButton}>
+                      📘 Facebook
+                    </Link>
+                  </td>
+                  <td style={shareButtonCell}>
+                    <Link href={twitterShareUrl} style={twitterButton}>
+                      🐦 X / Twitter
+                    </Link>
+                  </td>
+                  <td style={shareButtonCell}>
+                    <Link href={smsShareUrl} style={smsButton}>
+                      💬 Text
+                    </Link>
+                  </td>
+                </tr>
+              </table>
             </Section>
 
-            {/* Marketing Images Section */}
+            {/* Marketing Images */}
             {images && images.length > 0 && (
               <>
                 <Hr style={hr} />
 
                 <Section style={imagesSection}>
-                  <Heading style={h2}>🖼️ Your Marketing Images</Heading>
+                  <Heading style={sectionTitle}>Your Marketing Images</Heading>
 
                   <Text style={paragraph}>
-                    Download these images and share them on social media along with your referral link:
+                    Download and share these with your post:
                   </Text>
 
                   <Section style={imageGrid}>
@@ -201,44 +235,20 @@ Use my personal link: ${referralLink}
                       </Link>
                     ))}
                   </Section>
-
-                  <Text style={imageNote}>
-                    Click on images to download • Optimized for Instagram & Facebook
-                  </Text>
                 </Section>
               </>
             )}
 
             <Hr style={hr} />
 
-            {/* How It Works */}
-            <Section style={howItWorksSection}>
-              <Heading style={h2}>📋 How It Works</Heading>
-
-              <Text style={stepText}>
-                <strong>1.</strong> Share your personalized link above
-              </Text>
-              <Text style={stepText}>
-                <strong>2.</strong> Post the social media copy with your images
-              </Text>
-              <Text style={stepText}>
-                <strong>3.</strong> Earn cash when friends file their taxes!
-              </Text>
-              <Text style={stepText}>
-                <strong>4.</strong> Track your earnings in your dashboard
-              </Text>
-            </Section>
-
-            <Hr style={hr} />
-
             {/* Final CTA */}
             <Section style={finalCta}>
               <Text style={finalCtaText}>
-                The more you share, the more you earn! 😉
+                The more you share, the more you earn!
               </Text>
               <Section style={buttonContainer}>
-                <Link style={button} href={referralLink}>
-                  Start Sharing Now
+                <Link style={bigButton} href={referralLink}>
+                  START SHARING NOW
                 </Link>
               </Section>
             </Section>
@@ -246,16 +256,13 @@ Use my personal link: ${referralLink}
             {/* Signature */}
             <Section style={signatureSection}>
               <Text style={signatureText}>
-                Warm regards,
+                Thanks for being a Tax Genius client!
               </Text>
               <Text style={signatureName}>
                 {preparerName}
               </Text>
               <Text style={signatureCompany}>
-                Tax Genius
-              </Text>
-              <Text style={signatureTagline}>
-                Where your tax refund and side hustle both get a boost!
+                Tax Genius Pro
               </Text>
             </Section>
           </Section>
@@ -282,9 +289,9 @@ Use my personal link: ${referralLink}
 export default ReferralInvitationEmail;
 
 // Styles - Brand Colors
-const brandGreen = '#408851';
+const brandGreen = '#22c55e';
+const brandGreenDark = '#16a34a';
 const brandYellow = '#f9d938';
-const brandGradient = 'linear-gradient(135deg, #408851 0%, #5ba568 100%)';
 
 const main = {
   backgroundColor: '#f4f4f4',
@@ -310,24 +317,43 @@ const logo = {
   height: 'auto',
 };
 
-const header = {
-  background: brandGradient,
+// Hero Header Styles
+const heroHeader = {
+  backgroundColor: '#111827',
   padding: '40px 30px',
   textAlign: 'center' as const,
 };
 
-const h1 = {
+const preseasonBadge = {
+  display: 'inline-block',
+  backgroundColor: brandGreen,
   color: '#ffffff',
-  fontSize: '28px',
+  fontSize: '12px',
   fontWeight: 'bold',
-  margin: '0 0 10px 0',
+  padding: '8px 16px',
+  borderRadius: '20px',
+  margin: '0 0 20px 0',
+  letterSpacing: '1px',
 };
 
-const headerSubtext = {
+const heroHeadline = {
   color: '#ffffff',
-  fontSize: '16px',
-  margin: '0',
-  opacity: '0.9',
+  fontSize: '36px',
+  fontWeight: '900',
+  margin: '0 0 10px 0',
+  lineHeight: '1.2',
+};
+
+const refundText = {
+  color: '#9ca3af',
+  fontSize: '18px',
+  margin: '10px 0 0 0',
+};
+
+const refundAmountStyle = {
+  color: brandGreen,
+  fontWeight: 'bold',
+  fontSize: '24px',
 };
 
 const content = {
@@ -335,10 +361,28 @@ const content = {
 };
 
 const greeting = {
-  color: brandGreen,
-  fontSize: '20px',
+  color: '#111827',
+  fontSize: '24px',
   fontWeight: 'bold',
-  marginBottom: '20px',
+  marginBottom: '10px',
+};
+
+const bigMessage = {
+  color: '#6b7280',
+  fontSize: '20px',
+  margin: '0 0 20px 0',
+};
+
+const earnHeadline = {
+  color: '#111827',
+  fontSize: '28px',
+  fontWeight: '900',
+  margin: '0 0 20px 0',
+  lineHeight: '1.3',
+};
+
+const greenText = {
+  color: brandGreen,
 };
 
 const paragraph = {
@@ -348,16 +392,16 @@ const paragraph = {
   marginBottom: '16px',
 };
 
-const h2 = {
-  color: brandGreen,
-  fontSize: '22px',
-  fontWeight: 'bold',
+const sectionTitle = {
+  color: '#111827',
+  fontSize: '24px',
+  fontWeight: '900',
   margin: '0 0 20px 0',
   textAlign: 'center' as const,
 };
 
 const hr = {
-  borderColor: '#e0e0e0',
+  borderColor: '#e5e7eb',
   margin: '30px 0',
 };
 
@@ -367,8 +411,8 @@ const rewardsSection = {
 };
 
 const rewardsIntro = {
-  color: '#333',
-  fontSize: '16px',
+  color: '#4b5563',
+  fontSize: '18px',
   marginBottom: '24px',
 };
 
@@ -376,39 +420,70 @@ const tierContainer = {
   margin: '0 auto',
 };
 
-const tierBox = {
-  display: 'inline-block' as const,
-  width: '30%',
-  padding: '20px 10px',
-  margin: '0 5px 15px 5px',
-  backgroundColor: '#f0fdf4',
-  borderRadius: '12px',
-  border: `2px solid ${brandGreen}`,
-  textAlign: 'center' as const,
+const tierTable = {
+  width: '100%',
+  borderCollapse: 'collapse' as const,
+};
+
+const tierCell = {
+  width: '33.33%',
+  padding: '0 5px',
   verticalAlign: 'top' as const,
 };
 
+const tierBox = {
+  backgroundColor: '#f0fdf4',
+  borderRadius: '16px',
+  border: `3px solid ${brandGreen}`,
+  padding: '20px 10px',
+  textAlign: 'center' as const,
+};
+
 const tierBoxHighlight = {
-  ...tierBox,
   backgroundColor: brandGreen,
-  border: `2px solid ${brandGreen}`,
+  borderRadius: '16px',
+  border: `3px solid ${brandGreen}`,
+  padding: '20px 10px',
+  textAlign: 'center' as const,
 };
 
 const tierAmount = {
   color: brandGreen,
-  fontSize: '32px',
+  fontSize: '36px',
+  fontWeight: '900',
+  margin: '0',
+  lineHeight: '1',
+};
+
+const tierAmountWhite = {
+  color: '#ffffff',
+  fontSize: '36px',
+  fontWeight: '900',
+  margin: '0',
+  lineHeight: '1',
+};
+
+const tierLabel = {
+  color: '#6b7280',
+  fontSize: '14px',
+  margin: '8px 0',
+};
+
+const tierLabelWhite = {
+  color: 'rgba(255,255,255,0.9)',
+  fontSize: '14px',
+  margin: '8px 0',
+};
+
+const tierDescription = {
+  color: '#111827',
+  fontSize: '12px',
   fontWeight: 'bold',
   margin: '0',
 };
 
-const tierLabel = {
-  color: '#666',
-  fontSize: '14px',
-  margin: '5px 0',
-};
-
-const tierDescription = {
-  color: '#333',
+const tierDescriptionWhite = {
+  color: '#ffffff',
   fontSize: '12px',
   fontWeight: 'bold',
   margin: '0',
@@ -416,22 +491,22 @@ const tierDescription = {
 
 const earningsHighlight = {
   backgroundColor: brandYellow,
-  padding: '20px',
-  borderRadius: '12px',
+  padding: '24px',
+  borderRadius: '16px',
   margin: '25px 0 0 0',
   textAlign: 'center' as const,
 };
 
-const earningsText = {
-  color: '#333',
-  fontSize: '18px',
+const earningsEmoji = {
+  color: '#111827',
+  fontSize: '20px',
   margin: '0 0 10px 0',
 };
 
 const earningsBig = {
-  color: '#333',
-  fontSize: '24px',
-  fontWeight: 'bold',
+  color: '#111827',
+  fontSize: '28px',
+  fontWeight: '900',
   margin: '0',
 };
 
@@ -440,18 +515,25 @@ const linkSection = {
   textAlign: 'center' as const,
 };
 
-const linkBox = {
-  backgroundColor: '#f5f5f5',
-  padding: '15px',
-  borderRadius: '8px',
+const linkInstructions = {
+  color: '#4b5563',
+  fontSize: '18px',
+  marginBottom: '20px',
+};
+
+const linkBoxBig = {
+  backgroundColor: '#f3f4f6',
+  padding: '20px',
+  borderRadius: '12px',
   margin: '20px 0',
-  border: '1px dashed #ccc',
+  border: '2px dashed #d1d5db',
   wordBreak: 'break-all' as const,
 };
 
-const linkDisplay = {
+const linkDisplayBig = {
   color: brandGreen,
-  fontSize: '14px',
+  fontSize: '16px',
+  fontWeight: 'bold',
   textDecoration: 'none',
   fontFamily: 'monospace',
 };
@@ -461,22 +543,17 @@ const buttonContainer = {
   margin: '24px 0',
 };
 
-const button = {
+const bigButton = {
   backgroundColor: brandGreen,
-  borderRadius: '8px',
+  borderRadius: '12px',
   color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: 'bold',
+  fontSize: '18px',
+  fontWeight: '900',
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'inline-block',
-  padding: '16px 32px',
-};
-
-const linkNote = {
-  color: '#666',
-  fontSize: '14px',
-  marginTop: '10px',
+  padding: '18px 40px',
+  letterSpacing: '0.5px',
 };
 
 // Social Media Styles
@@ -484,11 +561,118 @@ const socialSection = {
   textAlign: 'center' as const,
 };
 
-const socialCopyBox = {
-  backgroundColor: '#f9f9f9',
+const socialInstructions = {
+  color: '#4b5563',
+  fontSize: '16px',
+  marginBottom: '20px',
+};
+
+const socialCopyBoxNew = {
+  backgroundColor: '#f9fafb',
   padding: '20px',
-  borderRadius: '8px',
+  borderRadius: '12px',
+  border: '1px solid #e5e7eb',
+  margin: '16px 0',
+  textAlign: 'left' as const,
+};
+
+const socialCopyTextNew = {
+  color: '#374151',
+  fontSize: '15px',
+  lineHeight: '24px',
+  whiteSpace: 'pre-wrap' as const,
+  margin: '0',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+};
+
+const linkLabel = {
+  color: '#6b7280',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  margin: '20px 0 8px 0',
+  textAlign: 'center' as const,
+};
+
+const separateLinkBox = {
+  backgroundColor: '#ecfdf5',
+  padding: '16px 20px',
+  borderRadius: '12px',
   border: `2px solid ${brandGreen}`,
+  margin: '0 0 24px 0',
+  textAlign: 'center' as const,
+};
+
+const separateLinkText = {
+  color: brandGreen,
+  fontSize: '16px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  fontFamily: 'monospace',
+  wordBreak: 'break-all' as const,
+};
+
+const shareButtonsLabel = {
+  color: '#6b7280',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  margin: '0 0 12px 0',
+  textAlign: 'center' as const,
+};
+
+const shareButtonsTable = {
+  width: '100%',
+  borderCollapse: 'collapse' as const,
+  margin: '0 auto',
+};
+
+const shareButtonCell = {
+  width: '33.33%',
+  padding: '0 4px',
+  textAlign: 'center' as const,
+};
+
+const facebookButton = {
+  display: 'inline-block',
+  backgroundColor: '#1877f2',
+  color: '#ffffff',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  padding: '12px 8px',
+  borderRadius: '8px',
+  width: '100%',
+};
+
+const twitterButton = {
+  display: 'inline-block',
+  backgroundColor: '#000000',
+  color: '#ffffff',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  padding: '12px 8px',
+  borderRadius: '8px',
+  width: '100%',
+};
+
+const smsButton = {
+  display: 'inline-block',
+  backgroundColor: brandGreen,
+  color: '#ffffff',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  padding: '12px 8px',
+  borderRadius: '8px',
+  width: '100%',
+};
+
+// Keep old styles for backwards compatibility
+const socialCopyBox = {
+  backgroundColor: '#f9fafb',
+  padding: '24px',
+  borderRadius: '12px',
+  border: `3px solid ${brandGreen}`,
   margin: '20px 0',
   textAlign: 'left' as const,
 };
@@ -499,22 +683,15 @@ const socialCopyLabel = {
   fontWeight: 'bold',
   textTransform: 'uppercase' as const,
   letterSpacing: '1px',
-  marginBottom: '10px',
+  marginBottom: '12px',
 };
 
 const socialCopyText = {
-  color: '#333',
-  fontSize: '14px',
-  lineHeight: '22px',
+  color: '#111827',
+  fontSize: '15px',
+  lineHeight: '24px',
   whiteSpace: 'pre-wrap' as const,
   margin: '0',
-};
-
-const socialTip = {
-  color: '#666',
-  fontSize: '14px',
-  fontStyle: 'italic' as const,
-  marginTop: '15px',
 };
 
 // Images Section Styles
@@ -535,42 +712,22 @@ const imageThumb = {
   width: '120px',
   height: '120px',
   objectFit: 'cover' as const,
-  borderRadius: '8px',
-  border: '1px solid #ddd',
-};
-
-const imageNote = {
-  color: '#666',
-  fontSize: '12px',
-  marginTop: '10px',
-};
-
-// How It Works Styles
-const howItWorksSection = {
-  backgroundColor: '#f0fdf4',
-  padding: '25px',
   borderRadius: '12px',
-};
-
-const stepText = {
-  color: '#333',
-  fontSize: '15px',
-  lineHeight: '28px',
-  marginBottom: '8px',
+  border: '2px solid #e5e7eb',
 };
 
 // Final CTA Styles
 const finalCta = {
   backgroundColor: brandYellow,
-  borderRadius: '12px',
+  borderRadius: '16px',
   padding: '30px',
   textAlign: 'center' as const,
 };
 
 const finalCtaText = {
-  color: '#333',
-  fontSize: '20px',
-  fontWeight: 'bold',
+  color: '#111827',
+  fontSize: '22px',
+  fontWeight: '900',
   margin: '0 0 20px 0',
 };
 
@@ -578,39 +735,33 @@ const finalCtaText = {
 const signatureSection = {
   marginTop: '30px',
   paddingTop: '20px',
-  borderTop: '1px solid #eee',
+  borderTop: '1px solid #e5e7eb',
+  textAlign: 'center' as const,
 };
 
 const signatureText = {
-  color: '#666',
-  fontSize: '14px',
-  margin: '0 0 5px 0',
+  color: '#6b7280',
+  fontSize: '16px',
+  margin: '0 0 10px 0',
 };
 
 const signatureName = {
   color: brandGreen,
-  fontSize: '18px',
+  fontSize: '20px',
   fontWeight: 'bold',
   margin: '0 0 3px 0',
 };
 
 const signatureCompany = {
-  color: '#333',
+  color: '#111827',
   fontSize: '14px',
   fontWeight: 'bold',
-  margin: '0 0 5px 0',
-};
-
-const signatureTagline = {
-  color: '#666',
-  fontSize: '13px',
-  fontStyle: 'italic' as const,
   margin: '0',
 };
 
 // Footer Styles
 const footerSection = {
-  backgroundColor: '#333',
+  backgroundColor: '#111827',
   padding: '25px',
   textAlign: 'center' as const,
 };
@@ -627,13 +778,13 @@ const footerLink = {
 };
 
 const copyright = {
-  color: '#999',
+  color: '#9ca3af',
   fontSize: '12px',
   margin: '10px 0 5px 0',
 };
 
 const address = {
-  color: '#999',
+  color: '#9ca3af',
   fontSize: '12px',
   margin: '0',
 };
