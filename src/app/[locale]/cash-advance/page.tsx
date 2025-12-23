@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useRef } from 'react';
+import { useState, useEffect, Suspense, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { motion, useScroll, useTransform } from 'framer-motion';
@@ -59,10 +59,54 @@ function CashAdvancePageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Track if we've already captured this lead (to avoid duplicate API calls)
+  const lastCapturedDataRef = useRef<string>('');
+
   // Always fetch preparer info - API returns Owliver as default
   useEffect(() => {
     fetchPreparerInfo(refCode || undefined);
   }, [refCode]);
+
+  // Early lead capture - saves contact info as soon as user provides enough data
+  const captureLeadEarly = useCallback(async () => {
+    // Need firstName and at least phone or email
+    if (!formData.firstName || (!formData.phone && !formData.email)) {
+      return;
+    }
+
+    // Create a signature of the current data to avoid duplicate captures
+    const dataSignature = `${formData.firstName}|${formData.phone}|${formData.email}`;
+    if (dataSignature === lastCapturedDataRef.current) {
+      return; // Already captured this exact data
+    }
+
+    try {
+      await fetch('/api/lead/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          phone: formData.phone,
+          email: formData.email,
+          zipCode: formData.zipCode,
+          source: 'cash_advance',
+          ref: refCode || preparer.trackingCode,
+        }),
+      });
+      lastCapturedDataRef.current = dataSignature;
+    } catch (error) {
+      // Silent fail - early capture should never block the user
+      logger.error('Early lead capture failed:', error);
+    }
+  }, [formData, refCode, preparer.trackingCode]);
+
+  // Capture lead when user blurs from key fields
+  const handleFieldBlur = useCallback((fieldName: string) => {
+    // Capture after phone or email is entered (with firstName)
+    if (fieldName === 'phone' || fieldName === 'email') {
+      captureLeadEarly();
+    }
+  }, [captureLeadEarly]);
 
   const fetchPreparerInfo = async (code?: string) => {
     try {
@@ -373,6 +417,7 @@ function CashAdvancePageContent() {
                       type="tel"
                       value={formData.phone}
                       onChange={handleInputChange}
+                      onBlur={() => handleFieldBlur('phone')}
                       required
                       placeholder="(555) 123-4567"
                       className="mt-1.5 h-12 text-lg"
@@ -387,6 +432,7 @@ function CashAdvancePageContent() {
                       type="email"
                       value={formData.email}
                       onChange={handleInputChange}
+                      onBlur={() => handleFieldBlur('email')}
                       placeholder="you@email.com"
                       className="mt-1.5 h-12 text-lg"
                     />

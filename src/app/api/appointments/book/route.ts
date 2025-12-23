@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
       notes,
       timezone = 'America/New_York',
       source, // Where did they come from? 'tax_intake', 'preparer_app', 'affiliate_app', 'contact_form'
+      ref, // CRITICAL: Explicit referral code from URL ?ref= parameter
+      preparerId: explicitPreparerId, // CRITICAL: Explicit preparer ID from booking page
     } = body;
 
     // Validate required fields
@@ -71,8 +73,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // EPIC 6: Get attribution (cookie → email → phone → direct)
+    // EPIC 6: Get attribution with priority:
+    // 1. Explicit ref parameter (from URL ?ref=)
+    // 2. Explicit preparerId (from booking page preparer resolution)
+    // 3. Attribution service (cookie → email → phone → direct)
     const attributionResult = await getAttribution(clientEmail, clientPhone);
+
+    // Use explicit ref parameter if provided, otherwise fall back to attribution
+    const effectiveRef = ref || attributionResult.attribution.referrerUsername;
 
     // CRITICAL: Determine lead assignment based on referrer role
     // Note: We track TWO IDs:
@@ -81,14 +89,31 @@ export async function POST(req: NextRequest) {
     let preparerProfileId: string | null = null;
     let preparerUserId: string | null = null;
 
-    if (attributionResult.attribution.referrerUsername) {
+    // PRIORITY 1: If explicit preparerId provided from booking page, use it directly
+    if (explicitPreparerId) {
+      const explicitPreparer = await prisma.profile.findUnique({
+        where: { id: explicitPreparerId },
+        select: { id: true, userId: true, role: true },
+      });
+      if (explicitPreparer && explicitPreparer.role === 'tax_preparer') {
+        preparerProfileId = explicitPreparer.id;
+        preparerUserId = explicitPreparer.userId;
+        logger.info('Appointment assigned via explicit preparerId', {
+          preparerProfileId,
+          ref: effectiveRef,
+        });
+      }
+    }
+
+    // PRIORITY 2: If ref parameter provided, resolve preparer from it
+    if (!preparerProfileId && effectiveRef) {
       // Find the referrer profile
       const referrerProfile = await prisma.profile.findFirst({
         where: {
           OR: [
-            { trackingCode: attributionResult.attribution.referrerUsername },
-            { customTrackingCode: attributionResult.attribution.referrerUsername },
-            { shortLinkUsername: attributionResult.attribution.referrerUsername },
+            { trackingCode: effectiveRef },
+            { customTrackingCode: effectiveRef },
+            { shortLinkUsername: effectiveRef },
           ],
         },
         select: {
@@ -243,12 +268,33 @@ export async function POST(req: NextRequest) {
           stage: 'NEW',
           lastContactedAt: new Date(),
           assignedPreparerId: preparerUserId, // Use User ID for CRM service
+          // CRITICAL: Track referral attribution
+          referrerUsername: effectiveRef || null,
+          referrerType: effectiveRef ? 'tax_preparer' : null,
+          attributionMethod: effectiveRef ? 'ref_param' : (attributionResult.method || 'direct'),
         },
       });
 
       logger.info('Created CRM contact for appointment', {
         contactId: crmContact.id,
         email: clientEmail,
+        referrerUsername: effectiveRef,
+        assignedPreparerId: preparerUserId,
+      });
+    } else if (effectiveRef && !crmContact.referrerUsername) {
+      // Update existing contact with referrer info if not already set
+      await prisma.cRMContact.update({
+        where: { id: crmContact.id },
+        data: {
+          referrerUsername: effectiveRef,
+          referrerType: 'tax_preparer',
+          attributionMethod: 'ref_param',
+          assignedPreparerId: preparerUserId || crmContact.assignedPreparerId,
+        },
+      });
+      logger.info('Updated CRM contact with referrer info', {
+        contactId: crmContact.id,
+        referrerUsername: effectiveRef,
       });
     }
 
