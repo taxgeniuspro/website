@@ -34,14 +34,19 @@ export const ReferralInvitationEmail = ({
   preparerName = 'Owliver',
   taxYear = 2024,
   refundAmount,
-  referralLink = 'https://taxgeniuspro.tax/new/?tp=ow&cl=Friend&co=Abc123',
+  referralLink = 'https://taxgeniuspro.tax/en/landing?ref=ow',
   referralCode = 'Abc123',
   socialMediaCopy,
   images = [],
 }: ReferralInvitationEmailProps) => {
-  const defaultSocialCopy = `Just got my taxes done by ${preparerName} at Tax Genius, and the process was smooth as ever! 💼✨ Fast refunds and even faster service. Let ${preparerName} hook you up with a great refund quote in minutes. 💰 Don't wait—get yours done today!
+  const defaultSocialCopy = `I just got my taxes done by ${preparerName}. Need cash now — or just want your taxes done right?
+
+They're offering $7,000 in tax advances and the process is super fast.
+
+Use my personal link: ${referralLink}
+
 @taxgeniusig
-#taxgenius #taxpreparer #refundready #fasttaxes #filetoday`;
+#TaxGenius #TaxSeason2025 #GetYourRefund #MoneyMoves`;
 
   const socialCopy = socialMediaCopy || defaultSocialCopy;
 
