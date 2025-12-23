@@ -128,33 +128,58 @@ export async function POST(req: NextRequest) {
     }
 
     // Create user with profile in a transaction
-    const { user, profile } = await prisma.$transaction(async (tx) => {
-      // Create user
-      const newUser = await tx.user.create({
-        data: {
-          name,
-          email: email.toLowerCase(), // Store email in lowercase
-          hashedPassword,
-        },
+    let user, profile;
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Create user
+        const newUser = await tx.user.create({
+          data: {
+            name,
+            email: email.toLowerCase(), // Store email in lowercase
+            hashedPassword,
+          },
+        });
+
+        // Create profile for the user
+        // All users are auto-approved as affiliates so they can refer others immediately
+        // Note: Profile doesn't have an 'email' field - email is stored on User
+        const newProfile = await tx.profile.create({
+          data: {
+            userId: newUser.id,
+            role: 'client', // Default role for new signups (client = registered user)
+            firstName,
+            middleName,
+            lastName,
+            affiliateStatus: 'APPROVED', // Auto-approve all users as affiliates
+            affiliateApprovedAt: new Date(),
+          },
+        });
+
+        return { user: newUser, profile: newProfile };
+      });
+      user = result.user;
+      profile = result.profile;
+    } catch (txError) {
+      const txErrorMessage = txError instanceof Error ? txError.message : 'Unknown error';
+      logger.error('[Signup] Transaction failed', {
+        error: txErrorMessage,
+        code: (txError as any)?.code,
+        meta: (txError as any)?.meta,
       });
 
-      // Create profile for the user
-      // All users are auto-approved as affiliates so they can refer others immediately
-      // Note: Profile doesn't have an 'email' field - email is stored on User
-      const newProfile = await tx.profile.create({
-        data: {
-          userId: newUser.id,
-          role: 'client', // Default role for new signups (client = registered user)
-          firstName,
-          middleName,
-          lastName,
-          affiliateStatus: 'APPROVED', // Auto-approve all users as affiliates
-          affiliateApprovedAt: new Date(),
-        },
-      });
+      // Check for specific Prisma errors
+      if (txErrorMessage.includes('Unique constraint')) {
+        return NextResponse.json(
+          { error: 'An account with this email already exists' },
+          { status: 409 }
+        );
+      }
 
-      return { user: newUser, profile: newProfile };
-    });
+      return NextResponse.json(
+        { error: 'Failed to create account. Database error.' },
+        { status: 500 }
+      );
+    }
 
     logger.info('[Signup] User created successfully', { email: email.toLowerCase() });
 
