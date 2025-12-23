@@ -38,7 +38,8 @@ export async function GET() {
     }
 
     // All clients and admins can access affiliate links (all clients are affiliates)
-    const isClient = profile.role === 'client';
+    // Note: 'affiliate' is technically a STATUS not a ROLE, but we handle it for safety
+    const isClient = profile.role === 'client' || profile.role === 'affiliate';
     const isAdmin = profile.role === 'admin';
 
     if (!isClient && !isAdmin) {
