@@ -14,8 +14,6 @@ import {
   Mail,
   MapPin,
   Clock,
-  MessageCircle,
-  Calendar,
   CheckCircle,
   ArrowRight,
 } from 'lucide-react';
@@ -289,14 +287,12 @@ function ContactPageContent() {
                     </div>
 
                     <div>
-                      <Label htmlFor="message">{t('message')} *</Label>
+                      <Label htmlFor="message">{t('message')}</Label>
                       <Textarea
                         id="message"
                         name="message"
                         value={formData.message}
                         onChange={handleInputChange}
-                        required
-                        minLength={10}
                         maxLength={1000}
                         rows={4}
                         className="mt-1"
@@ -519,46 +515,6 @@ function ContactPageContent() {
                   </div>
                 </div>
               )}
-
-              {/* Quick Actions */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-xl">{t('quickActionsTitle')}</CardTitle>
-                  <CardDescription>{t('quickActionsSubtitle')}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <a href={preparer?.trackingCode ? `/go/${preparer.trackingCode}-appt` : `/${locale}/book`}>
-                      <Calendar className="mr-2 w-4 h-4" />
-                      {t('scheduleConsultation')}
-                    </a>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <a href={`sms:${(preparer?.phone || DEFAULT_CONTACT.phone).replace(/[^+\d]/g, '')}`}>
-                      <MessageCircle className="mr-2 w-4 h-4" />
-                      {t('liveChat')}
-                    </a>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <a href="https://sa.www4.irs.gov/irfof/lang/en/irfofgetstatus.jsp" target="_blank" rel="noopener noreferrer">
-                      <CheckCircle className="mr-2 w-4 h-4" />
-                      {t('checkRefund')}
-                    </a>
-                  </Button>
-                </CardContent>
-              </Card>
 
               {/* Service Guarantee */}
               <Card className="bg-primary/5 border-primary/20">
