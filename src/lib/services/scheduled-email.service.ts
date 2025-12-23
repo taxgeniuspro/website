@@ -17,7 +17,13 @@ import { render } from '@react-email/render';
 import ReferralInvitationEmail from '../../../emails/referral-invitation';
 import { getClientReferralImages, generateSocialMediaCopy } from './client-referral.service';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization to avoid build-time errors when env vars aren't set
+const getResend = () => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not configured');
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+};
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Tax Genius <noreply@taxgeniuspro.tax>';
 
 export type ScheduledEmailType = 'client_referral_invitation';
@@ -224,7 +230,7 @@ async function sendReferralInvitationEmail(
     );
 
     // Send via Resend
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: FROM_EMAIL,
       to: lead.email,
       subject: `Hey ${lead.first_name || 'Friend'}, Want $1,125 Extra Bucks Fast from Tax Genius?`,
