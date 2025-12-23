@@ -248,6 +248,9 @@ function BookingPageContent() {
           duration: 30,
           source: referralUsername ? 'referral_direct_booking' : 'direct_booking_page',
           notes: formData.notes || 'Booked via direct booking page',
+          // CRITICAL: Pass preparer reference for attribution
+          ref: referralUsername || undefined,
+          preparerId: resolvedPreparerId || undefined,
         }),
       });
 
