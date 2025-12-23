@@ -17,6 +17,45 @@ import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.
 import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
 
+/**
+ * Get Owliver Owl's Profile.id as the default preparer assignment.
+ * All leads MUST be assigned to a preparer - Owliver is the fallback.
+ */
+async function getDefaultPreparerId(): Promise<string | null> {
+  try {
+    const owliver = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { customTrackingCode: 'ow' },
+          { trackingCode: 'ow' },
+          { user: { email: 'taxgenius.tax@gmail.com' } },
+        ],
+        role: { in: ['admin', 'tax_preparer'] },
+      },
+      select: { id: true },
+    });
+
+    if (owliver) {
+      return owliver.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const fallbackAdmin = await prisma.profile.findFirst({
+      where: {
+        role: 'admin',
+        bookingEnabled: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return fallbackAdmin?.id || null;
+  } catch (error) {
+    logger.error('Failed to get default preparer ID', { error });
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -196,27 +235,29 @@ export async function POST(req: NextRequest) {
                   assignedPreparerId: assignedPreparerId,
                 });
               } else {
-                // Fallback to corporate if client has no assigned preparer
-                assignedPreparerId = null;
-                logger.info(`Lead from CLIENT referral assigned to Tax Genius corporate (no preparer found)`, {
+                // Fallback to Owliver (default preparer) if client has no assigned preparer
+                assignedPreparerId = await getDefaultPreparerId();
+                logger.info(`Lead from CLIENT referral assigned to Owliver (client has no preparer)`, {
                   referrerId: referrerProfile.id,
+                  assignedPreparerId,
                 });
               }
             } catch (lookupError) {
-              // Log error and fallback to corporate
+              // Log error and fallback to Owliver (default preparer)
               logger.error('Failed to look up client preparer assignment', {
                 referrerId: referrerProfile.id,
                 error: lookupError,
               });
-              assignedPreparerId = null;
+              assignedPreparerId = await getDefaultPreparerId();
             }
             break;
 
           case 'affiliate':
-            // AFFILIATE refers → Assign to Tax Genius (null = corporate)
-            assignedPreparerId = null;
-            logger.info(`Lead from AFFILIATE referral assigned to Tax Genius corporate`, {
+            // AFFILIATE refers → Assign to Owliver (default preparer)
+            assignedPreparerId = await getDefaultPreparerId();
+            logger.info(`Lead from AFFILIATE referral assigned to Owliver (default)`, {
               referrerId: referrerProfile.id,
+              assignedPreparerId,
             });
             break;
 
@@ -231,13 +272,23 @@ export async function POST(req: NextRequest) {
             break;
 
           default:
-            // Default: assign to Tax Genius
-            assignedPreparerId = null;
-            logger.info(`Lead with unknown referrer role assigned to Tax Genius`, {
+            // Default: assign to Owliver (default preparer)
+            assignedPreparerId = await getDefaultPreparerId();
+            logger.info(`Lead with unknown referrer role assigned to Owliver (default)`, {
               role: referrerProfile.role,
+              assignedPreparerId,
             });
         }
       }
+    }
+
+    // CRITICAL: Ensure ALL leads are assigned to a preparer
+    // If we still don't have an assignment (no ref code, lookup failed, etc.), assign to Owliver
+    if (!assignedPreparerId) {
+      assignedPreparerId = await getDefaultPreparerId();
+      logger.info('Lead assigned to default preparer (no referrer)', {
+        assignedPreparerId,
+      });
     }
 
     // Check if lead already exists for this email AND tax year (composite key)

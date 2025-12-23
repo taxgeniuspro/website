@@ -5,6 +5,45 @@ import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { addMonths } from 'date-fns';
 
 /**
+ * Get Owliver Owl's Profile.id as the default preparer assignment.
+ * All leads MUST be assigned to a preparer - Owliver is the fallback.
+ */
+async function getDefaultPreparerId(): Promise<string | null> {
+  try {
+    const owliver = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { customTrackingCode: 'ow' },
+          { trackingCode: 'ow' },
+          { user: { email: 'taxgenius.tax@gmail.com' } },
+        ],
+        role: { in: ['admin', 'tax_preparer'] },
+      },
+      select: { id: true },
+    });
+
+    if (owliver) {
+      return owliver.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const fallbackAdmin = await prisma.profile.findFirst({
+      where: {
+        role: 'admin',
+        bookingEnabled: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return fallbackAdmin?.id || null;
+  } catch (error) {
+    logger.error('Failed to get default preparer ID', { error });
+    return null;
+  }
+}
+
+/**
  * POST /api/lead/capture
  *
  * Early lead capture endpoint - saves partial contact info as soon as user
@@ -64,9 +103,19 @@ export async function POST(req: NextRequest) {
         // Assign lead based on referrer role
         if (referrerProfile.role === 'tax_preparer' || referrerProfile.role === 'admin') {
           assignedPreparerId = referrerProfile.id;
+        } else {
+          // Affiliates and clients → assign to Owliver (default preparer)
+          assignedPreparerId = await getDefaultPreparerId();
         }
-        // Affiliates and clients don't get direct assignment - goes to corporate
+      } else {
+        // Ref code didn't match any profile → assign to Owliver
+        assignedPreparerId = await getDefaultPreparerId();
       }
+    }
+
+    // If no ref code at all → assign to Owliver (default preparer)
+    if (!ref) {
+      assignedPreparerId = await getDefaultPreparerId();
     }
 
     // If we have email, try to upsert to TaxIntakeLead
