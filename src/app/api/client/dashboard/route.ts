@@ -30,36 +30,64 @@ export async function GET(req: NextRequest) {
       // This handles the race condition where dashboard loads before events.signIn completes
       logger.info('Creating profile for new user on dashboard access', { userId });
 
-      const user = session.user;
-      const nameParts = user?.name?.split(' ').filter((part: string) => part.length > 0) || [];
-      let firstName = '';
-      let middleName: string | undefined;
-      let lastName = '';
+      try {
+        // First verify the User record exists in the database
+        const userExists = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, email: true, name: true },
+        });
 
-      if (nameParts.length === 1) {
-        firstName = nameParts[0];
-      } else if (nameParts.length === 2) {
-        firstName = nameParts[0];
-        lastName = nameParts[1];
-      } else if (nameParts.length >= 3) {
-        firstName = nameParts[0];
-        middleName = nameParts.slice(1, -1).join(' ');
-        lastName = nameParts[nameParts.length - 1];
+        if (!userExists) {
+          // User record doesn't exist yet - likely still being created by PrismaAdapter
+          logger.warn('User record not found during dashboard access - race condition', { userId });
+          return NextResponse.json({
+            error: 'Account setup in progress. Please refresh the page.',
+            retryable: true,
+          }, { status: 503 });
+        }
+
+        const user = session.user;
+        const nameParts = user?.name?.split(' ').filter((part: string) => part.length > 0) || [];
+        let firstName = '';
+        let middleName: string | undefined;
+        let lastName = '';
+
+        if (nameParts.length === 1) {
+          firstName = nameParts[0];
+        } else if (nameParts.length === 2) {
+          firstName = nameParts[0];
+          lastName = nameParts[1];
+        } else if (nameParts.length >= 3) {
+          firstName = nameParts[0];
+          middleName = nameParts.slice(1, -1).join(' ');
+          lastName = nameParts[nameParts.length - 1];
+        }
+
+        profile = await prisma.profile.create({
+          data: {
+            userId: userId,
+            role: 'client',
+            firstName,
+            middleName,
+            lastName,
+            affiliateStatus: 'APPROVED',
+            affiliateApprovedAt: new Date(),
+          },
+        });
+
+        logger.info('Created profile for new user', { userId, profileId: profile.id });
+      } catch (profileCreateError) {
+        // Profile creation failed - log details and return error
+        logger.error('Failed to create profile for new user on dashboard access', {
+          userId,
+          error: profileCreateError instanceof Error ? profileCreateError.message : String(profileCreateError),
+          stack: profileCreateError instanceof Error ? profileCreateError.stack : undefined,
+        });
+        return NextResponse.json({
+          error: 'Failed to setup your account. Please try refreshing the page.',
+          retryable: true,
+        }, { status: 500 });
       }
-
-      profile = await prisma.profile.create({
-        data: {
-          userId: userId,
-          role: 'client',
-          firstName,
-          middleName,
-          lastName,
-          affiliateStatus: 'APPROVED',
-          affiliateApprovedAt: new Date(),
-        },
-      });
-
-      logger.info('Created profile for new user', { userId, profileId: profile.id });
     }
 
     // Get tax year from query param or use current filing year
