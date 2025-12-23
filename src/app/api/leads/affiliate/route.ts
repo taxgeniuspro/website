@@ -14,6 +14,7 @@ import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateAffiliateLeadPDF } from '@/lib/services/pdf-form-generator.service';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 // Validation schema
 const affiliateLeadSchema = z.object({
@@ -257,6 +258,22 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
       logger.error('Error sending affiliate lead email', emailError);
       // Continue - database save succeeded
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: '🤝 Affiliate Application',
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      email: lead.email,
+      phone: lead.phone,
+      message: validatedData.message,
+      refCode: attributionResult.attribution.referrerUsername || undefined,
+      source: lead.source || 'affiliate_lead_form',
+      additionalFields: {
+        'Experience': validatedData.experience || 'Not specified',
+        'Audience': validatedData.audience || 'Not specified',
+      },
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('affiliate'));
   } catch (error) {

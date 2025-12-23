@@ -16,6 +16,46 @@ import {
 import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
 import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
+
+/**
+ * Get Owliver Owl's Profile.id as the default preparer assignment.
+ * All leads MUST be assigned to a preparer - Owliver is the fallback.
+ */
+async function getDefaultPreparerId(): Promise<string | null> {
+  try {
+    const owliver = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { customTrackingCode: 'ow' },
+          { trackingCode: 'ow' },
+          { user: { email: 'taxgenius.tax@gmail.com' } },
+        ],
+        role: { in: ['admin', 'tax_preparer'] },
+      },
+      select: { id: true },
+    });
+
+    if (owliver) {
+      return owliver.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const fallbackAdmin = await prisma.profile.findFirst({
+      where: {
+        role: 'admin',
+        bookingEnabled: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return fallbackAdmin?.id || null;
+  } catch (error) {
+    logger.error('Failed to get default preparer ID', { error });
+    return null;
+  }
+}
 
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
@@ -876,6 +916,27 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
         error: referralError,
         leadId: lead.id,
       });
+    }
+
+    // Send Telegram notification for complete tax intakes (non-blocking)
+    if (isCompleteTaxIntake) {
+      sendLeadToTelegram({
+        formType: '📋 TAX INTAKE (Complete)',
+        firstName: first_name,
+        lastName: last_name,
+        email,
+        phone,
+        zipCode: zip_code,
+        locale: (locale as 'en' | 'es') || 'en',
+        refCode: attributionResult.attribution.referrerUsername || undefined,
+        source: 'tax_intake_form',
+        additionalFields: {
+          'Filing Status': filing_status || 'Not provided',
+          'Employment': employment_type || 'Not provided',
+          'Dependents': has_dependents ? (number_of_dependents || '1+') : '0',
+          'Wants Advance': wants_refund_advance ? 'Yes' : 'No',
+        },
+      }).catch(err => logger.error('Telegram notification failed', { error: err }));
     }
 
     return NextResponse.json(

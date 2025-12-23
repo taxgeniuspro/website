@@ -8,6 +8,7 @@ import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 import { CRMService } from '@/lib/services/crm.service';
 import { ContactType, PipelineStage } from '@prisma/client';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 // Lazy initialize Cloudinary to avoid build errors
 const getCloudinary = () => {
@@ -731,6 +732,26 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
         email: taxFormData.email,
       });
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: '📋 TAX INTAKE (Complete Form)',
+      firstName: taxFormData.first_name,
+      lastName: taxFormData.last_name,
+      email: taxFormData.email,
+      phone: taxFormData.phone,
+      zipCode: taxFormData.zip_code,
+      refCode: preparerCode,
+      assignedPreparer: `${preparer.firstName} ${preparer.lastName}`,
+      source: 'tax_intake_form',
+      additionalFields: {
+        'Filing Status': taxFormData.filing_status || 'Not provided',
+        'Employment': taxFormData.employment_type || 'Not provided',
+        'Dependents': taxFormData.has_dependents === 'yes' ? (taxFormData.number_of_dependents || '1+') : '0',
+        'Wants Advance': taxFormData.wants_refund_advance === 'yes' ? 'Yes' : 'No',
+        'Has ID Upload': uploadedFileUrl ? 'Yes' : 'No',
+      },
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return NextResponse.json({
       success: true,

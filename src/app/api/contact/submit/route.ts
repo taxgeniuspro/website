@@ -6,6 +6,7 @@ import { ContactFormNotification } from '../../../../../emails/contact-form-noti
 import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateContactFormPDF } from '@/lib/services/pdf-form-generator.service';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 /**
  * POST /api/contact/submit - Handle contact form submissions
@@ -370,6 +371,20 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
       logger.error('Error sending contact form email', emailError);
       // Continue - database save succeeded
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: 'Contact Form',
+      firstName,
+      lastName,
+      email,
+      phone,
+      service,
+      message,
+      locale: (locale as 'en' | 'es') || 'en',
+      refCode: ref,
+      assignedPreparer: recipientName,
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return NextResponse.json({
       success: true,
