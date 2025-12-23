@@ -103,6 +103,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Rewrites for static HTML mockups (prevents [locale]/[username] catch-all)
+  async rewrites() {
+    return {
+      beforeFiles: [
+        // Serve mockup HTML files directly from public folder
+        {
+          source: '/mockups/:path*.html',
+          destination: '/mockups/:path*.html',
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   async redirects() {
     return [
       {
