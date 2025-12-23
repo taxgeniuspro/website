@@ -148,7 +148,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals, static files, and PWA files
-    '/((?!_next|sw\\.js|manifest\\.json|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Skip Next.js internals, static files, PWA files, and mockups folder
+    '/((?!_next|mockups|sw\\.js|manifest\\.json|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
   ],
 };
