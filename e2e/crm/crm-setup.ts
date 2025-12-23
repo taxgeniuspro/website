@@ -81,40 +81,64 @@ export const PIPELINE_STAGES = [
 export const CONTACT_TYPES = ['CLIENT', 'LEAD', 'AFFILIATE', 'PREPARER'] as const;
 
 /**
- * Login with credentials
+ * Login with credentials - with retry for transient failures
  */
 export async function login(
   page: Page,
   email: string,
-  password: string
+  password: string,
+  maxRetries = 3
 ): Promise<void> {
-  await page.goto(`${BASE_URL}/auth/signin`);
-  await page.waitForLoadState('networkidle');
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    await page.goto(`${BASE_URL}/auth/signin`);
+    await page.waitForLoadState('networkidle');
 
-  // The signin page has email and password inputs always visible
-  // Find the email input in the credentials form (not the magic link email input)
-  // The credentials form has placeholder "Email address" while magic link has "Enter email for magic link"
-  const emailInput = page.locator('input[type="email"][placeholder*="Email address"], input[autocomplete="email"]');
-  await emailInput.first().waitFor({ state: 'visible', timeout: 10000 });
+    // The signin page has email and password inputs always visible
+    // Find the email input in the credentials form (not the magic link email input)
+    // The credentials form has placeholder "Email address" while magic link has "Enter email for magic link"
+    const emailInput = page.locator('input[type="email"][placeholder*="Email address"], input[autocomplete="email"]');
+    await emailInput.first().waitFor({ state: 'visible', timeout: 10000 });
 
-  // Fill email
-  await emailInput.first().fill(email);
+    // Fill email
+    await emailInput.first().fill(email);
 
-  // Find and fill password
-  const passwordInput = page.locator('input[type="password"]');
-  await passwordInput.first().waitFor({ state: 'visible', timeout: 5000 });
-  await passwordInput.first().fill(password);
+    // Find and fill password
+    const passwordInput = page.locator('input[type="password"]');
+    await passwordInput.first().waitFor({ state: 'visible', timeout: 5000 });
+    await passwordInput.first().fill(password);
 
-  // Submit - click the Sign In button (not Sign in with Google or Magic Link)
-  // The credentials submit button has the Lock icon and says "Sign In"
-  const submitButton = page.locator('button[type="submit"]:has-text("Sign In")');
-  await submitButton.click();
+    // Submit - click the Sign In button (not Sign in with Google or Magic Link)
+    // The credentials submit button has the Lock icon and says "Sign In"
+    const submitButton = page.locator('button[type="submit"]:has-text("Sign In")');
+    await submitButton.click();
 
-  // Wait for navigation - should redirect away from signin page
-  await page.waitForLoadState('networkidle');
+    // Wait for navigation - should redirect away from signin page
+    await page.waitForLoadState('networkidle');
 
-  // Give extra time for client-side navigation
-  await page.waitForTimeout(2000);
+    // Give extra time for client-side navigation
+    await page.waitForTimeout(2000);
+
+    // Check if login succeeded (not on signin page anymore)
+    const url = page.url();
+    if (!url.includes('/auth/signin') && !url.includes('/auth/login')) {
+      return; // Success!
+    }
+
+    // Check for error message
+    const errorAlert = page.locator('[role="alert"], .text-destructive, .text-red-500');
+    const hasError = (await errorAlert.count()) > 0;
+
+    if (hasError && attempt < maxRetries) {
+      console.log(`Login attempt ${attempt} failed for ${email}, retrying...`);
+      await page.waitForTimeout(2000); // Wait before retry
+      continue;
+    }
+
+    if (attempt === maxRetries && hasError) {
+      const errorText = await errorAlert.first().textContent();
+      throw new Error(`Login failed for ${email} after ${maxRetries} attempts - ${errorText || 'Invalid credentials'}`);
+    }
+  }
 }
 
 /**
@@ -131,22 +155,16 @@ export async function loginAs(
   // The user might be redirected to /dashboard/admin, /admin, /dashboard, etc.
   try {
     await page.waitForURL(/dashboard|admin|crm|home/, {
-      timeout: 30000,
+      timeout: 15000,
     });
   } catch {
-    // If no redirect, check if we're still on signin (login failed)
+    // If no redirect, we might already be on a valid page after login retries
     const url = page.url();
     if (url.includes('/auth/signin') || url.includes('/auth/login')) {
-      // Check for error message
-      const errorAlert = page.locator('[role="alert"], .text-destructive, .text-red-500');
-      const hasError = (await errorAlert.count()) > 0;
-      if (hasError) {
-        const errorText = await errorAlert.first().textContent();
-        throw new Error(`Login failed for ${account.email} - ${errorText || 'Invalid credentials'}`);
-      }
+      // Login failed after retries - the login function should have thrown
       throw new Error(`Login failed for ${account.email} - still on signin page`);
     }
-    // Otherwise, assume we're logged in somewhere
+    // Otherwise, assume we're logged in somewhere valid
   }
 }
 
