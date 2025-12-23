@@ -11,20 +11,6 @@
       "maxDuration": 30
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/appointment-reminders",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-expired-leads",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/send-scheduled-emails",
-      "schedule": "0 * * * *"
-    }
-  ],
   "env": {
     "SKIP_ENV_VALIDATION": "true",
     "BUILD_TIMESTAMP": "1733331600"
