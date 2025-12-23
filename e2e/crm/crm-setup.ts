@@ -42,8 +42,8 @@ export const TEST_ACCOUNTS = {
     canChangeRoles: false,
   },
   client: {
-    email: 'testclient@example.com',
-    password: process.env.TEST_CLIENT_PASSWORD || '',
+    email: 'test-client@taxgeniuspro.tax',
+    password: process.env.TEST_CLIENT_PASSWORD || 'TestClient2024@',
     dashboardUrl: '/dashboard/client',
     canAccessCRM: false,
     canDeleteContacts: false,
@@ -455,6 +455,36 @@ export async function ensureTestContactExists(page: Page): Promise<boolean> {
 }
 
 /**
+ * Navigate to contact detail page by clicking View Details in dropdown menu
+ * @param page Playwright page
+ * @param row The contact row locator to click on
+ * @returns true if navigation was successful, false otherwise
+ */
+export async function navigateToContactDetail(page: Page, row: any): Promise<boolean> {
+  // Open actions dropdown - look for the DropdownMenuTrigger button with MoreVertical icon
+  // The button is variant="ghost" size="icon" or size="sm" with MoreVertical SVG inside
+  const actionsButton = row.locator('button:has(svg), button[aria-label="Actions"]');
+
+  if ((await actionsButton.count()) > 0) {
+    // Click the last button (usually the actions menu is on the right)
+    await actionsButton.last().click();
+    await page.waitForTimeout(500); // Wait for dropdown to open
+
+    // Click View or View Details menu item
+    const viewMenuItem = page.locator('[role="menuitem"]:has-text("View"), [role="menuitem"]:has-text("View Details")');
+    if ((await viewMenuItem.count()) > 0) {
+      await viewMenuItem.first().click();
+
+      // Wait for navigation
+      await page.waitForURL(/\/crm\/contacts\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Get the first contact ID from the contacts list
  * Returns null if no contacts exist
  */
@@ -467,14 +497,14 @@ export async function getFirstContactId(page: Page): Promise<string | null> {
     return null;
   }
 
-  // Click first row to navigate to detail
   const firstRow = rows.first();
-  const contactCell = firstRow.locator('td').first();
-  await contactCell.click();
+  const success = await navigateToContactDetail(page, firstRow);
 
-  // Wait for navigation and extract ID from URL
-  await page.waitForURL(/\/crm\/contacts\/[a-zA-Z0-9-]+/, { timeout: 10000 });
-  const url = page.url();
-  const match = url.match(/\/crm\/contacts\/([a-zA-Z0-9-]+)/);
-  return match ? match[1] : null;
+  if (success) {
+    const url = page.url();
+    const match = url.match(/\/crm\/contacts\/([a-zA-Z0-9-]+)/);
+    return match ? match[1] : null;
+  }
+
+  return null;
 }
