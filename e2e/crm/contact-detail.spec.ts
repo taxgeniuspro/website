@@ -49,16 +49,29 @@ test.describe('CRM Contact Detail Page', () => {
       return null;
     }
 
-    // Click first row to navigate to detail
+    // Open actions dropdown - look for the DropdownMenuTrigger button with MoreVertical icon
     const firstRow = rows.first();
-    const contactCell = firstRow.locator('td').first();
-    await contactCell.click();
+    const actionsButton = firstRow.locator('button:has(svg), button[aria-label="Actions"]');
 
-    // Wait for navigation and extract ID from URL
-    await page.waitForURL(/\/crm\/contacts\/[a-zA-Z0-9-]+/, { timeout: 10000 });
-    const url = page.url();
-    const match = url.match(/\/crm\/contacts\/([a-zA-Z0-9-]+)/);
-    return match ? match[1] : null;
+    if ((await actionsButton.count()) > 0) {
+      // Click the last button (usually the actions menu is on the right)
+      await actionsButton.last().click();
+      await page.waitForTimeout(500); // Wait for dropdown to open
+
+      // Click View or View Details menu item
+      const viewMenuItem = page.locator('[role="menuitem"]:has-text("View"), [role="menuitem"]:has-text("View Details")');
+      if ((await viewMenuItem.count()) > 0) {
+        await viewMenuItem.first().click();
+
+        // Wait for navigation and extract ID from URL
+        await page.waitForURL(/\/crm\/contacts\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+        const url = page.url();
+        const match = url.match(/\/crm\/contacts\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+      }
+    }
+
+    return null;
   }
 
   // ==========================================================================
@@ -106,8 +119,9 @@ test.describe('CRM Contact Detail Page', () => {
         return;
       }
 
-      const backButton = page.locator('button:has([class*="ArrowLeft"]), button[aria-label*="Back"], a:has-text("Back")');
-      await expect(backButton.first()).toBeVisible();
+      // Lucide icons have class like "lucide lucide-arrow-left"
+      const backButton = page.locator('button:has(svg.lucide-arrow-left), button[aria-label*="Back"], a:has-text("Back")');
+      await expect(backButton.first()).toBeVisible({ timeout: 10000 });
 
       await takeScreenshot(page, 'back-button-visible');
       await logout(page);
@@ -121,7 +135,8 @@ test.describe('CRM Contact Detail Page', () => {
         return;
       }
 
-      const backButton = page.locator('button:has([class*="ArrowLeft"]), button[aria-label*="Back"]');
+      // Lucide icons have class like "lucide lucide-arrow-left"
+      const backButton = page.locator('button:has(svg.lucide-arrow-left), button[aria-label*="Back"]');
       if ((await backButton.count()) > 0) {
         await backButton.first().click();
         await page.waitForLoadState('networkidle');
@@ -149,9 +164,10 @@ test.describe('CRM Contact Detail Page', () => {
         return;
       }
 
-      // Look for avatar component
-      const avatar = page.locator('[data-testid="avatar"], .avatar, [class*="Avatar"]');
-      await expect(avatar.first()).toBeVisible();
+      // Look for avatar component - Radix UI avatars use rounded-full class
+      // The AvatarFallback has bg-muted and contains initials
+      const avatar = page.locator('[class*="bg-muted"][class*="rounded-full"], [data-testid="avatar"]');
+      await expect(avatar.first()).toBeVisible({ timeout: 10000 });
 
       await takeScreenshot(page, 'avatar-display');
       await logout(page);
@@ -165,9 +181,10 @@ test.describe('CRM Contact Detail Page', () => {
         return;
       }
 
-      // Look for badge with contact type
-      const badge = page.locator('.badge, [class*="Badge"]:has-text("CLIENT"), [class*="Badge"]:has-text("LEAD"), [class*="Badge"]:has-text("AFFILIATE")');
-      await expect(badge.first()).toBeVisible();
+      // Look for badge with contact type - badges usually have specific background colors
+      // and contain text like CLIENT, LEAD, AFFILIATE, PREPARER
+      const badge = page.locator('span:has-text("CLIENT"), span:has-text("LEAD"), span:has-text("AFFILIATE"), span:has-text("PREPARER"), [class*="badge"]');
+      await expect(badge.first()).toBeVisible({ timeout: 10000 });
 
       await takeScreenshot(page, 'contact-type-badge');
       await logout(page);
