@@ -22,6 +22,7 @@ import {
 import { Header } from '@/components/header';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { BookingCallToAction } from '@/components/crm/BookingCallToAction';
+import { ReferralBanner } from '@/components/ReferralBanner';
 import { logger } from '@/lib/logger';
 
 // Preparer info interface
@@ -58,22 +59,23 @@ function ContactPageContent() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Fetch preparer info if ref code is present
+  // Always fetch preparer info - returns Owliver as default if no ref code
   useEffect(() => {
-    if (refCode) {
-      fetchPreparerInfo(refCode);
-    }
+    fetchPreparerInfo(refCode || undefined);
   }, [refCode]);
 
-  const fetchPreparerInfo = async (code: string) => {
+  const fetchPreparerInfo = async (code?: string) => {
     try {
-      const response = await fetch(`/api/preparer/by-code?code=${encodeURIComponent(code)}`);
+      const url = code
+        ? `/api/preparer/by-code?code=${encodeURIComponent(code)}`
+        : '/api/preparer/by-code';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (data.preparer) {
           setPreparer({
             ...data.preparer,
-            trackingCode: data.preparer.trackingCode || code,
+            trackingCode: data.preparer.trackingCode || code || 'ow',
           });
         }
       }
@@ -150,6 +152,15 @@ function ContactPageContent() {
             <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto">
               {t('pageSubtitle')}
             </p>
+
+            {/* Referral Banner - Shows preparer who will help */}
+            {preparer && preparerName && (
+              <ReferralBanner
+                preparerName={preparerName}
+                preparerAvatar={preparer.avatarUrl}
+                className="max-w-2xl mx-auto"
+              />
+            )}
           </div>
         </div>
       </section>
