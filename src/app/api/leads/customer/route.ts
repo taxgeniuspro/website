@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateCustomerLeadPDF } from '@/lib/services/pdf-form-generator.service';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 // Validation schema
 const customerLeadSchema = z.object({
@@ -283,6 +284,21 @@ ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
       logger.error('Error sending customer lead email', emailError);
       // Continue - database save succeeded
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: '💼 Customer Lead',
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      email: lead.email,
+      phone: lead.phone,
+      refCode: attributionResult.attribution.referrerUsername || undefined,
+      source: lead.source || 'customer_lead_form',
+      additionalFields: {
+        'Tax Situation': validatedData.taxSituation || 'Not specified',
+        'Est. Income': validatedData.estimatedIncome || 'Not specified',
+      },
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return createLeadSuccessResponse(lead.id, getLeadSuccessMessage('CUSTOMER'));
   } catch (error) {

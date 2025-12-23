@@ -6,6 +6,7 @@ import { CashAdvanceLeadNotification } from '../../../../../emails/cash-advance-
 import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateCashAdvancePDF } from '@/lib/services/pdf-form-generator.service';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
@@ -441,6 +442,24 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
     } catch (emailError) {
       logger.error('Error sending cash advance email', emailError);
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: '💰 CASH ADVANCE LEAD',
+      firstName,
+      email,
+      phone,
+      zipCode,
+      locale: (locale as 'en' | 'es') || 'en',
+      refCode: ref,
+      assignedPreparer: preparerProfile
+        ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
+        : 'Owliver Owl',
+      additionalFields: {
+        'Preferred Filing': preferredFiling === 'in-person' ? 'In-Person' : 'Remote',
+        'Best Time': bestTimeToContact,
+      },
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return NextResponse.json({
       success: true,

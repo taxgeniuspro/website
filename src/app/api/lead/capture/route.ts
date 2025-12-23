@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { addMonths } from 'date-fns';
+import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
@@ -244,6 +245,18 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    // Send Telegram notification (non-blocking)
+    sendLeadToTelegram({
+      formType: 'Early Lead Capture',
+      firstName,
+      lastName,
+      email,
+      phone,
+      zipCode,
+      source,
+      refCode: ref,
+    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
