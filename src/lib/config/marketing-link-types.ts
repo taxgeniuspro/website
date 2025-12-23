@@ -41,11 +41,11 @@ export const LINK_TYPE_CONFIGS: Record<LinkTypeValue, LinkTypeConfig> = {
   lead: {
     key: 'LEAD',
     suffix: 'lead',
-    targetPage: '/contact',
-    buildUrl: (code, base) => `${base}/contact?ref=${code}`,
-    title: 'Lead Capture Form',
-    description: 'Quick contact form for potential clients',
-    emoji: '📝',
+    targetPage: '/landing',
+    buildUrl: (code, base) => `${base}/landing?ref=${code}`,
+    title: 'Landing Page',
+    description: 'Unified landing page with advance or filing options',
+    emoji: '🏠',
   },
   intake: {
     key: 'INTAKE',

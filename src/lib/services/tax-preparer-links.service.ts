@@ -115,9 +115,9 @@ export async function generateTaxPreparerStandardLinks(
     // Create the two links
     const links = [];
 
-    // 1. Lead Form Link
+    // 1. Lead Form Link (points to unified landing page)
     const leadCode = `${trackingCode}-lead`;
-    const leadUrl = `${APP_URL}/contact?ref=${trackingCode}`;
+    const leadUrl = `${APP_URL}/landing?ref=${trackingCode}`;
     const leadShortUrl = `${APP_URL}/go/${leadCode}`;
 
     logger.info('🎯 Creating lead form link', { leadCode, leadUrl });
@@ -139,9 +139,9 @@ export async function generateTaxPreparerStandardLinks(
         code: leadCode,
         url: leadUrl,
         shortUrl: leadShortUrl,
-        targetPage: '/contact',
-        title: '📝 Lead Capture Form',
-        description: 'Quick contact form for potential clients to submit their information',
+        targetPage: '/landing',
+        title: '🏠 Landing Page',
+        description: 'Unified landing page with cash advance or tax filing options',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
         dateActivated: new Date(),
