@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/appointment-reminders",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/cleanup-expired-leads",
@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/send-scheduled-emails",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 * * * *"
     }
   ],
   "env": {
