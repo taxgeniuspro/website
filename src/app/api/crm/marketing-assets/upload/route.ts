@@ -90,9 +90,9 @@ export async function POST(req: NextRequest) {
       cloudinaryPublicId: uploadResult.public_id,
     });
 
-    // Try to create MarketingAsset record
-    let asset = null;
+    // Create MarketingAsset record
     const isPrimary = category === 'profile_photo';
+    let asset;
 
     try {
       if (isPrimary) {
@@ -125,13 +125,28 @@ export async function POST(req: NextRequest) {
         profileId: profile.id,
         category,
       });
-    } catch (dbError: any) {
-      // If MarketingAsset table doesn't exist yet, just log warning
-      logger.warn('MarketingAsset table may not exist yet, skipping database record:', {
-        error: dbError.message,
+    } catch (dbError: unknown) {
+      // Database error is critical - we have an orphaned file in Cloudinary
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+      logger.error('Failed to create MarketingAsset database record:', {
+        error: errorMessage,
         category,
         profileId: profile.id,
+        cloudinaryUrl: fileUrl,
       });
+
+      // Try to delete the orphaned Cloudinary file
+      try {
+        await getCloudinary().uploader.destroy(uploadResult.public_id);
+        logger.info('Cleaned up orphaned Cloudinary file:', { publicId: uploadResult.public_id });
+      } catch (cleanupError) {
+        logger.error('Failed to cleanup orphaned Cloudinary file:', { publicId: uploadResult.public_id });
+      }
+
+      return NextResponse.json(
+        { error: 'Failed to save asset to database', details: errorMessage },
+        { status: 500 }
+      );
     }
 
     // Always update Profile.avatarUrl for profile photos
@@ -144,7 +159,7 @@ export async function POST(req: NextRequest) {
     }
 
     logger.info('Marketing asset uploaded successfully:', {
-      assetId: asset?.id || 'none',
+      assetId: asset.id,
       profileId: profile.id,
       category,
       fileName: file.name,
@@ -154,13 +169,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       asset: {
-        id: asset?.id || `temp_${Date.now()}`,
-        category: category,
-        fileName: file.name,
-        fileUrl: fileUrl,
-        fileSize: file.size,
-        isPrimary: isPrimary,
-        createdAt: new Date().toISOString(),
+        id: asset.id,
+        category: asset.category,
+        fileName: asset.fileName,
+        fileUrl: asset.fileUrl,
+        fileSize: asset.fileSize,
+        isPrimary: asset.isPrimary,
+        createdAt: asset.createdAt.toISOString(),
       },
     });
   } catch (error) {

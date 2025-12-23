@@ -165,7 +165,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get contact', debug: error.stack?.slice(0, 500) },
+      { success: false, error: 'Failed to get contact' },
       { status: 500 }
     );
   }

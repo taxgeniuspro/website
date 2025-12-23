@@ -166,6 +166,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createContactSchema.parse(body);
 
+    // Auto-assign to creating tax preparer if not already assigned
+    if (role === 'tax_preparer' && !validatedData.assignedPreparerId) {
+      const profile = await prisma.profile.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      if (profile) {
+        validatedData.assignedPreparerId = profile.id;
+        logger.info('[CRM API] Auto-assigning contact to tax preparer', {
+          preparerId: profile.id,
+          userId: user.id
+        });
+      }
+    }
+
     // Create contact
     const contact = await CRMService.createContact(validatedData);
 
