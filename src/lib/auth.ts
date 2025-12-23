@@ -304,12 +304,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return true;
     },
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, trigger, session, account }) {
       // Initial sign in - add user data to token
       if (user) {
         token.id = user.id;
+        token.email = user.email;
         token.role = user.role || 'client'; // Default to 'client' if role not set
         token.isActive = user.isActive ?? true;
+
+        // For magic link users, ensure we have the correct database user ID
+        if (account?.provider === 'resend' && user.email) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { email: user.email.toLowerCase() },
+              select: { id: true },
+            });
+            if (dbUser) {
+              token.id = dbUser.id;
+              logger.info('JWT: Set user ID from database for magic link user', {
+                email: user.email,
+                userId: dbUser.id,
+              });
+            }
+          } catch (error) {
+            logger.error('JWT: Failed to look up magic link user', { error, email: user.email });
+          }
+        }
       }
 
       // Handle session updates (when user.update() is called)
@@ -337,10 +357,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (profile?.role) {
             // Force the role to be a plain string
             token.role = profile.role as UserRole;
-            logger.debug('JWT role refreshed from database', {
-              userId: token.id,
-              newRole: profile.role
-            });
           }
         } catch (error) {
           // Keep existing token values on error
