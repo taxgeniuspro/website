@@ -17,6 +17,7 @@ import { logger } from '@/lib/logger';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
+import { EmailService } from '@/lib/services/email.service';
 
 const createUserSchema = z.object({
   role: z.enum(['client', 'affiliate', 'tax_preparer']),
@@ -156,8 +157,49 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       };
     });
 
-    // TODO: If sendInviteEmail is true, send welcome/password reset email
-    // This would use the Resend email service
+    // Send invite email if requested
+    if (sendInviteEmail) {
+      try {
+        const fullName = `${contact.firstName} ${contact.lastName}`.trim();
+
+        if (role === 'tax_preparer') {
+          // Generate magic link for password setup
+          const magicLinkToken = nanoid(32);
+          const magicLinkUrl = `${process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax'}/auth/set-password?token=${magicLinkToken}&email=${encodeURIComponent(result.email)}`;
+
+          // Store token in database for verification (expires in 24 hours)
+          await prisma.verificationToken.create({
+            data: {
+              identifier: result.email,
+              token: magicLinkToken,
+              expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+            },
+          });
+
+          await EmailService.sendTaxPreparerWelcomeEmail(
+            result.email,
+            fullName,
+            result.email,
+            result.trackingCode || '',
+            magicLinkUrl,
+            '24 hours'
+          );
+          logger.info('[CRM Create User API] Tax preparer welcome email sent', { email: result.email });
+        } else {
+          // Send standard welcome email for clients and affiliates
+          const emailRole = role === 'affiliate' ? 'AFFILIATE' : 'CLIENT';
+          await EmailService.sendWelcomeEmail(result.email, fullName, emailRole);
+          logger.info('[CRM Create User API] Welcome email sent', { email: result.email, role: emailRole });
+        }
+      } catch (emailError: unknown) {
+        // Log email error but don't fail the request - user was created successfully
+        const errorMessage = emailError instanceof Error ? emailError.message : 'Unknown error';
+        logger.error('[CRM Create User API] Failed to send invite email', {
+          email: result.email,
+          error: errorMessage,
+        });
+      }
+    }
 
     logger.info('[CRM Create User API] User created successfully', {
       contactId,
