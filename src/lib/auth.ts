@@ -18,6 +18,8 @@ import { UserRole, ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { FailedLoginService } from '@/lib/services/failed-login.service';
+import { getResendClient } from '@/lib/resend';
+import { MagicLinkEmail } from '../../emails/MagicLinkEmail';
 
 // Extend NextAuth types to include our custom role field
 declare module 'next-auth' {
@@ -93,6 +95,44 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Resend({
       apiKey: process.env.RESEND_API_KEY || '',
       from: process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax',
+      // Custom email sending with branded template
+      async sendVerificationRequest({ identifier: email, url, provider }) {
+        try {
+          // Clean the URL to ensure it's properly formatted
+          const cleanUrl = url.trim();
+
+          logger.info('Sending magic link email', {
+            email,
+            url: cleanUrl,
+            from: provider.from,
+          });
+
+          const { data, error } = await getResendClient().emails.send({
+            from: provider.from as string,
+            to: email,
+            subject: 'Sign in to Tax Genius Pro',
+            react: MagicLinkEmail({
+              magicLinkUrl: cleanUrl,
+            }),
+          });
+
+          if (error) {
+            logger.error('Failed to send magic link email', { email, error });
+            throw new Error(`Failed to send magic link: ${error.message}`);
+          }
+
+          logger.info('Magic link email sent successfully', {
+            email,
+            emailId: data?.id,
+          });
+        } catch (error) {
+          logger.error('Error in sendVerificationRequest', {
+            email,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+      },
     }),
 
     // Credentials Provider (Email/Password)
