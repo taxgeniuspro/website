@@ -1,0 +1,33 @@
+name: Scheduled Jobs
+
+on:
+  schedule:
+    # Every 15 minutes for appointment reminders and scheduled emails
+    - cron: '*/15 * * * *'
+    # Daily at 3am UTC for cleanup
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  appointment-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send appointment reminders
+        run: |
+          curl -s -X GET "https://taxgeniuspro.tax/api/cron/appointment-reminders" || true
+
+  send-scheduled-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process scheduled emails
+        run: |
+          curl -s -X GET "https://taxgeniuspro.tax/api/cron/send-scheduled-emails" || true
+
+  cleanup-leads:
+    runs-on: ubuntu-latest
+    # Only run on the daily schedule (3am UTC)
+    if: github.event.schedule == '0 3 * * *'
+    steps:
+      - name: Cleanup expired leads
+        run: |
+          curl -s -X GET "https://taxgeniuspro.tax/api/cron/cleanup-expired-leads" || true
