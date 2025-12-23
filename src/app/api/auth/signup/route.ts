@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { createClientFromPreparerApplication } from '@/lib/services/lead-conversion.service';
 import { ContactType } from '@prisma/client';
+import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -42,6 +43,24 @@ function validatePassword(password: string): { valid: boolean; errors: string[] 
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting: 10 requests per minute per IP
+    const clientIp = getClientIdentifier(req);
+    const rateLimitResult = await authRateLimit.limit(clientIp);
+
+    if (!rateLimitResult.success) {
+      logger.warn('[Signup] Rate limit exceeded', { ip: clientIp });
+      return NextResponse.json(
+        { error: 'Too many signup attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            ...getRateLimitHeaders(rateLimitResult),
+            'Retry-After': Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const { name, email, password } = await req.json();
 
     // Validation - required fields

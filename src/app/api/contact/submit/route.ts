@@ -54,6 +54,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
+    // Validate service field (prevent injection attacks)
+    const allowedServices = [
+      'individual',
+      'business',
+      'real-estate',
+      'audit-defense',
+      'tax-planning',
+      'other',
+      // Also allow the display values
+      'Individual Tax Return',
+      'Business Tax Return',
+      'Real Estate Tax Services',
+      'Audit Defense',
+      'Tax Planning',
+      'Other Services',
+    ];
+    if (!allowedServices.includes(service)) {
+      logger.warn('Invalid service value submitted', { service, ip });
+      return NextResponse.json(
+        { error: 'Invalid service selection. Please select a valid service type.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate phone number format (if provided)
+    if (phone) {
+      // Accept common US phone formats:
+      // (123) 456-7890, 123-456-7890, 1234567890, +1 123-456-7890
+      const phoneRegex = /^(\+1\s?)?((\(\d{3}\)|\d{3})[\s.-]?)?\d{3}[\s.-]?\d{4}$/;
+      const cleanPhone = phone.replace(/\s/g, '');
+      if (!phoneRegex.test(cleanPhone) && cleanPhone.length > 0) {
+        return NextResponse.json(
+          { error: 'Invalid phone number format. Please use format: (123) 456-7890 or 123-456-7890' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate message length
     if (message.length < 10 || message.length > 1000) {
       return NextResponse.json(

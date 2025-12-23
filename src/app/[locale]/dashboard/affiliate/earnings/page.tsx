@@ -65,51 +65,91 @@ export default async function AffiliateEarningsPage() {
     redirect('/forbidden');
   }
 
-  // Mock earnings data
-  const commissions = [
-    {
-      id: '1',
-      lead: 'Jennifer Williams',
-      service: 'Personal Tax Return',
-      commission: 70,
-      date: '2024-03-15',
-      status: 'Paid',
-      tier: 'Standard',
-    },
-    {
-      id: '2',
-      lead: 'Ashley Garcia',
-      service: 'Business Tax Return',
-      commission: 150,
-      date: '2024-03-18',
-      status: 'Paid',
-      tier: 'Premium',
-    },
-    {
-      id: '3',
-      lead: 'Michael Torres',
-      service: 'Tax Planning',
-      commission: 40,
-      date: '2024-03-20',
-      status: 'Pending',
-      tier: 'Standard',
-    },
-    {
-      id: '4',
-      lead: 'Rebecca Johnson',
-      service: 'Personal Tax Return',
-      commission: 70,
-      date: '2024-03-22',
-      status: 'Processing',
-      tier: 'Standard',
-    },
-  ];
+  // Get the user's profile ID for querying commissions
+  const fullProfile = await prisma.profile.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
 
-  const monthlyData = [
-    { month: 'Jan', earnings: 420 },
-    { month: 'Feb', earnings: 680 },
-    { month: 'Mar', earnings: 330 },
-  ];
+  // Fetch real commission data from the database
+  const dbCommissions = await prisma.commission.findMany({
+    where: { referrerId: fullProfile?.id },
+    orderBy: { createdAt: 'desc' },
+    take: 50, // Limit to recent 50 commissions
+    include: {
+      referral: {
+        select: {
+          referredUser: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Transform database commissions to display format
+  const commissions = dbCommissions.map((c) => ({
+    id: c.id,
+    lead: c.clientName || c.referral?.referredUser?.name || 'Unknown Client',
+    service: c.sourceType === 'INTAKE_LEAD' ? 'Tax Intake'
+           : c.sourceType === 'RETURN_FILED' ? 'Tax Return Filed'
+           : c.sourceType === 'PREPARER_REFERRAL' ? 'Preparer Referral'
+           : c.sourceType === 'CLIENT_REFERRAL' ? 'Client Referral'
+           : 'Referral Commission',
+    commission: Number(c.amount),
+    date: c.createdAt.toISOString().split('T')[0],
+    status: c.status === 'PAID' ? 'Paid'
+          : c.status === 'APPROVED' ? 'Processing'
+          : c.status === 'PENDING' ? 'Pending'
+          : c.status === 'CANCELLED' ? 'Cancelled'
+          : 'Pending',
+    tier: Number(c.commissionRate || 0) >= 10 ? 'Premium' : 'Standard',
+  }));
+
+  // Calculate monthly earnings for the chart (last 3 months)
+  const now = new Date();
+  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+
+  const monthlyCommissions = await prisma.commission.groupBy({
+    by: ['createdAt'],
+    where: {
+      referrerId: fullProfile?.id,
+      createdAt: { gte: threeMonthsAgo },
+      status: { in: ['PAID', 'APPROVED', 'PENDING'] },
+    },
+    _sum: { amount: true },
+  });
+
+  // Aggregate by month
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyMap = new Map<string, number>();
+
+  // Initialize last 3 months with 0
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    monthlyMap.set(key, 0);
+  }
+
+  // Sum up commissions by month
+  for (const c of dbCommissions) {
+    const d = new Date(c.createdAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (monthlyMap.has(key)) {
+      monthlyMap.set(key, (monthlyMap.get(key) || 0) + Number(c.amount));
+    }
+  }
+
+  const monthlyData = Array.from(monthlyMap.entries()).map(([key, earnings]) => {
+    const [year, month] = key.split('-').map(Number);
+    return {
+      month: monthNames[month],
+      earnings: Math.round(earnings),
+    };
+  });
 
   const totalEarnings = commissions.reduce((sum, c) => sum + c.commission, 0);
   const paidEarnings = commissions
@@ -210,7 +250,7 @@ export default async function AffiliateEarningsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${Math.round(totalEarnings / commissions.length)}
+              ${commissions.length > 0 ? Math.round(totalEarnings / commissions.length) : 0}
             </div>
             <p className="text-xs text-muted-foreground">Per conversion</p>
           </CardContent>
@@ -297,6 +337,16 @@ export default async function AffiliateEarningsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {commissions.length === 0 ? (
+            <div className="text-center py-12">
+              <DollarSign className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium mb-2">No commissions yet</h3>
+              <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                Share your referral links to start earning commissions. When your referrals convert,
+                your earnings will appear here.
+              </p>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -350,6 +400,7 @@ export default async function AffiliateEarningsPage() {
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 

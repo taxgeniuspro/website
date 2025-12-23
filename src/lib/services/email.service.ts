@@ -1897,4 +1897,137 @@ export class EmailService {
       return { success: false };
     }
   }
+
+  /**
+   * Send appointment reminder email to client
+   * Used by the appointment-reminders cron job
+   */
+  static async sendAppointmentReminderEmail(
+    to: string,
+    data: {
+      clientName: string;
+      preparerName: string;
+      appointmentType: string;
+      scheduledFor: Date;
+      duration: number;
+      reminderType: '24h' | '1h';
+      meetingLink?: string;
+      location?: string;
+    }
+  ): Promise<boolean> {
+    try {
+      const resend = getResendClient();
+
+      // Format date and time
+      const dateOptions: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      };
+      const timeOptions: Intl.DateTimeFormatOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      };
+      const formattedDate = data.scheduledFor.toLocaleDateString('en-US', dateOptions);
+      const formattedTime = data.scheduledFor.toLocaleTimeString('en-US', timeOptions);
+
+      const reminderText = data.reminderType === '24h'
+        ? 'Your appointment is tomorrow!'
+        : 'Your appointment is in 1 hour!';
+
+      const { error, data: emailData } = await resend.emails.send({
+        from: `Tax Genius Pro <${this.fromEmail}>`,
+        to,
+        subject: `${reminderText} - ${data.appointmentType} with ${data.preparerName}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <img src="https://taxgeniuspro.tax/images/wordpress-assets/taxgenius-logo.png" alt="Tax Genius Pro" style="max-width: 200px; height: auto;">
+            </div>
+
+            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 20px;">${reminderText}</h1>
+
+            <p>Hi ${data.clientName},</p>
+
+            <p>This is a friendly reminder about your upcoming appointment:</p>
+
+            <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Type:</td>
+                  <td style="padding: 8px 0;">${data.appointmentType}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">With:</td>
+                  <td style="padding: 8px 0;">${data.preparerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Date:</td>
+                  <td style="padding: 8px 0;">${formattedDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Time:</td>
+                  <td style="padding: 8px 0;">${formattedTime}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Duration:</td>
+                  <td style="padding: 8px 0;">${data.duration} minutes</td>
+                </tr>
+                ${data.location ? `
+                <tr>
+                  <td style="padding: 8px 0; font-weight: 600; color: #666;">Location:</td>
+                  <td style="padding: 8px 0;">${data.location}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+
+            ${data.meetingLink ? `
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${data.meetingLink}" style="display: inline-block; background-color: #ff6b35; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                Join Video Call
+              </a>
+            </div>
+            ` : ''}
+
+            <p style="color: #666; font-size: 14px;">
+              Need to reschedule? Please contact us as soon as possible to make changes to your appointment.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              &copy; ${new Date().getFullYear()} Tax Genius Pro. All rights reserved.<br>
+              1632 Jonesboro Rd SE, Atlanta, GA 30315
+            </p>
+          </body>
+          </html>
+        `,
+      });
+
+      if (error) {
+        logger.error('Error sending appointment reminder email:', error);
+        return false;
+      }
+
+      logger.info('Appointment reminder email sent:', {
+        emailId: emailData?.id,
+        to,
+        reminderType: data.reminderType,
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Error sending appointment reminder email:', error);
+      return false;
+    }
+  }
 }

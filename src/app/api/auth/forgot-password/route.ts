@@ -6,6 +6,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
+
+// Stricter rate limit for password reset: 5 requests per minute per IP
+const PASSWORD_RESET_MAX_REQUESTS = 5;
 
 // Email sending via Resend
 async function sendPasswordResetEmail(email: string, resetUrl: string, name: string) {
@@ -76,6 +80,25 @@ async function sendPasswordResetEmail(email: string, resetUrl: string, name: str
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting: 5 requests per minute per IP (stricter for password reset)
+    const clientIp = getClientIdentifier(req);
+    const rateLimitResult = await authRateLimit.limit(`forgot-password:${clientIp}`);
+
+    // Check against stricter limit for password reset
+    if (!rateLimitResult.success || rateLimitResult.remaining < (10 - PASSWORD_RESET_MAX_REQUESTS)) {
+      logger.warn('[ForgotPassword] Rate limit exceeded', { ip: clientIp });
+      return NextResponse.json(
+        { error: 'Too many password reset attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            ...getRateLimitHeaders(rateLimitResult),
+            'Retry-After': Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const { email } = await req.json();
 
     if (!email) {
