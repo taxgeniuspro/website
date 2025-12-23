@@ -251,27 +251,46 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
-      // Check if user is deactivated (for non-Google login types)
-      if (user?.id && account?.provider !== 'google') {
+      // Handle magic link (resend) provider
+      if (account?.provider === 'resend' && user?.email) {
         try {
-          let profile = await prisma.profile.findUnique({
+          // For magic link, look up user by email since user.id may not be set yet
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email.toLowerCase() },
+            include: { profile: { select: { isActive: true, role: true } } },
+          });
+
+          if (existingUser?.profile?.isActive === false) {
+            logger.warn('Suspended user attempted magic link sign in', { email: user.email });
+            return '/suspended';
+          }
+
+          // Attach role if user exists
+          if (existingUser?.profile?.role) {
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
+          } else {
+            // New user - will get profile in events.signIn
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
+            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
+          }
+
+          logger.info('Magic link sign in successful', { email: user.email, hasProfile: !!existingUser?.profile });
+          return true;
+        } catch (error) {
+          logger.error('Magic link sign in error', { error, email: user.email });
+          // Allow sign in anyway - profile will be created in dashboard or events.signIn
+          return true;
+        }
+      }
+
+      // Check if user is deactivated (for credentials login)
+      if (user?.id && account?.provider === 'credentials') {
+        try {
+          const profile = await prisma.profile.findUnique({
             where: { userId: user.id },
             select: { role: true, isActive: true },
           });
-
-          // If no profile exists, create one (edge case recovery)
-          if (!profile) {
-            logger.warn('User without profile detected, creating default profile', { userId: user.id, email: user.email });
-            profile = await prisma.profile.create({
-              data: {
-                userId: user.id,
-                role: 'client',
-                affiliateStatus: 'APPROVED',
-                affiliateApprovedAt: new Date(),
-              },
-              select: { role: true, isActive: true },
-            });
-          }
 
           // Block deactivated users from signing in
           if (profile && profile.isActive === false) {
