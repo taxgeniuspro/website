@@ -57,6 +57,45 @@ async function getDefaultPreparerId(): Promise<string | null> {
   }
 }
 
+/**
+ * Get Owliver Owl's Profile.id as the default preparer assignment.
+ * All leads MUST be assigned to a preparer - Owliver is the fallback.
+ */
+async function getDefaultPreparerId(): Promise<string | null> {
+  try {
+    const owliver = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { customTrackingCode: 'ow' },
+          { trackingCode: 'ow' },
+          { user: { email: 'taxgenius.tax@gmail.com' } },
+        ],
+        role: { in: ['admin', 'tax_preparer'] },
+      },
+      select: { id: true },
+    });
+
+    if (owliver) {
+      return owliver.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const fallbackAdmin = await prisma.profile.findFirst({
+      where: {
+        role: 'admin',
+        bookingEnabled: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return fallbackAdmin?.id || null;
+  } catch (error) {
+    logger.error('Failed to get default preparer ID', { error });
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
