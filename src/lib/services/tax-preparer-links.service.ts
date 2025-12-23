@@ -1,9 +1,10 @@
 /**
  * Tax Preparer Links Service
  *
- * Automatically generates two standard tracking links with QR codes for tax preparers:
- * 1. Lead Form Link - Quick contact form
+ * Automatically generates three standard tracking links with QR codes for tax preparers:
+ * 1. Lead Form Link - Unified landing page (toggle: advance or filing)
  * 2. Intake Form Link - Full tax intake form
+ * 3. Advance Form Link - Cash advance page
  *
  * KEY DIFFERENCE FROM AFFILIATES:
  * - Tax preparer leads are ASSIGNED to the preparer (not corporate)
@@ -17,27 +18,23 @@ import { logger } from '@/lib/logger';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
 
+interface LinkInfo {
+  id: string;
+  code: string;
+  url: string;
+  shortUrl: string;
+  qrCodeDataUrl: string;
+  title: string;
+}
+
 export interface TaxPreparerLinks {
-  leadLink: {
-    id: string;
-    code: string;
-    url: string;
-    shortUrl: string;
-    qrCodeDataUrl: string;
-    title: string;
-  };
-  intakeLink: {
-    id: string;
-    code: string;
-    url: string;
-    shortUrl: string;
-    qrCodeDataUrl: string;
-    title: string;
-  };
+  leadLink: LinkInfo;
+  intakeLink: LinkInfo;
+  advanceLink: LinkInfo;
 }
 
 /**
- * Generate the two standard tax preparer links with QR codes
+ * Generate the three standard tax preparer links with QR codes
  */
 export async function generateTaxPreparerStandardLinks(
   profileId: string
@@ -76,21 +73,22 @@ export async function generateTaxPreparerStandardLinks(
 
     logger.info('📝 Using tracking code', { trackingCode, profileId });
 
-    // Check if links already exist
+    // Check if all 3 links already exist
     const existing = await prisma.marketingLink.findMany({
       where: {
         creatorId: profileId,
         code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
+          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
         },
       },
     });
 
-    if (existing.length === 2) {
-      logger.info('✅ Links already exist, returning existing links', { profileId });
+    if (existing.length === 3) {
+      logger.info('✅ All 3 links already exist, returning existing links', { profileId });
 
       const leadLink = existing.find((l) => l.code.endsWith('-lead'))!;
       const intakeLink = existing.find((l) => l.code.endsWith('-intake'))!;
+      const advanceLink = existing.find((l) => l.code.endsWith('-advance'))!;
 
       return {
         leadLink: {
@@ -109,15 +107,23 @@ export async function generateTaxPreparerStandardLinks(
           qrCodeDataUrl: intakeLink.qrCodeImageUrl || '',
           title: intakeLink.title || '',
         },
+        advanceLink: {
+          id: advanceLink.id,
+          code: advanceLink.code,
+          url: advanceLink.url,
+          shortUrl: advanceLink.shortUrl || '',
+          qrCodeDataUrl: advanceLink.qrCodeImageUrl || '',
+          title: advanceLink.title || '',
+        },
       };
     }
 
-    // Create the two links
+    // Create the three links
     const links = [];
 
-    // 1. Lead Form Link
+    // 1. Lead Form Link (points to unified landing page)
     const leadCode = `${trackingCode}-lead`;
-    const leadUrl = `${APP_URL}/contact?ref=${trackingCode}`;
+    const leadUrl = `${APP_URL}/landing?ref=${trackingCode}`;
     const leadShortUrl = `${APP_URL}/go/${leadCode}`;
 
     logger.info('🎯 Creating lead form link', { leadCode, leadUrl });
@@ -139,9 +145,9 @@ export async function generateTaxPreparerStandardLinks(
         code: leadCode,
         url: leadUrl,
         shortUrl: leadShortUrl,
-        targetPage: '/contact',
-        title: '📝 Lead Capture Form',
-        description: 'Quick contact form for potential clients to submit their information',
+        targetPage: '/landing',
+        title: '🏠 Landing Page',
+        description: 'Unified landing page with cash advance or tax filing options',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
         dateActivated: new Date(),
@@ -189,6 +195,43 @@ export async function generateTaxPreparerStandardLinks(
     links.push(intakeLink);
     logger.info('✅ Created intake form link', { id: intakeLink.id, code: intakeLink.code });
 
+    // 3. Cash Advance Link
+    const advanceCode = `${trackingCode}-advance`;
+    const advanceUrl = `${APP_URL}/cash-advance?ref=${trackingCode}`;
+    const advanceShortUrl = `${APP_URL}/go/${advanceCode}`;
+
+    logger.info('🎯 Creating cash advance link', { advanceCode, advanceUrl });
+
+    const advanceQR = await generateQRCode({
+      url: advanceShortUrl,
+      materialId: advanceCode,
+      format: 'PNG',
+      size: 512,
+      userId: profile.userId || undefined,
+      withLogo: true,
+    });
+
+    const advanceLink = await prisma.marketingLink.create({
+      data: {
+        creatorId: profileId,
+        creatorType: 'TAX_PREPARER',
+        linkType: 'QR_CODE',
+        code: advanceCode,
+        url: advanceUrl,
+        shortUrl: advanceShortUrl,
+        targetPage: '/cash-advance',
+        title: '💰 Cash Advance',
+        description: 'Get up to $7,000 preseason tax advance',
+        qrCodeImageUrl: advanceQR.dataUrl,
+        qrCodeFormat: 'PNG',
+        dateActivated: new Date(),
+        isActive: true,
+      },
+    });
+
+    links.push(advanceLink);
+    logger.info('✅ Created cash advance link', { id: advanceLink.id, code: advanceLink.code });
+
     logger.info('🎉 Successfully generated tax preparer standard links', {
       profileId,
       trackingCode,
@@ -211,6 +254,14 @@ export async function generateTaxPreparerStandardLinks(
         shortUrl: intakeLink.shortUrl || '',
         qrCodeDataUrl: intakeLink.qrCodeImageUrl || '',
         title: intakeLink.title || '',
+      },
+      advanceLink: {
+        id: advanceLink.id,
+        code: advanceLink.code,
+        url: advanceLink.url,
+        shortUrl: advanceLink.shortUrl || '',
+        qrCodeDataUrl: advanceLink.qrCodeImageUrl || '',
+        title: advanceLink.title || '',
       },
     };
   } catch (error) {
@@ -248,19 +299,20 @@ export async function getTaxPreparerLinks(
       where: {
         creatorId: profileId,
         code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
+          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
         },
       },
     });
 
-    if (links.length !== 2) {
+    if (links.length !== 3) {
       return null;
     }
 
     const leadLink = links.find((l) => l.code.endsWith('-lead'));
     const intakeLink = links.find((l) => l.code.endsWith('-intake'));
+    const advanceLink = links.find((l) => l.code.endsWith('-advance'));
 
-    if (!leadLink || !intakeLink) {
+    if (!leadLink || !intakeLink || !advanceLink) {
       return null;
     }
 
@@ -280,6 +332,14 @@ export async function getTaxPreparerLinks(
         shortUrl: intakeLink.shortUrl || '',
         qrCodeDataUrl: intakeLink.qrCodeImageUrl || '',
         title: intakeLink.title || '',
+      },
+      advanceLink: {
+        id: advanceLink.id,
+        code: advanceLink.code,
+        url: advanceLink.url,
+        shortUrl: advanceLink.shortUrl || '',
+        qrCodeDataUrl: advanceLink.qrCodeImageUrl || '',
+        title: advanceLink.title || '',
       },
     };
   } catch (error) {
@@ -319,7 +379,7 @@ export async function regenerateTaxPreparerQRCodes(profileId: string): Promise<b
       where: {
         creatorId: profileId,
         code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
+          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
         },
       },
     });
@@ -384,7 +444,7 @@ export async function deleteTaxPreparerLinks(profileId: string): Promise<boolean
       where: {
         creatorId: profileId,
         code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
+          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
         },
       },
     });
