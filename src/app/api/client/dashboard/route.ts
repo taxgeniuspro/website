@@ -63,8 +63,10 @@ export async function GET(req: NextRequest) {
           lastName = nameParts[nameParts.length - 1];
         }
 
-        profile = await prisma.profile.create({
-          data: {
+        profile = await prisma.profile.upsert({
+          where: { userId: userId },
+          update: {}, // Don't update if profile already exists - just return it
+          create: {
             userId: userId,
             role: 'client',
             firstName,
