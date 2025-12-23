@@ -79,14 +79,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists (case-insensitive)
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
+    let existingUser;
+    try {
+      existingUser = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: email,
+            mode: 'insensitive',
+          },
         },
-      },
-    });
+      });
+    } catch (dbError) {
+      logger.error('[Signup] Database query failed', {
+        error: dbError instanceof Error ? dbError.message : 'Unknown error',
+        code: (dbError as any)?.code,
+      });
+      return NextResponse.json(
+        { error: 'Database connection error. Please try again later.' },
+        { status: 503 }
+      );
+    }
 
     if (existingUser) {
       return NextResponse.json(
@@ -254,7 +266,32 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    logger.error('[Signup] Failed to create account', { error: error instanceof Error ? error.message : 'Unknown error' });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    logger.error('[Signup] Failed to create account', {
+      error: errorMessage,
+      stack: errorStack,
+      // Include Prisma-specific error info if available
+      code: (error as any)?.code,
+      meta: (error as any)?.meta,
+    });
+
+    // Provide more specific error messages for common issues
+    if (errorMessage.includes('Unique constraint')) {
+      return NextResponse.json(
+        { error: 'An account with this email already exists' },
+        { status: 409 }
+      );
+    }
+
+    if (errorMessage.includes('connect') || errorMessage.includes('ECONNREFUSED')) {
+      return NextResponse.json(
+        { error: 'Database connection error. Please try again later.' },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Failed to create account. Please try again.' },
       { status: 500 }
