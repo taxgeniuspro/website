@@ -174,7 +174,13 @@ function SignUpContent() {
       }
 
       // Success - redirect to dashboard
-      router.push('/dashboard/client');
+      if (result?.ok) {
+        router.push('/dashboard/client');
+        router.refresh();
+      } else {
+        // Fallback: account created but auto-login unclear - redirect to signin
+        router.push('/auth/signin');
+      }
     } catch (error) {
       console.error('Sign up error:', error);
       setError(t('errors.unexpectedError'));

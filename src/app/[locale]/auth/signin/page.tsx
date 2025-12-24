@@ -185,7 +185,10 @@ function SignInContent() {
       }
 
       // Success - redirect to dashboard
-      router.push(callbackUrl);
+      if (result?.ok) {
+        router.push(callbackUrl);
+        router.refresh();
+      }
     } catch (error) {
       console.error('Credentials sign in error:', error);
       setError(t('errors.unexpectedError', { defaultValue: 'An unexpected error occurred. Please try again.' }));
