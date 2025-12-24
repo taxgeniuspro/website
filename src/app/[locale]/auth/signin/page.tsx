@@ -7,10 +7,11 @@ import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap } from '
 import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 function SignInContent() {
   const t = useTranslations('auth.signin');
+  const locale = useLocale();
   const searchParams = useSearchParams();
   const role = searchParams.get('role') || 'client';
 
@@ -162,8 +163,8 @@ function SignInContent() {
               },
             }}
             routing="path"
-            path="/auth/signin"
-            signUpUrl="/auth/signup"
+            path={`/${locale}/auth/signin`}
+            signUpUrl={`/${locale}/auth/signup`}
             forceRedirectUrl={callbackUrl}
           />
 
@@ -173,7 +174,7 @@ function SignInContent() {
               {t('form.dontHaveAccount')}
             </p>
             <a
-              href={`/auth/signup${role ? `?role=${role}` : ''}`}
+              href={`/${locale}/auth/signup${role ? `?role=${role}` : ''}`}
               className="inline-flex items-center justify-center w-full px-6 py-3 text-base font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm"
             >
               {t('form.signUp')}
