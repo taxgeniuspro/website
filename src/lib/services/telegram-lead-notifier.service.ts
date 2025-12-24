@@ -111,7 +111,7 @@ function formatLeadMessage(data: LeadNotificationData): string {
 • Source: ${data.source || 'Direct'}
 • Ref Code: ${data.refCode || 'None'}
 • Language: ${languageFlag}
-• Assigned To: ${data.assignedPreparer || 'Owliver (Default)'}
+• Assigned To: ${data.assignedPreparer || (data.locale === 'es' ? 'Ale Hamilton' : 'Ray Hamilton')}
 ${serviceLine}${additionalSection}${messageSection}
 
 ⏰ ${timestamp} CST

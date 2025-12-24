@@ -2,32 +2,35 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 
-// Hardcoded fallback for Owliver Owl
+// Hardcoded fallback for Ray Hamilton (default preparer for English forms)
 const DEFAULT_PREPARER_FALLBACK = {
   id: null,
-  firstName: 'Owliver',
-  lastName: 'Owl',
+  firstName: 'Ray',
+  lastName: 'Hamilton',
   role: 'admin',
   avatarUrl:
-    'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg',
+    'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_rh.jpg',
 };
 
 /**
  * GET /api/preparers/default
  *
- * Get the default preparer for new appointments
- * Returns Owliver Owl (taxgenius.tax@gmail.com or tracking code 'ow')
+ * Get the default preparer for new appointments/forms
+ * Returns Ray Hamilton (rhamiltonfirm@gmail.com or tracking code 'rh')
+ *
+ * Note: Owliver Owl is now an affiliate, not a tax preparer
  */
 export async function GET() {
   try {
-    // First, try to find Owliver (the default corporate preparer)
-    const owliver = await prisma.profile.findFirst({
+    // First, try to find Ray Hamilton (the default preparer for English forms)
+    const rayHamilton = await prisma.profile.findFirst({
       where: {
         OR: [
-          { customTrackingCode: 'ow' },
-          { trackingCode: 'ow' },
-          { user: { email: 'taxgenius.tax@gmail.com' } },
+          { customTrackingCode: 'rh' },
+          { trackingCode: 'rh' },
+          { user: { email: 'rhamiltonfirm@gmail.com' } },
         ],
+        role: { in: ['admin', 'tax_preparer'] },
       },
       select: {
         id: true,
@@ -38,20 +41,20 @@ export async function GET() {
       },
     });
 
-    if (owliver) {
+    if (rayHamilton) {
       return NextResponse.json({
         success: true,
-        preparerId: owliver.id,
+        preparerId: rayHamilton.id,
         preparer: {
-          id: owliver.id,
-          name: `${owliver.firstName || 'Owliver'} ${owliver.lastName || 'Owl'}`,
-          role: owliver.role,
-          avatarUrl: owliver.avatarUrl || DEFAULT_PREPARER_FALLBACK.avatarUrl,
+          id: rayHamilton.id,
+          name: `${rayHamilton.firstName || 'Ray'} ${rayHamilton.lastName || 'Hamilton'}`,
+          role: rayHamilton.role,
+          avatarUrl: rayHamilton.avatarUrl || DEFAULT_PREPARER_FALLBACK.avatarUrl,
         },
       });
     }
 
-    // Fallback: find any admin with booking enabled
+    // Fallback: find any admin or tax_preparer with booking enabled
     const fallbackPreparer = await prisma.profile.findFirst({
       where: {
         role: { in: ['admin', 'tax_preparer'] },
@@ -80,7 +83,7 @@ export async function GET() {
       });
     }
 
-    // Ultimate fallback: return hardcoded Owliver
+    // Ultimate fallback: return hardcoded Ray Hamilton
     logger.warn('[Default Preparer API] No preparers found in database, using hardcoded fallback');
     return NextResponse.json({
       success: true,
