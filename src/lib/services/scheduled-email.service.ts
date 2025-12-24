@@ -196,9 +196,10 @@ async function sendReferralInvitationEmail(
     let preparerId: string | undefined;
 
     if (lead.assignedPreparerId) {
-      const preparer = await prisma.profile.findFirst({
-        where: { userId: lead.assignedPreparerId },
-        select: { id: true, firstName: true, lastName: true },
+      // NOTE: assignedPreparerId IS the Profile.id (not User.id)
+      const preparer = await prisma.profile.findUnique({
+        where: { id: lead.assignedPreparerId },
+        select: { id: true, firstName: true, lastName: true, customTrackingCode: true, trackingCode: true },
       });
       if (preparer) {
         preparerId = preparer.id;
@@ -213,8 +214,11 @@ async function sendReferralInvitationEmail(
       alt: img.alt,
     })) || [];
 
-    // Get social media copy
-    const socialMediaCopy = generateSocialMediaCopy(preparerName, 'instagram');
+    // Get the referral link from the stored data
+    const referralLink = data.referralLink as string;
+
+    // Get social media copy with the correct referral link
+    const socialMediaCopy = generateSocialMediaCopy(preparerName, 'instagram', referralLink);
 
     // Render the email
     const emailHtml = await render(
@@ -222,7 +226,7 @@ async function sendReferralInvitationEmail(
         clientName: data.clientName as string || lead.first_name || 'Friend',
         preparerName,
         taxYear: data.taxYear as number || new Date().getFullYear(),
-        referralLink: data.referralLink as string,
+        referralLink,
         referralCode: data.referralCode as string,
         socialMediaCopy,
         images,
