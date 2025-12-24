@@ -4,22 +4,18 @@
  *
  * Supports:
  * - Google OAuth (Gmail login)
- * - Magic Link (Email-based passwordless login)
  * - Credentials (Email/Password)
  */
 import NextAuth, { type DefaultSession, type User as NextAuthUser } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
-import Resend from 'next-auth/providers/resend';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { UserRole, ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { FailedLoginService } from '@/lib/services/failed-login.service';
-import { getResendClient } from '@/lib/resend';
-import { MagicLinkEmail } from '../../emails/MagicLinkEmail';
 
 // Extend NextAuth types to include our custom role field
 declare module 'next-auth' {
@@ -60,7 +56,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: '/auth/signin',
     signOut: '/auth/signout',
     error: '/auth/error',
-    verifyRequest: '/auth/verify', // Magic link verification page
     newUser: '/dashboard/client', // New users go directly to client dashboard (role is auto-assigned)
   },
   providers: [
@@ -88,50 +83,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           image: profile.picture,
           role: 'client' as UserRole, // Default role for new OAuth users
         };
-      },
-    }),
-
-    // Magic Link Provider (Email-based passwordless login)
-    Resend({
-      apiKey: process.env.RESEND_API_KEY || '',
-      from: process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax',
-      // Custom email sending with branded template
-      async sendVerificationRequest({ identifier: email, url, provider }) {
-        try {
-          // Clean the URL to ensure it's properly formatted
-          const cleanUrl = url.trim();
-
-          logger.info('Sending magic link email', {
-            email,
-            url: cleanUrl,
-            from: provider.from,
-          });
-
-          const { data, error } = await getResendClient().emails.send({
-            from: provider.from as string,
-            to: email,
-            subject: 'Sign in to Tax Genius Pro',
-            react: MagicLinkEmail({
-              magicLinkUrl: cleanUrl,
-            }),
-          });
-
-          if (error) {
-            logger.error('Failed to send magic link email', { email, error });
-            throw new Error(`Failed to send magic link: ${error.message}`);
-          }
-
-          logger.info('Magic link email sent successfully', {
-            email,
-            emailId: data?.id,
-          });
-        } catch (error) {
-          logger.error('Error in sendVerificationRequest', {
-            email,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
       },
     }),
 
@@ -251,39 +202,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
-      // Handle magic link (resend) provider
-      if (account?.provider === 'resend' && user?.email) {
-        try {
-          // For magic link, look up user by email since user.id may not be set yet
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email.toLowerCase() },
-            include: { profile: { select: { isActive: true, role: true } } },
-          });
-
-          if (existingUser?.profile?.isActive === false) {
-            logger.warn('Suspended user attempted magic link sign in', { email: user.email });
-            return '/suspended';
-          }
-
-          // Attach role if user exists
-          if (existingUser?.profile?.role) {
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
-          } else {
-            // New user - will get profile in events.signIn
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-          }
-
-          logger.info('Magic link sign in successful', { email: user.email, hasProfile: !!existingUser?.profile });
-          return true;
-        } catch (error) {
-          logger.error('Magic link sign in error', { error, email: user.email });
-          // Allow sign in anyway - profile will be created in dashboard or events.signIn
-          return true;
-        }
-      }
-
       // Check if user is deactivated (for credentials login)
       if (user?.id && account?.provider === 'credentials') {
         try {
@@ -304,32 +222,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return true;
     },
-    async jwt({ token, user, trigger, session, account }) {
+    async jwt({ token, user, trigger, session }) {
       // Initial sign in - add user data to token
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.role = user.role || 'client'; // Default to 'client' if role not set
         token.isActive = user.isActive ?? true;
-
-        // For magic link users, ensure we have the correct database user ID
-        if (account?.provider === 'resend' && user.email) {
-          try {
-            const dbUser = await prisma.user.findUnique({
-              where: { email: user.email.toLowerCase() },
-              select: { id: true },
-            });
-            if (dbUser) {
-              token.id = dbUser.id;
-              logger.info('JWT: Set user ID from database for magic link user', {
-                email: user.email,
-                userId: dbUser.id,
-              });
-            }
-          } catch (error) {
-            logger.error('JWT: Failed to look up magic link user', { error, email: user.email });
-          }
-        }
       }
 
       // Handle session updates (when user.update() is called)

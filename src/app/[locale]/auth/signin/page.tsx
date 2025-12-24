@@ -3,7 +3,7 @@
 import { useState, Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users, Zap, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
@@ -33,13 +33,10 @@ function SignInContent() {
     callbackUrl = '/dashboard';
   }
 
-  const [magicLinkEmail, setMagicLinkEmail] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
-  // Classic email/password login state
+  // Email/password login state
   const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -149,42 +146,6 @@ function SignInContent() {
       console.error('Google sign in error:', error);
       setError(t('errors.unexpectedError'));
       setIsLoading(false);
-    }
-  };
-
-  const handleMagicLinkSignIn = async () => {
-    if (!magicLinkEmail) {
-      setError(t('errors.emailRequired', { defaultValue: 'Please enter your email address' }));
-      return;
-    }
-
-    setError('');
-    setIsMagicLinkLoading(true);
-
-    try {
-      const result = await signIn('resend', {
-        email: magicLinkEmail,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError(t('errors.magicLinkFailed', { defaultValue: 'Failed to send magic link. Please try again.' }));
-        setIsMagicLinkLoading(false);
-        return;
-      }
-
-      // Success - show confirmation message
-      setMagicLinkSent(true);
-      setIsMagicLinkLoading(false);
-
-      // Redirect to verify page after 2 seconds
-      setTimeout(() => {
-        router.push('/auth/verify');
-      }, 2000);
-    } catch (error) {
-      console.error('Magic link error:', error);
-      setError(t('errors.unexpectedError'));
-      setIsMagicLinkLoading(false);
     }
   };
 
@@ -316,7 +277,7 @@ function SignInContent() {
             variant="default"
             className="w-full h-14 text-base font-semibold"
             onClick={handleGoogleSignIn}
-            disabled={isLoading || isMagicLinkLoading || isCredentialsLoading}
+            disabled={isLoading || isCredentialsLoading}
           >
             <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -338,42 +299,6 @@ function SignInContent() {
             </svg>
             {t('form.signInWithGoogle', { defaultValue: 'Sign in with Google' })}
           </Button>
-
-          {/* Magic Link - Second */}
-          <div className="space-y-2">
-            <Input
-              type="email"
-              placeholder={t('form.emailForMagicLink', { defaultValue: 'Enter email for magic link' })}
-              value={magicLinkEmail}
-              onChange={(e) => setMagicLinkEmail(e.target.value)}
-              disabled={isLoading || isMagicLinkLoading || isCredentialsLoading || magicLinkSent}
-              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-12 text-base"
-              onClick={handleMagicLinkSignIn}
-              disabled={isLoading || isMagicLinkLoading || isCredentialsLoading || magicLinkSent}
-            >
-              {isMagicLinkLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('form.sendingMagicLink', { defaultValue: 'Sending link...' })}
-                </>
-              ) : magicLinkSent ? (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
-                  {t('form.magicLinkSent', { defaultValue: 'Magic link sent!' })}
-                </>
-              ) : (
-                <>
-                  <Mail className="mr-2 h-4 w-4" />
-                  {t('form.signInWithMagicLink', { defaultValue: 'Sign in with Magic Link' })}
-                </>
-              )}
-            </Button>
-          </div>
 
           {/* Divider */}
           <div className="relative">
