@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import {
   FileText,
@@ -12,7 +11,6 @@ import {
   CalendarIcon,
   CheckCircle2,
   Clock,
-  AlertCircle,
   TrendingUp,
   Users,
   Gift,
@@ -74,36 +72,12 @@ export default function ClientDashboard() {
     );
   }
 
-  // Error State
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Welcome to Tax Genius Pro
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-2">
-              Setting up your account...
-            </p>
-          </div>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Account Setup in Progress</AlertTitle>
-            <AlertDescription>
-              We're preparing your dashboard. Please refresh this page in a moment. If this issue
-              persists, please contact our support team.
-            </AlertDescription>
-          </Alert>
-        </div>
-      </div>
-    );
-  }
-
-  const taxReturn = data?.currentReturn;
-  const stats = data?.stats;
-  const referralStats = data?.referralStats;
+  // Use data or empty defaults - never show error page
+  const taxReturn = data?.currentReturn || null;
+  const stats = data?.stats || { documentsCount: 0, estimatedRefund: 0, daysUntilDeadline: 113 };
+  const referralStats = data?.referralStats || { totalLeads: 0 };
   const hideReferralProgram = data?.hideReferralProgram ?? false;
+  const intakeStatus = data?.intakeStatus || { hasCompleted: false };
 
   return (
     <>
@@ -294,7 +268,7 @@ export default function ClientDashboard() {
               </Card>
             )}
           </>
-        ) : !data?.intakeStatus?.hasCompleted ? (
+        ) : !intakeStatus?.hasCompleted ? (
           /* STATE 1: No intake completed - show "Complete Tax Intake" card */
           <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
             <CardHeader>
