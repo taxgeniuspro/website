@@ -1046,7 +1046,7 @@ export function hasAffiliateAccess(
 
 /**
  * Check if user has access to tax filing features (documents, returns, tickets)
- * Only clients with hasFiledTaxes flag can access
+ * Clients always have access - they should be able to upload docs and ask questions anytime
  * Affiliates CANNOT file taxes - they are referral-only
  */
 export function hasTaxFilingAccess(
@@ -1058,9 +1058,10 @@ export function hasTaxFilingAccess(
     return false;
   }
 
-  // Only clients can have tax filing features
+  // Clients always have access to their tax documents and support
+  // They should be able to upload docs and ask questions before completing intake
   if (role === 'client') {
-    return hasFiledTaxes === true;
+    return true;
   }
 
   // Tax preparers access client files through their own interface
