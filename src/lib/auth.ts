@@ -534,11 +534,13 @@ export async function validateRequest() {
 export function getDashboardUrl(role: UserRole | string): string {
   const normalizedRole = typeof role === 'string' ? role.toLowerCase() : role;
 
-  // Only 3 valid roles: admin, client, tax_preparer
+  // Dashboard URLs by role
+  // Affiliates go to Analytics since that's their primary focus (marketing/referral tracking)
   const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
     client: '/dashboard/client',
     tax_preparer: '/dashboard/tax-preparer',
+    affiliate: '/dashboard/affiliate/analytics',
   };
 
   return dashboardUrls[normalizedRole] || '/dashboard/client';
