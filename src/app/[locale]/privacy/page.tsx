@@ -158,15 +158,15 @@ export default async function PrivacyPage({ params }: { params: { locale: string
             <p className="mb-4">{t('sections.thirdPartyServices.description')}</p>
             <ul className="list-disc pl-6 space-y-2 mb-4">
               <li>
-                <strong>{t('sections.thirdPartyServices.items.clerk.name')}</strong>{' '}
-                {t('sections.thirdPartyServices.items.clerk.description')} (
+                <strong>{t('sections.thirdPartyServices.items.nextauth.name')}</strong>{' '}
+                {t('sections.thirdPartyServices.items.nextauth.description')} (
                 <a
-                  href="https://clerk.com/privacy"
+                  href="https://next-auth.js.org"
                   className="text-primary hover:underline"
                   target="_blank"
                   rel="noopener"
                 >
-                  {t('sections.thirdPartyServices.items.clerk.linkText')}
+                  {t('sections.thirdPartyServices.items.nextauth.linkText')}
                 </a>
                 )
               </li>

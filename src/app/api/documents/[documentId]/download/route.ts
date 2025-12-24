@@ -155,9 +155,9 @@ async function generateSignedUrl(
   userId: string,
   expiryMinutes: number = 15
 ): Promise<string> {
-  const jwtSecret = process.env.JWT_SECRET || process.env.CLERK_SECRET_KEY;
+  const jwtSecret = process.env.JWT_SECRET || process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
   if (!jwtSecret) {
-    throw new Error('CRITICAL: JWT_SECRET or CLERK_SECRET_KEY environment variable is missing');
+    throw new Error('CRITICAL: JWT_SECRET or AUTH_SECRET environment variable is missing');
   }
   const secret = new TextEncoder().encode(jwtSecret);
 

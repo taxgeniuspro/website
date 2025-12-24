@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname, useParams } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { useSession } from 'next-auth/react';
+import { useUser } from '@clerk/nextjs';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { trackLanguageSwitch } from '@/lib/analytics/ga4';
 
@@ -23,7 +23,7 @@ export function LocaleSwitcher({
   const locale = (params.locale as Locale) || 'en';
   const router = useRouter();
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { user, isSignedIn } = useUser();
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -36,8 +36,8 @@ export function LocaleSwitcher({
       toLocale: newLocale,
       currentPage: pathname,
       switchMethod: trackingMethod,
-      userAuthenticated: !!session?.user,
-      userRole: session?.user?.role,
+      userAuthenticated: isSignedIn || false,
+      userRole: user?.publicMetadata?.role as string | undefined,
     });
 
     startTransition(() => {
@@ -238,7 +238,7 @@ export function MobileLocaleSwitcher({ className = '' }: { className?: string })
   const locale = (params.locale as Locale) || 'en';
   const router = useRouter();
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { user, isSignedIn } = useUser();
   const [isPending, startTransition] = useTransition();
 
   const switchLocale = (newLocale: Locale) => {
@@ -250,8 +250,8 @@ export function MobileLocaleSwitcher({ className = '' }: { className?: string })
       toLocale: newLocale,
       currentPage: pathname,
       switchMethod: 'mobile_menu',
-      userAuthenticated: !!session?.user,
-      userRole: session?.user?.role,
+      userAuthenticated: isSignedIn || false,
+      userRole: user?.publicMetadata?.role as string | undefined,
     });
 
     startTransition(() => {

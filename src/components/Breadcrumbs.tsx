@@ -245,7 +245,7 @@ function isDynamicSegment(segment: string): boolean {
   const patterns = [
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, // UUID
     /^\d+$/, // Numeric ID
-    /^clk_[a-zA-Z0-9]+$/, // Clerk ID
+    /^clk_[a-zA-Z0-9]+$/, // Legacy ID pattern
     /^[a-zA-Z0-9]{20,}$/, // Long random string
   ];
 

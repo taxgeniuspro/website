@@ -22,9 +22,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const token = params.token;
 
     // Verify JWT token
-    const jwtSecret = process.env.JWT_SECRET || process.env.CLERK_SECRET_KEY;
+    const jwtSecret = process.env.JWT_SECRET || process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
     if (!jwtSecret) {
-      logger.error('CRITICAL: JWT_SECRET or CLERK_SECRET_KEY environment variable is missing');
+      logger.error('CRITICAL: JWT_SECRET or AUTH_SECRET environment variable is missing');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
     const secret = new TextEncoder().encode(jwtSecret);

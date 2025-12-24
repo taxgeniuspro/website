@@ -24,7 +24,7 @@ export async function GET() {
 
     // Get user profile with username
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
       select: {
         id: true,
         shortLinkUsername: true,

@@ -23,14 +23,14 @@ const envSchema = z.object({
   // Database
   DATABASE_URL: z.string().url().describe('PostgreSQL database connection URL'),
 
-  // Clerk Authentication
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/auth/signin'),
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/auth/signup'),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().default('/dashboard'),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: z.string().default('/auth/select-role'),
-  CLERK_WEBHOOK_SECRET: z.string().optional(),
+  // NextAuth Authentication
+  AUTH_SECRET: z.string().min(32).optional(),
+  NEXTAUTH_SECRET: z.string().min(32).optional(),
+  NEXTAUTH_URL: z.string().url().optional(),
+
+  // Google OAuth
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
 
   // Upstash Redis
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),

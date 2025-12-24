@@ -2,13 +2,13 @@
  * Lightweight Edge Runtime Middleware
  *
  * This middleware handles:
+ * - Clerk authentication
  * - i18n routing (via next-intl)
  * - UTM/ref parameter tracking cookies
  *
- * Authentication and authorization are handled at the page/API route level
- * to avoid bundling heavy dependencies (bcrypt, prisma) into Edge Runtime.
  * The Edge Function size limit is 1MB for Vercel free tier.
  */
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
@@ -22,12 +22,47 @@ const intlMiddleware = createMiddleware({
   localeDetection: false, // Disable Accept-Language header detection - always use defaultLocale for unprefixed routes
 });
 
-export async function middleware(req: NextRequest) {
+// Define protected routes that require authentication
+const isProtectedRoute = createRouteMatcher([
+  '/dashboard(.*)',
+  '/admin(.*)',
+  '/crm(.*)',
+  '/:locale/dashboard(.*)',
+  '/:locale/admin(.*)',
+  '/:locale/crm(.*)',
+]);
+
+// Define public routes that don't require authentication
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/auth/(.*)',
+  '/api/webhook(.*)',
+  '/api/auth/(.*)',
+  '/api/leads(.*)',
+  '/api/public(.*)',
+  '/go/(.*)',
+  '/book(.*)',
+  '/contact(.*)',
+  '/start-filing(.*)',
+  '/refer(.*)',
+  '/privacy(.*)',
+  '/terms(.*)',
+  '/:locale',
+  '/:locale/auth/(.*)',
+  '/:locale/go/(.*)',
+  '/:locale/book(.*)',
+  '/:locale/contact(.*)',
+  '/:locale/start-filing(.*)',
+  '/:locale/refer(.*)',
+  '/:locale/privacy(.*)',
+  '/:locale/terms(.*)',
+]);
+
+export default clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
-  // Skip middleware for API routes, static files, mockups, and Next.js internals
+  // Skip middleware for API routes (except protected ones), static files, mockups, and Next.js internals
   if (
-    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/mockups/') ||
     pathname.startsWith('/sw.js') ||
@@ -35,6 +70,11 @@ export async function middleware(req: NextRequest) {
     pathname.includes('.')
   ) {
     return NextResponse.next();
+  }
+
+  // Protect dashboard, admin, and CRM routes
+  if (isProtectedRoute(req)) {
+    await auth.protect();
   }
 
   // ==================================================================================
@@ -144,11 +184,14 @@ export async function middleware(req: NextRequest) {
   }
 
   return intlResponse;
-}
+});
 
 export const config = {
   matcher: [
     // Skip Next.js internals, static files, PWA files, and mockups folder
+    // Include Clerk's internal routes
     '/((?!_next|mockups|sw\\.js|manifest\\.json|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes except webhooks
+    '/(api|trpc)(.*)',
   ],
 };

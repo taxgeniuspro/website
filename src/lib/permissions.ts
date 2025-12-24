@@ -5,7 +5,7 @@ import type { AffiliateStatus } from '@prisma/client';
  * Permission System
  *
  * Manages granular access control for different user roles.
- * Permissions are stored in Clerk publicMetadata.permissions
+ * Permissions are stored in the database via Prisma.
  */
 
 export type Permission =

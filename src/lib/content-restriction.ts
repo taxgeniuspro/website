@@ -2,7 +2,7 @@
  * Content Restriction Utilities
  *
  * Provides role-based and username-based access control for pages and content.
- * Inspired by WordPress "Pages by User Role" plugin, adapted for Next.js + Clerk.
+ * Inspired by WordPress "Pages by User Role" plugin, adapted for Next.js + NextAuth.
  *
  * Priority Order:
  * 1. Username-based blocks (blockedUsernames) - HIGHEST PRIORITY
