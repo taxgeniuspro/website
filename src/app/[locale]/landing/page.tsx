@@ -42,7 +42,7 @@ function LandingPageContent() {
 
   const [preparer, setPreparer] = useState<PreparerInfo>(DEFAULT_PREPARER);
   const [hasCustomPreparer, setHasCustomPreparer] = useState(false);
-  const [mode, setMode] = useState<FormMode>('advance');
+  const [mode, setMode] = useState<FormMode>('filing');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -179,10 +179,16 @@ function LandingPageContent() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to submit form');
 
-        // Redirect to full intake form
-        const intakeUrl = refCode
-          ? `/${locale}/start-filing/form?ref=${refCode}`
-          : `/${locale}/start-filing/form?ref=${preparer.trackingCode}`;
+        // Redirect to full intake form with pre-filled data
+        const params = new URLSearchParams();
+        params.set('ref', refCode || preparer.trackingCode);
+        if (formData.firstName) params.set('firstName', formData.firstName);
+        if (formData.lastName) params.set('lastName', formData.lastName);
+        if (formData.phone) params.set('phone', formData.phone);
+        if (formData.email) params.set('email', formData.email);
+        if (formData.zipCode) params.set('zipCode', formData.zipCode);
+
+        const intakeUrl = `/${locale}/start-filing/form?${params.toString()}`;
         router.push(intakeUrl);
       }
     } catch (error) {

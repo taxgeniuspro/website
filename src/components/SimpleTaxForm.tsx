@@ -114,6 +114,14 @@ interface SubmitPageProps {
   handleSubmit: () => Promise<void>;
 }
 
+interface InitialFormData {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  zipCode?: string;
+}
+
 interface SimpleTaxFormProps {
   preparer?: {
     firstName: string | null;
@@ -122,9 +130,10 @@ interface SimpleTaxFormProps {
     phone: string | null;
     email: string | null;
   } | null;
+  initialData?: InitialFormData;
 }
 
-export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFormProps = {}) {
+export default function SimpleTaxForm({ preparer: initialPreparer, initialData }: SimpleTaxFormProps = {}) {
   const t = useTranslations('forms.taxIntake');
   const tCommon = useTranslations('common');
   const locale = useLocale();
@@ -137,17 +146,17 @@ export default function SimpleTaxForm({ preparer: initialPreparer }: SimpleTaxFo
   const [taxYear, setTaxYear] = useState(() => getCurrentFilingTaxYear());
   const availableTaxYears = getAvailableTaxYears();
   const [formData, setFormData] = useState<TaxFormData>({
-    first_name: '',
+    first_name: initialData?.firstName || '',
     middle_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
+    last_name: initialData?.lastName || '',
+    email: initialData?.email || '',
+    phone: initialData?.phone || '',
     country_code: '+1',
     address_line_1: '',
     address_line_2: '',
     city: '',
     state: '',
-    zip_code: '',
+    zip_code: initialData?.zipCode || '',
     date_of_birth: '',
     ssn: '',
     claimed_as_dependent: 'no',

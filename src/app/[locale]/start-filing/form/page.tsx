@@ -27,7 +27,14 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  searchParams: Promise<{ ref?: string }>;
+  searchParams: Promise<{
+    ref?: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    email?: string;
+    zipCode?: string;
+  }>;
 }
 
 async function getPreparerByRef(ref: string | undefined) {
@@ -112,6 +119,15 @@ export default async function TaxFormPage({ searchParams }: PageProps) {
   const preparer = await getPreparerByRef(params.ref);
   const preparerName = `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim();
 
+  // Pre-fill data from landing page
+  const initialData = {
+    firstName: params.firstName || '',
+    lastName: params.lastName || '',
+    phone: params.phone || '',
+    email: params.email || '',
+    zipCode: params.zipCode || '',
+  };
+
   return (
     <div className="min-h-screen bg-background py-12">
       {/* Track short link clicks */}
@@ -134,7 +150,7 @@ export default async function TaxFormPage({ searchParams }: PageProps) {
           />
         </div>
 
-        <SimpleTaxForm preparer={preparer} />
+        <SimpleTaxForm preparer={preparer} initialData={initialData} />
       </div>
     </div>
   );
