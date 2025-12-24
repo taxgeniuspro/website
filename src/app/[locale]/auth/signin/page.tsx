@@ -321,7 +321,8 @@ function SignInContent() {
               onChange={(e) => setEmail(e.target.value)}
               disabled={isCredentialsLoading}
               className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
-              autoComplete="email"
+              autoComplete="username"
+              name="signin-email"
             />
             <div className="relative">
               <Input
