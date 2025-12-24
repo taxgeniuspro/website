@@ -223,13 +223,12 @@ export async function POST(req: NextRequest) {
           phone: phoneDigits,
           email: email?.toLowerCase() || existingContact.email,
           lastContactedAt: new Date(),
-          // Update preparer assignment if ref was provided
-          ...(assignedPreparerId && { assignedPreparerId }),
-          ...(ref && {
-            referrerUsername: ref,
-            referrerType: 'tax_preparer',
-            attributionMethod: 'ref_param',
-          }),
+          // Update preparer assignment if not already assigned
+          assignedPreparerId: existingContact.assignedPreparerId || assignedPreparerId,
+          // Update referrer info if not already set
+          referrerUsername: existingContact.referrerUsername || ref || null,
+          referrerType: existingContact.referrerType || (ref ? 'tax_preparer' : null),
+          attributionMethod: existingContact.attributionMethod || (ref ? 'ref_param' : null),
         },
       });
 

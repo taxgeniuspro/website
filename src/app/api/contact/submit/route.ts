@@ -157,9 +157,12 @@ export async function POST(req: NextRequest) {
           lastName,
           phone: phone || crmContact.phone,
           lastContactedAt: new Date(),
-          // Update preparer assignment if ref was provided
-          ...(assignedPreparerId && { assignedPreparerId }),
-          ...(ref && { referrerUsername: ref, referrerType: 'tax_preparer', attributionMethod: 'ref_param' }),
+          // Update preparer assignment if ref was provided and not already assigned
+          assignedPreparerId: crmContact.assignedPreparerId || assignedPreparerId,
+          // Update referrer info if ref provided and not already set
+          referrerUsername: crmContact.referrerUsername || ref || null,
+          referrerType: crmContact.referrerType || (ref ? 'tax_preparer' : null),
+          attributionMethod: crmContact.attributionMethod || (ref ? 'ref_param' : null),
         },
       });
 

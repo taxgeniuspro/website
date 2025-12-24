@@ -169,6 +169,11 @@ export async function POST(req: NextRequest) {
     // Also create/update CRMContact for unified tracking
     if (email) {
       try {
+        // Check if contact exists first to properly handle referrer info
+        const existingCRMContact = await prisma.cRMContact.findUnique({
+          where: { email: email.toLowerCase() },
+        });
+
         await prisma.cRMContact.upsert({
           where: { email: email.toLowerCase() },
           create: {
@@ -189,6 +194,10 @@ export async function POST(req: NextRequest) {
             firstName,
             lastName: lastName || undefined,
             phone: phone || undefined,
+            // Update referrer info if not already set
+            assignedPreparerId: existingCRMContact?.assignedPreparerId || assignedPreparerId,
+            referrerUsername: existingCRMContact?.referrerUsername || referrerUsername,
+            referrerType: existingCRMContact?.referrerType || referrerType,
           },
         });
       } catch (crmError) {
@@ -206,12 +215,16 @@ export async function POST(req: NextRequest) {
         });
 
         if (existingContact) {
-          // Update existing
+          // Update existing - preserve referrer info if already set
           await prisma.cRMContact.update({
             where: { id: existingContact.id },
             data: {
               firstName,
               lastName: lastName || undefined,
+              // Update referrer info if not already set
+              assignedPreparerId: existingContact.assignedPreparerId || assignedPreparerId,
+              referrerUsername: existingContact.referrerUsername || referrerUsername,
+              referrerType: existingContact.referrerType || referrerType,
             },
           });
         } else {
