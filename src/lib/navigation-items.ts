@@ -144,12 +144,13 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   // 🤝 AFFILIATE DASHBOARD SECTION
   // Referral-only: Can refer others for commission, CANNOT file taxes
+  // Analytics is the default/first item since that's their main focus
   // ═══════════════════════════════════════════════════════════════════════════
   {
-    label: 'Overview',
-    href: '/dashboard/affiliate',
-    icon: Home,
-    permission: 'dashboard',
+    label: 'Analytics',
+    href: '/dashboard/affiliate/analytics',
+    icon: BarChart3,
+    permission: 'analytics',
     section: '🤝 Affiliate Dashboard',
     roles: ['affiliate'],
   },
@@ -166,14 +167,6 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: '/dashboard/affiliate/leads',
     icon: Users,
     permission: 'dashboard',
-    section: '🤝 Affiliate Dashboard',
-    roles: ['affiliate'],
-  },
-  {
-    label: 'Analytics',
-    href: '/dashboard/affiliate/analytics',
-    icon: BarChart3,
-    permission: 'analytics',
     section: '🤝 Affiliate Dashboard',
     roles: ['affiliate'],
   },
@@ -466,12 +459,13 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 /**
  * Dashboard routes by role (for redirecting generic /dashboard to role-specific dashboard)
  * NOTE: Only 3 roles exist: admin, client, tax_preparer
+ * Affiliates go directly to Analytics since that's their main focus
  */
 export const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
   admin: '/dashboard/admin',
   tax_preparer: '/dashboard/tax-preparer',
   client: '/dashboard/client',
-  affiliate: '/dashboard/affiliate',
+  affiliate: '/dashboard/affiliate/analytics',
 };
 
 /**
