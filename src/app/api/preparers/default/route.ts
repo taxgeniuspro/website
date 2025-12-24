@@ -2,23 +2,27 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 
-// Hardcoded fallback for Ray Hamilton (default preparer for English forms)
+// Owliver Owl - Company mascot/icon used as default display image
+const OWLIVER_AVATAR_URL =
+  'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_ow.jpg';
+
+// Fallback when no preparer found in database
 const DEFAULT_PREPARER_FALLBACK = {
   id: null,
-  firstName: 'Ray',
-  lastName: 'Hamilton',
+  firstName: 'Tax Genius',
+  lastName: 'Pro',
   role: 'admin',
-  avatarUrl:
-    'https://res.cloudinary.com/dhktmiigh/image/upload/v1765487894/taxgeniuspro/preparers/preparer_rh.jpg',
+  avatarUrl: OWLIVER_AVATAR_URL,
 };
 
 /**
  * GET /api/preparers/default
  *
  * Get the default preparer for new appointments/forms
- * Returns Ray Hamilton (rhamiltonfirm@gmail.com or tracking code 'rh')
+ * Returns Ray Hamilton's ID for lead assignment, but Owliver's avatar for display
  *
- * Note: Owliver Owl is now an affiliate, not a tax preparer
+ * Display: Owliver Owl (company icon/mascot)
+ * Lead Assignment: Ray Hamilton (English) or Ale Hamilton (Spanish)
  */
 export async function GET() {
   try {
@@ -47,9 +51,10 @@ export async function GET() {
         preparerId: rayHamilton.id,
         preparer: {
           id: rayHamilton.id,
-          name: `${rayHamilton.firstName || 'Ray'} ${rayHamilton.lastName || 'Hamilton'}`,
+          // Display as "Tax Genius Pro" with Owliver's avatar (company icon)
+          name: 'Tax Genius Pro',
           role: rayHamilton.role,
-          avatarUrl: rayHamilton.avatarUrl || DEFAULT_PREPARER_FALLBACK.avatarUrl,
+          avatarUrl: OWLIVER_AVATAR_URL,
         },
       });
     }
@@ -76,14 +81,15 @@ export async function GET() {
         preparerId: fallbackPreparer.id,
         preparer: {
           id: fallbackPreparer.id,
-          name: `${fallbackPreparer.firstName} ${fallbackPreparer.lastName}`,
+          // Display as "Tax Genius Pro" with Owliver's avatar (company icon)
+          name: 'Tax Genius Pro',
           role: fallbackPreparer.role,
-          avatarUrl: fallbackPreparer.avatarUrl,
+          avatarUrl: OWLIVER_AVATAR_URL,
         },
       });
     }
 
-    // Ultimate fallback: return hardcoded Ray Hamilton
+    // Ultimate fallback: return hardcoded info
     logger.warn('[Default Preparer API] No preparers found in database, using hardcoded fallback');
     return NextResponse.json({
       success: true,
