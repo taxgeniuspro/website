@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
     const { paymentMethod, notes } = body;
 
     // Create payout request
-    // Note: In production, this would integrate with Square/Stripe for automatic payout
+    // Note: In production, this would integrate with Stripe for automatic payout
     // For now, we create a manual payout request that admin processes
     const payoutRequest = await prisma.payoutRequest.create({
       data: {

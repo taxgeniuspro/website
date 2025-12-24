@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 
-// Payment mode: 'test', 'stripe', or 'square'
-const PAYMENT_MODE = (process.env.PAYMENT_MODE || 'test') as 'test' | 'stripe' | 'square';
+// Payment mode: 'test' or 'stripe'
+const PAYMENT_MODE = (process.env.PAYMENT_MODE || 'stripe') as 'test' | 'stripe';
 
 // Initialize Stripe only if in Stripe mode
 const getStripe = () => {
@@ -185,17 +185,6 @@ export async function POST(request: NextRequest) {
       logger.info(`✅ Stripe session created: ${session.id}`);
 
       return NextResponse.json({ url: session.url, mode: 'stripe' });
-    } else if (PAYMENT_MODE === 'square') {
-      // SQUARE MODE: Placeholder for Square integration
-      logger.info('🟦 SQUARE MODE: Square integration not yet implemented');
-
-      return NextResponse.json(
-        {
-          error: 'Square integration coming soon',
-          message: 'Switch to PAYMENT_MODE=test or PAYMENT_MODE=stripe',
-        },
-        { status: 501 }
-      );
     } else {
       return NextResponse.json({ error: 'Invalid payment mode configured' }, { status: 500 });
     }

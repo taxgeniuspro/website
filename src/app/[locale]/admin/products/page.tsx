@@ -52,7 +52,6 @@ interface Product {
   digitalDownload: boolean | null;
   stock: number | null;
   sku: string | null;
-  squareItemId: string | null;
   createdAt: string;
   updatedAt: string;
 }

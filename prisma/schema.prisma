@@ -694,8 +694,6 @@ model Product {
   stock           Int? // Inventory count (null = unlimited)
   sku             String?  @unique // Product SKU
 
-  // Square/CashApp Integration (NEW)
-  squareItemId String? @unique // Square Catalog Item ID
   metadata     Json?   @default("{}") // Additional product metadata
 
   isActive  Boolean  @default(true)
@@ -708,7 +706,6 @@ model Product {
   @@index([type])
   @@index([isActive])
   @@index([category])
-  @@index([squareItemId])
   @@map("products")
 }
 
@@ -1024,8 +1021,7 @@ model Payment {
   amount          Decimal
   type            PaymentType
   status          PaymentStatus @default(PENDING)
-  squarePaymentId String?       @unique
-  squareOrderId   String?
+  stripePaymentId String?       @unique
   metadata        Json?
   processedAt     DateTime?
   createdAt       DateTime      @default(now())
@@ -1033,7 +1029,7 @@ model Payment {
 
   @@index([profileId])
   @@index([status])
-  @@index([squarePaymentId])
+  @@index([stripePaymentId])
   @@map("payments")
 }
 
@@ -1501,9 +1497,7 @@ model Order {
   id               String      @id @default(cuid())
   userId           String
   profile          Profile     @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  paymentSessionId String      @unique // Stripe or Square session ID
-  paymentMethod    String      @default("STRIPE") // "STRIPE", "SQUARE", "CASHAPP"
-  squareOrderId    String?     @unique // Square Order ID
+  stripeSessionId  String      @unique // Stripe checkout session ID
   items            Json // Array of { productId, name, quantity, price, customerImageUrl? }
   total            Decimal     @db.Decimal(10, 2)
   status           OrderStatus @default(PENDING)

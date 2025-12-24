@@ -1,7 +1,6 @@
 import { Resend } from 'resend';
 import { cache } from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
-import { MagicLinkEmail } from '../../../emails/MagicLinkEmail';
 import { WelcomeEmail } from '../../../emails/WelcomeEmail';
 import { CommissionEmail } from '../../../emails/CommissionEmail';
 import { StatusUpdateEmail } from '../../../emails/StatusUpdateEmail';
@@ -150,45 +149,6 @@ export class EmailService {
     } catch (error) {
       logger.error('Error getting preparer notification email', { preparerId, error });
       throw error;
-    }
-  }
-
-  /**
-   * Send magic link email using Resend + React Email
-   */
-  static async sendMagicLinkEmail(to: string, token: string, name?: string): Promise<boolean> {
-    try {
-      const magicLinkUrl = `${this.appUrl}/auth/verify?token=${token}`;
-
-      if (process.env.NODE_ENV === 'development') {
-        logger.info('Magic Link Email (Dev Mode):', {
-          to,
-          magicLinkUrl,
-          token,
-        });
-        return true;
-      }
-
-      const { data, error } = await getResendClient().emails.send({
-        from: this.fromEmail,
-        to,
-        subject: 'Your Tax Genius Login Link',
-        react: MagicLinkEmail({
-          name,
-          magicLinkUrl,
-        }),
-      });
-
-      if (error) {
-        logger.error('Error sending magic link email:', error);
-        return false;
-      }
-
-      logger.info('Magic link email sent:', data?.id);
-      return true;
-    } catch (error) {
-      logger.error('Error sending magic link email:', error);
-      return false;
     }
   }
 

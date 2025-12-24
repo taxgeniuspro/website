@@ -26,7 +26,7 @@ function SetupPasswordForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Validate magic link on mount
+  // Validate password setup token on mount
   useEffect(() => {
     if (!token) {
       setIsValidating(false);
@@ -53,12 +53,12 @@ function SetupPasswordForm() {
         setName(data.name || '');
       } else {
         setIsValid(false);
-        toast.error(data.error || t('invalidMagicLink'));
+        toast.error(data.error || t('invalidLink'));
       }
     } catch (error) {
       console.error('Error validating token:', error);
       setIsValid(false);
-      toast.error(t('invalidMagicLink'));
+      toast.error(t('invalidLink'));
     } finally {
       setIsValidating(false);
     }

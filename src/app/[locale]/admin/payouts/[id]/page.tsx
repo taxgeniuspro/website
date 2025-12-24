@@ -498,7 +498,7 @@ export default function PayoutDetailPage({ params }: { params: Promise<{ id: str
                   onChange={(e) => setPaymentRef(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Enter the Square, PayPal, or bank transfer reference number
+                  Enter the PayPal, Venmo, or bank transfer reference number
                 </p>
               </div>
             </div>

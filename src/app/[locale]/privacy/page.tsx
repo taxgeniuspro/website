@@ -171,15 +171,15 @@ export default async function PrivacyPage({ params }: { params: { locale: string
                 )
               </li>
               <li>
-                <strong>{t('sections.thirdPartyServices.items.square.name')}</strong>{' '}
-                {t('sections.thirdPartyServices.items.square.description')} (
+                <strong>{t('sections.thirdPartyServices.items.stripe.name')}</strong>{' '}
+                {t('sections.thirdPartyServices.items.stripe.description')} (
                 <a
-                  href="https://squareup.com/us/en/legal/general/privacy"
+                  href="https://stripe.com/privacy"
                   className="text-primary hover:underline"
                   target="_blank"
                   rel="noopener"
                 >
-                  {t('sections.thirdPartyServices.items.square.linkText')}
+                  {t('sections.thirdPartyServices.items.stripe.linkText')}
                 </a>
                 )
               </li>

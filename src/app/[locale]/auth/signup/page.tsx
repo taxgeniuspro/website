@@ -12,7 +12,9 @@ import {
   TrendingUp,
   Users,
   Loader2,
-  Mail,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
@@ -26,11 +28,16 @@ function SignUpContent() {
   const role = searchParams.get('role') || 'client';
   const t = useTranslations('auth.signup');
 
-  const [magicLinkEmail, setMagicLinkEmail] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
+
+  // Email/password signup state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isCredentialsLoading, setIsCredentialsLoading] = useState(false);
 
   // Role-specific content
   // Note: All signups become 'client' with automatic affiliate features
@@ -110,39 +117,68 @@ function SignUpContent() {
     }
   };
 
-  const handleMagicLinkSignUp = async () => {
-    if (!magicLinkEmail) {
+  const handleCredentialsSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email) {
       setError('Please enter your email address');
+      return;
+    }
+    if (!password) {
+      setError('Please enter a password');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setError('');
-    setIsMagicLinkLoading(true);
+    setIsCredentialsLoading(true);
 
     try {
-      const result = await signIn('resend', {
-        email: magicLinkEmail,
+      // Call signup API
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          password,
+          name: name || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to create account');
+        setIsCredentialsLoading(false);
+        return;
+      }
+
+      // Auto sign in after successful signup
+      const result = await signIn('credentials', {
+        email: email.toLowerCase(),
+        password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError('Failed to send magic link. Please try again.');
-        setIsMagicLinkLoading(false);
+        setError('Account created! Please sign in.');
+        router.push('/auth/signin');
         return;
       }
 
-      // Success - show confirmation message
-      setMagicLinkSent(true);
-      setIsMagicLinkLoading(false);
-
-      // Redirect to verify page after 2 seconds
-      setTimeout(() => {
-        router.push('/auth/verify');
-      }, 2000);
+      // Success - redirect to dashboard
+      router.push('/dashboard/client');
     } catch (error) {
-      console.error('Magic link error:', error);
+      console.error('Sign up error:', error);
       setError(t('errors.unexpectedError'));
-      setIsMagicLinkLoading(false);
+      setIsCredentialsLoading(false);
     }
   };
 
@@ -228,7 +264,7 @@ function SignUpContent() {
               role === 'affiliate' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
             }`}
             onClick={handleGoogleSignUp}
-            disabled={isLoading || isMagicLinkLoading}
+            disabled={isLoading || isCredentialsLoading}
           >
             <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -263,41 +299,79 @@ function SignUpContent() {
             </div>
           </div>
 
-          {/* Magic Link - Secondary sign up method */}
-          <div className="space-y-2">
+          {/* Email/Password Sign Up Form */}
+          <form onSubmit={handleCredentialsSignUp} className="space-y-3">
+            <Input
+              type="text"
+              placeholder="Full name (optional)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={isCredentialsLoading}
+              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
+              autoComplete="name"
+            />
             <Input
               type="email"
-              placeholder="Enter your email address"
-              value={magicLinkEmail}
-              onChange={(e) => setMagicLinkEmail(e.target.value)}
-              disabled={isLoading || isMagicLinkLoading || magicLinkSent}
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isCredentialsLoading}
               className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
+              autoComplete="email"
+            />
+            <div className="relative">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password (min 8 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isCredentialsLoading}
+                className="h-12 pr-10 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
+                autoComplete="new-password"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={isCredentialsLoading}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Confirm password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={isCredentialsLoading}
+              className="h-12 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm"
+              autoComplete="new-password"
             />
             <Button
-              type="button"
-              variant="outline"
-              className="w-full h-12 text-base font-semibold border-2 border-primary/50 hover:border-primary hover:bg-primary/10"
-              onClick={handleMagicLinkSignUp}
-              disabled={isLoading || isMagicLinkLoading || magicLinkSent}
+              type="submit"
+              variant="default"
+              className="w-full h-12 text-base"
+              disabled={isCredentialsLoading}
             >
-              {isMagicLinkLoading ? (
+              {isCredentialsLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending link...
-                </>
-              ) : magicLinkSent ? (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
-                  Check your email!
+                  Creating account...
                 </>
               ) : (
                 <>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Sign up with Magic Link
+                  <Lock className="mr-2 h-4 w-4" />
+                  Create Account
                 </>
               )}
             </Button>
-          </div>
+          </form>
 
           <div className="text-xs text-muted-foreground text-center">
             {t('form.termsText')}{' '}

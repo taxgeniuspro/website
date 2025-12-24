@@ -1599,10 +1599,6 @@
         "signUp": "Sign up",
         "orContinueWith": "Or continue with",
         "signInWithGoogle": "Sign in with Google",
-        "emailForMagicLink": "Enter email for magic link",
-        "signInWithMagicLink": "Sign in with Magic Link",
-        "sendingMagicLink": "Sending link...",
-        "magicLinkSent": "Magic link sent!",
         "orUseEmailPassword": "Or use email & password",
         "showEmailPasswordOptions": "Show email/password options",
         "hideEmailPasswordOptions": "Hide email/password options",
@@ -1615,8 +1611,7 @@
         "emailRequired": "Please enter your email address",
         "passwordRequired": "Please enter your password",
         "invalidCredentials": "Invalid email or password. Please try again.",
-        "unexpectedError": "An unexpected error occurred. Please try again.",
-        "magicLinkFailed": "Failed to send magic link. Please try again."
+        "unexpectedError": "An unexpected error occurred. Please try again."
       },
       "imagePlaceholder": {
         "replaceWith": "[Replace with image]",
@@ -1739,7 +1734,7 @@
       "passwordSetSuccess": "Password set successfully! Logging you in...",
       "loginFailed": "Login failed. Please try logging in manually.",
       "setPasswordFailed": "Failed to set password",
-      "invalidMagicLink": "Invalid or expired magic link"
+      "invalidLink": "Invalid or expired link"
     }
   },
   "booking": {
@@ -2328,7 +2323,7 @@
             "item1": "Name, email address, phone number",
             "item2": "Tax identification information (SSN, EIN)",
             "item3": "Financial information (income, deductions, expenses)",
-            "item4": "Payment information (processed securely through Square)",
+            "item4": "Payment information (processed securely through Stripe)",
             "item5": "Tax documents (W2, 1099, receipts, etc.)"
           }
         },
@@ -2365,7 +2360,7 @@
           },
           "item2": {
             "title": "Payment Processors:",
-            "description": "Square for payment processing"
+            "description": "Stripe for payment processing"
           },
           "item3": {
             "title": "Email Service:",
@@ -2436,8 +2431,8 @@
             "description": "Authentication",
             "linkText": "Privacy Policy"
           },
-          "square": {
-            "name": "Square:",
+          "stripe": {
+            "name": "Stripe:",
             "description": "Payment processing",
             "linkText": "Privacy Policy"
           },
@@ -2590,7 +2585,7 @@
             "item1": "Created automatically when a referred client's return is filed",
             "item2": "Paid out when you request payment (minimum $50)",
             "item3": "Processed within 5-7 business days of approval",
-            "item4": "Paid via bank transfer, PayPal, Square Cash, or Venmo"
+            "item4": "Paid via bank transfer, PayPal, or Venmo"
           }
         },
         "prohibitedActivities": {
@@ -2633,7 +2628,7 @@
         "title": "Payments and Refunds",
         "paymentProcessing": {
           "title": "Payment Processing",
-          "description": "All payments are processed securely through Square. We do not store credit card information."
+          "description": "All payments are processed securely through Stripe. We do not store credit card information."
         },
         "pricing": {
           "title": "Pricing",

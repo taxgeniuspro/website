@@ -47,12 +47,6 @@ const envSchema = z.object({
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
-  // Square
-  SQUARE_ACCESS_TOKEN: z.string().optional(),
-  SQUARE_LOCATION_ID: z.string().optional(),
-  SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().optional(),
-  SQUARE_ENVIRONMENT: z.enum(['production', 'sandbox']).default('sandbox'),
-
   // Resend (Email)
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().default('noreply@taxgeniuspro.tax'),

@@ -1599,10 +1599,6 @@
         "signUp": "Regístrese",
         "orContinueWith": "O continuar con",
         "signInWithGoogle": "Iniciar sesión con Google",
-        "emailForMagicLink": "Ingrese correo para enlace mágico",
-        "signInWithMagicLink": "Iniciar sesión con enlace mágico",
-        "sendingMagicLink": "Enviando enlace...",
-        "magicLinkSent": "¡Enlace mágico enviado!",
         "emailRequired": "Por favor ingrese su dirección de correo electrónico",
         "orUseEmailPassword": "O usar correo electrónico y contraseña",
         "showEmailPasswordOptions": "Mostrar opciones de correo/contraseña",
@@ -1614,8 +1610,7 @@
       },
       "errors": {
         "invalidCredentials": "Correo electrónico o contraseña inválidos. Por favor intente de nuevo.",
-        "unexpectedError": "Ocurrió un error inesperado. Por favor intente de nuevo.",
-        "magicLinkFailed": "No se pudo enviar el enlace mágico. Por favor intente de nuevo."
+        "unexpectedError": "Ocurrió un error inesperado. Por favor intente de nuevo."
       },
       "imagePlaceholder": {
         "replaceWith": "[Reemplazar con imagen]",
@@ -1738,7 +1733,7 @@
       "passwordSetSuccess": "¡Contraseña establecida exitosamente! Iniciando sesión...",
       "loginFailed": "Error al iniciar sesión. Por favor intente iniciar sesión manualmente.",
       "setPasswordFailed": "Error al establecer la contraseña",
-      "invalidMagicLink": "Enlace mágico inválido o expirado"
+      "invalidLink": "Enlace inválido o expirado"
     }
   },
   "booking": {
@@ -2327,7 +2322,7 @@
             "item1": "Nombre, dirección de correo electrónico, número de teléfono",
             "item2": "Información de identificación fiscal (SSN, EIN)",
             "item3": "Información financiera (ingresos, deducciones, gastos)",
-            "item4": "Información de pago (procesada de forma segura a través de Square)",
+            "item4": "Información de pago (procesada de forma segura a través de Stripe)",
             "item5": "Documentos fiscales (W2, 1099, recibos, etc.)"
           }
         },
@@ -2364,7 +2359,7 @@
           },
           "item2": {
             "title": "Procesadores de Pagos:",
-            "description": "Square para procesamiento de pagos"
+            "description": "Stripe para procesamiento de pagos"
           },
           "item3": {
             "title": "Servicio de Correo Electrónico:",
@@ -2435,8 +2430,8 @@
             "description": "Autenticación",
             "linkText": "Política de Privacidad"
           },
-          "square": {
-            "name": "Square:",
+          "stripe": {
+            "name": "Stripe:",
             "description": "Procesamiento de pagos",
             "linkText": "Política de Privacidad"
           },
@@ -2589,7 +2584,7 @@
             "item1": "Creadas automáticamente cuando se presenta la declaración de un cliente referido",
             "item2": "Pagadas cuando solicita el pago (mínimo $50)",
             "item3": "Procesadas dentro de 5-7 días hábiles de aprobación",
-            "item4": "Pagadas a través de transferencia bancaria, PayPal, Square Cash o Venmo"
+            "item4": "Pagadas a través de transferencia bancaria, PayPal o Venmo"
           }
         },
         "prohibitedActivities": {
@@ -2632,7 +2627,7 @@
         "title": "Pagos y Reembolsos",
         "paymentProcessing": {
           "title": "Procesamiento de Pagos",
-          "description": "Todos los pagos se procesan de forma segura a través de Square. No almacenamos información de tarjetas de crédito."
+          "description": "Todos los pagos se procesan de forma segura a través de Stripe. No almacenamos información de tarjetas de crédito."
         },
         "pricing": {
           "title": "Precios",

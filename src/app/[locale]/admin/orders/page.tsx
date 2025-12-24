@@ -37,9 +37,7 @@ interface OrderItem {
 interface Order {
   id: string;
   userId: string;
-  paymentSessionId: string;
-  paymentMethod: string;
-  squareOrderId: string | null;
+  stripeSessionId: string;
   items: OrderItem[];
   total: number;
   status: string;
@@ -126,16 +124,10 @@ export default function AdminOrdersPage() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const getPaymentMethodBadge = (method: string) => {
-    const colors: Record<string, string> = {
-      SQUARE: 'bg-blue-500',
-      STRIPE: 'bg-purple-500',
-      CASHAPP: 'bg-green-500',
-    };
-
+  const getPaymentMethodBadge = () => {
     return (
-      <Badge className={colors[method] || 'bg-gray-500'} variant="secondary">
-        {method}
+      <Badge className="bg-purple-500" variant="secondary">
+        STRIPE
       </Badge>
     );
   };
@@ -210,7 +202,7 @@ export default function AdminOrdersPage() {
                       </TableCell>
                       <TableCell>{itemCount} item(s)</TableCell>
                       <TableCell className="font-medium">${order.total.toFixed(2)}</TableCell>
-                      <TableCell>{getPaymentMethodBadge(order.paymentMethod)}</TableCell>
+                      <TableCell>{getPaymentMethodBadge()}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell className="text-sm">
                         {format(new Date(order.createdAt), 'MMM d, yyyy')}
@@ -295,18 +287,12 @@ export default function AdminOrdersPage() {
                 <div className="text-sm space-y-1">
                   <div>
                     <span className="text-muted-foreground">Method: </span>
-                    {selectedOrder.paymentMethod}
+                    Stripe
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Payment ID: </span>
-                    <span className="font-mono text-xs">{selectedOrder.paymentSessionId}</span>
+                    <span className="text-muted-foreground">Session ID: </span>
+                    <span className="font-mono text-xs">{selectedOrder.stripeSessionId}</span>
                   </div>
-                  {selectedOrder.squareOrderId && (
-                    <div>
-                      <span className="text-muted-foreground">Square Order ID: </span>
-                      <span className="font-mono text-xs">{selectedOrder.squareOrderId}</span>
-                    </div>
-                  )}
                 </div>
               </div>
 

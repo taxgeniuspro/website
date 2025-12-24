@@ -3,12 +3,8 @@
 import { useState } from 'react'
 import { ShippingAddressForm } from './shipping-address-form'
 import { ShippingMethodSelector } from './shipping-method-selector'
-import { SquareCardPayment } from './square-card-payment'
-import { CashAppQRPayment } from './cashapp-qr-payment'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CheckCircle2, Package, Truck, CreditCard } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { useRouter } from 'next/navigation'
@@ -61,6 +57,7 @@ export function CompleteCheckoutFlow({ items, userEmail }: CheckoutFlowProps) {
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress | null>(null)
   const [shippingMethod, setShippingMethod] = useState<ShippingRate | null>(null)
   const [orderId, setOrderId] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   // Calculate totals (USD only)
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -89,14 +86,41 @@ export function CompleteCheckoutFlow({ items, userEmail }: CheckoutFlowProps) {
     setCurrentStep('payment')
   }
 
-  const handlePaymentSuccess = async (paymentData: {
-    paymentId: string
-    orderId: string
-    status: string
-  }) => {
-    logger.info('[Checkout] Payment successful', paymentData)
-    setOrderId(paymentData.orderId)
-    setCurrentStep('complete')
+  const handleStripeCheckout = async () => {
+    setIsProcessing(true)
+    try {
+      const response = await fetch('/api/checkout/create-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartItems: items.map(item => ({
+            productId: item.productId,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            imageUrl: item.customerImageUrl || '',
+          })),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url
+      } else if (data.orderId) {
+        // Test mode - order created directly
+        setOrderId(data.orderId)
+        setCurrentStep('complete')
+      } else {
+        throw new Error(data.error || 'Failed to create checkout session')
+      }
+    } catch (error) {
+      logger.error('Checkout error', { error })
+      alert('Failed to process checkout. Please try again.')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const renderStepIndicator = () => {
@@ -270,69 +294,20 @@ export function CompleteCheckoutFlow({ items, userEmail }: CheckoutFlowProps) {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Payment Method</CardTitle>
+                  <CardTitle>Payment</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <Tabs defaultValue="card" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="card">Credit Card</TabsTrigger>
-                      <TabsTrigger value="cashapp">Cash App Pay</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="card" className="mt-6">
-                      <SquareCardPayment
-                        amount={Math.round(total * 100)} // Convert to cents
-                        orderData={{
-                          items: items.map((item) => ({
-                            productId: item.productId,
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: item.price,
-                            customerImageUrl: item.customerImageUrl,
-                          })),
-                          email: userEmail || '',
-                          shippingAddress: {
-                            name: shippingAddress.name,
-                            street: shippingAddress.street,
-                            city: shippingAddress.city,
-                            state: shippingAddress.state,
-                            zip: shippingAddress.zipCode,
-                            country: shippingAddress.country,
-                          },
-                          shippingMethod: shippingMethod.serviceType,
-                        }}
-                        onSuccess={handlePaymentSuccess}
-                        onError={(error) => logger.error('Payment error', { error })}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="cashapp" className="mt-6">
-                      <CashAppQRPayment
-                        amount={Math.round(total * 100)} // Convert to cents
-                        orderData={{
-                          items: items.map((item) => ({
-                            productId: item.productId,
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: item.price,
-                            customerImageUrl: item.customerImageUrl,
-                          })),
-                          email: userEmail || '',
-                          shippingAddress: {
-                            name: shippingAddress.name,
-                            street: shippingAddress.street,
-                            city: shippingAddress.city,
-                            state: shippingAddress.state,
-                            zip: shippingAddress.zipCode,
-                            country: shippingAddress.country,
-                          },
-                          shippingMethod: shippingMethod.serviceType,
-                        }}
-                        onSuccess={handlePaymentSuccess}
-                        onError={(error) => logger.error('Payment error', { error })}
-                      />
-                    </TabsContent>
-                  </Tabs>
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground">
+                    You will be redirected to our secure payment processor to complete your purchase.
+                  </p>
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handleStripeCheckout}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? 'Processing...' : `Pay $${total.toFixed(2)}`}
+                  </Button>
                 </CardContent>
               </Card>
               <Button variant="outline" onClick={() => setCurrentStep('shipping-method')}>

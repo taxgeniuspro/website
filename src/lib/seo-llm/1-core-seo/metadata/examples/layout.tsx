@@ -41,12 +41,6 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Use environment-specific Square SDK URL
-  const squareSdkUrl =
-    process.env.NEXT_PUBLIC_SQUARE_ENVIRONMENT === 'production'
-      ? 'https://web.squarecdn.com/v1/square.js'
-      : 'https://sandbox.web.squarecdn.com/v1/square.js';
-
   // Schema.org structured data for SEO and AI platforms
   const baseUrl = 'https://gangrunprinting.com';
   const organizationSchema = {
@@ -95,9 +89,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
         />
-
-        {/* Square Web Payments SDK - Load early for checkout performance */}
-        <Script src={squareSdkUrl} strategy="beforeInteractive" />
 
         {/* Ahrefs Web Analytics - Track backlinks, LLM traffic, and referrers */}
         <Script

@@ -1,7 +1,8 @@
 /**
- * Validate Magic Link Token
+ * Validate Password Setup Token
  *
- * POST: Check if magic link token is valid and not expired
+ * POST: Check if password setup token is valid and not expired
+ * Note: This endpoint is used for password setup flows (not magic link auth)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,8 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, error: 'No token provided' }, { status: 400 });
     }
 
-    // Find magic link
-    const magicLink = await prisma.magicLink.findUnique({
+    // Find token in magic_links table (used for password setup tokens)
+    const passwordToken = await prisma.magicLink.findUnique({
       where: { token },
       include: {
         user: {
@@ -31,29 +32,29 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (!magicLink) {
-      return NextResponse.json({ valid: false, error: 'Invalid magic link' }, { status: 404 });
+    if (!passwordToken) {
+      return NextResponse.json({ valid: false, error: 'Invalid link' }, { status: 404 });
     }
 
     // Check if already used
-    if (magicLink.used) {
+    if (passwordToken.used) {
       return NextResponse.json({ valid: false, error: 'This link has already been used' }, { status: 400 });
     }
 
     // Check if expired
-    if (new Date() > magicLink.expiresAt) {
+    if (new Date() > passwordToken.expiresAt) {
       return NextResponse.json({ valid: false, error: 'This link has expired' }, { status: 400 });
     }
 
     // Valid!
     return NextResponse.json({
       valid: true,
-      email: magicLink.user.email,
-      name: magicLink.user.name,
-      userId: magicLink.user.id,
+      email: passwordToken.user.email,
+      name: passwordToken.user.name,
+      userId: passwordToken.user.id,
     });
   } catch (error) {
-    logger.error('Error validating magic link:', error);
-    return NextResponse.json({ valid: false, error: 'Failed to validate magic link' }, { status: 500 });
+    logger.error('Error validating token:', error);
+    return NextResponse.json({ valid: false, error: 'Failed to validate link' }, { status: 500 });
   }
 }

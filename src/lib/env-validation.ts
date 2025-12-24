@@ -46,10 +46,6 @@ const envSchema = z.object({
     .optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().startsWith('pk_').optional(),
 
-  SQUARE_ACCESS_TOKEN: z.string().optional(),
-  SQUARE_LOCATION_ID: z.string().optional(),
-  SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().optional(),
-
   // AI Services
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

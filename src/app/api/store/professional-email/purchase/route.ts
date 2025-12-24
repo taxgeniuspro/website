@@ -34,7 +34,7 @@ const PRICING = {
  * {
  *   aliasId: string,
  *   email: string,
- *   checkoutUrl: string,  // Square/Stripe checkout URL
+ *   checkoutUrl: string,  // Stripe checkout URL
  *   amount: number
  * }
  */
@@ -149,12 +149,12 @@ export async function POST(request: NextRequest) {
       status: alias.status,
     });
 
-    // TODO: Create Stripe/Square subscription
+    // TODO: Create Stripe subscription
     // For now, return a placeholder checkout URL
     const checkoutUrl = `${process.env.NEXT_PUBLIC_APP_URL}/store/professional-email/checkout/${alias.id}`;
 
     // TODO: Implement actual payment integration
-    // This would create a Stripe subscription or Square recurring payment
+    // This would create a Stripe subscription
     // Example:
     // const subscription = await stripe.subscriptions.create({
     //   customer: profile.stripeCustomerId,
