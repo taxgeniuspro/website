@@ -7,10 +7,11 @@ import { DollarSign, Shield, Award, CheckCircle, TrendingUp, Users } from 'lucid
 import Image from 'next/image';
 import { AuthLogo } from '@/components/Logo';
 import { Badge } from '@/components/ui/badge';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 function SignUpContent() {
   const t = useTranslations('auth.signup');
+  const locale = useLocale();
   const searchParams = useSearchParams();
   const role = searchParams.get('role') || 'client';
 
@@ -143,8 +144,8 @@ function SignUpContent() {
               },
             }}
             routing="path"
-            path="/auth/signup"
-            signInUrl="/auth/signin"
+            path={`/${locale}/auth/signup`}
+            signInUrl={`/${locale}/auth/signin`}
             forceRedirectUrl="/dashboard"
           />
 
@@ -154,7 +155,7 @@ function SignUpContent() {
               {t('form.alreadyHaveAccount', { defaultValue: 'Already have an account?' })}
             </p>
             <a
-              href={`/auth/signin${role ? `?role=${role}` : ''}`}
+              href={`/${locale}/auth/signin${role ? `?role=${role}` : ''}`}
               className="inline-flex items-center justify-center w-full px-6 py-3 text-base font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm"
             >
               {t('form.signIn', { defaultValue: 'Sign In' })}
