@@ -23,6 +23,8 @@ const DEFAULT_PREPARER_FALLBACK = {
  *
  * Display: Owliver Owl (company icon/mascot)
  * Lead Assignment: Ray Hamilton (English) or Ale Hamilton (Spanish)
+ *
+ * Note: Owliver Owl is now an affiliate, not a tax preparer
  */
 export async function GET() {
   try {
