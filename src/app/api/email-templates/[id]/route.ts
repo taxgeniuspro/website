@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
     });
 
     if (!profile) {
@@ -75,7 +75,7 @@ export async function PUT(
     }
 
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
     });
 
     if (!profile) {
@@ -131,7 +131,7 @@ export async function DELETE(
     }
 
     const profile = await prisma.profile.findUnique({
-      where: { clerkId: userId },
+      where: { userId },
     });
 
     if (!profile) {

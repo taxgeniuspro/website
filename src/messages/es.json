@@ -2367,7 +2367,7 @@
           },
           "item4": {
             "title": "Proveedor de Autenticación:",
-            "description": "Clerk para inicio de sesión seguro"
+            "description": "NextAuth para inicio de sesión seguro"
           },
           "item5": {
             "title": "Autoridades Legales:",
@@ -2380,7 +2380,7 @@
         "description": "Implementamos medidas de seguridad estándar de la industria para proteger su información:",
         "items": {
           "item1": "Cifrado SSL/TLS para datos en tránsito",
-          "item2": "Autenticación segura a través de Clerk",
+          "item2": "Autenticación segura a través de NextAuth",
           "item3": "Control de acceso basado en roles",
           "item4": "Acceso a documentos por tiempo limitado (las URL firmadas expiran en 15 minutos)",
           "item5": "Limitación de velocidad para prevenir abusos",
@@ -2425,8 +2425,8 @@
         "title": "Servicios de Terceros",
         "description": "Nuestro servicio se integra con:",
         "items": {
-          "clerk": {
-            "name": "Clerk:",
+          "nextauth": {
+            "name": "NextAuth:",
             "description": "Autenticación",
             "linkText": "Política de Privacidad"
           },

@@ -19,7 +19,7 @@ export function AdminLayoutClient({ children, role, permissions }: AdminLayoutCl
 
       {/* Main content area with header */}
       <SidebarInset className="flex flex-col">
-        {/* Header - uses real user data from Clerk */}
+        {/* Header - uses real user data from NextAuth session */}
         <DashboardHeader actualRole={role} effectiveRole={role} isViewingAsOtherRole={false} />
 
         {/* Main Content Area */}

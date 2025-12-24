@@ -1,397 +1,99 @@
 /**
- * NextAuth.js v5 Configuration
- * Complete authentication system for Tax Genius Pro
+ * Clerk Authentication System
+ * Complete authentication for Tax Genius Pro using Clerk
  *
  * Supports:
  * - Google OAuth (Gmail login)
- * - Credentials (Email/Password)
+ * - Email/Password authentication
+ * - Role-based access control via publicMetadata
  */
-import NextAuth, { type DefaultSession, type User as NextAuthUser } from 'next-auth';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import Credentials from 'next-auth/providers/credentials';
-import Google from 'next-auth/providers/google';
+import { auth as clerkAuth, currentUser } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
-import { UserRole, ContactType } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
-import { FailedLoginService } from '@/lib/services/failed-login.service';
+import bcrypt from 'bcryptjs';
 
-// Extend NextAuth types to include our custom role field
-declare module 'next-auth' {
-  interface Session {
-    user: {
-      id: string;
-      role: UserRole;
-      email: string;
-      name?: string | null;
-      image?: string | null;
-      isActive?: boolean;
-    } & DefaultSession['user'];
-  }
-
-  interface User {
-    role: UserRole;
-    isActive?: boolean;
-  }
-}
-
-declare module '@auth/core/jwt' {
-  interface JWT {
-    id: string;
-    role: UserRole;
-    isActive?: boolean;
-  }
-}
-
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(prisma),
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  trustHost: true, // Trust the host in production (required for NextAuth v5)
-  session: {
-    strategy: 'jwt', // Use JWT for faster session checks
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  pages: {
-    signIn: '/auth/signin',
-    signOut: '/auth/signout',
-    error: '/auth/error',
-    newUser: '/dashboard/client', // New users go directly to client dashboard (role is auto-assigned)
-  },
-  providers: [
-    // Google OAuth Provider (Gmail Login)
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      // Allow NextAuth to link Google accounts to existing users with same email
-      // This is SAFE because Google verifies email ownership
-      // Database constraint @@unique([userId, provider]) prevents duplicates
-      allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          prompt: 'consent',
-          access_type: 'offline',
-          response_type: 'code',
-        },
-      },
-      // Profile callback - ensure we get the email correctly
-      profile(profile) {
-        return {
-          id: profile.sub, // Use Google's sub (subject) as the user ID
-          name: profile.name,
-          email: profile.email,
-          image: profile.picture,
-          role: 'client' as UserRole, // Default role for new OAuth users
-        };
-      },
-    }),
-
-    // Credentials Provider (Email/Password)
-    Credentials({
-      name: 'credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-        ipAddress: { label: 'IP Address', type: 'hidden' }, // Passed from signin form
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Missing email or password');
-        }
-
-        const email = (credentials.email as string).toLowerCase();
-        const ipAddress = (credentials.ipAddress as string) || 'unknown';
-
-        // Check if account is locked out due to failed attempts
-        const lockStatus = await FailedLoginService.isLocked(email);
-        if (lockStatus.locked) {
-          logger.warn('Login attempt on locked account', { email, ipAddress, lockoutMinutes: lockStatus.lockoutMinutes });
-          throw new Error(`Account temporarily locked. Please try again in ${lockStatus.lockoutMinutes} minutes.`);
-        }
-
-        // Find user by email
-        const user = await prisma.user.findUnique({
-          where: { email },
-          include: {
-            profile: true, // Include profile to get role
-          },
-        });
-
-        if (!user || !user.hashedPassword) {
-          // Record failed attempt - user not found
-          await FailedLoginService.recordFailedAttempt(email, ipAddress, 'User not found');
-          throw new Error('Invalid email or password');
-        }
-
-        // Verify password
-        const isValidPassword = await bcrypt.compare(
-          credentials.password as string,
-          user.hashedPassword
-        );
-
-        if (!isValidPassword) {
-          // Record failed attempt - wrong password
-          const failResult = await FailedLoginService.recordFailedAttempt(email, ipAddress, 'Invalid password');
-          if (failResult.locked) {
-            throw new Error(`Account temporarily locked due to too many failed attempts. Please try again in ${failResult.lockoutMinutes} minutes.`);
-          }
-          throw new Error('Invalid email or password');
-        }
-
-        // Check if user is deactivated
-        if (user.profile?.isActive === false) {
-          throw new Error('Account suspended');
-        }
-
-        // Successful login - clear any failed attempts
-        await FailedLoginService.recordSuccessfulLogin(email, ipAddress);
-
-        // Return user with role from profile
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.profile?.role || 'client', // Default to client if no profile
-          isActive: user.profile?.isActive ?? true,
-        } as NextAuthUser & { role: UserRole; isActive?: boolean };
-      },
-    }),
-  ],
-  callbacks: {
-    async signIn({ user, account }) {
-      // ============================================================
-      // SIMPLIFIED GOOGLE OAUTH HANDLING
-      // Let NextAuth/PrismaAdapter handle user creation naturally
-      // We only check for suspended accounts here
-      // ============================================================
-      if (account?.provider === 'google' && user?.email) {
-        try {
-          // Check if user exists and is suspended
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email.toLowerCase() },
-            include: { profile: { select: { isActive: true, role: true } } },
-          });
-
-          if (existingUser?.profile?.isActive === false) {
-            logger.warn('Suspended user attempted Google OAuth', { email: user.email });
-            return '/suspended';
-          }
-
-          // If user exists, attach their role for the session
-          if (existingUser?.profile?.role) {
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = existingUser.profile.role;
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = existingUser.profile.isActive ?? true;
-          } else {
-            // New user - will get client role in events.signIn
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).role = 'client';
-            (user as NextAuthUser & { role: UserRole; isActive?: boolean }).isActive = true;
-          }
-
-          // Let NextAuth/PrismaAdapter handle user creation and account linking
-          return true;
-        } catch (error: any) {
-          logger.error('Google OAuth error', {
-            message: error?.message,
-            code: error?.code,
-            email: user?.email,
-          });
-          // Return true anyway - let NextAuth try to handle it
-          // The events.signIn will create profile if needed
-          return true;
-        }
-      }
-
-      // Check if user is deactivated (for credentials login)
-      if (user?.id && account?.provider === 'credentials') {
-        try {
-          const profile = await prisma.profile.findUnique({
-            where: { userId: user.id },
-            select: { role: true, isActive: true },
-          });
-
-          // Block deactivated users from signing in
-          if (profile && profile.isActive === false) {
-            logger.warn('Deactivated user attempted to sign in', { userId: user.id, email: user.email });
-            return '/suspended';
-          }
-        } catch (error) {
-          logger.error('Failed to fetch user profile during sign-in', { error, userId: user.id });
-        }
-      }
-
-      return true;
-    },
-    async jwt({ token, user, trigger, session }) {
-      // Initial sign in - add user data to token
-      if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.role = user.role || 'client'; // Default to 'client' if role not set
-        token.isActive = user.isActive ?? true;
-      }
-
-      // Handle session updates (when user.update() is called)
-      if (trigger === 'update' && session) {
-        token.role = session.role;
-        if (session.isActive !== undefined) {
-          token.isActive = session.isActive;
-        }
-      }
-
-      // IMPORTANT: Always refresh role from database to catch admin changes
-      // This ensures users see updated permissions immediately after admin changes their role
-      if (token.id) {
-        try {
-          // Use raw query to ensure we get the role as a plain string
-          // This bypasses any Prisma enum caching issues
-          const profiles = await prisma.$queryRaw<{ role: string }[]>`
-            SELECT role::text as role
-            FROM profiles
-            WHERE "userId" = ${token.id as string}
-            LIMIT 1
-          `;
-
-          const profile = profiles[0];
-          if (profile?.role) {
-            // Force the role to be a plain string
-            token.role = profile.role as UserRole;
-          }
-        } catch (error) {
-          // Keep existing token values on error
-          logger.error('Failed to refresh user profile in JWT callback', { error, userId: token.id });
-        }
-      }
-
-      return token;
-    },
-    async session({ session, token }) {
-      // Add user ID, role, and isActive status to session
-      if (token) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as UserRole;
-        session.user.isActive = token.isActive ?? true;
-      }
-
-      return session;
-    },
-  },
-  events: {
-    async signIn({ user, isNewUser }) {
-      // Log sign in events
-      logger.info('User signed in', { email: user.email, userId: user.id });
-
-      // If new user, create a profile with default client role
-      // (Note: tax_preparer and affiliate roles require manual admin upgrade)
-      if (isNewUser) {
-        try {
-          // Parse name into firstName, middleName, lastName
-          const nameParts = user.name?.split(' ').filter(part => part.length > 0) || [];
-          let firstName = '';
-          let middleName: string | undefined;
-          let lastName = '';
-
-          if (nameParts.length === 1) {
-            // Only first name
-            firstName = nameParts[0];
-          } else if (nameParts.length === 2) {
-            // First and last name only
-            firstName = nameParts[0];
-            lastName = nameParts[1];
-          } else if (nameParts.length >= 3) {
-            // First, middle, and last name
-            firstName = nameParts[0];
-            // Take all middle parts except the last one as middle name
-            middleName = nameParts.slice(1, -1).join(' ');
-            lastName = nameParts[nameParts.length - 1];
-          }
-
-          // Use upsert to handle race conditions - if profile already exists, don't update
-          const profile = await prisma.profile.upsert({
-            where: { userId: user.id },
-            update: {}, // Don't update if exists (handles race condition)
-            create: {
-              userId: user.id,
-              role: 'client',
-              firstName,
-              middleName,
-              lastName,
-              affiliateStatus: 'APPROVED',
-              affiliateApprovedAt: new Date(),
-            },
-          });
-
-          logger.info('Created profile for new OAuth user', { userId: user.id, profileId: profile.id, firstName, lastName });
-
-          // Assign tracking code and auto-generate referral links
-          try {
-            await assignTrackingCodeToUser(profile.id);
-            logger.info('Assigned tracking code to new OAuth user', { userId: user.id, profileId: profile.id });
-          } catch (trackingError) {
-            // Log but don't block signup
-            logger.error('Failed to assign tracking code to OAuth user', { error: trackingError, userId: user.id });
-          }
-
-          // Create or link CRM contact for unified People Hub view
-          // This ensures all OAuth users appear in CRM
-          try {
-            const existingCrmContact = await prisma.cRMContact.findUnique({
-              where: { email: user.email?.toLowerCase() },
-            });
-
-            if (existingCrmContact) {
-              // Link existing CRM contact to this user
-              await prisma.cRMContact.update({
-                where: { id: existingCrmContact.id },
-                data: {
-                  userId: user.id,
-                  firstName: firstName || existingCrmContact.firstName,
-                  lastName: lastName || existingCrmContact.lastName,
-                  contactType: ContactType.CLIENT,
-                  lastContactedAt: new Date(),
-                },
-              });
-              logger.info('Linked existing CRM contact to OAuth user', {
-                userId: user.id,
-                crmContactId: existingCrmContact.id,
-              });
-            } else {
-              // Create new CRM contact
-              await prisma.cRMContact.create({
-                data: {
-                  userId: user.id,
-                  email: user.email?.toLowerCase() || '',
-                  firstName: firstName || 'Unknown',
-                  lastName: lastName || '',
-                  contactType: ContactType.CLIENT,
-                  stage: 'NEW',
-                  source: 'google_oauth',
-                },
-              });
-              logger.info('Created CRM contact for OAuth user', { userId: user.id });
-            }
-          } catch (crmError) {
-            // Log but don't block signup
-            logger.error('Failed to create/link CRM contact for OAuth user', {
-              error: crmError instanceof Error ? crmError.message : 'Unknown error',
-              userId: user.id,
-            });
-          }
-        } catch (profileError) {
-          // Log profile creation failure - critical issue
-          logger.error('Failed to create profile for new OAuth user', { error: profileError, userId: user.id, email: user.email });
-        }
-      }
-    },
-  },
-  debug: process.env.NODE_ENV === 'development',
-});
+// Re-export UserRole for convenience
+export { UserRole } from '@prisma/client';
 
 /**
  * User role types for Tax Genius platform
  * @deprecated Use UserRole from @prisma/client instead
  */
 export type UserRoleType = 'SUPER_ADMIN' | 'ADMIN' | 'LEAD' | 'CLIENT' | 'TAX_PREPARER' | 'AFFILIATE';
+
+// Type definitions for session user
+interface SessionUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  image?: string | null;
+  role: UserRole;
+  isActive?: boolean;
+}
+
+interface Session {
+  user: SessionUser;
+}
+
+/**
+ * Get auth session from Clerk
+ * This is the main auth function - replaces NextAuth's auth()
+ */
+export async function auth(): Promise<Session | null> {
+  try {
+    const { userId } = await clerkAuth();
+
+    if (!userId) {
+      return null;
+    }
+
+    const user = await currentUser();
+    if (!user) {
+      return null;
+    }
+
+    // Get role from Clerk public metadata or database profile
+    let role: UserRole = (user.publicMetadata?.role as UserRole) || 'client';
+
+    // Try to get role from database if not in Clerk metadata
+    try {
+      const profile = await prisma.profile.findFirst({
+        where: {
+          OR: [
+            { clerkUserId: userId },
+            { userId: userId }
+          ]
+        },
+        select: { role: true, isActive: true }
+      });
+
+      if (profile) {
+        role = profile.role;
+      }
+    } catch (error) {
+      // Use Clerk metadata role if database lookup fails
+      logger.error('Failed to fetch profile for role:', error);
+    }
+
+    const email = user.emailAddresses[0]?.emailAddress || '';
+    const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || null;
+
+    return {
+      user: {
+        id: userId,
+        email,
+        name,
+        image: user.imageUrl,
+        role,
+        isActive: true,
+      },
+    };
+  } catch (error) {
+    logger.error('Error in auth():', error);
+    return null;
+  }
+}
 
 /**
  * Get the current user session
@@ -435,7 +137,6 @@ export async function hasRole(role: UserRole | string): Promise<boolean> {
 /**
  * Check if current user is an admin
  * Admin is the highest privilege role in the system
- * Valid roles: admin, client, tax_preparer
  * @returns True if user has 'admin' role
  */
 export async function isAdmin(): Promise<boolean> {
@@ -445,10 +146,8 @@ export async function isAdmin(): Promise<boolean> {
 
 /**
  * Alias for isAdmin() - kept for backwards compatibility
- * Note: There is no separate 'super_admin' role in the system
- * 'admin' is the highest privilege level
  * @returns True if user has 'admin' role
- * @deprecated Use isAdmin() instead - this function name is misleading
+ * @deprecated Use isAdmin() instead
  */
 export async function isSuperAdmin(): Promise<boolean> {
   return isAdmin();
@@ -475,7 +174,6 @@ export async function requireRole(requiredRole: UserRole | string) {
   const user = await requireAuth();
   const normalizedRequired = typeof requiredRole === 'string' ? requiredRole.toLowerCase() : requiredRole;
 
-  // Defensive check - if role is not set, default to 'client'
   const userRole = user.role || 'client';
   const normalizedUserRole = userRole.toString().toLowerCase();
 
@@ -494,7 +192,6 @@ export async function requireRole(requiredRole: UserRole | string) {
 export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
   const user = await requireAuth();
 
-  // Defensive check - if role is not set, default to 'client'
   const userRole = user.role || 'client';
   const normalizedUserRole = userRole.toString().toLowerCase();
   const normalizedAllowedRoles = allowedRoles.map(r =>
@@ -505,9 +202,14 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
     throw new Error('Insufficient permissions');
   }
 
-  // Fetch actual profile.id from database (user.id != profile.id)
-  const profile = await prisma.profile.findUnique({
-    where: { userId: user.id },
+  // Fetch actual profile.id from database
+  const profile = await prisma.profile.findFirst({
+    where: {
+      OR: [
+        { userId: user.id },
+        { clerkUserId: user.id }
+      ]
+    },
     select: { id: true },
   });
 
@@ -515,7 +217,7 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
 }
 
 /**
- * Validate request and return user (for backward compatibility with old Clerk code)
+ * Validate request and return user
  * @returns Object with user or null
  */
 export async function validateRequest() {
@@ -534,8 +236,6 @@ export async function validateRequest() {
 export function getDashboardUrl(role: UserRole | string): string {
   const normalizedRole = typeof role === 'string' ? role.toLowerCase() : role;
 
-  // Dashboard URLs by role
-  // Affiliates go to Analytics since that's their primary focus (marketing/referral tracking)
   const dashboardUrls: Record<string, string> = {
     admin: '/dashboard/admin',
     client: '/dashboard/client',
@@ -558,20 +258,25 @@ export async function hasStoreAccess(): Promise<boolean> {
 
 /**
  * Update user role (admin only)
- * This should be called server-side only by admins
- * @param userId - User ID
+ * This updates the role in our database profile
+ * Clerk metadata should be updated separately via webhook
+ * @param userId - User ID (Clerk user ID)
  * @param role - Role to assign
  */
 export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
-  // Verify admin permissions
   const currentUser = await requireAuth();
   if (currentUser.role !== 'admin') {
     throw new Error('Only admins can update user roles');
   }
 
   // Update role in profile
-  await prisma.profile.update({
-    where: { userId },
+  await prisma.profile.updateMany({
+    where: {
+      OR: [
+        { userId },
+        { clerkUserId: userId }
+      ]
+    },
     data: { role },
   });
 }
@@ -594,3 +299,9 @@ export async function hashPassword(password: string): Promise<string> {
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
+
+// Legacy exports for backwards compatibility
+// These are no longer used but kept to prevent import errors
+export const handlers = {};
+export const signIn = async () => { throw new Error('Use Clerk\'s signIn instead'); };
+export const signOut = async () => { throw new Error('Use Clerk\'s signOut instead'); };

@@ -2368,7 +2368,7 @@
           },
           "item4": {
             "title": "Authentication Provider:",
-            "description": "Clerk for secure login"
+            "description": "NextAuth for secure login"
           },
           "item5": {
             "title": "Legal Authorities:",
@@ -2381,7 +2381,7 @@
         "description": "We implement industry-standard security measures to protect your information:",
         "items": {
           "item1": "SSL/TLS encryption for data in transit",
-          "item2": "Secure authentication via Clerk",
+          "item2": "Secure authentication via NextAuth",
           "item3": "Role-based access control",
           "item4": "Time-limited document access (signed URLs expire in 15 minutes)",
           "item5": "Rate limiting to prevent abuse",
@@ -2426,8 +2426,8 @@
         "title": "Third-Party Services",
         "description": "Our service integrates with:",
         "items": {
-          "clerk": {
-            "name": "Clerk:",
+          "nextauth": {
+            "name": "NextAuth:",
             "description": "Authentication",
             "linkText": "Privacy Policy"
           },

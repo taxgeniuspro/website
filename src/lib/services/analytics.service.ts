@@ -6,7 +6,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-// Clerk client removed - using NextAuth;
 import { logger } from '@/lib/logger';
 import { UserRole } from '@prisma/client';
 
@@ -72,14 +71,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    // Total users from Clerk
-    const { totalCount: totalUsers } = await clerk.users.getUserList({ limit: 1 });
+    // Total users from database
+    const totalUsers = await prisma.user.count();
 
-    // Users last month
-    const usersLastMonth = await clerk.users.getUserList({
-      limit: 1,
-      createdAt: {
-        $lt: startOfMonth.getTime(),
+    // Users created before this month (for growth calculation)
+    const usersLastMonthCount = await prisma.user.count({
+      where: {
+        createdAt: { lt: startOfMonth },
       },
     });
 
@@ -152,8 +150,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         : 0;
 
     const usersGrowth =
-      usersLastMonth.totalCount > 0
-        ? ((totalUsers - usersLastMonth.totalCount) / usersLastMonth.totalCount) * 100
+      usersLastMonthCount > 0
+        ? ((totalUsers - usersLastMonthCount) / usersLastMonthCount) * 100
         : 0;
 
     const returnsGrowth =

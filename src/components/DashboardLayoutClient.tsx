@@ -107,7 +107,7 @@ export function DashboardLayoutClient({
 
       {/* Main content area with header */}
       <SidebarInset className="flex flex-col">
-        {/* Header - uses real user data from Clerk */}
+        {/* Header - uses real user data from NextAuth session */}
         <DashboardHeader
           actualRole={actualRole}
           effectiveRole={effectiveRole}
