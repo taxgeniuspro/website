@@ -694,6 +694,10 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
             stage: existingContact.stage === 'NEW' ? PipelineStage.NEW : existingContact.stage,
             // Update preparer assignment if not already assigned
             assignedPreparerId: existingContact.assignedPreparerId || preparer.id,
+            // Update referrer info if provided and not already set
+            referrerUsername: existingContact.referrerUsername || preparerCode,
+            referrerType: existingContact.referrerType || 'TAX_PREPARER',
+            attributionMethod: existingContact.attributionMethod || 'ref_param',
             lastContactedAt: new Date(),
           },
         });
