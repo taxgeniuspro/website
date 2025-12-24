@@ -376,14 +376,8 @@ const handleSubmit = async () => {
       const result = await response.json();
       logger.info('Tax form submitted successfully', { emailId: result.emailId, fileUploaded: result.fileUploaded });
 
-      // Check if user is authenticated
-      if (user && isLoaded) {
-        // Authenticated user: show thank you page
-        setShowThankYou(true);
-      } else {
-        // Unauthenticated user: redirect to signup
-        window.location.href = `/auth/signup?email=${encodeURIComponent(formData.email)}&hint=tax_client&redirect_url=/dashboard/client?tab=referrals`;
-      }
+      // Show thank you page - no login/signup required
+      setShowThankYou(true);
     } catch (error) {
       logger.error('Error submitting tax form:', error);
       alert('Failed to submit form. Please try again.');
@@ -798,16 +792,6 @@ function ThankYouPage({ preparer }: ThankYouPageProps) {
             </Button>
           </div>
         </div>
-      </div>
-
-      {/* Dashboard Link */}
-      <div className="pt-4">
-        <Button size="lg" asChild>
-          <a href="/dashboard/client?tab=referrals">
-            Go to Dashboard
-            <ArrowRight className="ml-2 w-5 h-5" />
-          </a>
-        </Button>
       </div>
     </div>
   );
