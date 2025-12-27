@@ -38,9 +38,10 @@ function isProtectedRoute(pathname: string): boolean {
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Skip middleware for API routes, static files, mockups, and Next.js internals
+  // Skip middleware for API routes, auth callbacks, static files, mockups, and Next.js internals
   if (
     pathname.startsWith('/api/') ||
+    pathname.startsWith('/auth/callback') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/mockups/') ||
     pathname.startsWith('/sw.js') ||
