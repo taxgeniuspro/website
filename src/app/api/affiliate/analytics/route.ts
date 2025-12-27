@@ -20,8 +20,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user profile to check affiliate access
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
+    // Use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: user.id },
+          { userId: user.id },
+          { email: user.email }
+        ]
+      },
       select: { role: true, affiliateStatus: true },
     });
 
