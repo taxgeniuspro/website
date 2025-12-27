@@ -105,13 +105,18 @@ export async function auth(): Promise<Session | null> {
           const firstName = nameParts[0] || '';
           const lastName = nameParts.slice(1).join(' ') || '';
 
+          // Determine role - test accounts get tax_preparer role
+          const autoRole = user.email.toLowerCase() === 'testpreparer@taxgeniuspro.tax'
+            ? 'tax_preparer'
+            : 'client';
+
           // Create profile
           profile = await prisma.profile.create({
             data: {
               userId: dbUser.id,
               supabaseUserId: user.id,
               email: user.email.toLowerCase(),
-              role: 'client',
+              role: autoRole,
               firstName,
               lastName,
               affiliateStatus: 'APPROVED',
