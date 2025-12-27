@@ -17,9 +17,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile with group
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get user profile with group - use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       include: {
         affiliateGroup: true,
       },
