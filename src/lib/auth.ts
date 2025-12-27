@@ -105,10 +105,14 @@ export async function auth(): Promise<Session | null> {
           const firstName = nameParts[0] || '';
           const lastName = nameParts.slice(1).join(' ') || '';
 
-          // Determine role - test accounts get tax_preparer role
-          const autoRole = user.email.toLowerCase() === 'testpreparer@taxgeniuspro.tax'
-            ? 'tax_preparer'
-            : 'client';
+          // Determine role - test accounts get specific roles
+          const emailLower = user.email.toLowerCase();
+          let autoRole: string = 'client';
+          if (emailLower === 'testpreparer@taxgeniuspro.tax') {
+            autoRole = 'tax_preparer';
+          } else if (emailLower === 'testaffiliate@taxgeniuspro.tax') {
+            autoRole = 'affiliate';
+          }
 
           // Create profile
           profile = await prisma.profile.create({
