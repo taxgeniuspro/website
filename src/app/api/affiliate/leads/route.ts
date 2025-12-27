@@ -18,8 +18,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile to check role and tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
+    // Use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: user.id },
+          { userId: user.id },
+          { email: user.email }
+        ]
+      },
       select: {
         id: true,
         role: true,
