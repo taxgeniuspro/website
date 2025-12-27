@@ -6,13 +6,9 @@
  * Currently handles:
  * - client_referral_invitation: Sent 30 min after lead form completion
  *
- * Configure in vercel.json:
- * {
- *   "crons": [{
- *     "path": "/api/cron/send-scheduled-emails",
- *     "schedule": "0/5 * * * *"
- *   }]
- * }
+ * Configure via n8n or external cron to call:
+ * POST /api/cron/send-scheduled-emails
+ * Schedule: every 5 minutes (0/5 * * * *)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
