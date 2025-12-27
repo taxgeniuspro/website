@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { ALL_NAV_ITEMS, ROLE_DASHBOARD_ROUTES, SECTION_ROLE_RESTRICTIONS, type NavItem } from '@/lib/navigation-items';
 import { Phone, MapPin, Share2, ChevronUp, ChevronDown, Settings, LogOut } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/lib/supabase/useSession';
 import { useRouter } from 'next/navigation';
 
 interface MobileSidebarProps {

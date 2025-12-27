@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { PreparerCard } from '@/components/PreparerCard';
 import Image from 'next/image';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { useTranslations, useLocale } from 'next-intl';
 import { getCurrentFilingTaxYear, getAvailableTaxYears } from '@/lib/utils/tax-year';
 

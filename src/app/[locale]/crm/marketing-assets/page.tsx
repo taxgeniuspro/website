@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { useRouter } from 'next/navigation';
 import { getUserPermissions, UserRole } from '@/lib/permissions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

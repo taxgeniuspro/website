@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/lib/supabase/useSession';
 import { Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 

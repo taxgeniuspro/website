@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import { Resend } from '@/lib/resend';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';

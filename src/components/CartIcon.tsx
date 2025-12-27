@@ -2,7 +2,7 @@
 
 import { ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { useShoppingCart } from '@/lib/hooks/useShoppingCart';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ export function CartIcon() {
   const itemCount = getItemCount();
 
   // Only show cart for admins and tax preparers
-  const userRole = user?.publicMetadata?.role as string | undefined;
+  const userRole = user?.role as string | undefined;
   const canAccessCart = userRole === 'admin' || userRole === 'tax_preparer';
 
   if (!canAccessCart) {

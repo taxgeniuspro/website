@@ -20,7 +20,7 @@
 
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { ReactNode, useEffect, useState } from 'react';
 import { UserRole } from '@/lib/permissions';
 
@@ -55,8 +55,8 @@ export function HiddenForRoles({
       return;
     }
 
-    const userRole = user?.publicMetadata?.role as string | undefined;
-    const username = user?.username || user?.primaryEmailAddress?.emailAddress;
+    const userRole = user?.role as string | undefined;
+    const username = user?.email;
 
     // Check if should hide
     const hidden = checkIfHidden({

@@ -20,7 +20,7 @@
 
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { ReactNode, useEffect, useState } from 'react';
 import { UserRole } from '@/lib/permissions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -81,8 +81,8 @@ export function RestrictedSection({
       return;
     }
 
-    const userRole = user?.publicMetadata?.role as string | undefined;
-    const username = user?.username || user?.primaryEmailAddress?.emailAddress;
+    const userRole = user?.role as string | undefined;
+    const username = user?.email;
 
     const result = checkAccess({
       userRole,

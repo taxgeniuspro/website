@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { LeadDashboard } from '@/components/crm/LeadDashboard';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';

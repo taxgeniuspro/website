@@ -55,7 +55,7 @@ export default async function AdminEarningsPage() {
   }
 
   const currentUserData = await auth();
-  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'admin';
+  const isSuperAdmin = currentUserData?.user?.role === 'admin';
 
   // Fetch real data from database with error handling
   let platformStats = {

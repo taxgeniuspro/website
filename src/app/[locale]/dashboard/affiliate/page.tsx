@@ -41,7 +41,7 @@ import { AttributionStatsCard } from '@/components/dashboard/attribution-stats-c
 import { RecentLeadsTable } from '@/components/dashboard/recent-leads-table';
 import { ReferralLinksManager } from '@/components/dashboard/ReferralLinksManager';
 import { StatsWidget } from '@/components/gamification/StatsWidget';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { UserRole } from '@/lib/permissions';
 import { TierProgress } from '@/components/affiliate/TierProgress';

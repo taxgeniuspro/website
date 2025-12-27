@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import { Resend } from '@/lib/resend';
 import { cache } from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
 import { WelcomeEmail } from '../../../emails/WelcomeEmail';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { redirect } from 'next/navigation';
 import { CreativesLibrary } from '@/components/affiliate/CreativesLibrary';
 import { TierProgress } from '@/components/affiliate/TierProgress';

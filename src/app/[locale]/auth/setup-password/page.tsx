@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { signIn } from 'next-auth/react';
+import { signIn } from '@/lib/supabase/useSession';
 import { useTranslations } from 'next-intl';
 
 function SetupPasswordForm() {

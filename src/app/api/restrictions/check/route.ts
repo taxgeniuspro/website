@@ -44,10 +44,10 @@ export async function GET(request: NextRequest) {
 
     // Build user context
     const userContext: UserContext = {
-      userId: user?.id,
-      username: user?.username || user?.primaryEmailAddress?.emailAddress,
-      role: user?.publicMetadata?.role as string | undefined,
-      isAuthenticated: !!user,
+      userId: user?.user?.id,
+      username: user?.user?.email,
+      role: user?.user?.role as string | undefined,
+      isAuthenticated: !!user?.user,
     };
 
     // Check access

@@ -1,11 +1,11 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/supabase/useSession';
 import { TaxAssistantWidget } from '@/components/tax-assistant/TaxAssistantWidget';
 
 export default function DebugWidgetPage() {
   const { data: session } = useSession(); const user = session?.user;
-  const role = user?.publicMetadata?.role as string;
+  const role = user?.role as string;
 
   return (
     <div className="container mx-auto p-8">

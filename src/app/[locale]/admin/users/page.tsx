@@ -43,7 +43,7 @@ export default async function AdminUsersPage() {
   }
 
   const currentUserData = await auth();
-  const isSuperAdmin = currentUserData?.publicMetadata?.role === 'admin';
+  const isSuperAdmin = currentUserData?.user?.role === 'admin';
 
   // Fetch all users with profiles from database
   const usersWithProfiles = await prisma.user.findMany({

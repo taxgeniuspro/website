@@ -12,7 +12,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { Resend } from 'resend';
+import { Resend } from '@/lib/resend';
 import { render } from '@react-email/render';
 import ReferralInvitationEmail from '../../../emails/referral-invitation';
 import { getClientReferralImages, generateSocialMediaCopy } from './client-referral.service';

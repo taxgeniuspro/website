@@ -4,7 +4,7 @@ import { LayoutDashboard, Settings, HelpCircle, LogOut, Share2 } from 'lucide-re
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/lib/supabase/useSession';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 
 interface QuickLinksProps {

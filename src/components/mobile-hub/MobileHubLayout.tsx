@@ -4,7 +4,7 @@ import { ReactNode, useState } from 'react';
 import { Home, BarChart3, MessageCircle, User, Menu, X, Monitor } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/lib/supabase/useSession';
 import { useRouter } from 'next/navigation';
 import { TaxAssistantWidget } from '@/components/tax-assistant/TaxAssistantWidget';
 import {
