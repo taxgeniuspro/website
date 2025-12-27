@@ -35,18 +35,31 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let hideReferralProgram = null;
 
   if (effectiveRole === 'client') {
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: {
-        affiliateStatus: true,
-        hasFiledTaxes: true,
-        hideReferralProgram: true,
-      },
-    });
-    if (profile) {
-      affiliateStatus = profile.affiliateStatus;
-      hasFiledTaxes = profile.hasFiledTaxes;
-      hideReferralProgram = profile.hideReferralProgram;
+    try {
+      // Use findFirst with OR conditions to match by supabaseUserId, userId, or email
+      // This handles both legacy NextAuth users and new Supabase Auth users
+      const profile = await prisma.profile.findFirst({
+        where: {
+          OR: [
+            { supabaseUserId: user.id },
+            { userId: user.id },
+            { email: user.email }
+          ]
+        },
+        select: {
+          affiliateStatus: true,
+          hasFiledTaxes: true,
+          hideReferralProgram: true,
+        },
+      });
+      if (profile) {
+        affiliateStatus = profile.affiliateStatus;
+        hasFiledTaxes = profile.hasFiledTaxes;
+        hideReferralProgram = profile.hideReferralProgram;
+      }
+    } catch (error) {
+      console.error('[Dashboard Layout] Failed to fetch profile:', error);
+      // Continue with default values if profile fetch fails
     }
   }
 
