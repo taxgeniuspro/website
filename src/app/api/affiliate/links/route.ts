@@ -22,9 +22,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    // Get user's profile - use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         id: true,
         role: true,
