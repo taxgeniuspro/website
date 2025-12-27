@@ -24,9 +24,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile with tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    // Get user profile with tracking code - use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         id: true,
         customTrackingCode: true,

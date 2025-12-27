@@ -38,8 +38,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: user.id },
+          { userId: user.id },
+          { email: user.email }
+        ]
+      },
     });
 
     if (!profile) {
@@ -130,8 +136,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: user.id },
+          { userId: user.id },
+          { email: user.email }
+        ]
+      },
     });
 
     if (!profile) {

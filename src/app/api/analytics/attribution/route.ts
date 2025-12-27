@@ -23,8 +23,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile with username
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         id: true,
         shortLinkUsername: true,

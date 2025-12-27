@@ -31,9 +31,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update the user's profile
+    // Find profile first, then update - use findFirst with OR conditions for Supabase Auth compatibility
+    const existingProfile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
+      select: { id: true },
+    });
+
+    if (!existingProfile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
+
     const profile = await prisma.profile.update({
-      where: { userId },
+      where: { id: existingProfile.id },
       data: { hideReferralProgram },
       select: {
         id: true,
@@ -65,8 +80,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    // Use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         hideReferralProgram: true,
       },

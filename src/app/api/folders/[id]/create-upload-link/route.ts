@@ -37,8 +37,14 @@ export async function POST(
     }
 
     // Get tax preparer's profile
-    const preparer = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const preparer = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!preparer) {

@@ -22,9 +22,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile with all fields needed for marketing
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    // Get profile with all fields needed for marketing - use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         id: true,
         userId: true,
@@ -79,9 +85,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
+    // Get profile - use findFirst with OR conditions for Supabase Auth compatibility
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true },
     });
 

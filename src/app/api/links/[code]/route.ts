@@ -28,9 +28,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get profile with flexible lookup
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true },
     });
 
@@ -64,9 +70,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ code: 
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get profile with flexible lookup
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true },
     });
 
@@ -106,9 +118,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ code:
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get profile with flexible lookup
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true },
     });
 

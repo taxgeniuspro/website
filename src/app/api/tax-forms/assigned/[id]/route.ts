@@ -27,8 +27,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true, role: true },
     });
 
@@ -199,8 +205,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { id } = await params;
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true, role: true },
     });
 

@@ -23,8 +23,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile) {

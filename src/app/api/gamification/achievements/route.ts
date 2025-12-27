@@ -20,9 +20,15 @@ export async function GET(request: NextRequest) {
 
     const userId = user.id;
 
-    // Get user role
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get user role with flexible lookup
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: user?.email }
+        ]
+      },
       select: { role: true },
     });
 

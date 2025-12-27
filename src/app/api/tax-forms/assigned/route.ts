@@ -22,8 +22,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get client profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { id: true, role: true },
     });
 

@@ -16,8 +16,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Verify admin or tax preparer role
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile || !['admin', 'admin', 'tax_preparer'].includes(profile.role)) {
@@ -56,8 +62,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile || !['admin', 'admin'].includes(profile.role)) {

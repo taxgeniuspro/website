@@ -42,18 +42,33 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Increment share count in stats
-    await prisma.mobileHubStats.upsert({
-      where: { userId: userId },
-      create: {
-        userId: userId,
-        userRole,
-        linkShares: 1,
-      },
-      update: {
-        linkShares: { increment: 1 },
-      },
+    // Increment share count in stats - use findFirst then update/create pattern
+    const existingStats = await prisma.mobileHubStats.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      }
     });
+
+    if (existingStats) {
+      await prisma.mobileHubStats.update({
+        where: { id: existingStats.id },
+        data: {
+          linkShares: { increment: 1 },
+        },
+      });
+    } else {
+      await prisma.mobileHubStats.create({
+        data: {
+          userId: userId,
+          userRole,
+          linkShares: 1,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

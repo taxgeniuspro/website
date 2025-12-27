@@ -21,9 +21,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile with username
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Get user profile with username using flexible lookup
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: {
         id: true,
         shortLinkUsername: true,

@@ -28,16 +28,37 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get or create profile using upsert to avoid race conditions
-    const profile = await prisma.profile.upsert({
-      where: { userId: userId },
-      update: {}, // No updates if exists
-      create: {
-        userId: userId,
-        role: 'client', // Default role for registered users
+    // Get or create profile - use findFirst with OR conditions for Supabase Auth compatibility
+    let profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
       },
       select: { id: true, role: true },
     });
+
+    // If profile doesn't exist, create one (auth.ts should have done this, but just in case)
+    if (!profile) {
+      const dbUser = await prisma.user.findUnique({ where: { email: session?.user?.email?.toLowerCase() } });
+      if (dbUser) {
+        profile = await prisma.profile.create({
+          data: {
+            userId: dbUser.id,
+            supabaseUserId: userId,
+            email: session?.user?.email?.toLowerCase() || '',
+            role: 'client',
+          },
+          select: { id: true, role: true },
+        });
+      }
+    }
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
 
     logger.info(`Profile resolved: ${profile.id}`);
 
@@ -107,16 +128,37 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // Get or create profile using upsert to avoid race conditions
-    const profile = await prisma.profile.upsert({
-      where: { userId: userId },
-      update: {}, // No updates if exists
-      create: {
-        userId: userId,
-        role: 'client', // Default role for registered users
+    // Get or create profile - use findFirst with OR conditions for Supabase Auth compatibility
+    let profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
       },
       select: { id: true, role: true },
     });
+
+    // If profile doesn't exist, create one (auth.ts should have done this, but just in case)
+    if (!profile) {
+      const dbUser = await prisma.user.findUnique({ where: { email: session?.user?.email?.toLowerCase() } });
+      if (dbUser) {
+        profile = await prisma.profile.create({
+          data: {
+            userId: dbUser.id,
+            supabaseUserId: userId,
+            email: session?.user?.email?.toLowerCase() || '',
+            role: 'client',
+          },
+          select: { id: true, role: true },
+        });
+      }
+    }
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
 
     logger.info(`Profile resolved: ${profile.id}`);
 

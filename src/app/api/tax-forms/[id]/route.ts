@@ -58,8 +58,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Check if user is admin
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { role: true },
     });
 
@@ -100,8 +106,14 @@ export async function DELETE(
     }
 
     // Check if user is admin
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
       select: { role: true },
     });
 

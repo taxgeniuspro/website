@@ -31,8 +31,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     // Get user's profile (optional for marketing assets, required for documents)
     let profile = null;
     if (userId) {
-      profile = await prisma.profile.findUnique({
-        where: { userId: userId },
+      profile = await prisma.profile.findFirst({
+        where: {
+          OR: [
+            { supabaseUserId: userId },
+            { userId: userId },
+            { email: session?.user?.email }
+          ]
+        },
       });
 
       if (!profile && fileCategory === 'documents') {

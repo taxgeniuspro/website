@@ -20,8 +20,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ do
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile) {
@@ -126,8 +132,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ d
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile) {
@@ -212,8 +224,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    const profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile) {

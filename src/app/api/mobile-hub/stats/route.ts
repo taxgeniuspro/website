@@ -18,8 +18,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get or create stats record
-    let stats = await prisma.mobileHubStats.findUnique({
-      where: { userId: userId },
+    let stats = await prisma.mobileHubStats.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!stats) {
@@ -39,8 +45,14 @@ export async function GET(request: NextRequest) {
     if (shouldRecalculate) {
       await recalculateStats(userId);
       // Refetch updated stats
-      stats = await prisma.mobileHubStats.findUnique({
-        where: { userId: userId },
+      stats = await prisma.mobileHubStats.findFirst({
+        where: {
+          OR: [
+            { supabaseUserId: userId },
+            { userId: userId },
+            { email: session?.user?.email }
+          ]
+        },
       });
     }
 

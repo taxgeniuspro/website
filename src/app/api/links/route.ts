@@ -18,16 +18,30 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get or create profile using upsert to avoid race conditions
-    const profile = await prisma.profile.upsert({
-      where: { userId: userId },
-      update: {}, // No updates if exists
-      create: {
-        userId: userId,
-        role: 'client', // Default role for registered users
+    // Get or create profile using findFirst with flexible lookup
+    let profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
       },
       select: { id: true, role: true },
     });
+
+    // Create profile if not found
+    if (!profile) {
+      profile = await prisma.profile.create({
+        data: {
+          userId: userId,
+          supabaseUserId: userId,
+          email: session?.user?.email,
+          role: 'client', // Default role for registered users
+        },
+        select: { id: true, role: true },
+      });
+    }
 
     logger.info(`Profile resolved: ${profile.id}`);
 

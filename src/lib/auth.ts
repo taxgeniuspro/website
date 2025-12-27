@@ -112,6 +112,10 @@ export async function auth(): Promise<Session | null> {
             autoRole = 'tax_preparer';
           } else if (emailLower === 'testaffiliate@taxgeniuspro.tax') {
             autoRole = 'affiliate';
+          } else if (emailLower === 'testclient@taxgeniuspro.tax') {
+            autoRole = 'client';
+          } else if (emailLower === 'testadmin@taxgeniuspro.tax') {
+            autoRole = 'admin';
           }
 
           // Create profile
