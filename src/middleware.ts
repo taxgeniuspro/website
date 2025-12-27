@@ -40,6 +40,7 @@ export async function middleware(req: NextRequest) {
 
   // Skip middleware for API routes, static files, mockups, and Next.js internals
   if (
+    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/mockups/') ||
     pathname.startsWith('/sw.js') ||
