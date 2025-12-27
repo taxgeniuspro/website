@@ -21,8 +21,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile - create one if it doesn't exist (new OAuth users)
-    let profile = await prisma.profile.findUnique({
-      where: { userId: userId },
+    // Use findFirst with OR conditions to match by supabaseUserId, userId, or email
+    let profile = await prisma.profile.findFirst({
+      where: {
+        OR: [
+          { supabaseUserId: userId },
+          { userId: userId },
+          { email: session?.user?.email }
+        ]
+      },
     });
 
     if (!profile) {
