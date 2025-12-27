@@ -1,13 +1,14 @@
 /**
- * Clerk Authentication System
- * Complete authentication for Tax Genius Pro using Clerk
+ * Supabase Authentication System
+ * Complete authentication for Tax Genius Pro using Supabase Auth
  *
  * Supports:
- * - Google OAuth (Gmail login)
  * - Email/Password authentication
- * - Role-based access control via publicMetadata
+ * - Magic link authentication
+ * - OAuth providers (Google, etc.)
+ * - Role-based access control via database profile
  */
-import { auth as clerkAuth, currentUser } from '@clerk/nextjs/server';
+import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
@@ -37,54 +38,65 @@ interface Session {
 }
 
 /**
- * Get auth session from Clerk
- * This is the main auth function - replaces NextAuth's auth()
+ * Get auth session from Supabase
+ * This is the main auth function
  */
 export async function auth(): Promise<Session | null> {
   try {
-    const { userId } = await clerkAuth();
+    const supabase = await createClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    if (!userId) {
+    if (error || !user) {
       return null;
     }
 
-    const user = await currentUser();
-    if (!user) {
-      return null;
-    }
+    // Default role
+    let role: UserRole = 'client';
+    let name: string | null = null;
+    let image: string | null = null;
 
-    // Get role from Clerk public metadata or database profile
-    let role: UserRole = (user.publicMetadata?.role as UserRole) || 'client';
-
-    // Try to get role from database if not in Clerk metadata
+    // Get role and additional data from database profile
     try {
       const profile = await prisma.profile.findFirst({
         where: {
           OR: [
-            { clerkUserId: userId },
-            { userId: userId }
+            { supabaseUserId: user.id },
+            { userId: user.id },
+            { email: user.email }
           ]
         },
-        select: { role: true, isActive: true }
+        select: {
+          role: true,
+          isActive: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true
+        }
       });
 
       if (profile) {
         role = profile.role;
+        name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || null;
+        image = profile.avatarUrl || null;
       }
     } catch (error) {
-      // Use Clerk metadata role if database lookup fails
       logger.error('Failed to fetch profile for role:', error);
     }
 
-    const email = user.emailAddresses[0]?.emailAddress || '';
-    const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || null;
+    // Fallback to Supabase user metadata
+    if (!name) {
+      name = user.user_metadata?.full_name || user.user_metadata?.name || null;
+    }
+    if (!image) {
+      image = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+    }
 
     return {
       user: {
-        id: userId,
-        email,
+        id: user.id,
+        email: user.email || '',
         name,
-        image: user.imageUrl,
+        image,
         role,
         isActive: true,
       },
@@ -207,7 +219,7 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
     where: {
       OR: [
         { userId: user.id },
-        { clerkUserId: user.id }
+        { supabaseUserId: user.id }
       ]
     },
     select: { id: true },
@@ -259,8 +271,7 @@ export async function hasStoreAccess(): Promise<boolean> {
 /**
  * Update user role (admin only)
  * This updates the role in our database profile
- * Clerk metadata should be updated separately via webhook
- * @param userId - User ID (Clerk user ID)
+ * @param userId - User ID (Supabase user ID)
  * @param role - Role to assign
  */
 export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
@@ -274,7 +285,7 @@ export async function updateUserRole(userId: string, role: UserRole): Promise<vo
     where: {
       OR: [
         { userId },
-        { clerkUserId: userId }
+        { supabaseUserId: userId }
       ]
     },
     data: { role },
@@ -301,7 +312,6 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 // Legacy exports for backwards compatibility
-// These are no longer used but kept to prevent import errors
 export const handlers = {};
-export const signIn = async () => { throw new Error('Use Clerk\'s signIn instead'); };
-export const signOut = async () => { throw new Error('Use Clerk\'s signOut instead'); };
+export const signIn = async () => { throw new Error('Use Supabase auth instead'); };
+export const signOut = async () => { throw new Error('Use Supabase auth instead'); };

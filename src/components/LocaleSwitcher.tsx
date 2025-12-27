@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter, usePathname, useParams } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useState, useTransition, useEffect } from 'react';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { trackLanguageSwitch } from '@/lib/analytics/ga4';
+import { createClient } from '@/lib/supabase/client';
 
 interface LocaleSwitcherProps {
   variant?: 'default' | 'dropdown' | 'compact';
@@ -23,9 +23,17 @@ export function LocaleSwitcher({
   const locale = (params.locale as Locale) || 'en';
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isSignedIn } = useUser();
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Check auth state on client
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsSignedIn(!!user);
+    });
+  }, []);
 
   const switchLocale = (newLocale: Locale) => {
     if (newLocale === locale) return;
@@ -36,8 +44,8 @@ export function LocaleSwitcher({
       toLocale: newLocale,
       currentPage: pathname,
       switchMethod: trackingMethod,
-      userAuthenticated: isSignedIn || false,
-      userRole: user?.publicMetadata?.role as string | undefined,
+      userAuthenticated: isSignedIn,
+      userRole: undefined, // Role is fetched server-side now
     });
 
     startTransition(() => {
@@ -238,8 +246,16 @@ export function MobileLocaleSwitcher({ className = '' }: { className?: string })
   const locale = (params.locale as Locale) || 'en';
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isSignedIn } = useUser();
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Check auth state on client
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsSignedIn(!!user);
+    });
+  }, []);
 
   const switchLocale = (newLocale: Locale) => {
     if (newLocale === locale) return;
@@ -250,8 +266,8 @@ export function MobileLocaleSwitcher({ className = '' }: { className?: string })
       toLocale: newLocale,
       currentPage: pathname,
       switchMethod: 'mobile_menu',
-      userAuthenticated: isSignedIn || false,
-      userRole: user?.publicMetadata?.role as string | undefined,
+      userAuthenticated: isSignedIn,
+      userRole: undefined, // Role is fetched server-side now
     });
 
     startTransition(() => {

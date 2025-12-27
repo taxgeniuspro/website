@@ -119,10 +119,12 @@ enum UserRole {
 }
 
 model Profile {
-  id          String   @id @default(cuid())
-  userId      String   @unique // NextAuth user ID
-  user        User     @relation(references: [id], fields: [userId], onDelete: Cascade)
-  role        UserRole
+  id              String   @id @default(cuid())
+  userId          String   @unique // NextAuth user ID
+  user            User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+  supabaseUserId  String?  @unique // Supabase Auth user ID
+  email           String?  // Cached email for faster lookups
+  role            UserRole
   firstName   String?
   lastName    String?
   middleName  String? // Middle name for personalized tracking codes (tax preparers)

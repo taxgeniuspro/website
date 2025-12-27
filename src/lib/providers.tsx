@@ -1,7 +1,6 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ClerkProvider } from '@clerk/nextjs';
 import { useState, Suspense } from 'react';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import dynamic from 'next/dynamic';
@@ -30,28 +29,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ClerkProvider
-      appearance={{
-        variables: {
-          colorPrimary: '#ff6b35',
-          colorBackground: '#ffffff',
-          colorText: '#1a1a1a',
-        },
-        elements: {
-          formButtonPrimary: 'bg-primary hover:bg-primary/90',
-          card: 'shadow-lg',
-        },
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <PWAInstallPrompt />
-        {children}
-        {process.env.NODE_ENV === 'development' && (
-          <Suspense fallback={null}>
-            <ReactQueryDevtools />
-          </Suspense>
-        )}
-      </QueryClientProvider>
-    </ClerkProvider>
+    <QueryClientProvider client={queryClient}>
+      <PWAInstallPrompt />
+      {children}
+      {process.env.NODE_ENV === 'development' && (
+        <Suspense fallback={null}>
+          <ReactQueryDevtools />
+        </Suspense>
+      )}
+    </QueryClientProvider>
   );
 }

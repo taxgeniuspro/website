@@ -2,66 +2,43 @@
  * Lightweight Edge Runtime Middleware
  *
  * This middleware handles:
- * - Clerk authentication
+ * - Supabase session refresh
  * - i18n routing (via next-intl)
  * - UTM/ref parameter tracking cookies
- *
- * The Edge Function size limit is 1MB for Vercel free tier.
+ * - Protected route redirects
  */
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
 import { locales, defaultLocale } from './i18n';
+import { updateSession } from '@/lib/supabase/middleware';
 
 // Create i18n middleware
 const intlMiddleware = createMiddleware({
   locales,
   defaultLocale,
   localePrefix: 'always',
-  localeDetection: false, // Disable Accept-Language header detection - always use defaultLocale for unprefixed routes
+  localeDetection: false,
 });
 
-// Define protected routes that require authentication
-const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)',
-  '/admin(.*)',
-  '/crm(.*)',
-  '/:locale/dashboard(.*)',
-  '/:locale/admin(.*)',
-  '/:locale/crm(.*)',
-]);
+// Protected routes that require authentication
+const protectedRoutes = [
+  '/dashboard',
+  '/admin',
+  '/crm',
+];
 
-// Define public routes that don't require authentication
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/auth/(.*)',
-  '/api/webhook(.*)',
-  '/api/auth/(.*)',
-  '/api/leads(.*)',
-  '/api/public(.*)',
-  '/go/(.*)',
-  '/book(.*)',
-  '/contact(.*)',
-  '/start-filing(.*)',
-  '/refer(.*)',
-  '/privacy(.*)',
-  '/terms(.*)',
-  '/:locale',
-  '/:locale/auth/(.*)',
-  '/:locale/go/(.*)',
-  '/:locale/book(.*)',
-  '/:locale/contact(.*)',
-  '/:locale/start-filing(.*)',
-  '/:locale/refer(.*)',
-  '/:locale/privacy(.*)',
-  '/:locale/terms(.*)',
-]);
+// Check if path matches protected routes
+function isProtectedRoute(pathname: string): boolean {
+  // Remove locale prefix if present
+  const pathWithoutLocale = pathname.replace(/^\/(en|es)/, '') || '/';
+  return protectedRoutes.some(route => pathWithoutLocale.startsWith(route));
+}
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
+export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Skip middleware for API routes (except protected ones), static files, mockups, and Next.js internals
+  // Skip middleware for API routes, static files, mockups, and Next.js internals
   if (
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/mockups/') ||
@@ -72,29 +49,24 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.next();
   }
 
-  // Protect dashboard, admin, and CRM routes
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+  // Update Supabase session (refresh tokens if needed)
+  const { supabaseResponse, user } = await updateSession(req);
+
+  // Check protected routes
+  if (isProtectedRoute(pathname) && !user) {
+    // Redirect to sign in
+    const signInUrl = new URL('/auth/signin', req.url);
+    signInUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(signInUrl);
   }
 
   // ==================================================================================
-  // URL CONSOLIDATION REDIRECTS (Dec 2025)
-  //
-  // IMPORTANT: Only redirect routes that have been consolidated or moved.
-  // Affiliate dashboard pages (/dashboard/affiliate/*) are KEPT as-is because:
-  // - They are the canonical pages for affiliate features
-  // - Clients with affiliateStatus='APPROVED' use these pages
-  // - The pages exist and work correctly
-  //
-  // Tracking routes are consolidated into /dashboard/referrals
-  // Store routes redirect to professional email settings
+  // URL CONSOLIDATION REDIRECTS
   // ==================================================================================
   const urlRedirectMap: Record<string, string> = {
-    // Tracking → Unified Referrals page
     '/dashboard/affiliate/tracking': '/dashboard/referrals',
     '/dashboard/tax-preparer/tracking': '/dashboard/referrals',
     '/dashboard/client/tracking': '/dashboard/referrals',
-    // Store → Professional Email settings (store has been removed)
     '/store': '/dashboard/tax-preparer/settings/professional-email',
     '/store/professional-email': '/dashboard/tax-preparer/settings/professional-email',
   };
@@ -117,7 +89,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   if (redirectPath) {
     const newUrl = req.nextUrl.clone();
     newUrl.pathname = pathnameHasLocale ? `${localePrefix}${redirectPath}` : redirectPath;
-    return NextResponse.redirect(newUrl, { status: 301 }); // Permanent redirect
+    return NextResponse.redirect(newUrl, { status: 301 });
   }
 
   // Apply i18n middleware to handle locale routing
@@ -128,7 +100,14 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return intlResponse;
   }
 
-  // Handle UTM tracking via cookies (lightweight - no DB queries)
+  // Merge cookies from Supabase session refresh into the response
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    intlResponse.cookies.set(cookie.name, cookie.value, {
+      ...cookie,
+    });
+  });
+
+  // Handle UTM tracking via cookies
   const utmParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
   const hasUtmParams = utmParams.some((param) => req.nextUrl.searchParams.has(param));
 
@@ -145,7 +124,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: 30 * 24 * 60 * 60,
       path: '/',
     });
   }
@@ -157,24 +136,24 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 14 * 24 * 60 * 60, // 14 days
+      maxAge: 14 * 24 * 60 * 60,
       path: '/',
     });
   }
 
   // Handle booking redirect: ?book=true
   if (req.nextUrl.searchParams.get('book') === 'true') {
-    const pathnameHasLocale = locales.some(
+    const pathHasLocale = locales.some(
       (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
     );
 
-    let pathnameWithoutLocale = pathname;
-    if (pathnameHasLocale) {
+    let pathWithoutLocale = pathname;
+    if (pathHasLocale) {
       const segments = pathname.split('/');
-      pathnameWithoutLocale = '/' + segments.slice(2).join('/');
+      pathWithoutLocale = '/' + segments.slice(2).join('/');
     }
 
-    const username = pathnameWithoutLocale.slice(1);
+    const username = pathWithoutLocale.slice(1);
     if (username && !username.includes('/') && username !== '') {
       const bookingUrl = req.nextUrl.clone();
       bookingUrl.pathname = '/book';
@@ -184,14 +163,11 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   return intlResponse;
-});
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals, static files, PWA files, and mockups folder
-    // Include Clerk's internal routes
     '/((?!_next|mockups|sw\\.js|manifest\\.json|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes except webhooks
     '/(api|trpc)(.*)',
   ],
 };
