@@ -57,7 +57,7 @@ export async function auth(): Promise<Session | null> {
 
     // Get role and additional data from database profile
     try {
-      const profile = await prisma.profile.findFirst({
+      let profile = await prisma.profile.findFirst({
         where: {
           OR: [
             { supabaseUserId: user.id },
@@ -66,13 +66,89 @@ export async function auth(): Promise<Session | null> {
           ]
         },
         select: {
+          id: true,
           role: true,
           isActive: true,
           firstName: true,
           lastName: true,
-          avatarUrl: true
+          avatarUrl: true,
+          supabaseUserId: true
         }
       });
+
+      // Auto-create profile for new Supabase users (email/password login)
+      if (!profile && user.email) {
+        try {
+          // First create User record if it doesn't exist
+          let dbUser = await prisma.user.findUnique({
+            where: { email: user.email.toLowerCase() }
+          });
+
+          if (!dbUser) {
+            dbUser = await prisma.user.create({
+              data: {
+                email: user.email.toLowerCase(),
+                name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+                image: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+                emailVerified: new Date(),
+              }
+            });
+            logger.info('[Auth] Created User for Supabase email/password user', {
+              userId: dbUser.id,
+              supabaseUserId: user.id
+            });
+          }
+
+          // Parse name from metadata
+          const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
+          const nameParts = fullName.split(' ').filter((p: string) => p.length > 0);
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          // Create profile
+          profile = await prisma.profile.create({
+            data: {
+              userId: dbUser.id,
+              supabaseUserId: user.id,
+              email: user.email.toLowerCase(),
+              role: 'client',
+              firstName,
+              lastName,
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: new Date(),
+            },
+            select: {
+              id: true,
+              role: true,
+              isActive: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+              supabaseUserId: true
+            }
+          });
+          logger.info('[Auth] Created Profile for Supabase email/password user', {
+            profileId: profile.id,
+            supabaseUserId: user.id
+          });
+        } catch (createError) {
+          logger.error('[Auth] Failed to auto-create profile:', createError);
+        }
+      } else if (profile && !profile.supabaseUserId) {
+        // Update existing profile with supabaseUserId if missing
+        try {
+          await prisma.profile.update({
+            where: { id: profile.id },
+            data: { supabaseUserId: user.id }
+          });
+          logger.info('[Auth] Updated profile with supabaseUserId', {
+            profileId: profile.id,
+            supabaseUserId: user.id
+          });
+        } catch (updateError) {
+          logger.error('[Auth] Failed to update profile with supabaseUserId:', updateError);
+        }
+      }
 
       if (profile) {
         role = profile.role;
