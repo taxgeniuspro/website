@@ -6,11 +6,12 @@ import nodemailer from 'nodemailer';
 import { logger } from '@/lib/logger';
 
 // Email configuration from environment variables
-const GMAIL_USER = process.env.GMAIL_USER || 'taxgenius.tax@gmail.com';
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+// Supports Postal SMTP (primary) or Gmail SMTP (fallback)
+const SMTP_USER = process.env.SMTP_USER || process.env.GMAIL_USER || 'taxgenius.tax@gmail.com';
+const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true'; // false for TLS (port 587)
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true'; // false for TLS (port 587), true for SSL (port 465)
 
 // Email addresses for different purposes
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@taxgeniuspro.tax';
@@ -23,8 +24,8 @@ let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter() {
   if (!transporter) {
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-      logger.warn('[Email] Gmail credentials not configured. Emails will not be sent.');
+    if (!SMTP_USER || !SMTP_PASS) {
+      logger.warn('[Email] SMTP credentials not configured. Emails will not be sent.');
       // Return a mock transporter for development
       return {
         sendMail: async (options: any) => {
@@ -42,20 +43,20 @@ function getTransporter() {
       port: SMTP_PORT,
       secure: SMTP_SECURE, // false for TLS
       auth: {
-        user: GMAIL_USER,
-        pass: GMAIL_APP_PASSWORD,
+        user: SMTP_USER,
+        pass: SMTP_PASS,
       },
       tls: {
-        // Do not fail on invalid certs
+        // Do not fail on invalid certs (needed for some SMTP servers)
         rejectUnauthorized: false,
       },
     });
 
-    logger.info('[Email] Gmail SMTP transporter created', {
+    logger.info('[Email] SMTP transporter created', {
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
-      user: GMAIL_USER,
+      user: SMTP_USER,
     });
   }
 
