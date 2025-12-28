@@ -11,9 +11,12 @@ import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { ContactType } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/en/dashboard';
+
+  // Use NEXT_PUBLIC_APP_URL to avoid wrong redirect behind reverse proxy
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
   if (code) {
     const cookieStore = await cookies();
@@ -45,12 +48,12 @@ export async function GET(request: NextRequest) {
       // Sync user with our database profile
       await syncUserProfile(user);
 
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${baseUrl}${next}`);
     }
   }
 
   // Return to sign in page with error
-  return NextResponse.redirect(`${origin}/en/auth/signin?error=auth_callback_error`);
+  return NextResponse.redirect(`${baseUrl}/en/auth/signin?error=auth_callback_error`);
 }
 
 /**
