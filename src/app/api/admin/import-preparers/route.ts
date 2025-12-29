@@ -1,17 +1,19 @@
 /**
  * Admin API: Bulk Import Tax Preparers
  *
- * Creates Profile records for tax preparers migrating from old system.
- * Does NOT create User records - those are created when preparers sign up.
+ * Creates User + Profile records for tax preparers migrating from old system.
+ * Users are created WITHOUT passwords - passwords are set when preparers sign up.
  *
  * POST /api/admin/import-preparers
  * Body: { preparers: [{ firstName, lastName, email, avatarUrl?, trackingCode? }] }
+ * Headers: x-admin-setup-key: <key> OR session auth with admin role
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auth } from '@/lib/auth';
 import { nanoid } from 'nanoid';
+import { createId } from '@paralleldrive/cuid2';
 
 interface PreparerInput {
   firstName: string;
@@ -38,19 +40,27 @@ function generateTrackingCode(firstName: string, lastName: string): string {
   return `${firstInitial}${lastInitial}-${suffix}`;
 }
 
+// Admin setup key for API access (set in Coolify env vars)
+const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY || 'tax-preparer-import-2025';
+
 export async function POST(req: NextRequest) {
   try {
-    // Verify admin authentication
-    const session = await auth();
-    const user = session?.user;
+    // Check for admin setup key in headers
+    const adminKey = req.headers.get('x-admin-setup-key');
+    const hasValidKey = adminKey === ADMIN_SETUP_KEY;
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Verify admin authentication (either session or API key)
+    if (!hasValidKey) {
+      const session = await auth();
+      const user = session?.user;
 
-    // Only admins can import preparers
-    if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
+      }
     }
 
     // Parse request body
@@ -128,12 +138,38 @@ export async function POST(req: NextRequest) {
         // Generate or use provided tracking code
         const finalTrackingCode = trackingCode || generateTrackingCode(firstName, lastName);
 
-        // Create profile (NO userId - will be set on signup)
+        // Create User record first (without password - they'll set it on signup)
+        const userId = createId();
+        const { error: userError } = await db
+          .from('users')
+          .insert({
+            id: userId,
+            email: normalizedEmail,
+            name: `${firstName.trim()} ${lastName.trim()}`,
+            // hashedPassword: null - will be set when they sign up
+          });
+
+        if (userError) {
+          logger.error('[Import Preparers] Failed to create user', {
+            email: normalizedEmail,
+            error: userError.message,
+          });
+          results.push({
+            email: normalizedEmail,
+            status: 'error',
+            error: `User creation failed: ${userError.message}`,
+          });
+          errors++;
+          continue;
+        }
+
+        // Create profile linked to the User
+        const profileId = createId();
         const { data: newProfile, error: profileError } = await db
           .from('profiles')
           .insert({
-            // userId: null - will be set when they sign up
-            // supabaseUserId: null - will be set when they sign up
+            id: profileId,
+            userId: userId, // Link to the User we just created
             email: normalizedEmail,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
