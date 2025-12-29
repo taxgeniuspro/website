@@ -144,12 +144,14 @@ export async function POST(req: NextRequest) {
 
         // Create User record first (without password - they'll set it on signup)
         const userId = createId();
+        const now = new Date().toISOString();
         const { error: userError } = await db
           .from('users')
           .insert({
             id: userId,
             email: normalizedEmail,
             name: `${firstName.trim()} ${lastName.trim()}`,
+            updatedAt: now,
             // hashedPassword: null - will be set when they sign up
           });
 
