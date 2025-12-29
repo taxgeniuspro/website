@@ -1,8 +1,8 @@
 {
   "projectName": "taxgeniuspro",
-  "projectRoot": "/Users/irawatkins/.claude-worktrees/taxgeniuspro/blissful-wozniak",
+  "projectRoot": "/Users/irawatkins/Documents/taxgeniuspro-2026",
   "allowedPaths": [
-    "/Users/irawatkins/.claude-worktrees/taxgeniuspro/blissful-wozniak",
+    "/Users/irawatkins/Documents/taxgeniuspro-2026",
     "/Users/irawatkins/taxgeniuspro",
     "__tests__"
   ],
