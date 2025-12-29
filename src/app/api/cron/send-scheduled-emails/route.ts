@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { processScheduledEmails } from '@/lib/services/scheduled-email.service';
 
-// Vercel cron jobs use GET requests
+// Coolify cron jobs use GET requests
 export async function GET(req: NextRequest) {
   try {
     // Verify cron secret to prevent unauthorized access

@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 
-// Vercel cron jobs use GET requests
+// Coolify cron jobs use GET requests
 export async function GET(req: NextRequest) {
   try {
     // Verify cron secret to prevent unauthorized access

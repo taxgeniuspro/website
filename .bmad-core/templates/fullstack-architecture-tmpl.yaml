@@ -31,7 +31,7 @@ sections:
           1. Review the PRD and other documents for mentions of:
           - Fullstack starter templates (e.g., T3 Stack, MEAN/MERN starters, Django + React templates)
           - Monorepo templates (e.g., Nx, Turborepo starters)
-          - Platform-specific starters (e.g., Vercel templates, AWS Amplify starters)
+          - Platform-specific starters (e.g., Coolify/Docker templates, AWS Amplify starters)
           - Existing projects being extended or cloned
 
           2. If starter templates or existing projects are mentioned:
@@ -42,7 +42,7 @@ sections:
 
           3. If no starter is mentioned but this is greenfield:
           - Suggest appropriate fullstack starters based on tech preferences
-          - Consider platform-specific options (Vercel, AWS, etc.)
+          - Consider platform-specific options (Coolify, AWS, etc.)
           - Let user decide whether to use one
 
           4. Document the decision and any constraints it imposes
@@ -74,7 +74,7 @@ sections:
           Based on PRD requirements and technical assumptions, make a platform recommendation:
 
           1. Consider common patterns (not an exhaustive list, use your own best judgement and search the web as needed for emerging trends):
-          - **Vercel + Supabase**: For rapid development with Next.js, built-in auth/storage
+          - **Coolify + Supabase**: For self-hosted deployment with Next.js, built-in auth/storage
           - **AWS Full Stack**: For enterprise scale with Lambda, API Gateway, S3, Cognito
           - **Azure**: For .NET ecosystems or enterprise Microsoft environments
           - **Google Cloud**: For ML/AI heavy applications or Google ecosystem integration

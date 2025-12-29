@@ -4,7 +4,7 @@
 
 ## Purpose
 
-To generate a masterful, comprehensive, and optimized prompt that can be used with any AI-driven frontend development tool (e.g., Vercel v0, Lovable.ai, or similar) to scaffold or generate significant portions of a frontend application.
+To generate a masterful, comprehensive, and optimized prompt that can be used with any AI-driven frontend development tool (e.g., Bolt.new, Lovable.ai, or similar) to scaffold or generate significant portions of a frontend application.
 
 ## Inputs
 

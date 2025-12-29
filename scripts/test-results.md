@@ -252,7 +252,7 @@ The document upload API requires a valid user session. To test:
    - [ ] Upgrade ira@irawatkins.com to affiliate at /admin/users (if they register)
 
 3. **Monitoring:**
-   - Check Vercel logs for any email delivery failures
+   - Check Coolify logs for any email delivery failures
    - Verify Cloudinary storage for document uploads
 
 ---

@@ -63,7 +63,7 @@
 - **UI Components**: Shadcn/UI + Radix primitives
 
 ### Backend
-- **Runtime**: Node.js (Vercel Edge + Serverless)
+- **Runtime**: Node.js (Coolify Docker)
 - **Database**: PostgreSQL (self-hosted at 72.60.28.175:5435)
 - **ORM**: Prisma 6.18.0
 - **Cache**: Redis (self-hosted)
@@ -85,7 +85,7 @@
 | Socket.io | Real-time notifications |
 
 ### Hosting
-- **Frontend**: Vercel (taxgeniuspro.tax)
+- **Frontend**: Coolify self-hosted (72.60.28.175)
 - **Database/Services**: Self-hosted VPS (72.60.28.175)
 
 ---

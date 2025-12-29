@@ -107,7 +107,7 @@ async function runTest() {
 
     // Print recommendation
     if (owliverByCode?.id) {
-      console.log(`\n💡 Recommendation: Set OWLIVER_PROFILE_ID=${owliverByCode.id} in Vercel`);
+      console.log(`\n💡 Recommendation: Set OWLIVER_PROFILE_ID=${owliverByCode.id} in Coolify`);
     }
 
   } catch (error) {

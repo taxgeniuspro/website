@@ -2,7 +2,7 @@
  * Rate Limiting Module
  *
  * Uses ioredis for VPS Redis when available, falls back to in-memory store.
- * Vercel deployments use in-memory since VPS Redis is not exposed externally.
+ * Coolify deployments use Redis on the same VPS network.
  */
 
 import Redis from 'ioredis';

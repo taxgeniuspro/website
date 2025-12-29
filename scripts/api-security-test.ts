@@ -252,7 +252,7 @@ async function testSecurityHeaders() {
   addResult(
     'X-Content-Type-Options header',
     headers['x-content-type-options'] ? 'PASS' : 'SKIP',
-    headers['x-content-type-options'] || 'Not set (Vercel default)'
+    headers['x-content-type-options'] || 'Not set (Coolify/Traefik default)'
   );
 
   addResult(
@@ -264,7 +264,7 @@ async function testSecurityHeaders() {
   addResult(
     'Strict-Transport-Security header',
     headers['strict-transport-security'] ? 'PASS' : 'SKIP',
-    headers['strict-transport-security'] || 'Not set (Vercel handles HTTPS)'
+    headers['strict-transport-security'] || 'Not set (Cloudflare handles HTTPS)'
   );
 }
 

@@ -3,23 +3,30 @@
 ## Project Context
 Tax Genius Pro - An AI-powered tax preparation platform using Next.js 15.5.2, TypeScript, and modern tech stack.
 
-## CRITICAL: Vercel Deployment Rules
+## Coolify Deployment (Self-Hosted)
 
-**NEVER create new Vercel projects.** Use the existing project:
-- **Project Name**: `taxgeniuspro`
+TaxGeniusPro is **self-hosted on Coolify** at 72.60.28.175.
+
+- **Coolify UUID**: `iok4s804ocwoc84c0g844oog`
 - **Production Domain**: `taxgeniuspro.tax`
-- **Git Repository**: `taxgeniuspro/website` (main branch deploys to production)
+- **Git Repository**: `taxgeniuspro/website` (main branch auto-deploys)
+- **Database**: TaxGeniusPro-Supabase (self-hosted, same VPS)
 
 When deploying:
-1. Push changes to git (main branch for production)
-2. Vercel will auto-deploy from the connected git repository
-3. Only use `vercel --prod` if git deploy fails, and always link to `taxgeniuspro` project first
-4. NEVER run `vercel` without first checking which project is linked (`.vercel/project.json`)
+1. Push changes to `taxgeniuspro/website` main branch
+2. Coolify auto-deploys via GitHub webhook
+3. Monitor deployment in Coolify dashboard: http://72.60.28.175:8000
 
-**Delete these orphaned projects if you see them:**
-- nifty-ramanujan (worktree artifact)
-- blissful-wozniak (worktree artifact)
-- unruffled-mendeleev (worktree artifact)
+**Coolify API Commands:**
+```bash
+# Restart application
+curl -X POST -H "Authorization: Bearer my-coolify-token-2025" \
+  "http://72.60.28.175:8000/api/v1/applications/iok4s804ocwoc84c0g844oog/restart"
+
+# Check status
+curl -s -H "Authorization: Bearer my-coolify-token-2025" \
+  "http://72.60.28.175:8000/api/v1/applications/iok4s804ocwoc84c0g844oog" | jq '.status'
+```
 
 ## Available MCP Tools:
 

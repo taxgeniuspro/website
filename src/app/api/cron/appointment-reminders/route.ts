@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { EmailService } from '@/lib/services/email.service';
 
-// Vercel cron jobs use GET requests
+// Coolify cron jobs use GET requests
 export async function GET(req: NextRequest) {
   try {
     // Verify cron secret to prevent unauthorized access

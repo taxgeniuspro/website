@@ -1,6 +1,6 @@
 // PM2 Ecosystem Configuration for Tax Genius Pro
 // This file is for VPS/Docker deployments only
-// For Vercel deployments, environment variables are set in Vercel dashboard
+// For Coolify deployments, environment variables are set in Coolify dashboard
 
 module.exports = {
   apps: [
