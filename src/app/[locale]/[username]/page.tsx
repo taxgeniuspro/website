@@ -16,6 +16,7 @@ const RESERVED_ROUTES = [
   'landing',
   'cash-advance',
   'start-filing',
+  'tax-season',
   'admin',
   'about',
   'terms',
