@@ -7,6 +7,7 @@ import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/ra
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateContactFormPDF } from '@/lib/services/pdf-form-generator.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
+import { sendLeadToDiscord } from '@/lib/services/discord-notifier.service';
 
 // Local TypeScript interfaces (replacing Prisma types)
 interface Profile {
@@ -74,7 +75,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
     const { name, email, phone, service, message, locale, ref } = body;
 
     // Validate required fields
@@ -152,12 +161,12 @@ export async function POST(req: NextRequest) {
       // Look up the preparer by tracking code
       const { data: profiles } = await db
         .from('profiles')
-        .select('id, role, userId:user_id')
-        .or(`tracking_code.eq.${ref},custom_tracking_code.eq.${ref},short_link_username.eq.${ref}`)
+        .select('id, role, userId, firstName, lastName, discordUserId, customTrackingCode')
+        .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
         .eq('role', 'tax_preparer')
         .limit(1);
 
-      preparerProfile = firstOrNull(profiles) as Profile | null;
+      preparerProfile = firstOrNull(profiles) as (Profile & { firstName?: string; lastName?: string; discordUserId?: string; customTrackingCode?: string }) | null;
 
       if (preparerProfile) {
         // Use Profile.id (not User.id) to match dashboard queries
@@ -434,6 +443,27 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
       refCode: ref,
       assignedPreparer: recipientName,
     }).catch(err => logger.error('Telegram notification failed', { error: err }));
+
+    // Send Discord notification if preparer has Discord ID (non-blocking)
+    const extendedProfile = preparerProfile as (Profile & { firstName?: string; lastName?: string; discordUserId?: string; customTrackingCode?: string }) | null;
+    if (extendedProfile?.discordUserId) {
+      const preparerFullName = extendedProfile.firstName && extendedProfile.lastName
+        ? `${extendedProfile.firstName} ${extendedProfile.lastName}`
+        : recipientName;
+
+      sendLeadToDiscord({
+        leadType: 'contact',
+        firstName,
+        lastName,
+        email,
+        phone: phone || 'Not provided',
+        preparerName: preparerFullName,
+        preparerCode: extendedProfile.customTrackingCode || ref || undefined,
+        preparerDiscordId: extendedProfile.discordUserId,
+        source: 'Contact Form',
+        message: message || undefined,
+      }).catch(err => logger.error('Discord notification failed', { error: err }));
+    }
 
     return NextResponse.json({
       success: true,
