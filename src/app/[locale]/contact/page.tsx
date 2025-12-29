@@ -87,6 +87,13 @@ function ContactPageContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Client-side validation for required fields
+    if (!formData.name.trim() || !formData.email.trim() || !formData.service || !formData.message.trim()) {
+      setSubmitError('Please fill in all required fields');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -267,12 +274,13 @@ function ContactPageContent() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="service">{t('service')}</Label>
+                        <Label htmlFor="service">{t('service')} *</Label>
                         <select
                           id="service"
                           name="service"
                           value={formData.service}
                           onChange={handleInputChange}
+                          required
                           className="mt-1 w-full px-3 py-2 border border-input bg-background rounded-md"
                         >
                           <option value="">{t('serviceSelect')}</option>
@@ -287,7 +295,7 @@ function ContactPageContent() {
                     </div>
 
                     <div>
-                      <Label htmlFor="message">{t('message')}</Label>
+                      <Label htmlFor="message">{t('message')} *</Label>
                       <Textarea
                         id="message"
                         name="message"
@@ -295,6 +303,7 @@ function ContactPageContent() {
                         onChange={handleInputChange}
                         maxLength={1000}
                         rows={4}
+                        required
                         className="mt-1"
                         placeholder={t('messagePlaceholder')}
                       />
