@@ -13,7 +13,11 @@ import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auth } from '@/lib/auth';
 import { nanoid } from 'nanoid';
-import { createId } from '@paralleldrive/cuid2';
+
+// Generate cuid-like IDs using nanoid
+function createId(): string {
+  return 'cm' + nanoid(22).toLowerCase().replace(/[_-]/g, 'x');
+}
 
 interface PreparerInput {
   firstName: string;
