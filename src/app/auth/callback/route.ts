@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 // Interfaces for database records
 interface Profile {
   id: string;
-  userId: string;
+  userId: string | null; // Nullable for pre-created profiles (tax preparer migration)
   supabaseUserId: string | null;
   email: string;
   role: string;
@@ -182,19 +182,33 @@ async function syncUserProfile(user: { id: string; email?: string; user_metadata
       } catch (err) {
         logger.error('[Auth Callback] Failed to assign tracking code', { error: err });
       }
-    } else if (!profile.supabaseUserId) {
-      // Update existing profile with supabaseUserId
-      const { error: updateError } = await db.from('profiles')
-        .update({ supabaseUserId: user.id })
-        .eq('id', profile.id);
+    } else {
+      // Profile exists - update supabaseUserId and userId if missing
+      const updateFields: Record<string, unknown> = {};
 
-      if (updateError) {
-        logger.error('[Auth Callback] Failed to update profile with supabaseUserId', { error: updateError });
-      } else {
-        logger.info('[Auth Callback] Updated profile with supabaseUserId', {
-          profileId: profile.id,
-          supabaseUserId: user.id
-        });
+      if (!profile.supabaseUserId) {
+        updateFields.supabaseUserId = user.id;
+      }
+
+      // Link profile to user if not already linked (handles pre-created tax preparers)
+      if (!profile.userId && dbUser) {
+        updateFields.userId = dbUser.id;
+      }
+
+      if (Object.keys(updateFields).length > 0) {
+        const { error: updateError } = await db.from('profiles')
+          .update(updateFields)
+          .eq('id', profile.id);
+
+        if (updateError) {
+          logger.error('[Auth Callback] Failed to update profile', { error: updateError });
+        } else {
+          logger.info('[Auth Callback] Updated profile with missing fields', {
+            profileId: profile.id,
+            role: profile.role,
+            updates: Object.keys(updateFields),
+          });
+        }
       }
     }
 

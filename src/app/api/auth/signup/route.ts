@@ -109,7 +109,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, email, password } = await req.json();
+    let name: string, email: string, password: string;
+    try {
+      const body = await req.json();
+      name = body.name;
+      email = body.email;
+      password = body.password;
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
 
     // Validation - required fields
     if (!name || !email || !password) {
@@ -180,6 +191,105 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 409 }
+      );
+    }
+
+    // Check for pre-existing profile (tax preparer migration)
+    // This handles the case where a tax preparer profile was created before signup
+    const { data: existingProfileData } = await db
+      .from('profiles')
+      .select('id, userId, role, firstName, lastName, email')
+      .eq('email', email.toLowerCase())
+      .limit(1);
+
+    const existingProfile = firstOrNull<Profile>(existingProfileData);
+
+    if (existingProfile && existingProfile.role === 'tax_preparer') {
+      // This is a pre-created tax preparer claiming their account
+      logger.info('[Signup] Pre-created tax preparer found, activating account', {
+        email: email.toLowerCase(),
+        profileId: existingProfile.id,
+      });
+
+      const hashedPwd = await hashPassword(password);
+
+      // Create User record for them
+      const { data: newUser, error: userError } = await db
+        .from('users')
+        .insert({
+          email: email.toLowerCase(),
+          name,
+          hashedPassword: hashedPwd,
+          emailVerified: new Date().toISOString(), // Auto-verify pre-created preparers
+        })
+        .select()
+        .single();
+
+      if (userError) {
+        logger.error('[Signup] Failed to create user for pre-created preparer', {
+          error: userError.message,
+          email: email.toLowerCase(),
+        });
+        throw userError;
+      }
+
+      // Link profile to new user
+      await db
+        .from('profiles')
+        .update({ userId: newUser.id })
+        .eq('id', existingProfile.id);
+
+      logger.info('[Signup] Tax preparer claimed pre-created account', {
+        email: email.toLowerCase(),
+        profileId: existingProfile.id,
+        userId: newUser.id,
+      });
+
+      // Create/link CRM contact for the preparer
+      try {
+        const { data: existingCrmContactData } = await db
+          .from('crm_contacts')
+          .select('*')
+          .eq('email', email.toLowerCase())
+          .limit(1);
+
+        const existingCrmContact = firstOrNull<CRMContact>(existingCrmContactData);
+
+        if (existingCrmContact) {
+          await db
+            .from('crm_contacts')
+            .update({
+              userId: newUser.id,
+              contactType: 'PARTNER', // Tax preparers are partners
+              lastContactedAt: new Date().toISOString(),
+            })
+            .eq('id', existingCrmContact.id);
+        } else {
+          await db.from('crm_contacts').insert({
+            userId: newUser.id,
+            email: email.toLowerCase(),
+            firstName: existingProfile.firstName || name.split(' ')[0] || 'Unknown',
+            lastName: existingProfile.lastName || name.split(' ').slice(1).join(' ') || '',
+            contactType: 'PARTNER',
+            stage: 'NEW',
+            source: 'preparer_signup',
+          });
+        }
+      } catch (crmError) {
+        logger.error('[Signup] Failed to create/link CRM contact for preparer', {
+          error: crmError,
+          userId: newUser.id,
+        });
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: 'Account activated! You can now sign in as a tax preparer.',
+          user: { id: newUser.id, name: newUser.name, email: newUser.email },
+          role: 'tax_preparer',
+        },
+        { status: 201 }
       );
     }
 
