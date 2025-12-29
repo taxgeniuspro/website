@@ -1,24 +1,68 @@
+/**
+ * Shopping Cart Hook
+ *
+ * Zustand-based shopping cart with localStorage persistence.
+ * Provides cart state management for tax preparation product purchases.
+ *
+ * @module useShoppingCart
+ */
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/**
+ * Represents a single item in the shopping cart
+ * @interface CartItem
+ */
 export interface CartItem {
+  /** Unique product identifier */
   productId: string;
+  /** Number of items in cart */
   quantity: number;
+  /** Display name of the product */
   name: string;
+  /** Unit price in dollars */
   price: number;
+  /** URL to product image */
   imageUrl: string;
 }
 
+/**
+ * Shopping cart state and actions
+ * @interface ShoppingCartState
+ */
 interface ShoppingCartState {
+  /** Array of cart items */
   items: CartItem[];
+  /** Add item to cart (increments quantity if exists) */
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
+  /** Remove item from cart by product ID */
   removeItem: (productId: string) => void;
+  /** Update quantity for a cart item */
   updateQuantity: (productId: string, quantity: number) => void;
+  /** Clear all items from cart */
   clearCart: () => void;
+  /** Calculate total price of all items */
   getTotal: () => number;
+  /** Get total count of items in cart */
   getItemCount: () => number;
 }
 
+/**
+ * Shopping cart store hook with localStorage persistence
+ *
+ * @returns {ShoppingCartState} Cart state and action methods
+ * @example
+ * ```tsx
+ * const { items, addItem, getTotal } = useShoppingCart();
+ *
+ * // Add item to cart
+ * addItem({ productId: 'tax-prep-basic', name: 'Basic Filing', price: 49.99, imageUrl: '/img/basic.jpg' });
+ *
+ * // Get cart total
+ * const total = getTotal(); // Returns sum of (price * quantity)
+ * ```
+ */
 export const useShoppingCart = create<ShoppingCartState>()(
   persist(
     (set, get) => ({
