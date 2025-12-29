@@ -1,0 +1,604 @@
+openapi: 3.1.0
+info:
+  title: Tax Genius Pro API
+  description: |
+    RESTful API for Tax Genius Pro - An AI-powered tax preparation platform.
+    
+    ## Authentication
+    All protected endpoints require a valid session. Authentication is handled via Supabase Auth.
+    
+    ## Rate Limiting
+    API requests are rate-limited to prevent abuse. Default limits:
+    - 100 requests per minute for authenticated users
+    - 20 requests per minute for unauthenticated users
+    
+    ## Roles
+    - `admin`: Full access to all resources
+    - `tax_preparer`: Access to assigned clients and CRM
+    - `affiliate`: Access to referral and commission data
+    - `client`: Access to own data only
+  version: 1.0.0
+  contact:
+    name: Tax Genius Pro Support
+    email: support@taxgeniuspro.tax
+    url: https://taxgeniuspro.tax
+  license:
+    name: Proprietary
+    url: https://taxgeniuspro.tax/terms
+
+servers:
+  - url: https://taxgeniuspro.tax/api
+    description: Production server
+  - url: http://localhost:3002/api
+    description: Development server
+
+tags:
+  - name: Auth
+    description: Authentication and authorization endpoints
+  - name: CRM
+    description: Customer relationship management - contacts, interactions, pipeline
+  - name: Checkout
+    description: Payment and order processing
+  - name: Tax Intake
+    description: Lead capture and tax form intake
+  - name: Affiliates
+    description: Affiliate program and referral tracking
+  - name: Admin
+    description: Administrative functions (admin only)
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email/password
+      description: Authenticate user with email and password credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user
+      description: Create a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, firstName, lastName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                firstName:
+                  type: string
+                  maxLength: 100
+                lastName:
+                  type: string
+                  maxLength: 100
+                phone:
+                  type: string
+                  maxLength: 20
+                ref:
+                  type: string
+                  description: Referrer tracking code
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /crm/contacts:
+    get:
+      tags: [CRM]
+      summary: List contacts
+      description: Get paginated list of CRM contacts with optional filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: stage
+          in: query
+          schema:
+            $ref: '#/components/schemas/PipelineStage'
+        - name: contactType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContactType'
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      contacts:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CRMContact'
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [CRM]
+      summary: Create contact
+      description: Create a new CRM contact
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContactRequest'
+      responses:
+        '201':
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/CRMContact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /crm/contacts/{id}:
+    get:
+      tags: [CRM]
+      summary: Get contact details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contact details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/CRMContact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [CRM]
+      summary: Update contact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContactRequest'
+      responses:
+        '200':
+          description: Contact updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [CRM]
+      summary: Delete contact (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contact deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /checkout/create-session:
+    post:
+      tags: [Checkout]
+      summary: Create Stripe checkout session
+      description: Initialize a Stripe checkout session for payment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      quantity:
+                        type: integer
+                        minimum: 1
+                      price:
+                        type: number
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  url:
+                    type: string
+                    format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tax-intake:
+    post:
+      tags: [Tax Intake]
+      summary: Submit tax intake form
+      description: Submit lead information from tax intake form
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxIntakeRequest'
+      responses:
+        '201':
+          description: Lead created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      message:
+                        type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /affiliate/earnings:
+    get:
+      tags: [Affiliates]
+      summary: Get affiliate earnings summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, quarter, year, all]
+            default: month
+      responses:
+        '200':
+          description: Earnings summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EarningsSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /webhooks/stripe:
+    post:
+      tags: [Checkout]
+      summary: Stripe webhook endpoint
+      description: Handles Stripe webhook events for payment processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid signature
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth JWT token
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            role:
+              $ref: '#/components/schemas/UserRole'
+
+    UserRole:
+      type: string
+      enum: [admin, client, tax_preparer, affiliate, lead]
+
+    ContactType:
+      type: string
+      enum: [CLIENT, LEAD, AFFILIATE, PREPARER]
+
+    PipelineStage:
+      type: string
+      enum: [NEW, CONTACTED, DOCUMENTS, PREPARING, COMPLETE]
+
+    CRMContact:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        contactType:
+          $ref: '#/components/schemas/ContactType'
+        stage:
+          $ref: '#/components/schemas/PipelineStage'
+        company:
+          type: string
+        filingStatus:
+          type: string
+        dependents:
+          type: integer
+        previousYearAGI:
+          type: number
+        taxYear:
+          type: integer
+        assignedPreparerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateContactRequest:
+      type: object
+      required: [contactType, firstName, lastName, email]
+      properties:
+        contactType:
+          $ref: '#/components/schemas/ContactType'
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        filingStatus:
+          type: string
+        dependents:
+          type: integer
+          minimum: 0
+          maximum: 20
+        previousYearAGI:
+          type: number
+        taxYear:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+
+    UpdateContactRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        stage:
+          $ref: '#/components/schemas/PipelineStage'
+        assignedPreparerId:
+          type: string
+
+    TaxIntakeRequest:
+      type: object
+      required: [firstName, lastName, email]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        filingStatus:
+          type: string
+          enum: [single, married_joint, married_separate, head_of_household, qualifying_widow]
+        dependents:
+          type: integer
+        ref:
+          type: string
+          description: Referrer tracking code
+
+    EarningsSummary:
+      type: object
+      properties:
+        totalEarnings:
+          type: number
+        pendingEarnings:
+          type: number
+        approvedEarnings:
+          type: number
+        paidEarnings:
+          type: number
+        totalLeads:
+          type: integer
+        convertedLeads:
+          type: integer
+        conversionRate:
+          type: number
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: Unauthorized
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: Access denied
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: Not found
