@@ -187,13 +187,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'An account with this email already exists' },
-        { status: 409 }
-      );
-    }
-
     // Check for pre-existing profile (tax preparer migration)
     // This handles the case where a tax preparer profile was created before signup
     const { data: existingProfileData } = await db
@@ -204,8 +197,66 @@ export async function POST(req: NextRequest) {
 
     const existingProfile = firstOrNull<Profile>(existingProfileData);
 
+    // Handle pre-created tax preparer accounts
+    // Case 1: User exists with password - already registered, tell them to sign in
+    // Case 2: User exists without password - pre-imported preparer, let them claim
+    // Case 3: User doesn't exist but Profile does - legacy case, create user and link
+    // Case 4: Neither exists - normal signup flow
+    if (existingUser) {
+      // Check if this is a pre-imported preparer (User exists but no password)
+      if (!existingUser.hashedPassword && existingProfile && existingProfile.role === 'tax_preparer') {
+        // This is a pre-imported tax preparer claiming their account
+        logger.info('[Signup] Pre-imported tax preparer claiming account', {
+          email: email.toLowerCase(),
+          userId: existingUser.id,
+          profileId: existingProfile.id,
+        });
+
+        const hashedPwd = await hashPassword(password);
+
+        // Update User with password
+        const { error: updateError } = await db
+          .from('users')
+          .update({
+            hashedPassword: hashedPwd,
+            emailVerified: new Date().toISOString(), // Auto-verify
+          })
+          .eq('id', existingUser.id);
+
+        if (updateError) {
+          logger.error('[Signup] Failed to update password for pre-imported preparer', {
+            error: updateError.message,
+            email: email.toLowerCase(),
+          });
+          throw updateError;
+        }
+
+        logger.info('[Signup] Tax preparer claimed pre-imported account', {
+          email: email.toLowerCase(),
+          userId: existingUser.id,
+          profileId: existingProfile.id,
+        });
+
+        return NextResponse.json(
+          {
+            success: true,
+            message: 'Account activated! You can now sign in as a tax preparer.',
+            user: { id: existingUser.id, name: existingUser.name, email: existingUser.email },
+            role: 'tax_preparer',
+          },
+          { status: 201 }
+        );
+      }
+
+      // User exists with password - already fully registered
+      return NextResponse.json(
+        { error: 'An account with this email already exists' },
+        { status: 409 }
+      );
+    }
+
     if (existingProfile && existingProfile.role === 'tax_preparer') {
-      // This is a pre-created tax preparer claiming their account
+      // This is a pre-created tax preparer claiming their account (legacy case - no User record)
       logger.info('[Signup] Pre-created tax preparer found, activating account', {
         email: email.toLowerCase(),
         profileId: existingProfile.id,
