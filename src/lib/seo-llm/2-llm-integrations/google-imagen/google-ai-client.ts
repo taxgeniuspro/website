@@ -1,35 +1,35 @@
 /**
- * Google AI Studio (Imagen 4) Image Generation Client
+ * OpenAI DALL-E Image Generation Client
  *
- * Purpose: Generate product images using Google's Imagen 4 API
- * Model: imagen-4.0-generate-001 (Latest as of Oct 2025)
+ * Purpose: Generate product images using OpenAI's DALL-E API
+ * Model: dall-e-3 (Latest as of Dec 2025)
  *
- * Integration: Works seamlessly with existing MinIO upload system
+ * Integration: Works seamlessly with existing disk storage system
  *
- * @see https://ai.google.dev/gemini-api/docs/imagen
+ * @see https://platform.openai.com/docs/guides/images
  */
 
-import { GoogleGenAI } from '@google/genai'
+import OpenAI from 'openai';
 
 // ============================================================================
 // TYPES & INTERFACES
 // ============================================================================
 
 /**
- * Configuration for Google AI image generation
+ * Configuration for image generation
  */
 export interface ImageGenerationConfig {
-  /** Number of images to generate (1-4) */
-  numberOfImages?: 1 | 2 | 3 | 4
+  /** Number of images to generate (DALL-E 3 only supports 1) */
+  numberOfImages?: 1;
 
-  /** Image aspect ratio */
-  aspectRatio?: '1:1' | '3:4' | '4:3' | '9:16' | '16:9'
+  /** Image aspect ratio (mapped to size) */
+  aspectRatio?: '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
 
-  /** Image size quality */
-  imageSize?: '1K' | '2K'
+  /** Image quality */
+  quality?: 'standard' | 'hd';
 
-  /** Control person generation in images */
-  personGeneration?: 'dont_allow' | 'allow_adult' | 'allow_all'
+  /** Image style */
+  style?: 'vivid' | 'natural';
 }
 
 /**
@@ -37,13 +37,13 @@ export interface ImageGenerationConfig {
  */
 export interface GenerateImageOptions {
   /** Text prompt describing the desired image */
-  prompt: string
+  prompt: string;
 
-  /** Optional negative prompt (things to avoid) */
-  negativePrompt?: string
+  /** Optional negative prompt (things to avoid) - appended to prompt */
+  negativePrompt?: string;
 
   /** Configuration options */
-  config?: ImageGenerationConfig
+  config?: ImageGenerationConfig;
 }
 
 /**
@@ -51,55 +51,67 @@ export interface GenerateImageOptions {
  */
 export interface ImageGenerationResult {
   /** Base64 encoded image data */
-  imageBytes: string
+  imageBytes: string;
 
   /** Buffer ready for upload */
-  buffer: Buffer
+  buffer: Buffer;
 
   /** Original prompt used */
-  prompt: string
+  prompt: string;
 
   /** Timestamp of generation */
-  generatedAt: Date
+  generatedAt: Date;
 }
 
 /**
  * Image type for product photography
  */
-export type ImageType = 'hero' | 'gallery-1' | 'gallery-2' | 'gallery-3'
+export type ImageType = 'hero' | 'gallery-1' | 'gallery-2' | 'gallery-3';
 
 /**
  * City-specific image generation options
  */
 export interface CityImageOptions {
-  cityName: string
-  imageType: ImageType
-  customPrompt?: string
+  cityName: string;
+  imageType: ImageType;
+  customPrompt?: string;
 }
 
 // ============================================================================
-// GOOGLE AI CLIENT CLASS
+// ASPECT RATIO TO SIZE MAPPING
+// ============================================================================
+
+const aspectRatioToSize: Record<string, '1024x1024' | '1792x1024' | '1024x1792'> = {
+  '1:1': '1024x1024',
+  '4:3': '1792x1024', // Landscape
+  '3:4': '1024x1792', // Portrait
+  '16:9': '1792x1024', // Landscape
+  '9:16': '1024x1792', // Portrait
+};
+
+// ============================================================================
+// OPENAI IMAGE GENERATOR CLASS
 // ============================================================================
 
 export class GoogleAIImageGenerator {
-  private client: GoogleGenAI
-  private readonly model = 'imagen-4.0-generate-001'
+  private client: OpenAI;
+  private readonly model = 'dall-e-3';
 
   /**
-   * Initialize Google AI client
-   * @param apiKey - Google AI Studio API key (defaults to env var)
+   * Initialize OpenAI client
+   * @param apiKey - OpenAI API key (defaults to env var)
    */
   constructor(apiKey?: string) {
-    const key = apiKey || process.env.GOOGLE_AI_STUDIO_API_KEY
+    const key = apiKey || process.env.OPENAI_API_KEY;
 
     if (!key) {
       throw new Error(
-        'Google AI Studio API key not found. ' +
-          'Set GOOGLE_AI_STUDIO_API_KEY environment variable or pass apiKey to constructor.'
-      )
+        'OpenAI API key not found. ' +
+          'Set OPENAI_API_KEY environment variable or pass apiKey to constructor.'
+      );
     }
 
-    this.client = new GoogleGenAI({ apiKey: key })
+    this.client = new OpenAI({ apiKey: key });
   }
 
   /**
@@ -112,67 +124,71 @@ export class GoogleAIImageGenerator {
    * const generator = new GoogleAIImageGenerator();
    * const result = await generator.generateImage({
    *   prompt: 'Professional product photography of a red apple',
-   *   config: { aspectRatio: '1:1', imageSize: '2K' }
+   *   config: { aspectRatio: '1:1', quality: 'hd' }
    * });
-   * // result.buffer can be uploaded to MinIO
+   * // result.buffer can be uploaded to disk storage
    */
   async generateImage(options: GenerateImageOptions): Promise<ImageGenerationResult> {
-    const { prompt, config = {} } = options
+    const { prompt, negativePrompt, config = {} } = options;
 
     // Validate prompt
     if (!prompt || prompt.trim().length === 0) {
-      throw new Error('Prompt cannot be empty')
+      throw new Error('Prompt cannot be empty');
     }
 
-    if (prompt.length > 1440) {
-      // ~480 tokens * 3 chars/token
-      throw new Error('Prompt exceeds maximum length of 480 tokens (~1440 characters)')
+    if (prompt.length > 4000) {
+      throw new Error('Prompt exceeds maximum length of 4000 characters');
     }
 
-    // Set default config for product photography
-    const imageConfig: ImageGenerationConfig = {
-      numberOfImages: 1,
-      aspectRatio: '4:3', // Good for 4x6 postcards
-      imageSize: '2K', // Ultra quality
-      personGeneration: 'dont_allow', // No people in product photos
-      ...config,
+    // Build full prompt with negative prompt if provided
+    let fullPrompt = prompt;
+    if (negativePrompt) {
+      fullPrompt += `. Avoid: ${negativePrompt}`;
     }
+
+    // Map aspect ratio to size
+    const size = aspectRatioToSize[config.aspectRatio || '4:3'] || '1792x1024';
 
     try {
-      const response = await this.client.models.generateImages({
+      const response = await this.client.images.generate({
         model: this.model,
-        prompt: prompt,
-        config: imageConfig,
-      })
+        prompt: fullPrompt,
+        n: 1,
+        size,
+        quality: config.quality || 'hd',
+        style: config.style || 'natural',
+        response_format: 'b64_json',
+      });
 
-      if (!response.generatedImages || response.generatedImages.length === 0) {
-        throw new Error('No images generated in response')
+      if (!response.data || response.data.length === 0) {
+        throw new Error('No images generated in response');
       }
 
-      const imageBytes = response.generatedImages[0].image.imageBytes
-      const buffer = Buffer.from(imageBytes, 'base64')
+      const imageBytes = response.data[0].b64_json!;
+      const buffer = Buffer.from(imageBytes, 'base64');
 
       return {
         imageBytes,
         buffer,
         prompt,
         generatedAt: new Date(),
-      }
-    } catch (error: any) {
+      };
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string };
       // Enhanced error handling
-      if (error.status === 401 || error.status === 403) {
-        throw new Error(`Authentication failed: ${error.message}. Check your API key.`)
+      if (err.status === 401 || err.status === 403) {
+        throw new Error(`Authentication failed: ${err.message}. Check your API key.`);
       }
 
-      if (error.status === 429) {
-        throw new Error('Rate limit exceeded. Please wait and try again.')
+      if (err.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait and try again.');
       }
 
-      if (error.message?.includes('timeout')) {
-        throw new Error('Image generation timed out. Please try again.')
+      if (err.message?.includes('timeout')) {
+        throw new Error('Image generation timed out. Please try again.');
       }
 
-      throw new Error(`Image generation failed: ${error.message || 'Unknown error'}`)
+      throw new Error(`Image generation failed: ${err.message || 'Unknown error'}`);
     }
   }
 
@@ -193,19 +209,19 @@ export class GoogleAIImageGenerator {
     prompts: string[],
     config?: ImageGenerationConfig
   ): Promise<ImageGenerationResult[]> {
-    const results: ImageGenerationResult[] = []
+    const results: ImageGenerationResult[] = [];
 
     for (const prompt of prompts) {
-      const result = await this.generateImage({ prompt, config })
-      results.push(result)
+      const result = await this.generateImage({ prompt, config });
+      results.push(result);
 
       // Rate limiting: Wait 2 seconds between generations
       if (prompts.indexOf(prompt) < prompts.length - 1) {
-        await this.wait(2000)
+        await this.wait(2000);
       }
     }
 
-    return results
+    return results;
   }
 
   /**
@@ -221,20 +237,20 @@ export class GoogleAIImageGenerator {
    * });
    */
   async generateCityImage(options: CityImageOptions): Promise<ImageGenerationResult> {
-    const { cityName, imageType, customPrompt } = options
+    const { cityName, imageType, customPrompt } = options;
 
     // Use custom prompt if provided, otherwise generate from template
-    const prompt = customPrompt || this.buildCityPrompt(cityName, imageType)
+    const prompt = customPrompt || this.buildCityPrompt(cityName, imageType);
 
     // City-specific configuration
     const config: ImageGenerationConfig = {
       numberOfImages: 1,
       aspectRatio: imageType === 'hero' ? '4:3' : '1:1',
-      imageSize: '2K',
-      personGeneration: 'dont_allow',
-    }
+      quality: 'hd',
+      style: 'natural',
+    };
 
-    return this.generateImage({ prompt, config })
+    return this.generateImage({ prompt, config });
   }
 
   /**
@@ -253,9 +269,9 @@ export class GoogleAIImageGenerator {
       'San Francisco': 'Golden Gate Bridge',
       Miami: 'Miami Beach with Art Deco buildings',
       // Add more as template evolves
-    }
+    };
 
-    const landmark = cityLandmarks[cityName] || `${cityName} iconic landmark`
+    const landmark = cityLandmarks[cityName] || `${cityName} iconic landmark`;
 
     const promptTemplates = {
       hero: `professional product photography of a 4x6 postcard mockup featuring ${landmark}, studio lighting, clean white background, ultra realistic, high quality, 4k resolution, product shot, marketing photography, sharp focus`,
@@ -265,16 +281,16 @@ export class GoogleAIImageGenerator {
       'gallery-2': `angled 45-degree view of ${cityName} postcard on rustic wooden desk, natural window lighting, coffee cup nearby, lifestyle product photography, warm tones, authentic, cozy atmosphere`,
 
       'gallery-3': `hand holding ${cityName} postcard with ${landmark} softly blurred in background, outdoor setting, golden hour lighting, natural feel, authentic moment, shallow depth of field`,
-    }
+    };
 
-    return promptTemplates[imageType] || promptTemplates['hero']
+    return promptTemplates[imageType] || promptTemplates['hero'];
   }
 
   /**
    * Utility: Wait for specified milliseconds
    */
   private wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -298,9 +314,9 @@ export async function generateProductImage(
   prompt: string,
   config?: ImageGenerationConfig
 ): Promise<Buffer> {
-  const generator = new GoogleAIImageGenerator()
-  const result = await generator.generateImage({ prompt, config })
-  return result.buffer
+  const generator = new GoogleAIImageGenerator();
+  const result = await generator.generateImage({ prompt, config });
+  return result.buffer;
 }
 
 /**
@@ -317,13 +333,13 @@ export async function generateCityPostcardImage(
   cityName: string,
   imageType: ImageType = 'hero'
 ): Promise<Buffer> {
-  const generator = new GoogleAIImageGenerator()
-  const result = await generator.generateCityImage({ cityName, imageType })
-  return result.buffer
+  const generator = new GoogleAIImageGenerator();
+  const result = await generator.generateCityImage({ cityName, imageType });
+  return result.buffer;
 }
 
 // ============================================================================
 // EXPORTS
 // ============================================================================
 
-export default GoogleAIImageGenerator
+export default GoogleAIImageGenerator;

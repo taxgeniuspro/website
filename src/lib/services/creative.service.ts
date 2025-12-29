@@ -4,13 +4,63 @@
  * Inspired by Fluent Affiliate Pro's creative management system
  */
 
-import { prisma } from '@/lib/prisma';
-import {
-  CreativeType,
-  CreativePrivacy,
-  CreativeStatus,
-  type AffiliateCreative,
-} from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definitions (replacing @prisma/client)
+type CreativeType = 'IMAGE' | 'TEXT' | 'VIDEO' | 'BANNER' | 'EMAIL_TEMPLATE' | 'SOCIAL_POST' | 'FLYER' | 'BUSINESS_CARD';
+type CreativePrivacy = 'PUBLIC' | 'PRIVATE' | 'GROUP_ONLY';
+type CreativeStatus = 'ACTIVE' | 'INACTIVE' | 'SCHEDULED' | 'EXPIRED';
+
+interface AffiliateCreative {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: CreativeType;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  text?: string | null;
+  htmlContent?: string | null;
+  videoUrl?: string | null;
+  downloadUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  targetUrl?: string | null;
+  privacy: CreativePrivacy;
+  affiliateIds: string[];
+  groupIds: string[];
+  status: CreativeStatus;
+  startDate?: string | null;
+  endDate?: string | null;
+  tags: string[];
+  category?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdBy?: string | null;
+  views: number;
+  downloads: number;
+  clicks: number;
+  conversions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AffiliateGroupRecord {
+  id: string;
+  name: string;
+}
+
+interface CreativeUsageRecord {
+  id: string;
+  creativeId: string;
+  affiliateId: string;
+  action: string;
+  platform?: string | null;
+  campaignId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  usedAt: string;
+}
 
 // Creative creation input
 export interface CreateCreativeInput {
@@ -97,8 +147,9 @@ export interface CreativeWithStats extends AffiliateCreative {
 export async function createCreative(
   input: CreateCreativeInput
 ): Promise<AffiliateCreative> {
-  const creative = await prisma.affiliateCreative.create({
-    data: {
+  const { data: creativeData, error } = await db
+    .from('affiliate_creatives')
+    .insert({
       name: input.name,
       description: input.description,
       type: input.type,
@@ -113,29 +164,33 @@ export async function createCreative(
       fileSize: input.fileSize,
       mimeType: input.mimeType,
       targetUrl: input.targetUrl,
-      privacy: input.privacy ?? CreativePrivacy.PUBLIC,
+      privacy: input.privacy ?? 'PUBLIC',
       affiliateIds: input.affiliateIds ?? [],
       groupIds: input.groupIds ?? [],
-      status: input.status ?? CreativeStatus.ACTIVE,
-      startDate: input.startDate,
-      endDate: input.endDate,
+      status: input.status ?? 'ACTIVE',
+      startDate: input.startDate?.toISOString(),
+      endDate: input.endDate?.toISOString(),
       tags: input.tags ?? [],
       category: input.category,
       metadata: input.metadata,
       createdBy: input.createdBy,
-      // Connect to groups if provided
-      groups: input.groupIds?.length
-        ? {
-            connect: input.groupIds.map((id) => ({ id })),
-          }
-        : undefined,
-    },
-    include: {
-      groups: true,
-    },
-  });
+    })
+    .select()
+    .single();
 
-  return creative;
+  if (error) throw error;
+
+  // Handle group connections separately if needed (many-to-many via join table)
+  if (input.groupIds?.length) {
+    for (const groupId of input.groupIds) {
+      await db.from('affiliate_creative_groups').insert({
+        creativeId: creativeData.id,
+        groupId,
+      });
+    }
+  }
+
+  return creativeData as AffiliateCreative;
 }
 
 /**
@@ -151,33 +206,58 @@ export async function getCreatives(
   totalPages: number;
 }> {
   const { page = 1, limit = 20 } = pagination;
-  const skip = (page - 1) * limit;
+  const offset = (page - 1) * limit;
 
-  const where = buildCreativeWhereClause(filters);
+  let query = db.from('affiliate_creatives').select('*');
+  let countQuery = db.from('affiliate_creatives').select('id', { count: 'exact', head: true });
 
-  const [creatives, total] = await Promise.all([
-    prisma.affiliateCreative.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: { usageRecords: true },
-        },
-        groups: {
-          select: { id: true, name: true },
-        },
-      },
-    }),
-    prisma.affiliateCreative.count({ where }),
+  // Apply filters
+  if (filters.type) {
+    query = query.eq('type', filters.type);
+    countQuery = countQuery.eq('type', filters.type);
+  }
+  if (filters.privacy) {
+    query = query.eq('privacy', filters.privacy);
+    countQuery = countQuery.eq('privacy', filters.privacy);
+  }
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+    countQuery = countQuery.eq('status', filters.status);
+  }
+  if (filters.category) {
+    query = query.eq('category', filters.category);
+    countQuery = countQuery.eq('category', filters.category);
+  }
+  if (filters.search) {
+    const pattern = `%${filters.search}%`;
+    query = query.or(`name.ilike.${pattern},description.ilike.${pattern}`);
+    countQuery = countQuery.or(`name.ilike.${pattern},description.ilike.${pattern}`);
+  }
+
+  const [{ data: creativesData }, { count: total }] = await Promise.all([
+    query.order('createdAt', { ascending: false }).range(offset, offset + limit - 1),
+    countQuery,
   ]);
+
+  const creatives: CreativeWithStats[] = [];
+  for (const creative of (creativesData || []) as AffiliateCreative[]) {
+    // Get usage count
+    const { count: usageCount } = await db
+      .from('creative_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('creativeId', creative.id);
+
+    creatives.push({
+      ...creative,
+      _count: { usageRecords: usageCount || 0 },
+    });
+  }
 
   return {
     creatives,
-    total,
+    total: total || 0,
     page,
-    totalPages: Math.ceil(total / limit),
+    totalPages: Math.ceil((total || 0) / limit),
   };
 }
 
@@ -196,73 +276,52 @@ export async function getAccessibleCreatives(
   totalPages: number;
 }> {
   const { page = 1, limit = 20 } = pagination;
-  const skip = (page - 1) * limit;
+  const offset = (page - 1) * limit;
 
   // Get affiliate's group membership
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { affiliateGroupId: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('affiliateGroupId')
+    .eq('id', profileId)
+    .limit(1);
 
+  const profile = firstOrNull(profileData) as { affiliateGroupId?: string | null } | null;
   const affiliateGroupId = profile?.affiliateGroupId;
 
-  // Build access filter
-  const baseWhere = buildCreativeWhereClause(filters);
+  // Get all active creatives and filter in JS (Supabase doesn't support complex OR with arrays)
+  const now = new Date().toISOString();
 
-  // Creative must be:
-  // 1. PUBLIC, or
-  // 2. PRIVATE and affiliate is in affiliateIds list, or
-  // 3. GROUP_ONLY and affiliate's group is in groupIds list
-  const accessWhere = {
-    AND: [
-      baseWhere,
-      { status: CreativeStatus.ACTIVE },
-      {
-        OR: [
-          { privacy: CreativePrivacy.PUBLIC },
-          {
-            AND: [
-              { privacy: CreativePrivacy.PRIVATE },
-              { affiliateIds: { has: profileId } },
-            ],
-          },
-          ...(affiliateGroupId
-            ? [
-                {
-                  AND: [
-                    { privacy: CreativePrivacy.GROUP_ONLY },
-                    { groupIds: { has: affiliateGroupId } },
-                  ],
-                },
-              ]
-            : []),
-        ],
-      },
-      // Check scheduling
-      {
-        OR: [
-          { startDate: null },
-          { startDate: { lte: new Date() } },
-        ],
-      },
-      {
-        OR: [
-          { endDate: null },
-          { endDate: { gte: new Date() } },
-        ],
-      },
-    ],
-  };
+  let query = db
+    .from('affiliate_creatives')
+    .select('*')
+    .eq('status', 'ACTIVE');
 
-  const [creatives, total] = await Promise.all([
-    prisma.affiliateCreative.findMany({
-      where: accessWhere,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    }),
-    prisma.affiliateCreative.count({ where: accessWhere }),
-  ]);
+  // Apply basic filters
+  if (filters.type) query = query.eq('type', filters.type);
+  if (filters.category) query = query.eq('category', filters.category);
+  if (filters.search) {
+    const pattern = `%${filters.search}%`;
+    query = query.or(`name.ilike.${pattern},description.ilike.${pattern}`);
+  }
+
+  const { data: allCreatives } = await query.order('createdAt', { ascending: false });
+
+  // Filter by access permissions and scheduling in JS
+  const accessibleCreatives = ((allCreatives || []) as AffiliateCreative[]).filter((c) => {
+    // Check scheduling
+    if (c.startDate && c.startDate > now) return false;
+    if (c.endDate && c.endDate < now) return false;
+
+    // Check privacy
+    if (c.privacy === 'PUBLIC') return true;
+    if (c.privacy === 'PRIVATE' && c.affiliateIds?.includes(profileId)) return true;
+    if (c.privacy === 'GROUP_ONLY' && affiliateGroupId && c.groupIds?.includes(affiliateGroupId)) return true;
+
+    return false;
+  });
+
+  const total = accessibleCreatives.length;
+  const creatives = accessibleCreatives.slice(offset, offset + limit);
 
   return {
     creatives,
@@ -278,17 +337,25 @@ export async function getAccessibleCreatives(
 export async function getCreativeById(
   id: string
 ): Promise<CreativeWithStats | null> {
-  return prisma.affiliateCreative.findUnique({
-    where: { id },
-    include: {
-      _count: {
-        select: { usageRecords: true },
-      },
-      groups: {
-        select: { id: true, name: true },
-      },
-    },
-  });
+  const { data: creativeData } = await db
+    .from('affiliate_creatives')
+    .select('*')
+    .eq('id', id)
+    .limit(1);
+
+  const creative = firstOrNull(creativeData) as AffiliateCreative | null;
+  if (!creative) return null;
+
+  // Get usage count
+  const { count: usageCount } = await db
+    .from('creative_usage')
+    .select('id', { count: 'exact', head: true })
+    .eq('creativeId', id);
+
+  return {
+    ...creative,
+    _count: { usageRecords: usageCount || 0 },
+  };
 }
 
 /**
@@ -298,57 +365,63 @@ export async function updateCreative(
   id: string,
   input: UpdateCreativeInput
 ): Promise<AffiliateCreative> {
-  // Handle group connections
-  let groupsUpdate: Record<string, unknown> | undefined;
+  const updateData: Record<string, unknown> = {};
+
+  if (input.name !== undefined) updateData.name = input.name;
+  if (input.description !== undefined) updateData.description = input.description;
+  if (input.type !== undefined) updateData.type = input.type;
+  if (input.imageUrl !== undefined) updateData.imageUrl = input.imageUrl;
+  if (input.thumbnailUrl !== undefined) updateData.thumbnailUrl = input.thumbnailUrl;
+  if (input.text !== undefined) updateData.text = input.text;
+  if (input.htmlContent !== undefined) updateData.htmlContent = input.htmlContent;
+  if (input.videoUrl !== undefined) updateData.videoUrl = input.videoUrl;
+  if (input.downloadUrl !== undefined) updateData.downloadUrl = input.downloadUrl;
+  if (input.width !== undefined) updateData.width = input.width;
+  if (input.height !== undefined) updateData.height = input.height;
+  if (input.fileSize !== undefined) updateData.fileSize = input.fileSize;
+  if (input.mimeType !== undefined) updateData.mimeType = input.mimeType;
+  if (input.targetUrl !== undefined) updateData.targetUrl = input.targetUrl;
+  if (input.privacy !== undefined) updateData.privacy = input.privacy;
+  if (input.affiliateIds !== undefined) updateData.affiliateIds = input.affiliateIds;
+  if (input.groupIds !== undefined) updateData.groupIds = input.groupIds;
+  if (input.status !== undefined) updateData.status = input.status;
+  if (input.startDate !== undefined) updateData.startDate = input.startDate?.toISOString();
+  if (input.endDate !== undefined) updateData.endDate = input.endDate?.toISOString();
+  if (input.tags !== undefined) updateData.tags = input.tags;
+  if (input.category !== undefined) updateData.category = input.category;
+  if (input.metadata !== undefined) updateData.metadata = input.metadata;
+
+  const { data: creative, error } = await db
+    .from('affiliate_creatives')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // Handle group connections if changed
   if (input.groupIds !== undefined) {
-    groupsUpdate = {
-      set: input.groupIds.map((groupId) => ({ id: groupId })),
-    };
+    // Remove existing group connections
+    await db.from('affiliate_creative_groups').delete().eq('creativeId', id);
+
+    // Add new connections
+    for (const groupId of input.groupIds) {
+      await db.from('affiliate_creative_groups').insert({
+        creativeId: id,
+        groupId,
+      });
+    }
   }
 
-  const creative = await prisma.affiliateCreative.update({
-    where: { id },
-    data: {
-      name: input.name,
-      description: input.description,
-      type: input.type,
-      imageUrl: input.imageUrl,
-      thumbnailUrl: input.thumbnailUrl,
-      text: input.text,
-      htmlContent: input.htmlContent,
-      videoUrl: input.videoUrl,
-      downloadUrl: input.downloadUrl,
-      width: input.width,
-      height: input.height,
-      fileSize: input.fileSize,
-      mimeType: input.mimeType,
-      targetUrl: input.targetUrl,
-      privacy: input.privacy,
-      affiliateIds: input.affiliateIds,
-      groupIds: input.groupIds,
-      status: input.status,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      tags: input.tags,
-      category: input.category,
-      metadata: input.metadata,
-      groups: groupsUpdate,
-    },
-    include: {
-      groups: true,
-    },
-  });
-
-  return creative;
+  return creative as AffiliateCreative;
 }
 
 /**
  * Delete a creative
  */
 export async function deleteCreative(id: string): Promise<void> {
-  await prisma.affiliateCreative.delete({
-    where: { id },
-  });
+  await db.from('affiliate_creatives').delete().eq('id', id);
 }
 
 /**
@@ -362,21 +435,26 @@ export async function scheduleCreative(
   const updateData: Record<string, unknown> = {};
 
   if (startDate) {
-    updateData.startDate = startDate;
+    updateData.startDate = startDate.toISOString();
     // If start date is in the future, set status to SCHEDULED
     if (startDate > new Date()) {
-      updateData.status = CreativeStatus.SCHEDULED;
+      updateData.status = 'SCHEDULED';
     }
   }
 
   if (endDate) {
-    updateData.endDate = endDate;
+    updateData.endDate = endDate.toISOString();
   }
 
-  return prisma.affiliateCreative.update({
-    where: { id },
-    data: updateData,
-  });
+  const { data: creative, error } = await db
+    .from('affiliate_creatives')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return creative as AffiliateCreative;
 }
 
 /**
@@ -387,34 +465,35 @@ export async function processScheduledCreatives(): Promise<{
   activated: number;
   expired: number;
 }> {
-  const now = new Date();
+  const now = new Date().toISOString();
 
-  // Activate scheduled creatives whose start date has passed
-  const activateResult = await prisma.affiliateCreative.updateMany({
-    where: {
-      status: CreativeStatus.SCHEDULED,
-      startDate: { lte: now },
-    },
-    data: {
-      status: CreativeStatus.ACTIVE,
-    },
-  });
+  // Get scheduled creatives to activate
+  const { data: toActivate } = await db
+    .from('affiliate_creatives')
+    .select('id')
+    .eq('status', 'SCHEDULED')
+    .lte('startDate', now);
 
-  // Expire active creatives whose end date has passed
-  const expireResult = await prisma.affiliateCreative.updateMany({
-    where: {
-      status: CreativeStatus.ACTIVE,
-      endDate: { lte: now },
-    },
-    data: {
-      status: CreativeStatus.EXPIRED,
-    },
-  });
+  let activated = 0;
+  for (const creative of (toActivate || [])) {
+    await db.from('affiliate_creatives').update({ status: 'ACTIVE' }).eq('id', creative.id);
+    activated++;
+  }
 
-  return {
-    activated: activateResult.count,
-    expired: expireResult.count,
-  };
+  // Get active creatives to expire
+  const { data: toExpire } = await db
+    .from('affiliate_creatives')
+    .select('id')
+    .eq('status', 'ACTIVE')
+    .lte('endDate', now);
+
+  let expired = 0;
+  for (const creative of (toExpire || [])) {
+    await db.from('affiliate_creatives').update({ status: 'EXPIRED' }).eq('id', creative.id);
+    expired++;
+  }
+
+  return { activated, expired };
 }
 
 /**
@@ -432,26 +511,32 @@ export async function trackCreativeUsage(
   }
 ): Promise<void> {
   // Create usage record
-  await prisma.creativeUsage.create({
-    data: {
-      creativeId,
-      affiliateId,
-      action,
-      platform: context?.platform,
-      campaignId: context?.campaignId,
-      ipAddress: context?.ipAddress,
-      userAgent: context?.userAgent,
-    },
+  await db.from('creative_usage').insert({
+    creativeId,
+    affiliateId,
+    action,
+    platform: context?.platform,
+    campaignId: context?.campaignId,
+    ipAddress: context?.ipAddress,
+    userAgent: context?.userAgent,
   });
 
-  // Update creative stats
-  const updateField = action === 'VIEW' ? 'views' : 'downloads';
-  await prisma.affiliateCreative.update({
-    where: { id: creativeId },
-    data: {
-      [updateField]: { increment: 1 },
-    },
-  });
+  // Get current stats and increment
+  const { data: creativeData } = await db
+    .from('affiliate_creatives')
+    .select('views, downloads')
+    .eq('id', creativeId)
+    .limit(1);
+
+  const creative = firstOrNull(creativeData) as { views: number; downloads: number } | null;
+  if (creative) {
+    const updateField = action === 'VIEW' ? 'views' : 'downloads';
+    const currentValue = action === 'VIEW' ? creative.views : creative.downloads;
+    await db
+      .from('affiliate_creatives')
+      .update({ [updateField]: currentValue + 1 })
+      .eq('id', creativeId);
+  }
 }
 
 /**
@@ -469,11 +554,14 @@ export async function getCreativeStatistics(
 }> {
   const analytics = await getCreativeAnalytics(creativeId, dateRange ? { start: dateRange.startDate, end: dateRange.endDate } : undefined);
 
-  // Calculate conversion rate (conversions / views) if we have data
-  const creative = await prisma.affiliateCreative.findUnique({
-    where: { id: creativeId },
-    select: { conversions: true, views: true, clicks: true },
-  });
+  // Get creative stats
+  const { data: creativeData } = await db
+    .from('affiliate_creatives')
+    .select('conversions, views, clicks')
+    .eq('id', creativeId)
+    .limit(1);
+
+  const creative = firstOrNull(creativeData) as { conversions: number; views: number; clicks: number } | null;
 
   const conversionRate = creative && creative.views > 0
     ? (creative.conversions / creative.views) * 100
@@ -502,23 +590,19 @@ export async function getCreativeAnalytics(
   topPlatforms: Array<{ platform: string; count: number }>;
   usageOverTime: Array<{ date: string; count: number }>;
 }> {
-  const where: Record<string, unknown> = { creativeId };
+  let query = db
+    .from('creative_usage')
+    .select('action, platform, affiliateId, usedAt')
+    .eq('creativeId', creativeId);
+
   if (dateRange) {
-    where.usedAt = {
-      gte: dateRange.start,
-      lte: dateRange.end,
-    };
+    query = query
+      .gte('usedAt', dateRange.start.toISOString())
+      .lte('usedAt', dateRange.end.toISOString());
   }
 
-  const usageRecords = await prisma.creativeUsage.findMany({
-    where,
-    select: {
-      action: true,
-      platform: true,
-      affiliateId: true,
-      usedAt: true,
-    },
-  });
+  const { data: usageData } = await query;
+  const usageRecords = (usageData || []) as CreativeUsageRecord[];
 
   // Calculate stats
   const totalViews = usageRecords.filter((r) => r.action === 'VIEW').length;
@@ -544,7 +628,7 @@ export async function getCreativeAnalytics(
   // Usage over time (group by day)
   const usageByDay = new Map<string, number>();
   for (const record of usageRecords) {
-    const dateKey = record.usedAt.toISOString().split('T')[0];
+    const dateKey = record.usedAt.split('T')[0];
     usageByDay.set(dateKey, (usageByDay.get(dateKey) || 0) + 1);
   }
   const usageOverTime = Array.from(usageByDay.entries())
@@ -568,11 +652,14 @@ export async function getTopCreatives(
   limit: number = 10,
   metric: 'downloads' | 'views' | 'conversions' = 'downloads'
 ): Promise<AffiliateCreative[]> {
-  return prisma.affiliateCreative.findMany({
-    where: { status: CreativeStatus.ACTIVE },
-    orderBy: { [metric]: 'desc' },
-    take: limit,
-  });
+  const { data: creatives } = await db
+    .from('affiliate_creatives')
+    .select('*')
+    .eq('status', 'ACTIVE')
+    .order(metric, { ascending: false })
+    .limit(limit);
+
+  return (creatives || []) as AffiliateCreative[];
 }
 
 /**
@@ -582,17 +669,31 @@ export async function duplicateCreative(
   id: string,
   newName?: string
 ): Promise<AffiliateCreative> {
-  const original = await prisma.affiliateCreative.findUnique({
-    where: { id },
-    include: { groups: true },
-  });
+  // Get original creative
+  const { data: originalData } = await db
+    .from('affiliate_creatives')
+    .select('*')
+    .eq('id', id)
+    .limit(1);
+
+  const original = firstOrNull(originalData) as AffiliateCreative | null;
 
   if (!original) {
     throw new Error('Creative not found');
   }
 
-  return prisma.affiliateCreative.create({
-    data: {
+  // Get group connections
+  const { data: groupConnections } = await db
+    .from('affiliate_creative_groups')
+    .select('groupId')
+    .eq('creativeId', id);
+
+  const groupIds = (groupConnections || []).map((g: { groupId: string }) => g.groupId);
+
+  // Create duplicate
+  const { data: newCreative, error } = await db
+    .from('affiliate_creatives')
+    .insert({
       name: newName || `${original.name} (Copy)`,
       description: original.description,
       type: original.type,
@@ -610,15 +711,25 @@ export async function duplicateCreative(
       privacy: original.privacy,
       affiliateIds: original.affiliateIds,
       groupIds: original.groupIds,
-      status: CreativeStatus.INACTIVE, // Start as inactive
+      status: 'INACTIVE', // Start as inactive
       tags: original.tags,
       category: original.category,
-      metadata: original.metadata as Record<string, unknown>,
-      groups: {
-        connect: original.groups.map((g) => ({ id: g.id })),
-      },
-    },
-  });
+      metadata: original.metadata,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // Reconnect group relationships
+  for (const groupId of groupIds) {
+    await db.from('affiliate_creative_groups').insert({
+      creativeId: newCreative.id,
+      groupId,
+    });
+  }
+
+  return newCreative as AffiliateCreative;
 }
 
 /**
@@ -628,12 +739,19 @@ export async function bulkUpdateCreativeStatus(
   ids: string[],
   status: CreativeStatus
 ): Promise<number> {
-  const result = await prisma.affiliateCreative.updateMany({
-    where: { id: { in: ids } },
-    data: { status },
-  });
+  let count = 0;
 
-  return result.count;
+  // Supabase doesn't support IN clause with update, loop through
+  for (const id of ids) {
+    const { error } = await db
+      .from('affiliate_creatives')
+      .update({ status })
+      .eq('id', id);
+
+    if (!error) count++;
+  }
+
+  return count;
 }
 
 /**
@@ -642,57 +760,41 @@ export async function bulkUpdateCreativeStatus(
 export async function getCreativesByCategory(): Promise<
   Array<{ category: string; count: number }>
 > {
-  const result = await prisma.affiliateCreative.groupBy({
-    by: ['category'],
-    _count: true,
-    where: { status: CreativeStatus.ACTIVE },
-  });
+  // Supabase doesn't support groupBy, fetch all and aggregate in JS
+  const { data: creatives } = await db
+    .from('affiliate_creatives')
+    .select('category')
+    .eq('status', 'ACTIVE');
 
-  return result.map((r) => ({
-    category: r.category || 'Uncategorized',
-    count: r._count,
-  }));
+  const categoryCounts = new Map<string, number>();
+
+  for (const creative of (creatives || []) as { category?: string | null }[]) {
+    const cat = creative.category || 'Uncategorized';
+    categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1);
+  }
+
+  return Array.from(categoryCounts.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 /**
- * Build where clause for creative queries
+ * Build filter object for creative queries
+ * Note: Supabase queries are built inline in each function
+ * This helper is retained for type checking and documentation
  */
-function buildCreativeWhereClause(
+function buildCreativeFilterObject(
   filters: CreativeFilters
 ): Record<string, unknown> {
   const where: Record<string, unknown> = {};
 
-  if (filters.type) {
-    where.type = filters.type;
-  }
-
-  if (filters.privacy) {
-    where.privacy = filters.privacy;
-  }
-
-  if (filters.status) {
-    where.status = filters.status;
-  }
-
-  if (filters.category) {
-    where.category = filters.category;
-  }
-
-  if (filters.tags?.length) {
-    where.tags = { hasSome: filters.tags };
-  }
-
-  if (filters.groupIds?.length) {
-    where.groupIds = { hasSome: filters.groupIds };
-  }
-
-  if (filters.search) {
-    where.OR = [
-      { name: { contains: filters.search, mode: 'insensitive' } },
-      { description: { contains: filters.search, mode: 'insensitive' } },
-      { tags: { has: filters.search } },
-    ];
-  }
+  if (filters.type) where.type = filters.type;
+  if (filters.privacy) where.privacy = filters.privacy;
+  if (filters.status) where.status = filters.status;
+  if (filters.category) where.category = filters.category;
+  if (filters.tags?.length) where.tags = filters.tags;
+  if (filters.groupIds?.length) where.groupIds = filters.groupIds;
+  if (filters.search) where.search = filters.search;
 
   return where;
 }
@@ -713,12 +815,12 @@ export const CREATIVE_CATEGORIES = [
  * Get creative type display names
  */
 export const CREATIVE_TYPE_LABELS: Record<CreativeType, string> = {
-  [CreativeType.IMAGE]: 'Image',
-  [CreativeType.TEXT]: 'Text Copy',
-  [CreativeType.VIDEO]: 'Video',
-  [CreativeType.BANNER]: 'Banner Ad',
-  [CreativeType.EMAIL_TEMPLATE]: 'Email Template',
-  [CreativeType.SOCIAL_POST]: 'Social Media Post',
-  [CreativeType.FLYER]: 'Flyer',
-  [CreativeType.BUSINESS_CARD]: 'Business Card',
+  IMAGE: 'Image',
+  TEXT: 'Text Copy',
+  VIDEO: 'Video',
+  BANNER: 'Banner Ad',
+  EMAIL_TEMPLATE: 'Email Template',
+  SOCIAL_POST: 'Social Media Post',
+  FLYER: 'Flyer',
+  BUSINESS_CARD: 'Business Card',
 };

@@ -10,8 +10,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for TaxIntakeLead
+interface TaxIntakeLead {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string | null;
+  expiresAt: string | null;
+  assignedPreparerId: string | null;
+}
 
 // Coolify cron jobs use GET requests
 export async function GET(req: NextRequest) {
@@ -28,25 +38,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const now = new Date();
+    const now = new Date().toISOString();
 
     // Find expired leads that haven't been converted
-    const expiredLeads = await prisma.taxIntakeLead.findMany({
-      where: {
-        expiresAt: { lt: now },
-        convertedToClient: false,
-      },
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-        expiresAt: true,
-        assignedPreparerId: true,
-      },
-    });
+    const { data: expiredLeads, error: findError } = await db
+      .from('tax_intake_leads')
+      .select('id, email, first_name, last_name, expiresAt, assignedPreparerId')
+      .lt('expiresAt', now)
+      .eq('convertedToClient', false);
 
-    if (expiredLeads.length === 0) {
+    if (findError) {
+      throw findError;
+    }
+
+    const leads = (expiredLeads || []) as TaxIntakeLead[];
+
+    if (leads.length === 0) {
       logger.info('No expired leads to delete');
       return NextResponse.json({
         success: true,
@@ -56,28 +63,31 @@ export async function GET(req: NextRequest) {
     }
 
     // Log which leads are being deleted (for audit trail)
-    logger.info(`Deleting ${expiredLeads.length} expired leads`, {
-      leadIds: expiredLeads.map((l) => l.id),
-      emails: expiredLeads.map((l) => l.email),
+    logger.info(`Deleting ${leads.length} expired leads`, {
+      leadIds: leads.map((l) => l.id),
+      emails: leads.map((l) => l.email),
     });
 
     // Delete expired unconverted leads
-    const result = await prisma.taxIntakeLead.deleteMany({
-      where: {
-        expiresAt: { lt: now },
-        convertedToClient: false,
-      },
-    });
+    const { error: deleteError } = await db
+      .from('tax_intake_leads')
+      .delete()
+      .lt('expiresAt', now)
+      .eq('convertedToClient', false);
 
-    logger.info(`Successfully deleted ${result.count} expired leads`);
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    logger.info(`Successfully deleted ${leads.length} expired leads`);
 
     return NextResponse.json({
       success: true,
-      message: `Deleted ${result.count} expired leads`,
-      deletedCount: result.count,
-      deletedLeads: expiredLeads.map((l) => ({
+      message: `Deleted ${leads.length} expired leads`,
+      deletedCount: leads.length,
+      deletedLeads: leads.map((l) => ({
         id: l.id,
-        name: `${l.first_name} ${l.last_name}`,
+        name: `${l.first_name} ${l.last_name || ''}`.trim(),
         email: l.email,
         expiredAt: l.expiresAt,
       })),

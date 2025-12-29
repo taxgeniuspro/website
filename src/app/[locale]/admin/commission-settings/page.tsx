@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Info } from 'lucide-react';
 import { getCompanyDefaultTiers } from '@/lib/services/tiered-commission.service';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { AdminCommissionSettingsForm } from './AdminCommissionSettingsForm';
 
 export const metadata = {
@@ -44,39 +44,38 @@ export default async function AdminCommissionSettingsPage() {
   const companyDefaultTiers = await getCompanyDefaultTiers();
 
   // Get last update info
-  const setting = await prisma.systemSettings.findUnique({
-    where: { key: 'commission_default_tiers' },
-    include: {
-      updatedBy: {
-        select: {
-          firstName: true,
-          lastName: true,
-          user: { select: { email: true } },
-        },
-      },
-    },
-  });
+  const { data: settingsData } = await db
+    .from('system_settings')
+    .select(`
+      *,
+      updated_by_profile:profiles!system_settings_updated_by_id_fkey(
+        first_name,
+        last_name,
+        user_id
+      )
+    `)
+    .eq('key', 'commission_default_tiers')
+    .single();
 
-  const lastUpdatedBy = setting?.updatedBy
-    ? `${setting.updatedBy.firstName || ''} ${setting.updatedBy.lastName || ''}`.trim() ||
-      setting.updatedBy.user.email
+  const setting = settingsData;
+  const lastUpdatedBy = setting?.updated_by_profile
+    ? `${setting.updated_by_profile.first_name || ''} ${setting.updated_by_profile.last_name || ''}`.trim() ||
+      'Unknown'
     : null;
-  const lastUpdatedAt = setting?.updatedAt;
+  const lastUpdatedAt = setting?.updated_at;
 
   // Count how many preparers are using company defaults
-  const preparersUsingDefaults = await prisma.profile.count({
-    where: {
-      role: 'tax_preparer',
-      useCompanyCommissionDefaults: true,
-    },
-  });
+  const { count: preparersUsingDefaults } = await db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'tax_preparer')
+    .eq('use_company_commission_defaults', true);
 
-  const preparersUsingCustom = await prisma.profile.count({
-    where: {
-      role: 'tax_preparer',
-      useCompanyCommissionDefaults: false,
-    },
-  });
+  const { count: preparersUsingCustom } = await db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'tax_preparer')
+    .eq('use_company_commission_defaults', false);
 
   return (
     <div className="p-6 space-y-6">
@@ -103,11 +102,11 @@ export default async function AdminCommissionSettingsPage() {
           </p>
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2">
-              <Badge variant="default">{preparersUsingDefaults}</Badge>
+              <Badge variant="default">{preparersUsingDefaults || 0}</Badge>
               <span className="text-muted-foreground">preparers using company defaults</span>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{preparersUsingCustom}</Badge>
+              <Badge variant="outline">{preparersUsingCustom || 0}</Badge>
               <span className="text-muted-foreground">preparers using custom tiers</span>
             </div>
           </div>

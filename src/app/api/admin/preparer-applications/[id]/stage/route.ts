@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
   params: Promise<{
     id: string;
   }>;
+}
+
+// Local interfaces
+interface PreparerApplication {
+  id: string;
+  stage: string;
+  interviewScheduled: string | null;
+  interviewNotes: string | null;
 }
 
 // Valid pipeline stages
@@ -42,37 +50,46 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const application = await prisma.preparerApplication.findUnique({
-      where: { id },
-    });
+    // Check if application exists
+    const { data: applicationData, error: findError } = await db.from('preparer_applications')
+      .select('id, stage, interviewScheduled, interviewNotes')
+      .eq('id', id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const application = firstOrNull<PreparerApplication>(applicationData);
 
     if (!application) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 });
     }
 
     // Build update data
-    const updateData: {
-      stage?: string;
-      interviewScheduled?: Date | null;
-      interviewNotes?: string;
-    } = {};
+    const updateData: Record<string, any> = {};
 
     if (stage) {
       updateData.stage = stage;
     }
 
     if (interviewScheduled !== undefined) {
-      updateData.interviewScheduled = interviewScheduled ? new Date(interviewScheduled) : null;
+      updateData.interviewScheduled = interviewScheduled ? new Date(interviewScheduled).toISOString() : null;
     }
 
     if (interviewNotes !== undefined) {
       updateData.interviewNotes = interviewNotes;
     }
 
-    const updatedApplication = await prisma.preparerApplication.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: updatedApplication, error: updateError } = await db.from('preparer_applications')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     logger.info('Preparer application stage updated', {
       applicationId: id,

@@ -8,13 +8,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     const user = session?.user;
@@ -39,17 +36,13 @@ export async function POST(
     const { notes } = body as { notes?: string };
 
     // Fetch the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        assignedPreparerId: true,
-        unqualified: true,
-        unqualifiedReason: true,
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, assignedPreparerId, unqualified, unqualifiedReason')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -65,16 +58,16 @@ export async function POST(
 
     // Tax preparers can only reopen their assigned leads
     if (isTaxPreparer) {
-      const preparerProfile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles);
 
       if (!preparerProfile) {
-        return NextResponse.json(
-          { error: 'Tax preparer profile not found' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
       }
 
       if (lead.assignedPreparerId !== preparerProfile.id) {
@@ -86,28 +79,26 @@ export async function POST(
     }
 
     // Reopen the lead
-    const updatedLead = await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    await db
+      .from('tax_intake_leads')
+      .update({
         unqualified: false,
         // Keep the reason and notes for history, but clear the timestamp
         unqualifiedAt: null,
-        updated_at: new Date(),
-      },
-    });
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId);
 
     // Create lead activity
-    await prisma.leadActivity.create({
-      data: {
-        leadId,
-        type: 'STATUS_CHANGED',
-        description: `Lead REOPENED - Previously unqualified: ${lead.unqualifiedReason}`,
-        metadata: {
-          previousStatus: 'unqualified',
-          newStatus: 'active',
-          previousReason: lead.unqualifiedReason,
-          reopenNotes: notes || null,
-        },
+    await db.from('lead_activities').insert({
+      leadId,
+      type: 'STATUS_CHANGED',
+      description: `Lead REOPENED - Previously unqualified: ${lead.unqualifiedReason}`,
+      metadata: {
+        previousStatus: 'unqualified',
+        newStatus: 'active',
+        previousReason: lead.unqualifiedReason,
+        reopenNotes: notes || null,
       },
     });
 
@@ -125,9 +116,6 @@ export async function POST(
     });
   } catch (error) {
     logger.error('Error reopening lead:', error);
-    return NextResponse.json(
-      { error: 'Failed to reopen lead' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to reopen lead' }, { status: 500 });
   }
 }

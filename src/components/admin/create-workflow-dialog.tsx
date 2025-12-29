@@ -23,7 +23,15 @@ import {
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { WorkflowTrigger } from '@prisma/client';
+// Workflow trigger type (migrated from Prisma to local interface)
+export type WorkflowTrigger =
+  | 'TICKET_CREATED'
+  | 'TICKET_UPDATED'
+  | 'TICKET_IDLE'
+  | 'CLIENT_RESPONSE'
+  | 'PREPARER_RESPONSE'
+  | 'TICKET_ASSIGNED'
+  | 'TICKET_UNASSIGNED';
 import { logger } from '@/lib/logger';
 
 interface CreateWorkflowDialogProps {

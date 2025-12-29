@@ -19,7 +19,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { incrementShortLinkClick } from '@/lib/services/short-link.service';
 import { trackLinkClick, resolveReferralCode } from '@/lib/services/client-referral.service';
 import { logger } from '@/lib/logger';
@@ -30,9 +30,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const code = rawCode.toLowerCase();
 
     // 1. First, try to look up as a MarketingLink
-    const link = await prisma.marketingLink.findUnique({
-      where: { code },
-    });
+    const { data: linkData, error: linkError } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('code', code)
+      .single();
+
+    // Ignore error if not found (we'll check for client referral next)
+    const link = linkError ? null : linkData;
 
     // 2. If not found as marketing link, try as client referral code
     if (!link) {
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Handle inactive links
-    if (!link.isActive) {
+    if (!link.is_active) {
       return NextResponse.redirect(new URL('/?error=link-inactive', request.url));
     }
 
@@ -91,21 +96,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const utmContent = searchParams.get('utm_content') || undefined;
       const utmTerm = searchParams.get('utm_term') || undefined;
 
-      await prisma.linkClick.create({
-        data: {
-          linkId: link.id,
-          ipAddress: ip,
-          userAgent,
+      await db
+        .from('link_clicks')
+        .insert({
+          link_id: link.id,
+          ip_address: ip,
+          user_agent: userAgent,
           referrer: referer,
-          clickedAt: new Date(),
+          clicked_at: new Date().toISOString(),
           // UTM tracking for source attribution
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmContent,
-          utmTerm,
-        },
-      });
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          utm_content: utmContent,
+          utm_term: utmTerm,
+        });
 
       logger.info('Link click recorded', {
         code,

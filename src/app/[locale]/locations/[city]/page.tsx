@@ -1,11 +1,25 @@
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { LandingPageTemplate } from '@/components/landing-page/LandingPageTemplate';
 import { logger } from '@/lib/logger';
 import { generateTaxGeniusLocalBusinessSchema } from '@/lib/seo-llm/1-core-seo/schema/tax-genius-schemas';
 import { normalizeState } from '@/lib/seo-llm/1-core-seo/utils/state-mapping';
 import { safeJsonLdStringify } from '@/lib/utils/json-ld';
+
+// LandingPage interface for type safety
+interface LandingPage {
+  id: string;
+  slug: string;
+  city: string;
+  state: string;
+  meta_title: string;
+  meta_description: string;
+  is_published: boolean;
+  created_at: string;
+  // Add other fields as needed
+  [key: string]: unknown;
+}
 
 // ISR: Revalidate every 1 hour (AC8)
 export const revalidate = 3600;
@@ -29,37 +43,38 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return {};
   }
 
-  const page = await prisma.landingPage.findUnique({
-    where: {
-      slug: city,
-      isPublished: true, // AC6
-    },
-  });
+  const { data: pageData, error } = await db
+    .from('landing_pages')
+    .select('*')
+    .eq('slug', city)
+    .eq('is_published', true)
+    .single();
 
-  if (!page) {
+  if (error || !pageData) {
     return {};
   }
 
+  const page = pageData as LandingPage;
   const url = `https://taxgeniuspro.tax/locations/${city}`;
 
   return {
-    title: page.metaTitle, // AC10
-    description: page.metaDescription, // AC10
+    title: page.meta_title, // AC10
+    description: page.meta_description, // AC10
     alternates: {
       canonical: url, // AC12
     },
     openGraph: {
       // AC11
-      title: page.metaTitle,
-      description: page.metaDescription,
+      title: page.meta_title,
+      description: page.meta_description,
       url: url,
       type: 'website',
       siteName: 'Tax Genius Pro',
     },
     twitter: {
       card: 'summary_large_image',
-      title: page.metaTitle,
-      description: page.metaDescription,
+      title: page.meta_title,
+      description: page.meta_description,
     },
   };
 }
@@ -71,14 +86,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export async function generateStaticParams() {
   try {
-    const topCities = await prisma.landingPage.findMany({
-      where: { isPublished: true },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: { slug: true },
-    });
+    const { data: topCities, error } = await db
+      .from('landing_pages')
+      .select('slug')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(50);
 
-    return topCities.map((page) => ({ city: page.slug }));
+    if (error) throw error;
+
+    return (topCities || []).map((page: { slug: string }) => ({ city: page.slug }));
   } catch (error) {
     // During Docker build, database isn't available - return empty array
     // Pages will be generated on-demand via ISR instead
@@ -101,17 +118,19 @@ export default async function CityLandingPage({ params }: PageProps) {
   }
 
   // Fetch landing page data from database (AC5, AC6, AC7)
-  const page = await prisma.landingPage.findUnique({
-    where: {
-      slug: city,
-      isPublished: true, // AC6: Only show published pages
-    },
-  });
+  const { data: pageData, error } = await db
+    .from('landing_pages')
+    .select('*')
+    .eq('slug', city)
+    .eq('is_published', true)
+    .single();
 
   // Return 404 if page not found or not published (AC4)
-  if (!page) {
+  if (error || !pageData) {
     notFound();
   }
+
+  const page = pageData as LandingPage;
 
   // Generate LocalBusiness schema for SEO
   const stateData = normalizeState(page.state);

@@ -7,9 +7,16 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
 import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
 import { logger } from '@/lib/logger'
+
+// TypeScript interface for SEOBrainDecision
+interface SEOBrainDecision {
+  id: string;
+  status: string;
+  createdAt: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,24 +36,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Find most recent pending decision
-    const pendingDecision = await prisma.sEOBrainDecision.findFirst({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'desc' },
-    })
+    const { data: pendingData, error: findError } = await db
+      .from('seo_brain_decisions')
+      .select('id, status, createdAt')
+      .eq('status', 'PENDING')
+      .order('createdAt', { ascending: false })
+      .limit(1)
+
+    if (findError) {
+      throw findError
+    }
+
+    const pendingDecision = firstOrNull(pendingData) as SEOBrainDecision | null
 
     if (!pendingDecision) {
       return NextResponse.json({ ok: true })
     }
 
     // Update decision with user response
-    await prisma.sEOBrainDecision.update({
-      where: { id: pendingDecision.id },
-      data: {
+    const { error: updateError } = await db
+      .from('seo_brain_decisions')
+      .update({
         selectedOption: text,
-        respondedAt: new Date(),
+        respondedAt: new Date().toISOString(),
         status: 'APPROVED',
-      },
-    })
+      })
+      .eq('id', pendingDecision.id)
+
+    if (updateError) {
+      throw updateError
+    }
 
     // Execute the decision
     await seoBrain.executeDecision(pendingDecision.id, text)

@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 interface SourceBreakdown {
@@ -45,6 +45,19 @@ interface SourceBreakdown {
   };
 }
 
+interface MarketingLinkRow {
+  linkType: string;
+  campaign: string | null;
+  location: string | null;
+  clicks: number | null;
+  returnsFiled: number | null;
+}
+
+interface CommissionRow {
+  referralId: string;
+  amount: number | null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth(); const userId = session?.user?.id;
@@ -57,143 +70,134 @@ export async function GET(request: NextRequest) {
     const dateRange = url.searchParams.get('dateRange') || 'all';
 
     // Calculate date filter
-    let dateFilter = {};
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
     if (dateRange !== 'all') {
-      const now = new Date();
-      const start = new Date();
+      endDate = new Date();
+      startDate = new Date();
 
       switch (dateRange) {
         case 'week':
-          start.setDate(now.getDate() - 7);
+          startDate.setDate(endDate.getDate() - 7);
           break;
         case 'month':
-          start.setMonth(now.getMonth() - 1);
+          startDate.setMonth(endDate.getMonth() - 1);
           break;
         case 'quarter':
-          start.setMonth(now.getMonth() - 3);
+          startDate.setMonth(endDate.getMonth() - 3);
           break;
         case 'year':
-          start.setFullYear(now.getFullYear() - 1);
+          startDate.setFullYear(endDate.getFullYear() - 1);
           break;
       }
-
-      dateFilter = {
-        createdAt: {
-          gte: start,
-          lte: now,
-        },
-      };
     }
 
-    // Group by type
-    const byType = await prisma.marketingLink.groupBy({
-      by: ['linkType'],
-      where: {
-        creatorId: userId,
-        isActive: true,
-        ...dateFilter,
-      },
-      _count: {
-        id: true,
-      },
-      _sum: {
-        clicks: true,
-        returnsFiled: true,
-      },
-    });
+    // Query marketing links
+    let linksQuery = db
+      .from('marketing_links')
+      .select('linkType, campaign, location, clicks, returnsFiled')
+      .eq('creatorId', userId)
+      .eq('isActive', true);
 
-    // Group by campaign
-    const byCampaign = await prisma.marketingLink.groupBy({
-      by: ['campaign'],
-      where: {
-        creatorId: userId,
-        isActive: true,
-        campaign: { not: null },
-        ...dateFilter,
-      },
-      _count: {
-        id: true,
-      },
-      _sum: {
-        clicks: true,
-        returnsFiled: true,
-      },
-    });
+    if (startDate && endDate) {
+      linksQuery = linksQuery.gte('createdAt', startDate.toISOString()).lte('createdAt', endDate.toISOString());
+    }
 
-    // Group by location
-    const byLocation = await prisma.marketingLink.groupBy({
-      by: ['location'],
-      where: {
-        creatorId: userId,
-        isActive: true,
-        location: { not: null },
-        ...dateFilter,
-      },
-      _count: {
-        id: true,
-      },
-      _sum: {
-        clicks: true,
-        returnsFiled: true,
-      },
-    });
+    const { data: linksData, error: linksError } = await linksQuery;
+
+    if (linksError) {
+      throw linksError;
+    }
+
+    const links = (linksData || []) as MarketingLinkRow[];
+
+    // Group by type manually
+    const typeMap = new Map<string, { count: number; clicks: number; conversions: number }>();
+    for (const link of links) {
+      const key = link.linkType || 'unknown';
+      const existing = typeMap.get(key) || { count: 0, clicks: 0, conversions: 0 };
+      existing.count += 1;
+      existing.clicks += link.clicks || 0;
+      existing.conversions += link.returnsFiled || 0;
+      typeMap.set(key, existing);
+    }
+
+    // Group by campaign manually
+    const campaignMap = new Map<string, { count: number; clicks: number; conversions: number }>();
+    for (const link of links) {
+      if (link.campaign) {
+        const existing = campaignMap.get(link.campaign) || { count: 0, clicks: 0, conversions: 0 };
+        existing.count += 1;
+        existing.clicks += link.clicks || 0;
+        existing.conversions += link.returnsFiled || 0;
+        campaignMap.set(link.campaign, existing);
+      }
+    }
+
+    // Group by location manually
+    const locationMap = new Map<string, { count: number; clicks: number; conversions: number }>();
+    for (const link of links) {
+      if (link.location) {
+        const existing = locationMap.get(link.location) || { count: 0, clicks: 0, conversions: 0 };
+        existing.count += 1;
+        existing.clicks += link.clicks || 0;
+        existing.conversions += link.returnsFiled || 0;
+        locationMap.set(link.location, existing);
+      }
+    }
 
     // Get earnings by material (for referrers/affiliates)
-    const commissions = await prisma.commission.groupBy({
-      by: ['referralId'],
-      where: {
-        referrerId: userId,
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+    const { data: commissionsData, error: commissionsError } = await db
+      .from('commissions')
+      .select('referralId, amount')
+      .eq('referrerId', userId);
 
-    const commissionMap = new Map(
-      commissions.map((c) => [c.referralId, Number(c._sum.amount || 0)])
-    );
+    if (commissionsError) {
+      throw commissionsError;
+    }
+
+    // Group commissions by referralId
+    const commissionMap = new Map<string, number>();
+    for (const c of (commissionsData || []) as CommissionRow[]) {
+      const existing = commissionMap.get(c.referralId) || 0;
+      commissionMap.set(c.referralId, existing + Number(c.amount || 0));
+    }
 
     // Format by type
-    const formattedByType = byType.map((item) => {
-      const clicks = item._sum.clicks || 0;
-      const conversions = item._sum.returnsFiled || 0;
-      const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+    const formattedByType = Array.from(typeMap.entries()).map(([type, stats]) => {
+      const conversionRate = stats.clicks > 0 ? (stats.conversions / stats.clicks) * 100 : 0;
 
       return {
-        type: item.linkType,
-        count: item._count.id,
-        clicks,
-        conversions,
+        type,
+        count: stats.count,
+        clicks: stats.clicks,
+        conversions: stats.conversions,
         conversionRate: Number(conversionRate.toFixed(2)),
       };
     });
 
     // Format by campaign
-    const formattedByCampaign = byCampaign.map((item) => {
-      const clicks = item._sum.clicks || 0;
-      const conversions = item._sum.returnsFiled || 0;
-      const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+    const formattedByCampaign = Array.from(campaignMap.entries()).map(([campaign, stats]) => {
+      const conversionRate = stats.clicks > 0 ? (stats.conversions / stats.clicks) * 100 : 0;
 
       return {
-        campaign: item.campaign || 'Uncategorized',
-        count: item._count.id,
-        clicks,
-        conversions,
+        campaign: campaign || 'Uncategorized',
+        count: stats.count,
+        clicks: stats.clicks,
+        conversions: stats.conversions,
         conversionRate: Number(conversionRate.toFixed(2)),
       };
     });
 
     // Format by location
-    const formattedByLocation = byLocation.map((item) => {
-      const clicks = item._sum.clicks || 0;
-      const conversions = item._sum.returnsFiled || 0;
-      const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+    const formattedByLocation = Array.from(locationMap.entries()).map(([location, stats]) => {
+      const conversionRate = stats.clicks > 0 ? (stats.conversions / stats.clicks) * 100 : 0;
 
       return {
-        location: item.location || 'Not specified',
-        count: item._count.id,
-        clicks,
-        conversions,
+        location: location || 'Not specified',
+        count: stats.count,
+        clicks: stats.clicks,
+        conversions: stats.conversions,
         conversionRate: Number(conversionRate.toFixed(2)),
       };
     });

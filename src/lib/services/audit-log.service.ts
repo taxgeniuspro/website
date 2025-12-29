@@ -5,17 +5,30 @@
  * for security monitoring and compliance
  */
 
+import { db, firstOrNull } from '@/lib/db';
 import { UserRole } from '@/lib/permissions';
 import type { RoleSwitchAuditLog } from '@/types/role-switcher';
 import { logger } from '@/lib/logger';
 
+// Local type definitions
+interface AuditLogRecord {
+  id: string;
+  type: string;
+  userId: string;
+  userEmail: string;
+  fromRole?: string | null;
+  toRole?: string | null;
+  operation?: string | null;
+  viewingRole?: string | null;
+  resourceId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  timestamp: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 /**
  * Log a role switch event
- *
- * TODO: Implement database storage
- * - Create AuditLog model in Prisma schema
- * - Store events in database
- * - Implement retention policy (90 days recommended)
  */
 export async function logRoleSwitch(
   adminUserId: string,
@@ -39,7 +52,7 @@ export async function logRoleSwitch(
   };
 
   // Console logging for development
-  logger.info('📋 Audit Log - Role Switch:', {
+  logger.info('Audit Log - Role Switch:', {
     admin: adminEmail,
     from: fromRole,
     to: toRole,
@@ -47,19 +60,22 @@ export async function logRoleSwitch(
     ip: logEntry.ipAddress,
   });
 
-  // TODO: Store in database
-  // await prisma.auditLog.create({
-  //   data: {
-  //     type: 'ROLE_SWITCH',
-  //     userId: adminUserId,
-  //     userEmail: adminEmail,
-  //     fromRole,
-  //     toRole,
-  //     ipAddress: metadata?.ipAddress,
-  //     userAgent: metadata?.userAgent,
-  //     timestamp: new Date(),
-  //   },
-  // })
+  // Store in database
+  try {
+    await db.from('audit_logs').insert({
+      id: logEntry.id,
+      type: 'ROLE_SWITCH',
+      userId: adminUserId,
+      userEmail: adminEmail,
+      fromRole,
+      toRole,
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to store audit log', { error, logEntry });
+  }
 }
 
 /**
@@ -77,7 +93,7 @@ export async function logProtectedOperationAttempt(
     resourceId?: string;
   }
 ): Promise<void> {
-  logger.info('⚠️  Audit Log - Protected Operation Blocked:', {
+  logger.info('Audit Log - Protected Operation Blocked:', {
     admin: adminEmail,
     operation,
     viewingRole,
@@ -85,26 +101,27 @@ export async function logProtectedOperationAttempt(
     resourceId: metadata?.resourceId,
   });
 
-  // TODO: Store in database
-  // await prisma.auditLog.create({
-  //   data: {
-  //     type: 'PROTECTED_OPERATION_BLOCKED',
-  //     userId: adminUserId,
-  //     userEmail: adminEmail,
-  //     operation,
-  //     viewingRole,
-  //     resourceId: metadata?.resourceId,
-  //     ipAddress: metadata?.ipAddress,
-  //     userAgent: metadata?.userAgent,
-  //     timestamp: new Date(),
-  //   },
-  // })
+  // Store in database
+  try {
+    await db.from('audit_logs').insert({
+      id: generateAuditId(),
+      type: 'PROTECTED_OPERATION_BLOCKED',
+      userId: adminUserId,
+      userEmail: adminEmail,
+      operation,
+      viewingRole,
+      resourceId: metadata?.resourceId,
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to store audit log', { error });
+  }
 }
 
 /**
  * Get audit logs for a specific admin
- *
- * TODO: Implement database query
  */
 export async function getAuditLogsForAdmin(
   adminUserId: string,
@@ -115,29 +132,47 @@ export async function getAuditLogsForAdmin(
     endDate?: Date;
   }
 ): Promise<RoleSwitchAuditLog[]> {
-  logger.info('📋 Fetching audit logs for admin:', adminUserId, options);
+  logger.info('Fetching audit logs for admin:', adminUserId, options);
 
-  // TODO: Query database
-  // return await prisma.auditLog.findMany({
-  //   where: {
-  //     userId: adminUserId,
-  //     timestamp: {
-  //       gte: options?.startDate,
-  //       lte: options?.endDate,
-  //     },
-  //   },
-  //   orderBy: { timestamp: 'desc' },
-  //   take: options?.limit || 50,
-  //   skip: options?.offset || 0,
-  // })
+  try {
+    let query = db
+      .from('audit_logs')
+      .select('*')
+      .eq('userId', adminUserId)
+      .order('timestamp', { ascending: false });
 
-  return [];
+    if (options?.startDate) {
+      query = query.gte('timestamp', options.startDate.toISOString());
+    }
+    if (options?.endDate) {
+      query = query.lte('timestamp', options.endDate.toISOString());
+    }
+
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: logsData } = await query;
+    const logs = (logsData || []) as AuditLogRecord[];
+
+    return logs.map((log) => ({
+      id: log.id,
+      adminUserId: log.userId,
+      adminEmail: log.userEmail,
+      fromRole: (log.fromRole || 'super_admin') as UserRole,
+      toRole: (log.toRole || 'super_admin') as UserRole,
+      timestamp: new Date(log.timestamp),
+      ipAddress: log.ipAddress || undefined,
+      userAgent: log.userAgent || undefined,
+    }));
+  } catch (error) {
+    logger.error('Failed to fetch audit logs', { error, adminUserId });
+    return [];
+  }
 }
 
 /**
  * Get all audit logs (admin view)
- *
- * TODO: Implement database query with filters
  */
 export async function getAllAuditLogs(options?: {
   limit?: number;
@@ -147,24 +182,48 @@ export async function getAllAuditLogs(options?: {
   userId?: string;
   type?: string;
 }): Promise<RoleSwitchAuditLog[]> {
-  logger.info('📋 Fetching all audit logs:', options);
+  logger.info('Fetching all audit logs:', options);
 
-  // TODO: Query database with filters
-  // return await prisma.auditLog.findMany({
-  //   where: {
-  //     userId: options?.userId,
-  //     type: options?.type,
-  //     timestamp: {
-  //       gte: options?.startDate,
-  //       lte: options?.endDate,
-  //     },
-  //   },
-  //   orderBy: { timestamp: 'desc' },
-  //   take: options?.limit || 100,
-  //   skip: options?.offset || 0,
-  // })
+  try {
+    let query = db
+      .from('audit_logs')
+      .select('*')
+      .order('timestamp', { ascending: false });
 
-  return [];
+    if (options?.userId) {
+      query = query.eq('userId', options.userId);
+    }
+    if (options?.type) {
+      query = query.eq('type', options.type);
+    }
+    if (options?.startDate) {
+      query = query.gte('timestamp', options.startDate.toISOString());
+    }
+    if (options?.endDate) {
+      query = query.lte('timestamp', options.endDate.toISOString());
+    }
+
+    const limit = options?.limit || 100;
+    const offset = options?.offset || 0;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: logsData } = await query;
+    const logs = (logsData || []) as AuditLogRecord[];
+
+    return logs.map((log) => ({
+      id: log.id,
+      adminUserId: log.userId,
+      adminEmail: log.userEmail,
+      fromRole: (log.fromRole || 'super_admin') as UserRole,
+      toRole: (log.toRole || 'super_admin') as UserRole,
+      timestamp: new Date(log.timestamp),
+      ipAddress: log.ipAddress || undefined,
+      userAgent: log.userAgent || undefined,
+    }));
+  } catch (error) {
+    logger.error('Failed to fetch all audit logs', { error });
+    return [];
+  }
 }
 
 /**
@@ -176,8 +235,6 @@ function generateAuditId(): string {
 
 /**
  * Get statistics about audit logs
- *
- * TODO: Implement database aggregation
  */
 export async function getAuditLogStats(options?: { startDate?: Date; endDate?: Date }): Promise<{
   totalEvents: number;
@@ -185,51 +242,63 @@ export async function getAuditLogStats(options?: { startDate?: Date; endDate?: D
   protectedOperationAttempts: number;
   uniqueAdmins: number;
 }> {
-  logger.info('📊 Fetching audit log statistics:', options);
+  logger.info('Fetching audit log statistics:', options);
 
-  // TODO: Aggregate from database
-  // const stats = await prisma.auditLog.aggregate({
-  //   where: {
-  //     timestamp: {
-  //       gte: options?.startDate,
-  //       lte: options?.endDate,
-  //     },
-  //   },
-  //   _count: {
-  //     id: true,
-  //   },
-  // })
+  try {
+    let baseQuery = db.from('audit_logs').select('type, userId');
 
-  return {
-    totalEvents: 0,
-    roleSwitchEvents: 0,
-    protectedOperationAttempts: 0,
-    uniqueAdmins: 0,
-  };
+    if (options?.startDate) {
+      baseQuery = baseQuery.gte('timestamp', options.startDate.toISOString());
+    }
+    if (options?.endDate) {
+      baseQuery = baseQuery.lte('timestamp', options.endDate.toISOString());
+    }
+
+    const { data: logsData } = await baseQuery;
+    const logs = (logsData || []) as { type: string; userId: string }[];
+
+    const uniqueAdmins = new Set(logs.map((l) => l.userId)).size;
+    const roleSwitchEvents = logs.filter((l) => l.type === 'ROLE_SWITCH').length;
+    const protectedOperationAttempts = logs.filter((l) => l.type === 'PROTECTED_OPERATION_BLOCKED').length;
+
+    return {
+      totalEvents: logs.length,
+      roleSwitchEvents,
+      protectedOperationAttempts,
+      uniqueAdmins,
+    };
+  } catch (error) {
+    logger.error('Failed to get audit log stats', { error });
+    return {
+      totalEvents: 0,
+      roleSwitchEvents: 0,
+      protectedOperationAttempts: 0,
+      uniqueAdmins: 0,
+    };
+  }
 }
 
 /**
- * Prisma Schema Recommendation:
+ * Supabase Table Schema:
  *
- * Add this model to your schema.prisma:
+ * CREATE TABLE audit_logs (
+ *   id TEXT PRIMARY KEY,
+ *   type TEXT NOT NULL,  -- 'ROLE_SWITCH' | 'PROTECTED_OPERATION_BLOCKED' | etc.
+ *   "userId" TEXT NOT NULL,
+ *   "userEmail" TEXT NOT NULL,
+ *   "fromRole" TEXT,
+ *   "toRole" TEXT,
+ *   operation TEXT,
+ *   "viewingRole" TEXT,
+ *   "resourceId" TEXT,
+ *   "ipAddress" TEXT,
+ *   "userAgent" TEXT,
+ *   timestamp TIMESTAMPTZ DEFAULT NOW(),
+ *   metadata JSONB,
+ *   CONSTRAINT fk_user FOREIGN KEY ("userId") REFERENCES profiles(id)
+ * );
  *
- * model AuditLog {
- *   id          String   @id @default(cuid())
- *   type        String   // 'ROLE_SWITCH' | 'PROTECTED_OPERATION_BLOCKED' | etc.
- *   userId      String   // Admin who performed the action
- *   userEmail   String
- *   fromRole    String?  // For role switches
- *   toRole      String?  // For role switches
- *   operation   String?  // For protected operations
- *   viewingRole String?  // For protected operations
- *   resourceId  String?  // ID of affected resource
- *   ipAddress   String?
- *   userAgent   String?
- *   timestamp   DateTime @default(now())
- *   metadata    Json?    // Additional flexible data
- *
- *   @@index([userId])
- *   @@index([type])
- *   @@index([timestamp])
- * }
+ * CREATE INDEX idx_audit_logs_user ON audit_logs("userId");
+ * CREATE INDEX idx_audit_logs_type ON audit_logs(type);
+ * CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
  */

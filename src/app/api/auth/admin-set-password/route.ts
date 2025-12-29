@@ -4,10 +4,32 @@
  * Also creates profile if missing
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  hashedPassword: string | null;
+  emailVerified: Date | null;
+  image: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  affiliateStatus: string | null;
+  affiliateApprovedAt: Date | null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,17 +71,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Find user (case-insensitive)
-    const user = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        profile: true,
-      },
-    });
+    const { data: usersData, error: userError } = await db
+      .from('users')
+      .select('*')
+      .ilike('email', email)
+      .limit(1);
+
+    if (userError) {
+      logger.error('[Admin SetPassword] Error finding user', { error: userError.message });
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    const user = firstOrNull<User>(usersData);
 
     if (!user) {
       return NextResponse.json(
@@ -68,34 +91,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Check if user has a profile
+    const { data: profilesData } = await db
+      .from('profiles')
+      .select('*')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profilesData);
+
     // Hash new password
     const hashedPassword = await hashPassword(password);
 
     // Update user with new password
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { hashedPassword },
-    });
+    const { error: updateError } = await db
+      .from('users')
+      .update({ hashedPassword })
+      .eq('id', user.id);
+
+    if (updateError) {
+      logger.error('[Admin SetPassword] Error updating password', { error: updateError.message });
+      return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
+    }
 
     // Create profile if missing
-    if (!user.profile) {
+    if (!profile) {
       const nameParts = (user.name || '').split(' ').filter(part => part.length > 0);
       const firstName = nameParts[0] || '';
       const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
 
       // Note: Profile doesn't have an 'email' field - email is stored on User
-      await prisma.profile.create({
-        data: {
+      const { error: profileError } = await db
+        .from('profiles')
+        .insert({
           userId: user.id,
           role: 'client', // Default role for new profiles
           firstName,
           lastName,
           affiliateStatus: 'APPROVED', // Auto-approve as affiliate
-          affiliateApprovedAt: new Date(),
-        },
-      });
+          affiliateApprovedAt: new Date().toISOString(),
+        });
 
-      logger.info('[Admin] Created missing profile for user', { email });
+      if (profileError) {
+        logger.error('[Admin SetPassword] Error creating profile', { error: profileError.message });
+        // Don't return error - password was set successfully
+      } else {
+        logger.info('[Admin] Created missing profile for user', { email });
+      }
     }
 
     logger.info('[Admin] Password set for user', { email });
@@ -103,7 +145,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Password set successfully',
-      profileCreated: !user.profile,
+      profileCreated: !profile,
     });
   } catch (error) {
     logger.error('Admin set password error', { error: error instanceof Error ? error.message : 'Unknown error' });

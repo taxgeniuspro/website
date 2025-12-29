@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   convertLeadToClient,
@@ -23,10 +23,7 @@ type ConversionType = 'client' | 'affiliate';
  *   notes?: string
  * }
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     const user = session?.user;
@@ -69,20 +66,24 @@ export async function POST(
     }
 
     // Fetch the lead with profile relation
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            userId: true,
-            role: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select(
+        `
+        *,
+        profile:profiles!profileId (
+          id,
+          userId,
+          role,
+          firstName,
+          lastName
+        )
+      `
+      )
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -101,16 +102,16 @@ export async function POST(
 
     // Tax preparers can only convert their assigned leads
     if (isTaxPreparer) {
-      const preparerProfile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles);
 
       if (!preparerProfile) {
-        return NextResponse.json(
-          { error: 'Tax preparer profile not found' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
       }
 
       if (lead.assignedPreparerId !== preparerProfile.id) {
@@ -123,17 +124,18 @@ export async function POST(
 
     // Handle CLIENT or AFFILIATE conversion
     // These require the lead to have signed up first
+    const profileData = lead.profile as { id: string; userId: string; role: string } | null;
 
-    if (lead.profile && lead.profile.userId) {
+    if (profileData && profileData.userId) {
       // Lead has signed up - proceed with conversion
       logger.info(`Lead ${leadId} has account, converting to ${conversionType}`);
 
       let conversionResult;
 
       if (conversionType === 'affiliate') {
-        conversionResult = await convertLeadToAffiliateClient(leadId, lead.profile.userId);
+        conversionResult = await convertLeadToAffiliateClient(leadId, profileData.userId);
       } else {
-        conversionResult = await convertLeadToClient(leadId, lead.profile.userId);
+        conversionResult = await convertLeadToClient(leadId, profileData.userId);
       }
 
       if (!conversionResult.success) {
@@ -144,41 +146,43 @@ export async function POST(
       }
 
       // Update profile role to CLIENT if not already
-      if (lead.profile.role !== 'client') {
-        await prisma.profile.update({
-          where: { id: lead.profile.id },
-          data: { role: 'client' },
-        });
-        logger.info(`Updated profile ${lead.profile.id} role to client`);
+      if (profileData.role !== 'client') {
+        await db.from('profiles').update({ role: 'client' }).eq('id', profileData.id);
+        logger.info(`Updated profile ${profileData.id} role to client`);
       }
 
       logger.info(
-        `✅ Lead ${leadId} converted to ${conversionType} by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
+        `Lead ${leadId} converted to ${conversionType} by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
       );
 
       return NextResponse.json({
         success: true,
         conversionType,
-        message: conversionType === 'affiliate'
-          ? 'Lead converted to affiliate client with referral benefits!'
-          : 'Lead successfully converted to client',
+        message:
+          conversionType === 'affiliate'
+            ? 'Lead converted to affiliate client with referral benefits!'
+            : 'Lead successfully converted to client',
         profileId: conversionResult.profileId,
         taxReturnId: conversionResult.taxReturnId,
       });
     }
 
     // Lead hasn't signed up yet - mark as ready to convert
-    logger.info(`Lead ${leadId} has not signed up yet, marking as ready to convert to ${conversionType}`);
+    logger.info(
+      `Lead ${leadId} has not signed up yet, marking as ready to convert to ${conversionType}`
+    );
 
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
-        contactNotes: lead.contactNotes
-          ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`
-          : `[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`,
-        updated_at: new Date(),
-      },
-    });
+    const updatedNotes = lead.contactNotes
+      ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`
+      : `[${new Date().toISOString()}] Marked as ready to convert to ${conversionType} - awaiting signup`;
+
+    await db
+      .from('tax_intake_leads')
+      .update({
+        contactNotes: updatedNotes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId);
 
     return NextResponse.json({
       success: false,
@@ -190,9 +194,6 @@ export async function POST(
     });
   } catch (error) {
     logger.error('Error converting lead:', error);
-    return NextResponse.json(
-      { error: 'Failed to convert lead' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to convert lead' }, { status: 500 });
   }
 }

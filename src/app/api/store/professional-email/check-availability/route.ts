@@ -7,8 +7,22 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for ProfessionalEmailAlias (replaces @prisma/client import)
+interface ProfessionalEmailAlias {
+  id: string;
+  profile_id: string;
+  email_address: string;
+  forward_to_email: string;
+  display_name: string;
+  status: string;
+  annual_price: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 /**
  * GET /api/store/professional-email/check-availability
@@ -97,10 +111,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Check if email already exists
-    const existing = await prisma.professionalEmailAlias.findUnique({
-      where: { emailAddress },
-    });
+    // Check if email already exists using Supabase
+    const { data, error } = await db
+      .from('professional_email_aliases')
+      .select('id')
+      .eq('email_address', emailAddress)
+      .limit(1);
+
+    if (error) {
+      logger.error('Error checking email availability', { error });
+      return NextResponse.json(
+        { error: 'Failed to check availability' },
+        { status: 500 }
+      );
+    }
+
+    const existing = firstOrNull(data);
 
     if (existing) {
       logger.info('Username check: taken', {

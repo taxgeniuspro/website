@@ -9,9 +9,35 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface PayoutRequest {
+  id: string;
+  referrerId: string;
+  amount: number;
+  commissionIds: string[];
+  status: string;
+  paymentMethod: string | null;
+  notes: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+  paymentRef: string | null;
+}
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  userId: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,23 +66,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Fetch payout request
-    const payout = await prisma.payoutRequest.findUnique({
-      where: { id },
-      include: {
-        referrer: {
-          include: {
-            user: {
-              select: {
-                email: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const { data: payoutData, error: payoutError } = await db.from('payout_requests')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (payoutError) {
+      throw payoutError;
+    }
+
+    const payout = firstOrNull<PayoutRequest>(payoutData);
 
     if (!payout) {
       return NextResponse.json({ error: 'Payout request not found' }, { status: 404 });
+    }
+
+    // Fetch referrer profile
+    const { data: profileData } = await db.from('profiles')
+      .select('id, firstName, lastName, userId')
+      .eq('id', payout.referrerId)
+      .limit(1);
+
+    const referrer = firstOrNull<Profile>(profileData);
+
+    // Fetch referrer user for email
+    let referrerEmail = '';
+    if (referrer) {
+      const { data: userData } = await db.from('users')
+        .select('id, email')
+        .eq('id', referrer.userId)
+        .limit(1);
+
+      const referrerUser = firstOrNull<User>(userData);
+      referrerEmail = referrerUser?.email || '';
     }
 
     // Validate payout is pending
@@ -68,51 +110,53 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Update payout request status to PAID
-    const updatedPayout = await prisma.payoutRequest.update({
-      where: { id },
-      data: {
+    const { data: updatedPayoutData, error: updateError } = await db.from('payout_requests')
+      .update({
         status: 'PAID',
-        processedAt: new Date(),
+        processedAt: new Date().toISOString(),
         paymentRef: paymentRef.trim(),
-      },
-    });
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     // Update all related commissions to PAID status
-    await prisma.commission.updateMany({
-      where: {
-        id: { in: payout.commissionIds },
-      },
-      data: {
+    await db.from('commissions')
+      .update({
         status: 'PAID',
-        paidAt: new Date(),
+        paidAt: new Date().toISOString(),
         paymentRef: paymentRef.trim(),
-      },
-    });
+      })
+      .in('id', payout.commissionIds);
 
     // Send payout completed email to referrer
-    const referrerName = payout.referrer.firstName
-      ? `${payout.referrer.firstName} ${payout.referrer.lastName || ''}`.trim()
+    const referrerName = referrer?.firstName
+      ? `${referrer.firstName} ${referrer.lastName || ''}`.trim()
       : 'Referrer';
 
     await EmailService.sendPayoutCompletedEmail(
-      payout.referrer.user.email,
+      referrerEmail,
       referrerName,
       Number(payout.amount),
       paymentRef.trim(),
       payout.paymentMethod
     );
 
-    logger.info(`✅ Payout ${id} approved by admin ${profile.id}`);
-    logger.info(`💰 $${payout.amount} paid to referrer ${payout.referrerId}`);
+    logger.info(`Payout ${id} approved by admin`);
+    logger.info(`$${payout.amount} paid to referrer ${payout.referrerId}`);
 
     return NextResponse.json({
       success: true,
       message: 'Payout approved and processed successfully',
       payout: {
-        id: updatedPayout.id,
-        status: updatedPayout.status,
-        processedAt: updatedPayout.processedAt?.toISOString(),
-        paymentRef: updatedPayout.paymentRef,
+        id: updatedPayoutData.id,
+        status: updatedPayoutData.status,
+        processedAt: updatedPayoutData.processedAt,
+        paymentRef: updatedPayoutData.paymentRef,
       },
     });
   } catch (error) {

@@ -37,7 +37,7 @@ import {
   XCircle,
   ArrowUpRight,
 } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // Status badge colors
@@ -72,45 +72,51 @@ export default async function ReferralsStatusPage() {
 
   try {
     // Fetch all referrals with related data
-    referrals = await prisma.referral.findMany({
-      include: {
-        referrer: true,
-        client: true,
-        commissions: true,
-        analytics: {
-          where: {
-            eventType: 'LINK_CLICK',
-          },
-          orderBy: {
-            eventDate: 'desc',
-          },
-          take: 1,
-        },
-      },
-      orderBy: {
-        signupDate: 'desc',
-      },
-    });
+    const { data: referralsData, error: referralsError } = await db
+      .from('referrals')
+      .select(`
+        *,
+        referrer:profiles!referrals_referrer_id_fkey(*),
+        client:profiles!referrals_client_id_fkey(*),
+        commissions(*)
+      `)
+      .order('signup_date', { ascending: false });
+
+    if (referralsError) throw referralsError;
+
+    // Transform the data to match expected format
+    referrals = (referralsData || []).map((r: any) => ({
+      ...r,
+      referrer: r.referrer || {},
+      client: r.client || {},
+      commissions: r.commissions || [],
+      analytics: [], // Will be fetched separately if needed
+      signupDate: r.signup_date,
+      referralCode: r.referral_code,
+    }));
 
     // Get top referrers (tax preparers who have referrals)
-    topReferrers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-      },
-      include: {
-        referrerReferrals: {
-          where: {
-            status: 'COMPLETED',
-          },
-        },
-      },
-      orderBy: {
-        referrerReferrals: {
-          _count: 'desc',
-        },
-      },
-      take: 5,
-    });
+    const { data: topReferrersData, error: topReferrersError } = await db
+      .from('profiles')
+      .select(`
+        *,
+        referrer_referrals:referrals!referrals_referrer_id_fkey(id, status)
+      `)
+      .eq('role', 'tax_preparer')
+      .limit(5);
+
+    if (topReferrersError) throw topReferrersError;
+
+    // Transform and sort by completed referrals count
+    topReferrers = (topReferrersData || [])
+      .map((p: any) => ({
+        ...p,
+        firstName: p.first_name,
+        lastName: p.last_name,
+        referrerReferrals: (p.referrer_referrals || []).filter((r: any) => r.status === 'COMPLETED'),
+      }))
+      .sort((a: any, b: any) => b.referrerReferrals.length - a.referrerReferrals.length)
+      .slice(0, 5);
   } catch (error) {
     logger.error('Error fetching referrals data:', error);
     // Continue with empty arrays - will show "No referrals found" message
@@ -320,11 +326,11 @@ export default async function ReferralsStatusPage() {
                           <TableCell>
                             <div>
                               <p className="font-medium">
-                                {referral.referrer.firstName} {referral.referrer.lastName}
+                                {referral.referrer.first_name} {referral.referrer.last_name}
                               </p>
-                              {referral.referrer.vanitySlug && (
+                              {referral.referrer.vanity_slug && (
                                 <p className="text-xs text-muted-foreground">
-                                  @{referral.referrer.vanitySlug}
+                                  @{referral.referrer.vanity_slug}
                                 </p>
                               )}
                             </div>
@@ -332,7 +338,7 @@ export default async function ReferralsStatusPage() {
                           <TableCell>
                             <div>
                               <p className="font-medium">
-                                {referral.client.firstName} {referral.client.lastName}
+                                {referral.client.first_name} {referral.client.last_name}
                               </p>
                               {referral.client.phone && (
                                 <p className="text-xs text-muted-foreground">

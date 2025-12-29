@@ -8,9 +8,16 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
 import { seoBrain } from '@/lib/seo-llm/3-seo-brain/integration'
 import { logger } from '@/lib/logger'
+
+// TypeScript interface for SEOBrainDecision
+interface SEOBrainDecision {
+  id: string;
+  status: string;
+  createdAt: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,28 +39,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Get decision
-    const decision = await prisma.sEOBrainDecision.findUnique({
-      where: { id: decisionId },
-    })
+    const { data: decisionData, error: fetchError } = await db
+      .from('seo_brain_decisions')
+      .select('id, status, createdAt')
+      .eq('id', decisionId)
+      .single()
 
-    if (!decision) {
-      return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
+      }
+      throw fetchError
     }
+
+    const decision = decisionData as SEOBrainDecision
 
     if (decision.status !== 'PENDING') {
       return NextResponse.json({ error: 'Decision already processed' }, { status: 400 })
     }
 
     // Update decision with user response
-    await prisma.sEOBrainDecision.update({
-      where: { id: decisionId },
-      data: {
+    const { error: updateError } = await db
+      .from('seo_brain_decisions')
+      .update({
         selectedOption: selectedOption.toUpperCase(),
         userFeedback: feedback || null,
-        respondedAt: new Date(),
+        respondedAt: new Date().toISOString(),
         status: 'APPROVED',
-      },
-    })
+      })
+      .eq('id', decisionId)
+
+    if (updateError) {
+      throw updateError
+    }
 
     // Execute the decision
     await seoBrain.executeDecision(decisionId, selectedOption.toUpperCase())
@@ -76,13 +94,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Get pending decisions
-    const pendingDecisions = await prisma.sEOBrainDecision.findMany({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    })
+    const { data: pendingDecisions, error: fetchError } = await db
+      .from('seo_brain_decisions')
+      .select('*')
+      .eq('status', 'PENDING')
+      .order('createdAt', { ascending: false })
+      .limit(20)
 
-    return NextResponse.json({ decisions: pendingDecisions })
+    if (fetchError) {
+      throw fetchError
+    }
+
+    return NextResponse.json({ decisions: pendingDecisions || [] })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch decisions' }, { status: 500 })
   }

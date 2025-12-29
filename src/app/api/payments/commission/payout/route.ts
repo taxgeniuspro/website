@@ -12,10 +12,55 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces for database records
+interface Profile {
+  id: string;
+  role: string;
+  affiliateStatus: string | null;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface ProfileWithUser extends Profile {
+  users?: {
+    id: string;
+    email: string;
+  };
+}
+
+interface Commission {
+  id: string;
+  referrerId: string;
+  amount: number | string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  paidAt: string | null;
+  paymentRef: string | null;
+  referrals?: {
+    crm_contacts?: {
+      firstName: string | null;
+      lastName: string | null;
+    };
+  };
+}
+
+interface PayoutRequest {
+  id: string;
+  referrerId: string;
+  amount: number | string;
+  commissionIds: string[];
+  status: string;
+  paymentMethod: string;
+  notes: string | null;
+  createdAt: string;
+}
 
 const MINIMUM_PAYOUT_AMOUNT = Number(process.env.MINIMUM_PAYOUT_AMOUNT) || 50;
 
@@ -32,9 +77,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Find user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, affiliateStatus, userId, firstName, lastName')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -48,53 +97,56 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get all pending commissions
-    const pendingCommissions = await prisma.commission.findMany({
-      where: {
-        referrerId: profile.id,
-        status: 'PENDING',
-      },
-      include: {
-        referral: {
-          include: {
-            client: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    // Get all pending commissions with referral and client info
+    const { data: pendingCommissionsData } = await db
+      .from('commissions')
+      .select(`
+        id,
+        referrerId,
+        amount,
+        status,
+        createdAt,
+        updatedAt,
+        paidAt,
+        paymentRef,
+        referrals (
+          crm_contacts (
+            firstName,
+            lastName
+          )
+        )
+      `)
+      .eq('referrerId', profile.id)
+      .eq('status', 'PENDING')
+      .order('createdAt', { ascending: false });
+
+    const pendingCommissions = (pendingCommissionsData || []) as Commission[];
 
     // Calculate total pending balance
     const totalPending = pendingCommissions.reduce((sum, c) => sum + Number(c.amount), 0);
 
     // Get processing/paid commissions for history
-    const paidCommissions = await prisma.commission.findMany({
-      where: {
-        referrerId: profile.id,
-        status: { in: ['PROCESSING', 'PAID'] },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-      take: 10,
-    });
+    const { data: paidCommissionsData } = await db
+      .from('commissions')
+      .select('id, amount, status, updatedAt, paidAt, paymentRef')
+      .eq('referrerId', profile.id)
+      .in('status', ['PROCESSING', 'PAID'])
+      .order('updatedAt', { ascending: false })
+      .limit(10);
 
-    const totalPaid = await prisma.commission.aggregate({
-      where: {
-        referrerId: profile.id,
-        status: 'PAID',
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+    const paidCommissions = (paidCommissionsData || []) as Commission[];
+
+    // Get sum of all paid commissions
+    const { data: totalPaidData } = await db
+      .from('commissions')
+      .select('amount')
+      .eq('referrerId', profile.id)
+      .eq('status', 'PAID');
+
+    const totalPaidSum = (totalPaidData || []).reduce(
+      (sum: number, c: { amount: number | string }) => sum + Number(c.amount),
+      0
+    );
 
     return NextResponse.json({
       pendingBalance: totalPending,
@@ -102,20 +154,20 @@ export async function GET(req: NextRequest) {
         id: c.id,
         amount: Number(c.amount),
         clientName:
-          `${c.referral.client.firstName || ''} ${c.referral.client.lastName || ''}`.trim() ||
+          `${c.referrals?.crm_contacts?.firstName || ''} ${c.referrals?.crm_contacts?.lastName || ''}`.trim() ||
           'Client',
-        createdAt: c.createdAt.toISOString(),
+        createdAt: c.createdAt,
       })),
       commissionCount: pendingCommissions.length,
-      totalEarningsAllTime: Number(totalPaid._sum.amount || 0) + totalPending,
-      totalPaidOut: Number(totalPaid._sum.amount || 0),
+      totalEarningsAllTime: totalPaidSum + totalPending,
+      totalPaidOut: totalPaidSum,
       minimumPayout: MINIMUM_PAYOUT_AMOUNT,
       canRequestPayout: totalPending >= MINIMUM_PAYOUT_AMOUNT,
       recentPayouts: paidCommissions.map((c) => ({
         id: c.id,
         amount: Number(c.amount),
         status: c.status,
-        paidAt: c.paidAt?.toISOString(),
+        paidAt: c.paidAt,
         paymentRef: c.paymentRef,
       })),
     });
@@ -137,11 +189,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-      include: { user: true },
-    });
+    // Find user profile using session user ID with user email
+    const { data: profileData } = await db
+      .from('profiles')
+      .select(`
+        id, role, affiliateStatus, userId, firstName, lastName,
+        users!inner (id, email)
+      `)
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileWithUser | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -156,12 +214,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Get all pending commissions
-    const pendingCommissions = await prisma.commission.findMany({
-      where: {
-        referrerId: profile.id,
-        status: 'PENDING',
-      },
-    });
+    const { data: pendingCommissionsData } = await db
+      .from('commissions')
+      .select('id, amount, status')
+      .eq('referrerId', profile.id)
+      .eq('status', 'PENDING');
+
+    const pendingCommissions = (pendingCommissionsData || []) as Commission[];
 
     // Calculate total amount
     const totalAmount = pendingCommissions.reduce((sum, c) => sum + Number(c.amount), 0);
@@ -185,36 +244,43 @@ export async function POST(req: NextRequest) {
     // Create payout request
     // Note: In production, this would integrate with Stripe for automatic payout
     // For now, we create a manual payout request that admin processes
-    const payoutRequest = await prisma.payoutRequest.create({
-      data: {
+    const { data: payoutRequest, error: payoutError } = await db
+      .from('payout_requests')
+      .insert({
         referrerId: profile.id,
         amount: totalAmount,
         commissionIds: pendingCommissions.map((c) => c.id),
         status: 'PENDING',
         paymentMethod: paymentMethod || 'BANK_TRANSFER',
         notes: notes || null,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (payoutError) throw payoutError;
 
     // Update commissions to "PROCESSING" status
-    await prisma.commission.updateMany({
-      where: {
-        id: { in: pendingCommissions.map((c) => c.id) },
-      },
-      data: {
-        status: 'PROCESSING',
-      },
-    });
+    const commissionIds = pendingCommissions.map((c) => c.id);
+    const { error: updateError } = await db
+      .from('commissions')
+      .update({ status: 'PROCESSING' })
+      .in('id', commissionIds);
+
+    if (updateError) {
+      logger.error('Failed to update commission status', { error: updateError });
+    }
 
     // Send payout request notification to admin
     const referrerName = profile.firstName
       ? `${profile.firstName} ${profile.lastName || ''}`.trim()
       : 'Referrer';
 
+    const userEmail = profile.users?.email || '';
+
     await EmailService.sendPayoutRequestEmail(
       process.env.ADMIN_EMAIL || 'admin@taxgeniuspro.tax',
       referrerName,
-      profile.user.email,
+      userEmail,
       totalAmount,
       pendingCommissions.length,
       payoutRequest.id
@@ -222,7 +288,7 @@ export async function POST(req: NextRequest) {
 
     // Send confirmation email to referrer
     await EmailService.sendPayoutConfirmationEmail(
-      profile.user.email,
+      userEmail,
       referrerName,
       totalAmount,
       paymentMethod || 'bank transfer',
@@ -237,7 +303,7 @@ export async function POST(req: NextRequest) {
         amount: Number(payoutRequest.amount),
         commissionsIncluded: pendingCommissions.length,
         status: payoutRequest.status,
-        requestedAt: payoutRequest.createdAt.toISOString(),
+        requestedAt: payoutRequest.createdAt,
         estimatedProcessingTime: '5-7 business days',
       },
     });

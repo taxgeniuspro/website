@@ -1,65 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from '@/lib/resend';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
-import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
 import { generateTaxIntakePDF } from '@/lib/services/pdf-form-generator.service';
 import { CRMService } from '@/lib/services/crm.service';
-import { ContactType, PipelineStage } from '@prisma/client';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
-// Lazy initialize Cloudinary to avoid build errors
-const getCloudinary = () => {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
-    api_key: process.env.CLOUDINARY_API_KEY || '',
-    api_secret: process.env.CLOUDINARY_API_SECRET || '',
-  });
-  return cloudinary;
-};
+// TypeScript interfaces for database types (replacing @prisma/client imports)
+type ContactType = 'LEAD' | 'CLIENT' | 'PROSPECT' | 'PARTNER';
+type PipelineStage = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  user: {
+    email: string;
+    name: string | null;
+  };
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  email: string;
+  phone: string;
+  tax_year: number;
+  clientFolderId: string | null;
+  full_form_data: Record<string, unknown> | null;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  stage: PipelineStage;
+  assignedPreparerId: string | null;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  attributionMethod: string | null;
+}
 
 // Initialize Resend only when needed to avoid build errors
 const getResend = () => new Resend(process.env.RESEND_API_KEY || 're_placeholder');
-
-// Upload buffer to Cloudinary
-async function uploadToCloudinary(
-  buffer: Buffer,
-  fileName: string,
-  mimeType: string,
-  folderPath: string
-): Promise<UploadApiResponse> {
-  const cloud = getCloudinary();
-
-  // Sanitize filename for public_id - remove extension and special chars
-  const sanitizedName = fileName
-    .replace(/\.[^/.]+$/, '') // Remove extension
-    .replace(/[^a-zA-Z0-9-_]/g, '-') // Replace special chars with hyphen
-    .toLowerCase();
-
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloud.uploader.upload_stream(
-      {
-        folder: `taxgeniuspro/client-documents/${folderPath}`,
-        public_id: sanitizedName,
-        resource_type: mimeType.startsWith('image/') ? 'image' : 'auto',
-        // Don't specify format - let Cloudinary determine from the file
-      },
-      (error, result) => {
-        if (error) {
-          reject(error);
-        } else if (result) {
-          resolve(result);
-        } else {
-          reject(new Error('No result from Cloudinary'));
-        }
-      }
-    );
-
-    uploadStream.end(buffer);
-  });
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,26 +96,30 @@ export async function POST(request: NextRequest) {
     const tax_year = providedTaxYear ? parseInt(providedTaxYear) : getCurrentFilingTaxYear();
 
     // Find preparer by tracking code first (needed for folder creation)
-    const preparer = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: preparerCode },
-          { customTrackingCode: preparerCode },
-        ],
-      },
-      include: {
-        user: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
-      },
-    });
+    const { data: preparerResults } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role, trackingCode, customTrackingCode, users!inner(email, name)')
+      .or(`trackingCode.eq.${preparerCode},customTrackingCode.eq.${preparerCode}`)
+      .limit(1);
 
-    if (!preparer) {
+    const preparerRow = firstOrNull(preparerResults);
+    if (!preparerRow) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
     }
+
+    // Map Supabase result to expected Profile interface
+    const preparer: Profile = {
+      id: preparerRow.id,
+      firstName: preparerRow.firstName,
+      lastName: preparerRow.lastName,
+      role: preparerRow.role,
+      trackingCode: preparerRow.trackingCode,
+      customTrackingCode: preparerRow.customTrackingCode,
+      user: {
+        email: (preparerRow.users as { email: string; name: string | null }).email,
+        name: (preparerRow.users as { email: string; name: string | null }).name,
+      },
+    };
 
     // Handle file upload to Cloudinary
     const licenseFile = formData.get('license_file') as File | null;
@@ -146,7 +140,6 @@ export async function POST(request: NextRequest) {
     if (licenseFile && licenseFile.size > 0) {
       const bytes = await licenseFile.arrayBuffer();
       fileBuffer = Buffer.from(bytes);
-      const timestamp = Date.now();
 
       try {
         // Get or create client folder structure using tax year
@@ -157,33 +150,33 @@ export async function POST(request: NextRequest) {
           tax_year
         );
 
-        // Generate descriptive filename
-        const sanitizedLastName = taxFormData.last_name.replace(/[^a-zA-Z0-9]/g, '');
-        const sanitizedFirstName = taxFormData.first_name.replace(/[^a-zA-Z0-9]/g, '');
-        const fileExtension = licenseFile.name.split('.').pop() || 'jpg';
-        const cloudinaryFileName = `${sanitizedLastName}-${sanitizedFirstName}-DL-${timestamp}`;
-        const folderPath = `${preparer.id}/${tax_year}`;
+        // Generate storage key for disk storage
+        const key = DiskStorageService.generateKey(preparer.id, licenseFile.name, 'documents');
 
-        // Upload to Cloudinary instead of local filesystem
-        const cloudinaryResult = await uploadToCloudinary(
+        // Upload to disk storage (encrypted for sensitive documents)
+        const uploadResult = await DiskStorageService.uploadFile(
+          key,
           fileBuffer,
-          cloudinaryFileName,
           licenseFile.type || 'image/jpeg',
-          folderPath
+          {
+            encrypt: true, // Sensitive client documents
+            generateThumbnail: licenseFile.type?.startsWith('image/'),
+          }
         );
 
-        uploadedFileUrl = cloudinaryResult.secure_url;
+        uploadedFileUrl = uploadResult.url;
 
-        logger.info('Document uploaded to Cloudinary', {
-          fileName: cloudinaryFileName,
-          cloudinaryUrl: uploadedFileUrl,
-          publicId: cloudinaryResult.public_id,
+        logger.info('Document uploaded to disk storage', {
+          fileName: licenseFile.name,
+          storageUrl: uploadedFileUrl,
+          storageKey: key,
           size: fileBuffer.length,
         });
 
         // Create Document record in database for tracking
-        documentRecord = await prisma.document.create({
-          data: {
+        const { data: docRecord, error: docError } = await db
+          .from('documents')
+          .insert({
             profileId: preparer.id,
             type: 'OTHER', // Driver's license - use OTHER as ID_DOCUMENT doesn't exist in enum
             fileName: licenseFile.name,
@@ -199,10 +192,14 @@ export async function POST(request: NextRequest) {
               uploadedVia: 'tax_intake_form',
               documentCategory: 'ID-Documents',
               documentType: 'drivers_license',
-              cloudinaryPublicId: cloudinaryResult.public_id,
+              storageKey: key,
             },
-          },
-        });
+          })
+          .select('id')
+          .single();
+
+        if (docError) throw docError;
+        documentRecord = docRecord;
 
         logger.info('Document record created', {
           documentId: documentRecord.id,
@@ -211,31 +208,27 @@ export async function POST(request: NextRequest) {
         });
 
         // Also update the lead with the folder ID if it exists (using composite key)
-        const existingLead = await prisma.taxIntakeLead.findUnique({
-          where: {
-            email_tax_year: {
-              email: taxFormData.email,
-              tax_year: tax_year,
-            },
-          },
-        });
+        const { data: existingLeadResults } = await db
+          .from('tax_intake_leads')
+          .select('id, clientFolderId')
+          .eq('email', taxFormData.email)
+          .eq('tax_year', tax_year)
+          .limit(1);
+
+        const existingLead = firstOrNull(existingLeadResults);
 
         if (existingLead && !existingLead.clientFolderId) {
-          await prisma.taxIntakeLead.update({
-            where: { id: existingLead.id },
-            data: { clientFolderId: folderResult.folderId },
-          });
+          await db
+            .from('tax_intake_leads')
+            .update({ clientFolderId: folderResult.folderId })
+            .eq('id', existingLead.id);
         }
-      } catch (err: any) {
-        uploadError = err?.message || String(err);
-        logger.error('Cloudinary upload failed', {
+      } catch (err: unknown) {
+        const errObj = err as Error;
+        uploadError = errObj?.message || String(err);
+        logger.error('Disk storage upload failed', {
           error: uploadError,
-          stack: err?.stack,
-          cloudinaryConfig: {
-            hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
-            hasApiKey: !!process.env.CLOUDINARY_API_KEY,
-            hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
-          },
+          stack: errObj?.stack,
         });
         // Continue without file - don't fail the whole submission
       }
@@ -477,14 +470,14 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     try {
       // Generate PDF using the PDF service
       // Need to find or create a lead ID for the PDF
-      const existingLeadForPdf = await prisma.taxIntakeLead.findUnique({
-        where: {
-          email_tax_year: {
-            email: taxFormData.email.toLowerCase(),
-            tax_year: tax_year,
-          },
-        },
-      });
+      const { data: pdfLeadResults } = await db
+        .from('tax_intake_leads')
+        .select('id')
+        .eq('email', taxFormData.email.toLowerCase())
+        .eq('tax_year', tax_year)
+        .limit(1);
+
+      const existingLeadForPdf = firstOrNull(pdfLeadResults);
 
       const pdfData = {
         id: existingLeadForPdf?.id || 'new-submission',
@@ -588,22 +581,22 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     // The lead was created at page 2/3 with basic info only.
     // Now we update it with ALL tax data (SSN, DOB, filing_status, etc.)
     try {
-      const existingLead = await prisma.taxIntakeLead.findUnique({
-        where: {
-          email_tax_year: {
-            email: taxFormData.email.toLowerCase(),
-            tax_year: tax_year,
-          },
-        },
-      });
+      const { data: existingLeadResults } = await db
+        .from('tax_intake_leads')
+        .select('id, full_form_data')
+        .eq('email', taxFormData.email.toLowerCase())
+        .eq('tax_year', tax_year)
+        .limit(1);
+
+      const existingLead = firstOrNull(existingLeadResults) as TaxIntakeLead | null;
 
       if (existingLead) {
         // Merge existing full_form_data with new complete data
         const existingFormData = (existingLead.full_form_data as Record<string, unknown>) || {};
 
-        await prisma.taxIntakeLead.update({
-          where: { id: existingLead.id },
-          data: {
+        await db
+          .from('tax_intake_leads')
+          .update({
             // Mark as complete - this is a FULL intake form with SSN, DOB, filing_status
             completed: true,
             // Update full_form_data with ALL fields including sensitive tax data
@@ -615,8 +608,8 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
               // Mark submission timestamp
               submitted_at: new Date().toISOString(),
             },
-          },
-        });
+          })
+          .eq('id', existingLead.id);
 
         logger.info('TaxIntakeLead updated with complete form data', {
           leadId: existingLead.id,
@@ -630,8 +623,9 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       } else {
         // Lead doesn't exist yet - create it with complete data
         // This can happen if user skipped the intermediate save
-        const newLead = await prisma.taxIntakeLead.create({
-          data: {
+        const { data: newLead, error: createError } = await db
+          .from('tax_intake_leads')
+          .insert({
             first_name: taxFormData.first_name,
             middle_name: taxFormData.middle_name || null,
             last_name: taxFormData.last_name,
@@ -654,11 +648,14 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
               drivers_license_image_url: uploadedFileUrl,
               submitted_at: new Date().toISOString(),
             },
-          },
-        });
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
 
         logger.info('TaxIntakeLead created with complete form data', {
-          leadId: newLead.id,
+          leadId: newLead?.id,
           email: taxFormData.email,
           assignedPreparerId: preparer.id,
         });
@@ -676,31 +673,36 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
     let crmContactId: string | null = null;
     try {
       // Check if CRM contact already exists for this email
-      const existingContact = await prisma.cRMContact.findUnique({
-        where: { email: taxFormData.email.toLowerCase() },
-      });
+      const { data: existingContactResults } = await db
+        .from('crm_contacts')
+        .select('id, stage, assignedPreparerId, referrerUsername, referrerType, attributionMethod')
+        .eq('email', taxFormData.email.toLowerCase())
+        .limit(1);
+
+      const existingContact = firstOrNull(existingContactResults) as CRMContact | null;
 
       if (existingContact) {
         // Update existing contact with latest data
-        await prisma.cRMContact.update({
-          where: { id: existingContact.id },
-          data: {
+        await db
+          .from('crm_contacts')
+          .update({
             firstName: taxFormData.first_name,
             lastName: taxFormData.last_name,
             phone: taxFormData.phone,
             filingStatus: taxFormData.filing_status,
             taxYear: tax_year,
             // Don't change stage if already past NEW
-            stage: existingContact.stage === 'NEW' ? PipelineStage.NEW : existingContact.stage,
+            stage: existingContact.stage === 'NEW' ? 'NEW' : existingContact.stage,
             // Update preparer assignment if not already assigned
             assignedPreparerId: existingContact.assignedPreparerId || preparer.id,
             // Update referrer info if provided and not already set
             referrerUsername: existingContact.referrerUsername || preparerCode,
             referrerType: existingContact.referrerType || 'TAX_PREPARER',
             attributionMethod: existingContact.attributionMethod || 'ref_param',
-            lastContactedAt: new Date(),
-          },
-        });
+            lastContactedAt: new Date().toISOString(),
+          })
+          .eq('id', existingContact.id);
+
         crmContactId = existingContact.id;
         logger.info('CRM contact updated', {
           contactId: existingContact.id,
@@ -709,7 +711,7 @@ Preparer: ${preparer.firstName} ${preparer.lastName} (Code: ${preparerCode})
       } else {
         // Create new CRM contact
         const newContact = await CRMService.createContact({
-          contactType: ContactType.CLIENT,
+          contactType: 'CLIENT' as ContactType,
           firstName: taxFormData.first_name,
           lastName: taxFormData.last_name,
           email: taxFormData.email.toLowerCase(),

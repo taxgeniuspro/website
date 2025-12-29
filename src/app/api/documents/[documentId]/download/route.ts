@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import {
   documentRateLimit,
   getClientIdentifier,
@@ -52,28 +52,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
     }
 
     // Get user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`user_id.eq.${user.id},supabase_user_id.eq.${user.id}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const documentId = params.documentId;
+    const { documentId } = await params;
 
-    // Get document with related tax return and profile
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-      include: {
-        taxReturn: {
-          include: {
-            profile: true,
-          },
-        },
-        profile: true,
-      },
-    });
+    // Get document with related tax return
+    const { data: documents } = await db.from('documents')
+      .select('*, tax_returns(*, profiles(*))')
+      .eq('id', documentId);
+    const document = firstOrNull(documents);
 
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -83,21 +77,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
     let isAuthorized = false;
 
     // Check if user is the document owner (client)
-    if (document.profileId === profile.id) {
+    if (document.profile_id === profile.id) {
       isAuthorized = true;
     }
 
     // Check if user is an assigned preparer
-    if (profile.role === 'PREPARER' && document.taxReturn) {
-      const assignment = await prisma.clientPreparer.findFirst({
-        where: {
-          preparerId: profile.id,
-          clientId: document.taxReturn.profileId,
-          isActive: true,
-        },
-      });
+    if (profile.role === 'PREPARER' && document.tax_returns) {
+      const { data: assignments } = await db.from('client_preparers')
+        .select('*')
+        .eq('preparer_id', profile.id)
+        .eq('client_id', document.tax_returns.profile_id)
+        .eq('is_active', true);
 
-      if (assignment) {
+      if (assignments && assignments.length > 0) {
         isAuthorized = true;
       }
     }
@@ -115,7 +107,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
     }
 
     // Generate signed URL with 15-minute expiry
-    const signedUrl = await generateSignedUrl(document.id, document.fileUrl, user.id, 15);
+    const signedUrl = await generateSignedUrl(document.id, document.file_url, user.id, 15);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
     return NextResponse.json(
@@ -123,9 +115,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
         success: true,
         document: {
           id: document.id,
-          fileName: document.fileName,
-          fileType: document.fileType,
-          fileSize: document.fileSize,
+          fileName: document.file_name,
+          fileType: document.file_type,
+          fileSize: document.file_size,
           downloadUrl: signedUrl,
           expiresAt: expiresAt.toISOString(),
         },

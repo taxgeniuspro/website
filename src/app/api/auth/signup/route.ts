@@ -7,15 +7,61 @@
  *   we apply the conversion (to client or affiliate) and assign to Owliver
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { createClientFromPreparerApplication } from '@/lib/services/lead-conversion.service';
 import { EmailService } from '@/lib/services/email.service';
-import { ContactType } from '@prisma/client';
 import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import crypto from 'crypto';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  hashedPassword: string | null;
+  emailVerified: Date | null;
+  image: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
+  affiliateStatus: string | null;
+  affiliateApprovedAt: Date | null;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  userId: string | null;
+  contactType: string;
+}
+
+interface PreparerApplication {
+  id: string;
+  email: string;
+  status: string;
+  notes: string | null;
+}
+
+// Contact type enum (replaces @prisma/client ContactType)
+const ContactType = {
+  LEAD: 'LEAD',
+  CLIENT: 'CLIENT',
+  PARTNER: 'PARTNER',
+  OTHER: 'OTHER',
+} as const;
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -100,16 +146,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists (case-insensitive)
-    let existingUser;
+    let existingUser: User | null = null;
     try {
-      existingUser = await prisma.user.findFirst({
-        where: {
-          email: {
-            equals: email,
-            mode: 'insensitive',
-          },
-        },
-      });
+      const { data: existingUsersData, error: existingUserError } = await db
+        .from('users')
+        .select('*')
+        .ilike('email', email)
+        .limit(1);
+
+      if (existingUserError) {
+        logger.error('[Signup] Database query failed', {
+          error: existingUserError.message,
+        });
+        return NextResponse.json(
+          { error: 'Database connection error. Please try again later.' },
+          { status: 503 }
+        );
+      }
+
+      existingUser = firstOrNull<User>(existingUsersData);
     } catch (dbError) {
       logger.error('[Signup] Database query failed', {
         error: dbError instanceof Error ? dbError.message : 'Unknown error',
@@ -148,48 +203,72 @@ export async function POST(req: NextRequest) {
       lastName = nameParts[nameParts.length - 1];
     }
 
-    // Create user with profile in a transaction
-    let user, profile;
+    // Create user with profile
+    // Note: Supabase doesn't have transactions like Prisma, so we handle errors manually
+    let user: User | null = null;
+    let profile: Profile | null = null;
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        // Create user
-        const newUser = await tx.user.create({
-          data: {
-            name,
-            email: email.toLowerCase(), // Store email in lowercase
-            hashedPassword,
-          },
-        });
+      // Create user
+      const { data: newUserData, error: userError } = await db
+        .from('users')
+        .insert({
+          name,
+          email: email.toLowerCase(), // Store email in lowercase
+          hashedPassword,
+        })
+        .select()
+        .single();
 
-        // Create profile for the user
-        // All users are auto-approved as affiliates so they can refer others immediately
-        // Note: Profile doesn't have an 'email' field - email is stored on User
-        const newProfile = await tx.profile.create({
-          data: {
-            userId: newUser.id,
-            role: 'client', // Default role for new signups (client = registered user)
-            firstName,
-            middleName,
-            lastName,
-            affiliateStatus: 'APPROVED', // Auto-approve all users as affiliates
-            affiliateApprovedAt: new Date(),
-          },
-        });
+      if (userError) {
+        // Check for unique constraint violation
+        if (userError.code === '23505' || userError.message?.includes('duplicate') || userError.message?.includes('unique')) {
+          return NextResponse.json(
+            { error: 'An account with this email already exists' },
+            { status: 409 }
+          );
+        }
+        throw userError;
+      }
 
-        return { user: newUser, profile: newProfile };
-      });
-      user = result.user;
-      profile = result.profile;
+      user = newUserData as User;
+
+      // Create profile for the user
+      // All users are auto-approved as affiliates so they can refer others immediately
+      // Note: Profile doesn't have an 'email' field - email is stored on User
+      const { data: newProfileData, error: profileError } = await db
+        .from('profiles')
+        .insert({
+          userId: user.id,
+          role: 'client', // Default role for new signups (client = registered user)
+          firstName,
+          middleName,
+          lastName,
+          affiliateStatus: 'APPROVED', // Auto-approve all users as affiliates
+          affiliateApprovedAt: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        // If profile creation fails, we should clean up the user
+        logger.error('[Signup] Profile creation failed, cleaning up user', {
+          error: profileError.message,
+          userId: user.id,
+        });
+        await db.from('users').delete().eq('id', user.id);
+        throw profileError;
+      }
+
+      profile = newProfileData as Profile;
     } catch (txError) {
-      const txErrorMessage = txError instanceof Error ? txError.message : 'Unknown error';
+      const txErrorMessage = txError instanceof Error ? txError.message : String(txError);
       logger.error('[Signup] Transaction failed', {
         error: txErrorMessage,
         code: (txError as any)?.code,
-        meta: (txError as any)?.meta,
       });
 
-      // Check for specific Prisma errors
-      if (txErrorMessage.includes('Unique constraint')) {
+      // Check for unique constraint errors
+      if (txErrorMessage.includes('duplicate') || txErrorMessage.includes('unique') || txErrorMessage.includes('23505')) {
         return NextResponse.json(
           { error: 'An account with this email already exists' },
           { status: 409 }
@@ -198,6 +277,13 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(
         { error: 'Failed to create account. Database error.' },
+        { status: 500 }
+      );
+    }
+
+    if (!user || !profile) {
+      return NextResponse.json(
+        { error: 'Failed to create account.' },
         { status: 500 }
       );
     }
@@ -217,30 +303,35 @@ export async function POST(req: NextRequest) {
     // This ensures all users appear in CRM regardless of how they signed up
     try {
       // Check if CRM contact already exists (from previous form submission)
-      const existingCrmContact = await prisma.cRMContact.findUnique({
-        where: { email: email.toLowerCase() },
-      });
+      const { data: existingCrmContactData } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .limit(1);
+
+      const existingCrmContact = firstOrNull<CRMContact>(existingCrmContactData);
 
       if (existingCrmContact) {
         // Link existing CRM contact to this user
-        await prisma.cRMContact.update({
-          where: { id: existingCrmContact.id },
-          data: {
+        await db
+          .from('crm_contacts')
+          .update({
             userId: user.id,
             firstName: firstName || existingCrmContact.firstName,
             lastName: lastName || existingCrmContact.lastName,
             contactType: ContactType.CLIENT, // Signed up = Client
-            lastContactedAt: new Date(),
-          },
-        });
+            lastContactedAt: new Date().toISOString(),
+          })
+          .eq('id', existingCrmContact.id);
         logger.info('[Signup] Linked existing CRM contact to new user', {
           userId: user.id,
           crmContactId: existingCrmContact.id,
         });
       } else {
         // Create new CRM contact
-        await prisma.cRMContact.create({
-          data: {
+        await db
+          .from('crm_contacts')
+          .insert({
             userId: user.id,
             email: email.toLowerCase(),
             firstName: firstName || 'Unknown',
@@ -248,8 +339,7 @@ export async function POST(req: NextRequest) {
             contactType: ContactType.CLIENT,
             stage: 'NEW',
             source: 'signup',
-          },
-        });
+          });
         logger.info('[Signup] Created CRM contact for new user', { userId: user.id });
       }
     } catch (crmError) {
@@ -264,13 +354,15 @@ export async function POST(req: NextRequest) {
     // If this user was rejected from a preparer application but marked for conversion,
     // process that conversion now and assign them to Owliver
     try {
-      const pendingApplication = await prisma.preparerApplication.findFirst({
-        where: {
-          email: email.toLowerCase(),
-          status: 'REJECTED',
-          notes: { contains: '[PENDING_CONVERSION:' },
-        },
-      });
+      const { data: pendingApplicationData } = await db
+        .from('preparer_applications')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .eq('status', 'REJECTED')
+        .ilike('notes', '%[PENDING_CONVERSION:%')
+        .limit(1);
+
+      const pendingApplication = firstOrNull<PreparerApplication>(pendingApplicationData);
 
       if (pendingApplication) {
         // Extract conversion type from notes
@@ -306,18 +398,19 @@ export async function POST(req: NextRequest) {
       const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       // Delete any existing tokens for this email
-      await prisma.verificationToken.deleteMany({
-        where: { identifier: email.toLowerCase() },
-      });
+      await db
+        .from('verification_tokens')
+        .delete()
+        .eq('identifier', email.toLowerCase());
 
       // Store verification token
-      await prisma.verificationToken.create({
-        data: {
+      await db
+        .from('verification_tokens')
+        .insert({
           identifier: email.toLowerCase(),
           token: verificationToken,
-          expires: tokenExpiry,
-        },
-      });
+          expires: tokenExpiry.toISOString(),
+        });
 
       // Build verification URL
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';

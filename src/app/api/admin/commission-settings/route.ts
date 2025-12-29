@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import {
   getCompanyDefaultTiers,
   updateCompanyDefaultTiers,
@@ -20,6 +20,26 @@ import {
   FlexibleTierStructure,
   validateTierStructure,
 } from '@/lib/types/commission-tiers';
+
+// Local interfaces
+interface SystemSetting {
+  id: string;
+  key: string;
+  value: string;
+  updatedAt: string;
+  updatedById: string | null;
+}
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  userId: string;
+}
+
+interface User {
+  email: string;
+}
 
 /**
  * GET /api/admin/commission-settings
@@ -43,26 +63,41 @@ export async function GET() {
     const tiers = await getCompanyDefaultTiers();
 
     // Get last update info
-    const setting = await prisma.systemSettings.findUnique({
-      where: { key: 'commission_default_tiers' },
-      include: {
-        updatedBy: {
-          select: {
-            firstName: true,
-            lastName: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
-    });
+    const { data: settingData } = await db.from('system_settings')
+      .select('*')
+      .eq('key', 'commission_default_tiers')
+      .limit(1);
+
+    const setting = firstOrNull<SystemSetting>(settingData);
+
+    let updatedByName: string | null = null;
+    if (setting?.updatedById) {
+      const { data: updaterData } = await db.from('profiles')
+        .select('firstName, lastName, userId')
+        .eq('id', setting.updatedById)
+        .limit(1);
+
+      const updater = firstOrNull<Profile>(updaterData);
+      if (updater) {
+        const name = `${updater.firstName || ''} ${updater.lastName || ''}`.trim();
+        if (name) {
+          updatedByName = name;
+        } else {
+          // Get email from users table
+          const { data: userData } = await db.from('users')
+            .select('email')
+            .eq('id', updater.userId)
+            .limit(1);
+          const userRecord = firstOrNull<User>(userData);
+          updatedByName = userRecord?.email || null;
+        }
+      }
+    }
 
     return NextResponse.json({
       tiers,
       lastUpdatedAt: setting?.updatedAt ?? null,
-      lastUpdatedBy: setting?.updatedBy
-        ? `${setting.updatedBy.firstName || ''} ${setting.updatedBy.lastName || ''}`.trim() ||
-          setting.updatedBy.user.email
-        : null,
+      lastUpdatedBy: updatedByName,
     });
   } catch (error) {
     logger.error('Error fetching admin commission settings', { error });
@@ -89,10 +124,12 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get admin's profile ID for audit
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profileData } = await db.from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull<{ id: string }>(profileData);
 
     const body = await request.json();
     const { tiers } = body;

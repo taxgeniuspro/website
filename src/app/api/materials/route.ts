@@ -14,8 +14,10 @@ import {
   getCreatorMaterials,
   checkMaterialLimit,
 } from '@/lib/services/material-management.service';
-import type { LinkType } from '@prisma/client';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript type (replacing Prisma LinkType enum)
+type LinkType = 'QR_CODE' | 'SHORT_LINK' | 'DIRECT_LINK' | 'EMAIL_LINK' | 'SMS_LINK' | 'SOCIAL_MEDIA' | 'PRINT' | 'OTHER';
 
 /**
  * GET /api/materials

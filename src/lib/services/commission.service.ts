@@ -7,8 +7,59 @@
  * Part of Epic 6: Lead Tracking Dashboard Enhancement - Story 6
  */
 
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+type CommissionType = 'PERCENTAGE' | 'FLAT' | 'TIERED';
+type PaymentStatus = 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED' | 'CANCELLED';
+
+interface LeadRecord {
+  id: string;
+  status: string;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  commissionRate?: number | null;
+  commissionRateLockedAt?: string | null;
+  updatedAt: string;
+}
+
+interface CommissionDbRecord {
+  id: string;
+  leadId?: string | null;
+  referrerId?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  amount: number;
+  status: PaymentStatus;
+  leadStatus?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  grossAmount?: number | null;
+  commissionType?: CommissionType | null;
+  commissionRate?: number | null;
+  rateAtCreation?: number | null;
+  rateSource?: string | null;
+  groupIdAtCreation?: string | null;
+  calculatedAmount?: number | null;
+  pendingAt?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  approvalNotes?: string | null;
+  paidAt?: string | null;
+  payoutRequestId?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  affiliateGroupId?: string | null;
+}
 
 /**
  * Commission status types
@@ -54,30 +105,22 @@ export interface EarningsSummary {
 
 /**
  * Calculate commission when a lead reaches CONVERTED status
- *
- * Commission is locked at lead creation time in lead.commissionRate
- * This function creates a commission record when the lead converts
  */
 export async function calculateCommission(leadId: string): Promise<CommissionRecord | null> {
   try {
-    const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        status: true,
-        referrerUsername: true,
-        referrerType: true,
-        commissionRate: true,
-        commissionRateLockedAt: true,
-      },
-    });
+    const { data: leadData } = await db
+      .from('leads')
+      .select('id, status, referrerUsername, referrerType, commissionRate, commissionRateLockedAt')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData) as LeadRecord | null;
 
     if (!lead) {
       logger.error('Lead not found for commission calculation', { leadId });
       return null;
     }
 
-    // Only calculate commission for CONVERTED leads
     if (lead.status !== 'CONVERTED') {
       logger.warn('Attempted to calculate commission for non-converted lead', {
         leadId,
@@ -86,7 +129,6 @@ export async function calculateCommission(leadId: string): Promise<CommissionRec
       return null;
     }
 
-    // Ensure we have a referrer and commission rate
     if (!lead.referrerUsername || !lead.commissionRate) {
       logger.warn('Lead missing referrer or commission rate', {
         leadId,
@@ -97,30 +139,51 @@ export async function calculateCommission(leadId: string): Promise<CommissionRec
     }
 
     // Check if commission already exists
-    const existingCommission = await prisma.commission.findFirst({
-      where: { leadId },
-    });
+    const { data: existingData } = await db
+      .from('commissions')
+      .select('*')
+      .eq('leadId', leadId)
+      .limit(1);
+
+    const existingCommission = firstOrNull(existingData) as CommissionDbRecord | null;
 
     if (existingCommission) {
       logger.info('Commission already exists for lead', {
         leadId,
         commissionId: existingCommission.id,
       });
-      return existingCommission as CommissionRecord;
+      return {
+        id: existingCommission.id,
+        leadId: existingCommission.leadId || '',
+        referrerUsername: existingCommission.referrerUsername || '',
+        referrerType: (existingCommission.referrerType || 'REFERRER') as 'AFFILIATE' | 'REFERRER' | 'TAX_PREPARER',
+        amount: Number(existingCommission.amount),
+        status: existingCommission.status as CommissionStatus,
+        leadStatus: existingCommission.leadStatus || '',
+        createdAt: new Date(existingCommission.createdAt),
+        approvedAt: existingCommission.approvedAt ? new Date(existingCommission.approvedAt) : null,
+        paidAt: existingCommission.paidAt ? new Date(existingCommission.paidAt) : null,
+        notes: existingCommission.notes,
+      };
     }
 
     // Create commission record
-    const commission = await prisma.commission.create({
-      data: {
+    const { data: commissionData, error } = await db
+      .from('commissions')
+      .insert({
         leadId: lead.id,
         referrerUsername: lead.referrerUsername,
         referrerType: lead.referrerType || 'REFERRER',
         amount: lead.commissionRate,
         status: 'PENDING',
         leadStatus: lead.status,
-        notes: `Commission locked at ${lead.commissionRate} on ${lead.commissionRateLockedAt?.toISOString()}`,
-      },
-    });
+        notes: `Commission locked at ${lead.commissionRate} on ${lead.commissionRateLockedAt}`,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    const commission = commissionData as CommissionDbRecord;
 
     logger.info('Commission calculated and created', {
       leadId,
@@ -129,7 +192,19 @@ export async function calculateCommission(leadId: string): Promise<CommissionRec
       referrerUsername: commission.referrerUsername,
     });
 
-    return commission as CommissionRecord;
+    return {
+      id: commission.id,
+      leadId: commission.leadId || '',
+      referrerUsername: commission.referrerUsername || '',
+      referrerType: (commission.referrerType || 'REFERRER') as 'AFFILIATE' | 'REFERRER' | 'TAX_PREPARER',
+      amount: Number(commission.amount),
+      status: commission.status as CommissionStatus,
+      leadStatus: commission.leadStatus || '',
+      createdAt: new Date(commission.createdAt),
+      approvedAt: commission.approvedAt ? new Date(commission.approvedAt) : null,
+      paidAt: commission.paidAt ? new Date(commission.paidAt) : null,
+      notes: commission.notes,
+    };
   } catch (error) {
     logger.error('Error calculating commission', { leadId, error });
     return null;
@@ -138,22 +213,21 @@ export async function calculateCommission(leadId: string): Promise<CommissionRec
 
 /**
  * Update commission status when lead status changes
- *
- * - CONVERTED → PENDING commission
- * - Stay CONVERTED for 30 days → APPROVED commission
- * - Revert from CONVERTED → CANCELLED commission
  */
 export async function updateCommissionStatus(
   leadId: string,
   newLeadStatus: string
 ): Promise<CommissionRecord | null> {
   try {
-    const commission = await prisma.commission.findFirst({
-      where: { leadId },
-    });
+    const { data: commissionData } = await db
+      .from('commissions')
+      .select('*')
+      .eq('leadId', leadId)
+      .limit(1);
+
+    const commission = firstOrNull(commissionData) as CommissionDbRecord | null;
 
     if (!commission) {
-      // If lead just converted, create new commission
       if (newLeadStatus === 'CONVERTED') {
         return await calculateCommission(leadId);
       }
@@ -162,14 +236,18 @@ export async function updateCommissionStatus(
 
     // If lead reverted from CONVERTED, cancel commission
     if (newLeadStatus !== 'CONVERTED' && commission.status === 'PENDING') {
-      const updated = await prisma.commission.update({
-        where: { id: commission.id },
-        data: {
+      const { data: updated, error } = await db
+        .from('commissions')
+        .update({
           status: 'CANCELLED',
           leadStatus: newLeadStatus,
           notes: `Commission cancelled due to lead status change to ${newLeadStatus}`,
-        },
-      });
+        })
+        .eq('id', commission.id)
+        .select()
+        .single();
+
+      if (error) throw error;
 
       logger.info('Commission cancelled due to lead status change', {
         commissionId: commission.id,
@@ -177,16 +255,44 @@ export async function updateCommissionStatus(
         newStatus: newLeadStatus,
       });
 
-      return updated as CommissionRecord;
+      const result = updated as CommissionDbRecord;
+      return {
+        id: result.id,
+        leadId: result.leadId || '',
+        referrerUsername: result.referrerUsername || '',
+        referrerType: (result.referrerType || 'REFERRER') as 'AFFILIATE' | 'REFERRER' | 'TAX_PREPARER',
+        amount: Number(result.amount),
+        status: result.status as CommissionStatus,
+        leadStatus: result.leadStatus || '',
+        createdAt: new Date(result.createdAt),
+        approvedAt: result.approvedAt ? new Date(result.approvedAt) : null,
+        paidAt: result.paidAt ? new Date(result.paidAt) : null,
+        notes: result.notes,
+      };
     }
 
     // Update lead status in commission record
-    const updated = await prisma.commission.update({
-      where: { id: commission.id },
-      data: { leadStatus: newLeadStatus },
-    });
+    const { data: updated } = await db
+      .from('commissions')
+      .update({ leadStatus: newLeadStatus })
+      .eq('id', commission.id)
+      .select()
+      .single();
 
-    return updated as CommissionRecord;
+    const result = updated as CommissionDbRecord;
+    return {
+      id: result.id,
+      leadId: result.leadId || '',
+      referrerUsername: result.referrerUsername || '',
+      referrerType: (result.referrerType || 'REFERRER') as 'AFFILIATE' | 'REFERRER' | 'TAX_PREPARER',
+      amount: Number(result.amount),
+      status: result.status as CommissionStatus,
+      leadStatus: result.leadStatus || '',
+      createdAt: new Date(result.createdAt),
+      approvedAt: result.approvedAt ? new Date(result.approvedAt) : null,
+      paidAt: result.paidAt ? new Date(result.paidAt) : null,
+      notes: result.notes,
+    };
   } catch (error) {
     logger.error('Error updating commission status', { leadId, newLeadStatus, error });
     return null;
@@ -195,38 +301,40 @@ export async function updateCommissionStatus(
 
 /**
  * Auto-approve commissions for leads that have been CONVERTED for 30+ days
- *
- * This should be run as a scheduled job (cron)
  */
 export async function autoApproveCommissions(): Promise<number> {
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Find pending commissions where lead has been converted for 30+ days
-    const leads = await prisma.lead.findMany({
-      where: {
-        status: 'CONVERTED',
-        updatedAt: { lte: thirtyDaysAgo },
-      },
-      select: { id: true },
-    });
+    // Find leads that have been converted for 30+ days
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id')
+      .eq('status', 'CONVERTED')
+      .lte('updatedAt', thirtyDaysAgo.toISOString());
 
-    const leadIds = leads.map((l) => l.id);
+    const leadIds = (leadsData || []).map((l: { id: string }) => l.id);
 
-    const result = await prisma.commission.updateMany({
-      where: {
-        leadId: { in: leadIds },
-        status: 'PENDING',
-      },
-      data: {
-        status: 'APPROVED',
-        approvedAt: new Date(),
-      },
-    });
+    if (leadIds.length === 0) return 0;
 
-    logger.info('Auto-approved commissions', { count: result.count });
-    return result.count;
+    // Update pending commissions for these leads
+    let count = 0;
+    for (const leadId of leadIds) {
+      const { error } = await db
+        .from('commissions')
+        .update({
+          status: 'APPROVED',
+          approvedAt: new Date().toISOString(),
+        })
+        .eq('leadId', leadId)
+        .eq('status', 'PENDING');
+
+      if (!error) count++;
+    }
+
+    logger.info('Auto-approved commissions', { count });
+    return count;
   } catch (error) {
     logger.error('Error auto-approving commissions', { error });
     return 0;
@@ -238,23 +346,19 @@ export async function autoApproveCommissions(): Promise<number> {
  */
 export async function getEarningsSummary(username: string): Promise<EarningsSummary> {
   try {
-    const commissions = await prisma.commission.findMany({
-      where: { referrerUsername: username },
-      select: {
-        amount: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    const { data: commissionsData } = await db
+      .from('commissions')
+      .select('amount, status, createdAt')
+      .eq('referrerUsername', username);
 
-    const leads = await prisma.lead.findMany({
-      where: { referrerUsername: username },
-      select: {
-        id: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    const commissions = (commissionsData || []) as { amount: number; status: string; createdAt: string }[];
+
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id, status, createdAt')
+      .eq('referrerUsername', username);
+
+    const leads = (leadsData || []) as { id: string; status: string; createdAt: string }[];
 
     // Calculate totals by status
     const totalEarnings = commissions.reduce((sum, c) => sum + Number(c.amount), 0);
@@ -273,18 +377,21 @@ export async function getEarningsSummary(username: string): Promise<EarningsSumm
     const convertedLeads = leads.filter((l) => l.status === 'CONVERTED').length;
     const averageCommission = commissions.length > 0 ? totalEarnings / commissions.length : 0;
 
-    // Calculate this month and last month earnings
+    // Calculate monthly earnings
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const thisMonthEarnings = commissions
-      .filter((c) => c.createdAt >= thisMonthStart)
+      .filter((c) => new Date(c.createdAt) >= thisMonthStart)
       .reduce((sum, c) => sum + Number(c.amount), 0);
 
     const lastMonthEarnings = commissions
-      .filter((c) => c.createdAt >= lastMonthStart && c.createdAt <= lastMonthEnd)
+      .filter((c) => {
+        const d = new Date(c.createdAt);
+        return d >= lastMonthStart && d <= lastMonthEnd;
+      })
       .reduce((sum, c) => sum + Number(c.amount), 0);
 
     return {
@@ -322,13 +429,28 @@ export async function getCommissionHistory(
   limit: number = 50
 ): Promise<CommissionRecord[]> {
   try {
-    const commissions = await prisma.commission.findMany({
-      where: { referrerUsername: username },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const { data: commissionsData } = await db
+      .from('commissions')
+      .select('*')
+      .eq('referrerUsername', username)
+      .order('createdAt', { ascending: false })
+      .limit(limit);
 
-    return commissions as CommissionRecord[];
+    const commissions = (commissionsData || []) as CommissionDbRecord[];
+
+    return commissions.map((c) => ({
+      id: c.id,
+      leadId: c.leadId || '',
+      referrerUsername: c.referrerUsername || '',
+      referrerType: (c.referrerType || 'REFERRER') as 'AFFILIATE' | 'REFERRER' | 'TAX_PREPARER',
+      amount: Number(c.amount),
+      status: c.status as CommissionStatus,
+      leadStatus: c.leadStatus || '',
+      createdAt: new Date(c.createdAt),
+      approvedAt: c.approvedAt ? new Date(c.approvedAt) : null,
+      paidAt: c.paidAt ? new Date(c.paidAt) : null,
+      notes: c.notes,
+    }));
   } catch (error) {
     logger.error('Error getting commission history', { username, error });
     return [];
@@ -345,7 +467,6 @@ export async function requestPayout(
   paymentDetails: string
 ): Promise<{ success: boolean; payoutId?: string; error?: string }> {
   try {
-    // Verify available balance
     const summary = await getEarningsSummary(username);
 
     if (summary.approvedEarnings < amount) {
@@ -355,17 +476,20 @@ export async function requestPayout(
       };
     }
 
-    // Create payout request
-    const payout = await prisma.payout.create({
-      data: {
+    const { data: payout, error } = await db
+      .from('payouts')
+      .insert({
         referrerUsername: username,
         amount,
         status: 'REQUESTED',
         paymentMethod,
         paymentDetails,
-        requestedAt: new Date(),
-      },
-    });
+        requestedAt: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     logger.info('Payout requested', {
       payoutId: payout.id,
@@ -389,15 +513,16 @@ export async function requestPayout(
 /**
  * Get payout history for a referrer
  */
-export async function getPayoutHistory(username: string, limit: number = 20): Promise<any[]> {
+export async function getPayoutHistory(username: string, limit: number = 20): Promise<unknown[]> {
   try {
-    const payouts = await prisma.payout.findMany({
-      where: { referrerUsername: username },
-      orderBy: { requestedAt: 'desc' },
-      take: limit,
-    });
+    const { data: payouts } = await db
+      .from('payouts')
+      .select('*')
+      .eq('referrerUsername', username)
+      .order('requestedAt', { ascending: false })
+      .limit(limit);
 
-    return payouts;
+    return payouts || [];
   } catch (error) {
     logger.error('Error getting payout history', { username, error });
     return [];
@@ -411,9 +536,7 @@ import {
   calculateCommissionAmount,
   updateAffiliateStats,
   type EffectiveRate,
-  type CommissionCalculation,
 } from './tiered-commission.service';
-import { CommissionType, PaymentStatus } from '@prisma/client';
 
 /**
  * Enhanced commission record with source tracking
@@ -439,7 +562,6 @@ export interface EnhancedCommissionRecord {
 
 /**
  * Create a commission for a profile-based referral (new system)
- * Uses the tiered commission service for rate calculation
  */
 export async function createEnhancedCommission(
   referrerProfileId: string,
@@ -450,14 +572,16 @@ export async function createEnhancedCommission(
   clientEmail?: string
 ): Promise<EnhancedCommissionRecord | null> {
   try {
-    // IDEMPOTENCY CHECK: Prevent duplicate commissions for the same source
-    const existingCommission = await prisma.commission.findFirst({
-      where: {
-        referrerId: referrerProfileId,
-        sourceType,
-        sourceId,
-      },
-    });
+    // IDEMPOTENCY CHECK: Prevent duplicate commissions
+    const { data: existingData } = await db
+      .from('commissions')
+      .select('*')
+      .eq('referrerId', referrerProfileId)
+      .eq('sourceType', sourceType)
+      .eq('sourceId', sourceId)
+      .limit(1);
+
+    const existingCommission = firstOrNull(existingData) as CommissionDbRecord | null;
 
     if (existingCommission) {
       logger.info('Commission already exists for this source, returning existing', {
@@ -467,15 +591,17 @@ export async function createEnhancedCommission(
         sourceId,
       });
 
-      // Return the existing commission in the expected format
-      const profile = await prisma.profile.findUnique({
-        where: { id: referrerProfileId },
-        select: { firstName: true, lastName: true },
-      });
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('firstName, lastName')
+        .eq('id', referrerProfileId)
+        .limit(1);
+
+      const profile = firstOrNull(profileData) as ProfileRecord | null;
 
       return {
         id: existingCommission.id,
-        referrerId: existingCommission.referrerId,
+        referrerId: existingCommission.referrerId || '',
         referrerName: `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim(),
         amount: Number(existingCommission.amount),
         status: existingCommission.status,
@@ -484,31 +610,27 @@ export async function createEnhancedCommission(
         clientName: existingCommission.clientName || undefined,
         clientEmail: existingCommission.clientEmail || undefined,
         commissionType: existingCommission.commissionType || undefined,
-        commissionRate: existingCommission.commissionRate?.toNumber(),
+        commissionRate: existingCommission.commissionRate || undefined,
         rateSource: existingCommission.rateSource || undefined,
         groupId: existingCommission.groupIdAtCreation || undefined,
-        createdAt: existingCommission.createdAt,
-        approvedAt: existingCommission.approvedAt,
-        paidAt: existingCommission.paidAt,
+        createdAt: new Date(existingCommission.createdAt),
+        approvedAt: existingCommission.approvedAt ? new Date(existingCommission.approvedAt) : null,
+        paidAt: existingCommission.paidAt ? new Date(existingCommission.paidAt) : null,
       };
     }
 
-    // Get effective commission rate using the hierarchy
+    // Get effective commission rate
     const effectiveRate = await getEffectiveCommissionRate(referrerProfileId);
-
-    // Calculate commission amount
     const calculation = calculateCommissionAmount(grossAmount, effectiveRate);
 
-    // Get referrer profile for linking
-    const profile = await prisma.profile.findUnique({
-      where: { id: referrerProfileId },
-      select: {
-        id: true,
-        affiliateGroupId: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    // Get referrer profile
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, affiliateGroupId, firstName, lastName')
+      .eq('id', referrerProfileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       logger.error('Profile not found for commission creation', { referrerProfileId });
@@ -516,11 +638,12 @@ export async function createEnhancedCommission(
     }
 
     // Create the commission record
-    const commission = await prisma.commission.create({
-      data: {
+    const { data: commissionData, error } = await db
+      .from('commissions')
+      .insert({
         referrerId: referrerProfileId,
         amount: calculation.finalAmount,
-        status: PaymentStatus.PENDING,
+        status: 'PENDING',
         sourceType,
         sourceId,
         clientName,
@@ -532,9 +655,13 @@ export async function createEnhancedCommission(
         rateSource: calculation.rateSource,
         groupIdAtCreation: calculation.groupId,
         calculatedAmount: calculation.finalAmount,
-        pendingAt: new Date(),
-      },
-    });
+        pendingAt: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    const commission = commissionData as CommissionDbRecord;
 
     logger.info('Enhanced commission created', {
       commissionId: commission.id,
@@ -548,7 +675,7 @@ export async function createEnhancedCommission(
 
     return {
       id: commission.id,
-      referrerId: commission.referrerId,
+      referrerId: commission.referrerId || '',
       referrerName: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
       amount: Number(commission.amount),
       status: commission.status,
@@ -557,12 +684,12 @@ export async function createEnhancedCommission(
       clientName: commission.clientName || undefined,
       clientEmail: commission.clientEmail || undefined,
       commissionType: commission.commissionType || undefined,
-      commissionRate: commission.commissionRate?.toNumber(),
+      commissionRate: commission.commissionRate || undefined,
       rateSource: commission.rateSource || undefined,
       groupId: commission.groupIdAtCreation || undefined,
-      createdAt: commission.createdAt,
-      approvedAt: commission.approvedAt,
-      paidAt: commission.paidAt,
+      createdAt: new Date(commission.createdAt),
+      approvedAt: commission.approvedAt ? new Date(commission.approvedAt) : null,
+      paidAt: commission.paidAt ? new Date(commission.paidAt) : null,
     };
   } catch (error) {
     logger.error('Error creating enhanced commission', {
@@ -591,45 +718,43 @@ export async function getProfileCommissionSummary(
   effectiveRate: EffectiveRate;
 }> {
   try {
-    const commissions = await prisma.commission.findMany({
-      where: { referrerId: profileId },
-      select: {
-        amount: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    const { data: commissionsData } = await db
+      .from('commissions')
+      .select('amount, status, createdAt')
+      .eq('referrerId', profileId);
 
-    // Get effective rate
+    const commissions = (commissionsData || []) as { amount: number; status: string; createdAt: string }[];
+
     const effectiveRate = await getEffectiveCommissionRate(profileId);
 
-    // Calculate totals by status
     const totalEarnings = commissions.reduce((sum, c) => sum + Number(c.amount), 0);
     const pendingEarnings = commissions
-      .filter((c) => c.status === PaymentStatus.PENDING)
+      .filter((c) => c.status === 'PENDING')
       .reduce((sum, c) => sum + Number(c.amount), 0);
     const approvedEarnings = commissions
-      .filter((c) => c.status === PaymentStatus.APPROVED)
+      .filter((c) => c.status === 'APPROVED')
       .reduce((sum, c) => sum + Number(c.amount), 0);
     const paidEarnings = commissions
-      .filter((c) => c.status === PaymentStatus.PAID)
+      .filter((c) => c.status === 'PAID')
       .reduce((sum, c) => sum + Number(c.amount), 0);
 
-    // Available for payout = approved but not yet paid
     const availableForPayout = approvedEarnings;
 
-    // Calculate monthly earnings
+    // Monthly earnings
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const thisMonthEarnings = commissions
-      .filter((c) => c.createdAt >= thisMonthStart)
+      .filter((c) => new Date(c.createdAt) >= thisMonthStart)
       .reduce((sum, c) => sum + Number(c.amount), 0);
 
     const lastMonthEarnings = commissions
-      .filter((c) => c.createdAt >= lastMonthStart && c.createdAt <= lastMonthEnd)
+      .filter((c) => {
+        const d = new Date(c.createdAt);
+        return d >= lastMonthStart && d <= lastMonthEnd;
+      })
       .reduce((sum, c) => sum + Number(c.amount), 0);
 
     return {
@@ -673,28 +798,38 @@ export async function getProfileCommissionHistory(
   totalPages: number;
 }> {
   const { page = 1, limit = 20, status } = options;
-  const skip = (page - 1) * limit;
-
-  const where: Record<string, unknown> = { referrerId: profileId };
-  if (status) {
-    where.status = status;
-  }
+  const offset = (page - 1) * limit;
 
   try {
-    const [commissions, total] = await Promise.all([
-      prisma.commission.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.commission.count({ where }),
+    let query = db
+      .from('commissions')
+      .select('*')
+      .eq('referrerId', profileId);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    let countQuery = db
+      .from('commissions')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrerId', profileId);
+
+    if (status) {
+      countQuery = countQuery.eq('status', status);
+    }
+
+    const [{ data: commissionsData }, { count: total }] = await Promise.all([
+      query.order('createdAt', { ascending: false }).range(offset, offset + limit - 1),
+      countQuery,
     ]);
+
+    const commissions = (commissionsData || []) as CommissionDbRecord[];
 
     return {
       commissions: commissions.map((c) => ({
         id: c.id,
-        referrerId: c.referrerId,
+        referrerId: c.referrerId || '',
         amount: Number(c.amount),
         status: c.status,
         sourceType: c.sourceType || undefined,
@@ -702,16 +837,16 @@ export async function getProfileCommissionHistory(
         clientName: c.clientName || undefined,
         clientEmail: c.clientEmail || undefined,
         commissionType: c.commissionType || undefined,
-        commissionRate: c.commissionRate?.toNumber(),
+        commissionRate: c.commissionRate || undefined,
         rateSource: c.rateSource || undefined,
         groupId: c.groupIdAtCreation || undefined,
-        createdAt: c.createdAt,
-        approvedAt: c.approvedAt,
-        paidAt: c.paidAt,
+        createdAt: new Date(c.createdAt),
+        approvedAt: c.approvedAt ? new Date(c.approvedAt) : null,
+        paidAt: c.paidAt ? new Date(c.paidAt) : null,
       })),
-      total,
+      total: total || 0,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil((total || 0) / limit),
     };
   } catch (error) {
     logger.error('Error getting profile commission history', { profileId, error });
@@ -733,7 +868,6 @@ export async function requestProfilePayout(
   paymentMethod: string
 ): Promise<{ success: boolean; payoutId?: string; error?: string }> {
   try {
-    // Verify available balance
     const summary = await getProfileCommissionSummary(profileId);
 
     if (summary.availableForPayout < amount) {
@@ -743,7 +877,6 @@ export async function requestProfilePayout(
       };
     }
 
-    // Check minimum payout threshold
     if (amount < summary.effectiveRate.minimumPayout) {
       return {
         success: false,
@@ -751,42 +884,47 @@ export async function requestProfilePayout(
       };
     }
 
-    // Get approved commissions to include in payout
-    const approvedCommissions = await prisma.commission.findMany({
-      where: {
-        referrerId: profileId,
-        status: PaymentStatus.APPROVED,
-        payoutRequestId: null,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Get approved commissions
+    const { data: approvedCommissions } = await db
+      .from('commissions')
+      .select('id, amount')
+      .eq('referrerId', profileId)
+      .eq('status', 'APPROVED')
+      .is('payoutRequestId', null)
+      .order('createdAt', { ascending: true });
 
-    // Select commissions up to the requested amount
+    // Select commissions up to amount
     let runningTotal = 0;
     const commissionIds: string[] = [];
-    for (const commission of approvedCommissions) {
+    for (const commission of (approvedCommissions || []) as { id: string; amount: number }[]) {
       if (runningTotal >= amount) break;
       commissionIds.push(commission.id);
       runningTotal += Number(commission.amount);
     }
 
     // Create payout request
-    const payout = await prisma.payoutRequest.create({
-      data: {
+    const { data: payout, error } = await db
+      .from('payout_requests')
+      .insert({
         referrerId: profileId,
         amount,
         commissionIds,
         status: 'PENDING',
         paymentMethod,
-        requestedAt: new Date(),
-      },
-    });
+        requestedAt: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    // Link commissions to this payout request
-    await prisma.commission.updateMany({
-      where: { id: { in: commissionIds } },
-      data: { payoutRequestId: payout.id },
-    });
+    if (error) throw error;
+
+    // Link commissions to payout
+    for (const commissionId of commissionIds) {
+      await db
+        .from('commissions')
+        .update({ payoutRequestId: payout.id })
+        .eq('id', commissionId);
+    }
 
     logger.info('Profile payout requested', {
       payoutId: payout.id,
@@ -817,15 +955,17 @@ export async function approveCommission(
   notes?: string
 ): Promise<boolean> {
   try {
-    await prisma.commission.update({
-      where: { id: commissionId },
-      data: {
-        status: PaymentStatus.APPROVED,
-        approvedAt: new Date(),
+    const { error } = await db
+      .from('commissions')
+      .update({
+        status: 'APPROVED',
+        approvedAt: new Date().toISOString(),
         approvedBy,
         approvalNotes: notes,
-      },
-    });
+      })
+      .eq('id', commissionId);
+
+    if (error) throw error;
 
     logger.info('Commission approved', { commissionId, approvedBy });
     return true;
@@ -843,20 +983,23 @@ export async function bulkApproveCommissions(
   approvedBy: string
 ): Promise<number> {
   try {
-    const result = await prisma.commission.updateMany({
-      where: {
-        id: { in: commissionIds },
-        status: PaymentStatus.PENDING,
-      },
-      data: {
-        status: PaymentStatus.APPROVED,
-        approvedAt: new Date(),
-        approvedBy,
-      },
-    });
+    let count = 0;
+    for (const id of commissionIds) {
+      const { error } = await db
+        .from('commissions')
+        .update({
+          status: 'APPROVED',
+          approvedAt: new Date().toISOString(),
+          approvedBy,
+        })
+        .eq('id', id)
+        .eq('status', 'PENDING');
 
-    logger.info('Bulk commissions approved', { count: result.count, approvedBy });
-    return result.count;
+      if (!error) count++;
+    }
+
+    logger.info('Bulk commissions approved', { count, approvedBy });
+    return count;
   } catch (error) {
     logger.error('Error bulk approving commissions', { commissionIds, error });
     return 0;
@@ -873,23 +1016,34 @@ export async function autoApproveEnhancedCommissions(
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
 
-    const result = await prisma.commission.updateMany({
-      where: {
-        status: PaymentStatus.PENDING,
-        pendingAt: { lte: thresholdDate },
-      },
-      data: {
-        status: PaymentStatus.APPROVED,
-        approvedAt: new Date(),
-        approvalNotes: `Auto-approved after ${daysThreshold} days`,
-      },
-    });
+    // Get pending commissions older than threshold
+    const { data: pendingData } = await db
+      .from('commissions')
+      .select('id')
+      .eq('status', 'PENDING')
+      .lte('pendingAt', thresholdDate.toISOString());
+
+    const pendingIds = ((pendingData || []) as { id: string }[]).map((c) => c.id);
+
+    let count = 0;
+    for (const id of pendingIds) {
+      const { error } = await db
+        .from('commissions')
+        .update({
+          status: 'APPROVED',
+          approvedAt: new Date().toISOString(),
+          approvalNotes: `Auto-approved after ${daysThreshold} days`,
+        })
+        .eq('id', id);
+
+      if (!error) count++;
+    }
 
     logger.info('Auto-approved enhanced commissions', {
-      count: result.count,
+      count,
       daysThreshold,
     });
-    return result.count;
+    return count;
   } catch (error) {
     logger.error('Error auto-approving enhanced commissions', { error });
     return 0;

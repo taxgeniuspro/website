@@ -9,9 +9,17 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { createStateToken, generateNonce } from '@/lib/utils/hmac';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface Account {
+  id: string;
+  userId: string;
+  provider: string;
+  providerAccountId: string;
+}
 
 export async function POST() {
   try {
@@ -25,12 +33,14 @@ export async function POST() {
     const userEmail = session.user.email;
 
     // Check if user already has a Google account linked
-    const existingGoogleAccount = await prisma.account.findFirst({
-      where: {
-        userId,
-        provider: 'google',
-      },
-    });
+    const { data: existingAccountData } = await db
+      .from('accounts')
+      .select('*')
+      .eq('userId', userId)
+      .eq('provider', 'google')
+      .limit(1);
+
+    const existingGoogleAccount = firstOrNull<Account>(existingAccountData);
 
     if (existingGoogleAccount) {
       return NextResponse.json(

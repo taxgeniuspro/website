@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// TypeScript interface for TaxForm
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  description: string | null;
+  category: string;
+  taxYear: number;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  downloadCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * GET /api/tax-forms/[id]/download
@@ -20,9 +37,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
 
     // Get tax form
-    const taxForm = await prisma.taxForm.findUnique({
-      where: { id },
-    });
+    const { data: taxFormData, error: taxFormError } = await db
+      .from('tax_forms')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (taxFormError) {
+      logger.error('Error fetching tax form:', taxFormError);
+      return NextResponse.json({ error: 'Failed to fetch tax form' }, { status: 500 });
+    }
+
+    const taxForm = firstOrNull<TaxForm>(taxFormData);
 
     if (!taxForm) {
       return NextResponse.json({ error: 'Tax form not found' }, { status: 404 });
@@ -33,10 +59,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Increment download count
-    await prisma.taxForm.update({
-      where: { id },
-      data: { downloadCount: { increment: 1 } },
-    });
+    await db
+      .from('tax_forms')
+      .update({ downloadCount: taxForm.downloadCount + 1 })
+      .eq('id', id);
 
     logger.info(`Tax form downloaded: ${taxForm.formNumber} by ${userId}`);
 

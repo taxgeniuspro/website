@@ -5,10 +5,41 @@
  * Each user gets a unique code on signup that can be customized once.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { generateQRCode, type QRCodeResult } from './qr-code.service';
 import { logger } from '@/lib/logger';
 import { buildTrackingUrl } from '@/lib/utils/tracking-integration';
+
+// Local types (replacing @prisma/client)
+interface Profile {
+  id: string;
+  userId?: string | null;
+  role: string;
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  trackingCodeChanged?: boolean;
+  trackingCodeFinalized?: boolean;
+  trackingCodeQRUrl?: string | null;
+}
+
+interface MarketingLink {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  code: string;
+  url: string;
+  shortUrl: string;
+  title: string;
+  description?: string | null;
+  campaign?: string | null;
+  targetPage?: string | null;
+  qrCodeImageUrl?: string | null;
+  isActive: boolean;
+}
 
 export interface TrackingCodeData {
   code: string;
@@ -70,7 +101,7 @@ export async function generateUniqueTrackingCode(options?: {
   middleName?: string | null;
   lastName?: string | null;
 }): Promise<string> {
-  let code: string;
+  let code: string = '';
   let exists = true;
   let attempts = 0;
   const maxAttempts = 20;
@@ -92,12 +123,14 @@ export async function generateUniqueTrackingCode(options?: {
     while (exists && attempts < maxAttempts) {
       code = baseInitials + suffix;
 
-      // Check if code already exists
-      const existing = await prisma.profile.findFirst({
-        where: {
-          OR: [{ trackingCode: code }, { customTrackingCode: code }],
-        },
-      });
+      // Check if code already exists (using OR for both tracking code fields)
+      const { data: existingProfiles } = await db
+        .from('profiles')
+        .select('id')
+        .or(`trackingCode.eq.${code},customTrackingCode.eq.${code}`)
+        .limit(1);
+
+      const existing = firstOrNull(existingProfiles);
 
       if (!existing) {
         exists = false;
@@ -122,12 +155,13 @@ export async function generateUniqueTrackingCode(options?: {
       code = `TGP-${random}`;
 
       // Check if code already exists
-      const existing = await prisma.profile.findFirst({
-        where: {
-          OR: [{ trackingCode: code }, { customTrackingCode: code }],
-        },
-      });
+      const { data: existingProfiles } = await db
+        .from('profiles')
+        .select('id')
+        .or(`trackingCode.eq.${code},customTrackingCode.eq.${code}`)
+        .limit(1);
 
+      const existing = firstOrNull(existingProfiles);
       exists = !!existing;
       attempts++;
     }
@@ -137,7 +171,7 @@ export async function generateUniqueTrackingCode(options?: {
     }
   }
 
-  return code!;
+  return code;
 }
 
 /**
@@ -169,12 +203,15 @@ export async function autoGenerateReferralLinks(
   profileId: string,
   trackingCode: string,
   baseUrl: string = 'https://taxgeniuspro.tax'
-): Promise<{ intakeLink: any; appointmentLink: any }> {
+): Promise<{ intakeLink: MarketingLink; appointmentLink: MarketingLink }> {
   // Get profile info
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { role: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles);
 
   if (!profile) {
     throw new Error('Profile not found');
@@ -185,13 +222,21 @@ export async function autoGenerateReferralLinks(
   const appointmentCode = `${trackingCode}-appt`.toLowerCase();
 
   // Check if links already exist (for re-customization scenarios)
-  const existingIntakeLink = await prisma.marketingLink.findUnique({
-    where: { code: intakeCode },
-  });
+  const { data: existingIntakeLinks } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', intakeCode)
+    .limit(1);
 
-  const existingAppointmentLink = await prisma.marketingLink.findUnique({
-    where: { code: appointmentCode },
-  });
+  const existingIntakeLink = firstOrNull(existingIntakeLinks) as MarketingLink | null;
+
+  const { data: existingAppointmentLinks } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', appointmentCode)
+    .limit(1);
+
+  const existingAppointmentLink = firstOrNull(existingAppointmentLinks) as MarketingLink | null;
 
   // Build URLs with tracking
   const intakeUrl = buildTrackingUrl(`${baseUrl}/start-filing/form`, {
@@ -231,66 +276,89 @@ export async function autoGenerateReferralLinks(
     userId: profileId,
   });
 
+  let intakeLink: MarketingLink;
+  let appointmentLink: MarketingLink;
+
   // Create or update intake link
-  const intakeLink = existingIntakeLink
-    ? await prisma.marketingLink.update({
-        where: { id: existingIntakeLink.id },
-        data: {
-          code: intakeCode,
-          url: intakeUrl,
-          shortUrl: `${baseUrl}/go/${intakeCode}`,
-          qrCodeImageUrl: intakeQR.dataUrl,
-          title: `Referral Link - Tax Filing`,
-        },
+  if (existingIntakeLink) {
+    const { data: updatedLinks } = await db
+      .from('marketing_links')
+      .update({
+        code: intakeCode,
+        url: intakeUrl,
+        shortUrl: `${baseUrl}/go/${intakeCode}`,
+        qrCodeImageUrl: intakeQR.dataUrl,
+        title: `Referral Link - Tax Filing`,
       })
-    : await prisma.marketingLink.create({
-        data: {
-          creatorId: profileId,
-          creatorType: profile.role,
-          linkType: 'LANDING_PAGE',
-          code: intakeCode,
-          url: intakeUrl,
-          shortUrl: `${baseUrl}/go/${intakeCode}`,
-          title: `Referral Link - Tax Filing`,
-          description: 'Auto-generated referral link for tax filing intake form',
-          campaign: 'auto-referral',
-          targetPage: '/start-filing/form',
-          qrCodeImageUrl: intakeQR.dataUrl,
-          isActive: true,
-        },
-      });
+      .eq('id', existingIntakeLink.id)
+      .select()
+      .single();
+
+    intakeLink = updatedLinks as MarketingLink;
+  } else {
+    const { data: newLink } = await db
+      .from('marketing_links')
+      .insert({
+        creatorId: profileId,
+        creatorType: profile.role,
+        linkType: 'LANDING_PAGE',
+        code: intakeCode,
+        url: intakeUrl,
+        shortUrl: `${baseUrl}/go/${intakeCode}`,
+        title: `Referral Link - Tax Filing`,
+        description: 'Auto-generated referral link for tax filing intake form',
+        campaign: 'auto-referral',
+        targetPage: '/start-filing/form',
+        qrCodeImageUrl: intakeQR.dataUrl,
+        isActive: true,
+      })
+      .select()
+      .single();
+
+    intakeLink = newLink as MarketingLink;
+  }
 
   // Create or update appointment link
-  const appointmentLink = existingAppointmentLink
-    ? await prisma.marketingLink.update({
-        where: { id: existingAppointmentLink.id },
-        data: {
-          code: appointmentCode,
-          url: appointmentUrl,
-          shortUrl: `${baseUrl}/go/${appointmentCode}`,
-          qrCodeImageUrl: appointmentQR.dataUrl,
-          title: `Referral Link - Book Appointment`,
-        },
+  if (existingAppointmentLink) {
+    const { data: updatedLinks } = await db
+      .from('marketing_links')
+      .update({
+        code: appointmentCode,
+        url: appointmentUrl,
+        shortUrl: `${baseUrl}/go/${appointmentCode}`,
+        qrCodeImageUrl: appointmentQR.dataUrl,
+        title: `Referral Link - Book Appointment`,
       })
-    : await prisma.marketingLink.create({
-        data: {
-          creatorId: profileId,
-          creatorType: profile.role,
-          linkType: 'LANDING_PAGE',
-          code: appointmentCode,
-          url: appointmentUrl,
-          shortUrl: `${baseUrl}/go/${appointmentCode}`,
-          title: `Referral Link - Book Appointment`,
-          description: 'Auto-generated referral link for booking appointments',
-          campaign: 'auto-referral',
-          targetPage: '/book-appointment',
-          qrCodeImageUrl: appointmentQR.dataUrl,
-          isActive: true,
-        },
-      });
+      .eq('id', existingAppointmentLink.id)
+      .select()
+      .single();
+
+    appointmentLink = updatedLinks as MarketingLink;
+  } else {
+    const { data: newLink } = await db
+      .from('marketing_links')
+      .insert({
+        creatorId: profileId,
+        creatorType: profile.role,
+        linkType: 'LANDING_PAGE',
+        code: appointmentCode,
+        url: appointmentUrl,
+        shortUrl: `${baseUrl}/go/${appointmentCode}`,
+        title: `Referral Link - Book Appointment`,
+        description: 'Auto-generated referral link for booking appointments',
+        campaign: 'auto-referral',
+        targetPage: '/book-appointment',
+        qrCodeImageUrl: appointmentQR.dataUrl,
+        isActive: true,
+      })
+      .select()
+      .single();
+
+    appointmentLink = newLink as MarketingLink;
+  }
 
   logger.info(
-    `✅ Auto-generated referral links for ${trackingCode}: ${intakeCode}, ${appointmentCode}`
+    `Auto-generated referral links for ${trackingCode}: ${intakeCode}, ${appointmentCode}`
   );
 
   return { intakeLink, appointmentLink };
@@ -341,12 +409,13 @@ export function validateCustomTrackingCode(code: string): { valid: boolean; erro
  * Check if custom tracking code is available
  */
 export async function isTrackingCodeAvailable(code: string): Promise<boolean> {
-  const existing = await prisma.profile.findFirst({
-    where: {
-      OR: [{ trackingCode: code }, { customTrackingCode: code }],
-    },
-  });
+  const { data: existingProfiles } = await db
+    .from('profiles')
+    .select('id')
+    .or(`trackingCode.eq.${code},customTrackingCode.eq.${code}`)
+    .limit(1);
 
+  const existing = firstOrNull(existingProfiles);
   return !existing;
 }
 
@@ -361,15 +430,13 @@ export async function assignTrackingCodeToUser(
   const url = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
   // Get profile data for tracking code generation
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: {
-      role: true,
-      firstName: true,
-      middleName: true,
-      lastName: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('role, firstName, middleName, lastName')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     throw new Error('Profile not found');
@@ -387,20 +454,20 @@ export async function assignTrackingCodeToUser(
   const qrCode = await generateTrackingQRCode(trackingCode, profileId, url);
 
   // Update profile
-  await prisma.profile.update({
-    where: { id: profileId },
-    data: {
+  await db
+    .from('profiles')
+    .update({
       trackingCode,
       trackingCodeQRUrl: qrCode.dataUrl,
-    },
-  });
+    })
+    .eq('id', profileId);
 
   // Auto-generate referral links (intake + appointment)
   try {
     await autoGenerateReferralLinks(profileId, trackingCode, url);
-    logger.info(`✅ Auto-generated referral links for new user ${profileId}`);
+    logger.info(`Auto-generated referral links for new user ${profileId}`);
   } catch (error) {
-    logger.error(`❌ Failed to auto-generate referral links for ${profileId}:`, error);
+    logger.error(`Failed to auto-generate referral links for ${profileId}:`, error);
     // Don't throw - tracking code assignment should still succeed
   }
 
@@ -428,15 +495,13 @@ export async function customizeTrackingCode(
   const url = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
   // Get profile
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: {
-      trackingCode: true,
-      trackingCodeChanged: true,
-      trackingCodeFinalized: true,
-      customTrackingCode: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('trackingCode, trackingCodeChanged, trackingCodeFinalized, customTrackingCode')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     return { success: false, error: 'Profile not found' };
@@ -471,36 +536,34 @@ export async function customizeTrackingCode(
   const oldAppointmentCode = `${activeCode}-appt`.toLowerCase();
 
   try {
-    await prisma.marketingLink.deleteMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [oldIntakeCode, oldAppointmentCode],
-        },
-      },
-    });
-    logger.info(`🗑️  Deleted old referral links for ${profile.trackingCode}`);
+    await db
+      .from('marketing_links')
+      .delete()
+      .eq('creatorId', profileId)
+      .in('code', [oldIntakeCode, oldAppointmentCode]);
+
+    logger.info(`Deleted old referral links for ${profile.trackingCode}`);
   } catch (error) {
     logger.error('Error deleting old referral links:', error);
     // Continue anyway
   }
 
   // Update profile
-  await prisma.profile.update({
-    where: { id: profileId },
-    data: {
+  await db
+    .from('profiles')
+    .update({
       customTrackingCode: customCode,
       trackingCodeChanged: true,
       trackingCodeQRUrl: qrCode.dataUrl,
-    },
-  });
+    })
+    .eq('id', profileId);
 
   // Auto-generate new referral links with custom code
   try {
     await autoGenerateReferralLinks(profileId, customCode, url);
-    logger.info(`✅ Regenerated referral links with custom code ${customCode}`);
+    logger.info(`Regenerated referral links with custom code ${customCode}`);
   } catch (error) {
-    logger.error(`❌ Failed to regenerate referral links for ${customCode}:`, error);
+    logger.error(`Failed to regenerate referral links for ${customCode}:`, error);
     // Don't throw - customization should still succeed
   }
 
@@ -525,16 +588,13 @@ export async function customizeTrackingCode(
 export async function getUserTrackingCode(profileId: string, baseUrl?: string): Promise<TrackingCodeData | null> {
   const url = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: {
-      trackingCode: true,
-      customTrackingCode: true,
-      trackingCodeChanged: true,
-      trackingCodeFinalized: true,
-      trackingCodeQRUrl: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('trackingCode, customTrackingCode, trackingCodeChanged, trackingCodeFinalized, trackingCodeQRUrl')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     return null;
@@ -551,9 +611,9 @@ export async function getUserTrackingCode(profileId: string, baseUrl?: string): 
   return {
     code: activeCode,
     isCustom: !!profile.customTrackingCode,
-    qrCodeUrl: profile.trackingCodeQRUrl,
+    qrCodeUrl: profile.trackingCodeQRUrl || null,
     canCustomize: !profile.trackingCodeFinalized,
-    isFinalized: profile.trackingCodeFinalized,
+    isFinalized: profile.trackingCodeFinalized || false,
     trackingUrl,
   };
 }
@@ -569,15 +629,13 @@ export async function finalizeTrackingCode(
   const url = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
   // Get profile
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: {
-      trackingCode: true,
-      customTrackingCode: true,
-      trackingCodeFinalized: true,
-      trackingCodeQRUrl: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('trackingCode, customTrackingCode, trackingCodeFinalized, trackingCodeQRUrl')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     return { success: false, error: 'Profile not found' };
@@ -595,24 +653,24 @@ export async function finalizeTrackingCode(
   }
 
   // Update profile to finalize
-  await prisma.profile.update({
-    where: { id: profileId },
-    data: {
+  await db
+    .from('profiles')
+    .update({
       trackingCodeFinalized: true,
       trackingCodeChanged: true, // Also set this for backwards compatibility
-    },
-  });
+    })
+    .eq('id', profileId);
 
   const trackingUrl = `${url}?ref=${activeCode}`;
 
-  logger.info(`✅ Tracking code finalized for profile ${profileId}: ${activeCode}`);
+  logger.info(`Tracking code finalized for profile ${profileId}: ${activeCode}`);
 
   return {
     success: true,
     data: {
       code: activeCode,
       isCustom: !!profile.customTrackingCode,
-      qrCodeUrl: profile.trackingCodeQRUrl,
+      qrCodeUrl: profile.trackingCodeQRUrl || null,
       canCustomize: false,
       isFinalized: true,
       trackingUrl,
@@ -626,18 +684,15 @@ export async function finalizeTrackingCode(
 export async function getUserByTrackingCode(
   code: string
 ): Promise<{ id: string; userId: string | null; role: string } | null> {
-  const profile = await prisma.profile.findFirst({
-    where: {
-      OR: [{ trackingCode: code }, { customTrackingCode: code }],
-    },
-    select: {
-      id: true,
-      userId: true,
-      role: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id, userId, role')
+    .or(`trackingCode.eq.${code},customTrackingCode.eq.${code}`)
+    .limit(1);
 
-  return profile;
+  const profile = firstOrNull(profiles);
+
+  return profile as { id: string; userId: string | null; role: string } | null;
 }
 
 /**
@@ -647,14 +702,14 @@ export async function getUserByTrackingCode(
 export async function backfillTrackingCodes(
   baseUrl?: string
 ): Promise<{ updated: number; errors: number }> {
-  const profiles = await prisma.profile.findMany({
-    where: {
-      trackingCode: null,
-    },
-    select: {
-      id: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id')
+    .is('trackingCode', null);
+
+  if (!profiles) {
+    return { updated: 0, errors: 0 };
+  }
 
   let updated = 0;
   let errors = 0;

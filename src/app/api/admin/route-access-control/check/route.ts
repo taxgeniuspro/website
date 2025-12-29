@@ -9,7 +9,15 @@ import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { CheckRouteAccessRequest, CheckRouteAccessResponse } from '@/types/route-access-control';
 import { checkPageAccess, matchRoutePattern } from '@/lib/content-restriction';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
+
+// Local interfaces
+interface PageRestriction {
+  id: string;
+  routePath: string;
+  isActive: boolean;
+  priority: number;
+}
 
 /**
  * POST - Test route access for a given user context
@@ -48,12 +56,12 @@ export async function POST(req: NextRequest) {
 
     if (!accessResult.allowed || accessResult.reason !== 'no_restriction') {
       // Find the matching restriction
-      const allRestrictions = await prisma.pageRestriction.findMany({
-        where: { isActive: true },
-        orderBy: { priority: 'desc' },
-      });
+      const { data: allRestrictions } = await db.from('page_restrictions')
+        .select('id, routePath, isActive, priority')
+        .eq('isActive', true)
+        .order('priority', { ascending: false });
 
-      const matchingRestriction = allRestrictions.find((r) =>
+      const matchingRestriction = (allRestrictions || []).find((r: PageRestriction) =>
         matchRoutePattern(body.routePath, r.routePath)
       );
 

@@ -1,7 +1,22 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { FedExProviderEnhanced } from '@/lib/shipping/providers/fedex-provider'
 import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/db'
+import { db } from '@/lib/db'
+
+// TypeScript interface for Order (replaces @prisma/client import)
+interface Order {
+  id: string;
+  user_id: string;
+  stripe_session_id: string;
+  items: any;
+  total: number;
+  status: string;
+  email: string;
+  tracking_number: string | null;
+  shipping_method: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // Initialize FedEx provider
 const fedexProvider = new FedExProviderEnhanced({
@@ -59,14 +74,27 @@ export async function POST(request: NextRequest) {
       trackingNumber: label.trackingNumber,
     })
 
-    // Update order with tracking information
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        trackingNumber: label.trackingNumber,
-        shippingMethod: serviceType,
-      },
-    })
+    // Update order with tracking information using Supabase
+    const { data: updatedOrder, error: updateError } = await db
+      .from('orders')
+      .update({
+        tracking_number: label.trackingNumber,
+        shipping_method: serviceType,
+      })
+      .eq('id', orderId)
+      .select()
+      .single()
+
+    if (updateError) {
+      logger.error('[Shipping Label] Error updating order', {
+        orderId,
+        error: updateError,
+      })
+      return NextResponse.json(
+        { error: 'Failed to update order with tracking information' },
+        { status: 500 }
+      )
+    }
 
     logger.info('[Shipping Label] Order updated with tracking', {
       orderId,

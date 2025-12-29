@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auth } from '@/lib/auth';
 import { getUserPermissions, UserRole } from '@/lib/permissions';
+
+// Local interface
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role: string;
+  companyName: string | null;
+  phone: string | null;
+  userId: string;
+  customTrackingCode: string | null;
+  bookingEnabled: boolean;
+  allowPhoneBookings: boolean;
+  allowVideoBookings: boolean;
+  allowInPersonBookings: boolean;
+  requireApprovalForBookings: boolean;
+  customBookingMessage: string | null;
+  bookingCalendarColor: string | null;
+}
 
 /**
  * GET /api/admin/preparers
@@ -28,56 +48,36 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const includeBookingSettings = searchParams.get('includeBookingSettings') === 'true';
 
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: {
-          in: ['tax_preparer', 'admin', 'admin'],
-        },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        companyName: true,
-        phone: true,
-        userId: true,
-        customTrackingCode: true,
-        // Include booking settings if requested
-        ...(includeBookingSettings && {
-          bookingEnabled: true,
-          allowPhoneBookings: true,
-          allowVideoBookings: true,
-          allowInPersonBookings: true,
-          requireApprovalForBookings: true,
-          customBookingMessage: true,
-          bookingCalendarColor: true,
-        }),
-      },
-      orderBy: [
-        { role: 'asc' }, // SUPER_ADMIN first
-        { firstName: 'asc' },
-      ],
-    });
+    // Build select fields
+    let selectFields = 'id, firstName, lastName, email, role, companyName, phone, userId, customTrackingCode';
+    if (includeBookingSettings) {
+      selectFields += ', bookingEnabled, allowPhoneBookings, allowVideoBookings, allowInPersonBookings, requireApprovalForBookings, customBookingMessage, bookingCalendarColor';
+    }
+
+    const { data: preparers, error: preparersError } = await db.from('profiles')
+      .select(selectFields)
+      .in('role', ['tax_preparer', 'admin'])
+      .order('role', { ascending: true })
+      .order('firstName', { ascending: true });
+
+    if (preparersError) {
+      throw preparersError;
+    }
 
     // Format email for display (get from Clerk user or profile)
-    const preparersWithEmail = await Promise.all(
-      preparers.map(async (preparer) => {
-        let email = '';
+    const preparersWithEmail = (preparers || []).map((preparer: Profile) => {
+      let email = preparer.email || '';
 
-        if (preparer.userId) {
-          // Fetch email from Clerk if we have userId
-          // For now, we'll use placeholder - in production you'd fetch from Clerk
-          email = `${preparer.firstName?.toLowerCase()}.${preparer.lastName?.toLowerCase()}@taxgeniuspro.tax`;
-        }
+      if (!email && preparer.userId) {
+        // Fallback placeholder if no email
+        email = `${preparer.firstName?.toLowerCase()}.${preparer.lastName?.toLowerCase()}@taxgeniuspro.tax`;
+      }
 
-        return {
-          ...preparer,
-          email,
-        };
-      })
-    );
+      return {
+        ...preparer,
+        email,
+      };
+    });
 
     return NextResponse.json({
       success: true,

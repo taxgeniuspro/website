@@ -6,9 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { incrementImageDownload } from '@/lib/services/client-referral.service';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for referral image
+interface ReferralImage {
+  id: string;
+  imageUrl: string;
+  fileName: string | null;
+}
 
 interface RouteParams {
   params: Promise<{
@@ -21,16 +28,15 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     // Get the image
-    const image = await prisma.referralImage.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        imageUrl: true,
-        fileName: true,
-      },
-    });
+    const { data: imageData, error } = await db
+      .from('referral_images')
+      .select('id, image_url, file_name')
+      .eq('id', id)
+      .limit(1);
 
-    if (!image) {
+    const image = firstOrNull(imageData);
+
+    if (error || !image) {
       return NextResponse.json(
         { error: 'Image not found' },
         { status: 404 }
@@ -43,7 +49,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     });
 
     // Redirect to the image URL
-    return NextResponse.redirect(image.imageUrl);
+    return NextResponse.redirect(image.image_url);
   } catch (error) {
     logger.error('Error downloading referral image', { error });
     return NextResponse.json(

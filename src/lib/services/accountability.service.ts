@@ -5,9 +5,59 @@
  * Critical for ensuring no client is ignored and maintaining service quality
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { FollowUpMethod } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client)
+type FollowUpMethod = 'CALL' | 'EMAIL' | 'TEXT' | 'VIDEO' | 'IN_PERSON' | 'OTHER';
+
+interface LeadRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  assignedPreparerId?: string | null;
+  contactRequested?: boolean | null;
+  contactMethod?: string | null;
+  contactNotes?: string | null;
+  lastContactedAt?: string | null;
+  status?: string | null;
+  createdAt: string;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  assignedPreparerId?: string | null;
+  contactRequested?: boolean | null;
+  contactMethod?: string | null;
+  contactNotes?: string | null;
+  lastContactedAt?: string | null;
+  created_at: string;
+}
+
+interface AppointmentRecord {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  preparerId: string;
+  status: string;
+  requestedAt: string;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+  updatedAt?: string | null;
+}
 
 export interface MissedFollowUpAlert {
   id: string;
@@ -52,36 +102,43 @@ export async function getAllMissedFollowUps(limit?: number): Promise<MissedFollo
     const results: MissedFollowUpAlert[] = [];
 
     // Get all leads that need follow-up
-    const leads = await prisma.lead.findMany({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-      },
-      include: {
-        // This will need a relation added to schema, but for now we'll fetch preparer separately
-      },
-      orderBy: { createdAt: 'asc' }, // Oldest first
-      take: limit,
-    });
+    let leadsQuery = db
+      .from('leads')
+      .select('*')
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null)
+      .order('createdAt', { ascending: true });
+
+    if (limit) {
+      leadsQuery = leadsQuery.limit(limit);
+    }
+
+    const { data: leadsData } = await leadsQuery;
+    const leads = (leadsData || []) as LeadRecord[];
 
     // Get preparer details for leads
     const preparerIds = [
       ...new Set(leads.map((l) => l.assignedPreparerId).filter(Boolean)),
     ] as string[];
-    const preparers = await prisma.profile.findMany({
-      where: { id: { in: preparerIds } },
-      select: { id: true, firstName: true, lastName: true },
-    });
-    const preparerMap = new Map(
-      preparers.map((p) => [p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim()])
-    );
+
+    const preparerMap = new Map<string, string>();
+    if (preparerIds.length > 0) {
+      const { data: preparersData } = await db
+        .from('profiles')
+        .select('id, firstName, lastName')
+        .in('id', preparerIds);
+
+      for (const p of (preparersData || []) as ProfileRecord[]) {
+        preparerMap.set(p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim());
+      }
+    }
 
     leads.forEach((lead) => {
       if (!lead.assignedPreparerId) return;
 
       const daysWaiting = Math.floor(
-        (now.getTime() - lead.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+        (now.getTime() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24)
       );
       const urgency: 'critical' | 'high' | 'medium' =
         daysWaiting > 2 ? 'critical' : daysWaiting > 1 ? 'high' : 'medium';
@@ -96,28 +153,33 @@ export async function getAllMissedFollowUps(limit?: number): Promise<MissedFollo
         preparerName: preparerMap.get(lead.assignedPreparerId) || 'Unknown',
         contactMethod: lead.contactMethod || 'CALL',
         daysWaiting,
-        requestedAt: lead.createdAt,
+        requestedAt: new Date(lead.createdAt),
         source: 'Lead',
         urgency,
       });
     });
 
     // Get tax intakes that need follow-up
-    const intakes = await prisma.taxIntakeLead.findMany({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-      },
-      orderBy: { created_at: 'asc' },
-      take: limit,
-    });
+    let intakesQuery = db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null)
+      .order('created_at', { ascending: true });
+
+    if (limit) {
+      intakesQuery = intakesQuery.limit(limit);
+    }
+
+    const { data: intakesData } = await intakesQuery;
+    const intakes = (intakesData || []) as TaxIntakeLeadRecord[];
 
     intakes.forEach((intake) => {
       if (!intake.assignedPreparerId) return;
 
       const daysWaiting = Math.floor(
-        (now.getTime() - intake.created_at.getTime()) / (1000 * 60 * 60 * 24)
+        (now.getTime() - new Date(intake.created_at).getTime()) / (1000 * 60 * 60 * 24)
       );
       const urgency: 'critical' | 'high' | 'medium' =
         daysWaiting > 2 ? 'critical' : daysWaiting > 1 ? 'high' : 'medium';
@@ -132,24 +194,29 @@ export async function getAllMissedFollowUps(limit?: number): Promise<MissedFollo
         preparerName: preparerMap.get(intake.assignedPreparerId) || 'Unknown',
         contactMethod: intake.contactMethod || 'CALL',
         daysWaiting,
-        requestedAt: intake.created_at,
+        requestedAt: new Date(intake.created_at),
         source: 'TaxIntake',
         urgency,
       });
     });
 
     // Get appointment requests not yet scheduled
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        status: 'REQUESTED',
-      },
-      orderBy: { requestedAt: 'asc' },
-      take: limit,
-    });
+    let appointmentsQuery = db
+      .from('appointments')
+      .select('*')
+      .eq('status', 'REQUESTED')
+      .order('requestedAt', { ascending: true });
+
+    if (limit) {
+      appointmentsQuery = appointmentsQuery.limit(limit);
+    }
+
+    const { data: appointmentsData } = await appointmentsQuery;
+    const appointments = (appointmentsData || []) as AppointmentRecord[];
 
     appointments.forEach((appt) => {
       const daysWaiting = Math.floor(
-        (now.getTime() - appt.requestedAt.getTime()) / (1000 * 60 * 60 * 24)
+        (now.getTime() - new Date(appt.requestedAt).getTime()) / (1000 * 60 * 60 * 24)
       );
       const urgency: 'critical' | 'high' | 'medium' =
         daysWaiting > 2 ? 'critical' : daysWaiting > 1 ? 'high' : 'medium';
@@ -164,7 +231,7 @@ export async function getAllMissedFollowUps(limit?: number): Promise<MissedFollo
         preparerName: preparerMap.get(appt.preparerId) || 'Unknown',
         contactMethod: 'APPOINTMENT',
         daysWaiting,
-        requestedAt: appt.requestedAt,
+        requestedAt: new Date(appt.requestedAt),
         source: 'Appointment',
         urgency,
       });
@@ -192,69 +259,62 @@ export async function getAllMissedFollowUps(limit?: number): Promise<MissedFollo
  */
 export async function getPreparerAccountabilityMetrics(): Promise<PreparerAccountability[]> {
   try {
-    const preparers = await prisma.profile.findMany({
-      where: { role: 'TAX_PREPARER' },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        updatedAt: true,
-      },
-    });
+    const { data: preparersData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, updatedAt')
+      .eq('role', 'TAX_PREPARER');
+
+    const preparers = (preparersData || []) as ProfileRecord[];
 
     const now = new Date();
     const metrics: PreparerAccountability[] = [];
 
     for (const preparer of preparers) {
-      // Count missed follow-ups
-      const missedLeads = await prisma.lead.count({
-        where: {
-          assignedPreparerId: preparer.id,
-          contactRequested: true,
-          lastContactedAt: null,
-        },
-      });
+      // Count missed follow-ups (leads)
+      const { count: missedLeads } = await db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('assignedPreparerId', preparer.id)
+        .eq('contactRequested', true)
+        .is('lastContactedAt', null);
 
-      const missedIntakes = await prisma.taxIntakeLead.count({
-        where: {
-          assignedPreparerId: preparer.id,
-          contactRequested: true,
-          lastContactedAt: null,
-        },
-      });
+      // Count missed follow-ups (intakes)
+      const { count: missedIntakes } = await db
+        .from('tax_intake_leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('assignedPreparerId', preparer.id)
+        .eq('contactRequested', true)
+        .is('lastContactedAt', null);
 
-      const missedFollowUps = missedLeads + missedIntakes;
+      const missedFollowUps = (missedLeads || 0) + (missedIntakes || 0);
 
       // Calculate average response time
-      const leads = await prisma.lead.findMany({
-        where: {
-          assignedPreparerId: preparer.id,
-          lastContactedAt: { not: null },
-        },
-        select: {
-          createdAt: true,
-          lastContactedAt: true,
-        },
-        take: 20, // Last 20 contacts
-      });
+      const { data: leadsData } = await db
+        .from('leads')
+        .select('createdAt, lastContactedAt')
+        .eq('assignedPreparerId', preparer.id)
+        .not('lastContactedAt', 'is', null)
+        .limit(20);
+
+      const leads = (leadsData || []) as { createdAt: string; lastContactedAt?: string | null }[];
 
       let avgResponseTime = 0;
       if (leads.length > 0) {
         const totalHours = leads.reduce((sum, lead) => {
           if (!lead.lastContactedAt) return sum;
-          const diff = lead.lastContactedAt.getTime() - lead.createdAt.getTime();
+          const diff =
+            new Date(lead.lastContactedAt).getTime() - new Date(lead.createdAt).getTime();
           return sum + diff / (1000 * 60 * 60);
         }, 0);
         avgResponseTime = Math.round(totalHours / leads.length);
       }
 
       // Count pending appointments
-      const pendingAppointments = await prisma.appointment.count({
-        where: {
-          preparerId: preparer.id,
-          status: 'REQUESTED',
-        },
-      });
+      const { count: pendingAppointments } = await db
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('preparerId', preparer.id)
+        .eq('status', 'REQUESTED');
 
       // Calculate performance score (0-100)
       // Lower missed follow-ups = better score
@@ -263,7 +323,7 @@ export async function getPreparerAccountabilityMetrics(): Promise<PreparerAccoun
       let score = 100;
       score -= missedFollowUps * 10; // -10 points per missed follow-up
       score -= Math.min(avgResponseTime, 48); // -1 point per hour response time, max -48
-      score -= pendingAppointments * 5; // -5 points per pending appointment
+      score -= (pendingAppointments || 0) * 5; // -5 points per pending appointment
       score = Math.max(0, Math.min(100, score)); // Clamp between 0-100
 
       metrics.push({
@@ -271,8 +331,8 @@ export async function getPreparerAccountabilityMetrics(): Promise<PreparerAccoun
         preparerName: `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() || 'Unknown',
         missedFollowUps,
         avgResponseTime,
-        pendingAppointments,
-        lastActive: preparer.updatedAt,
+        pendingAppointments: pendingAppointments || 0,
+        lastActive: preparer.updatedAt ? new Date(preparer.updatedAt) : null,
         performanceScore: score,
       });
     }
@@ -296,64 +356,63 @@ export async function getPlatformAccountabilityStats(): Promise<PlatformAccounta
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
 
-    // Total missed follow-ups
-    const missedLeads = await prisma.lead.count({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-      },
-    });
+    // Total missed follow-ups (leads)
+    const { count: missedLeads } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null);
 
-    const missedIntakes = await prisma.taxIntakeLead.count({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-      },
-    });
+    // Total missed follow-ups (intakes)
+    const { count: missedIntakes } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null);
 
-    const totalMissedFollowUps = missedLeads + missedIntakes;
+    const totalMissedFollowUps = (missedLeads || 0) + (missedIntakes || 0);
 
-    // Critical alerts (>48 hours old)
-    const criticalLeads = await prisma.lead.count({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-        createdAt: { lt: twoDaysAgo },
-      },
-    });
+    // Critical alerts (>48 hours old) - leads
+    const { count: criticalLeads } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null)
+      .lt('createdAt', twoDaysAgo.toISOString());
 
-    const criticalIntakes = await prisma.taxIntakeLead.count({
-      where: {
-        contactRequested: true,
-        lastContactedAt: null,
-        assignedPreparerId: { not: null },
-        created_at: { lt: twoDaysAgo },
-      },
-    });
+    // Critical alerts (>48 hours old) - intakes
+    const { count: criticalIntakes } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .not('assignedPreparerId', 'is', null)
+      .lt('created_at', twoDaysAgo.toISOString());
 
-    const criticalAlerts = criticalLeads + criticalIntakes;
+    const criticalAlerts = (criticalLeads || 0) + (criticalIntakes || 0);
 
     // Calculate platform average response time
-    const recentContacts = await prisma.lead.findMany({
-      where: {
-        lastContactedAt: { not: null },
-      },
-      select: {
-        createdAt: true,
-        lastContactedAt: true,
-      },
-      take: 100, // Last 100 contacts
-      orderBy: { lastContactedAt: 'desc' },
-    });
+    const { data: recentContactsData } = await db
+      .from('leads')
+      .select('createdAt, lastContactedAt')
+      .not('lastContactedAt', 'is', null)
+      .order('lastContactedAt', { ascending: false })
+      .limit(100);
+
+    const recentContacts = (recentContactsData || []) as {
+      createdAt: string;
+      lastContactedAt?: string | null;
+    }[];
 
     let averageResponseTime = 0;
     if (recentContacts.length > 0) {
       const totalHours = recentContacts.reduce((sum, contact) => {
         if (!contact.lastContactedAt) return sum;
-        const diff = contact.lastContactedAt.getTime() - contact.createdAt.getTime();
+        const diff =
+          new Date(contact.lastContactedAt).getTime() - new Date(contact.createdAt).getTime();
         return sum + diff / (1000 * 60 * 60);
       }, 0);
       averageResponseTime = Math.round(totalHours / recentContacts.length);
@@ -364,16 +423,17 @@ export async function getPlatformAccountabilityStats(): Promise<PlatformAccounta
     const preparersWithIssues = allMetrics.filter((m) => m.performanceScore < 50).length;
 
     // Total pending appointments
-    const totalPendingAppointments = await prisma.appointment.count({
-      where: { status: 'REQUESTED' },
-    });
+    const { count: totalPendingAppointments } = await db
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'REQUESTED');
 
     return {
       totalMissedFollowUps,
       criticalAlerts,
       averageResponseTime,
       preparersWithIssues,
-      totalPendingAppointments,
+      totalPendingAppointments: totalPendingAppointments || 0,
     };
   } catch (error) {
     logger.error('Error fetching platform accountability stats:', error);
@@ -414,37 +474,35 @@ export async function markFollowUpCompleted(params: {
   notes?: string;
 }) {
   try {
-    const now = new Date();
+    const now = new Date().toISOString();
 
     if (params.source === 'Lead') {
-      await prisma.lead.update({
-        where: { id: params.clientId },
-        data: {
+      await db
+        .from('leads')
+        .update({
           lastContactedAt: now,
           contactNotes: params.notes,
           status: 'CONTACTED',
-        },
-      });
+        })
+        .eq('id', params.clientId);
     } else if (params.source === 'TaxIntake') {
-      await prisma.taxIntakeLead.update({
-        where: { id: params.clientId },
-        data: {
+      await db
+        .from('tax_intake_leads')
+        .update({
           lastContactedAt: now,
           contactNotes: params.notes,
-        },
-      });
+        })
+        .eq('id', params.clientId);
     }
 
     // Log the follow-up
-    await prisma.followUpLog.create({
-      data: {
-        clientId: params.clientId,
-        preparerId: params.preparerId,
-        method: params.contactMethod as FollowUpMethod,
-        outcome: 'CONNECTED',
-        notes: params.notes,
-        contactedAt: now,
-      },
+    await db.from('follow_up_logs').insert({
+      clientId: params.clientId,
+      preparerId: params.preparerId,
+      method: params.contactMethod as FollowUpMethod,
+      outcome: 'CONNECTED',
+      notes: params.notes,
+      contactedAt: now,
     });
 
     return { success: true };
@@ -466,21 +524,21 @@ export async function escalateMissedFollowUp(params: {
 }) {
   try {
     if (params.source === 'Lead') {
-      await prisma.lead.update({
-        where: { id: params.clientId },
-        data: {
+      await db
+        .from('leads')
+        .update({
           assignedPreparerId: params.newPreparerId,
           contactNotes: `ESCALATED: ${params.reason}`,
-        },
-      });
+        })
+        .eq('id', params.clientId);
     } else if (params.source === 'TaxIntake') {
-      await prisma.taxIntakeLead.update({
-        where: { id: params.clientId },
-        data: {
+      await db
+        .from('tax_intake_leads')
+        .update({
           assignedPreparerId: params.newPreparerId,
           contactNotes: `ESCALATED: ${params.reason}`,
-        },
-      });
+        })
+        .eq('id', params.clientId);
     }
 
     return { success: true };

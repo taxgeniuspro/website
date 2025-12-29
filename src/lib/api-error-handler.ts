@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { Prisma } from '@prisma/client';
+import { PostgrestError } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
 export interface APIError {
@@ -31,6 +31,19 @@ export function createAPIError(
   details?: unknown
 ): CustomAPIError {
   return new CustomAPIError(message, statusCode, code, details);
+}
+
+/**
+ * Check if error is a Supabase/Postgrest error
+ */
+function isPostgrestError(error: unknown): error is PostgrestError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    'message' in error &&
+    'details' in error
+  );
 }
 
 export function handleAPIError(error: unknown): NextResponse {
@@ -68,41 +81,61 @@ export function handleAPIError(error: unknown): NextResponse {
     );
   }
 
-  // Handle Prisma errors
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+  // Handle Supabase/PostgreSQL errors
+  if (isPostgrestError(error)) {
     switch (error.code) {
-      case 'P2002':
+      case '23505': // unique_violation
         return NextResponse.json(
           {
             error: {
               code: 'DUPLICATE_ENTRY',
               message: 'A record with this information already exists',
-              details: { constraint: error.meta?.target },
+              details: { constraint: error.details },
             },
           },
           { status: 409 }
         );
-      case 'P2025':
-        return NextResponse.json(
-          {
-            error: {
-              code: 'NOT_FOUND',
-              message: 'The requested resource was not found',
-              details: { cause: error.meta?.cause },
-            },
-          },
-          { status: 404 }
-        );
-      case 'P2003':
+      case '23503': // foreign_key_violation
         return NextResponse.json(
           {
             error: {
               code: 'FOREIGN_KEY_CONSTRAINT',
               message: 'Referenced record does not exist',
-              details: { field: error.meta?.field_name },
+              details: { field: error.details },
             },
           },
           { status: 400 }
+        );
+      case '23502': // not_null_violation
+        return NextResponse.json(
+          {
+            error: {
+              code: 'REQUIRED_FIELD_MISSING',
+              message: 'A required field is missing',
+              details: { field: error.details },
+            },
+          },
+          { status: 400 }
+        );
+      case '42501': // insufficient_privilege
+        return NextResponse.json(
+          {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Insufficient permissions for this operation',
+            },
+          },
+          { status: 403 }
+        );
+      case 'PGRST116': // Row not found (PostgREST specific)
+        return NextResponse.json(
+          {
+            error: {
+              code: 'NOT_FOUND',
+              message: 'The requested resource was not found',
+            },
+          },
+          { status: 404 }
         );
       default:
         return NextResponse.json(
@@ -116,20 +149,6 @@ export function handleAPIError(error: unknown): NextResponse {
           { status: 500 }
         );
     }
-  }
-
-  // Handle Prisma connection errors
-  if (error instanceof Prisma.PrismaClientInitializationError) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'DATABASE_CONNECTION_ERROR',
-          message: 'Unable to connect to database',
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-        },
-      },
-      { status: 503 }
-    );
   }
 
   // Handle authentication/authorization errors
@@ -155,6 +174,20 @@ export function handleAPIError(error: unknown): NextResponse {
           },
         },
         { status: 403 }
+      );
+    }
+
+    // Handle connection errors
+    if (error.message.includes('connection') || error.message.includes('ECONNREFUSED')) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DATABASE_CONNECTION_ERROR',
+            message: 'Unable to connect to database',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          },
+        },
+        { status: 503 }
       );
     }
   }

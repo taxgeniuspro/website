@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
 
@@ -65,30 +65,47 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     // Find user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get the tax return
-    const taxReturn = await prisma.taxReturn.findUnique({
-      where: { id },
-      include: {
-        profile: {
-          include: {
-            user: true,
-          },
-        },
-        documents: true,
-      },
-    });
+    const { data: taxReturn } = await db
+      .from('tax_returns')
+      .select('*')
+      .eq('id', id)
+      .single();
 
     if (!taxReturn) {
       return NextResponse.json({ error: 'Tax return not found' }, { status: 404 });
     }
+
+    // Get the profile and user for this tax return
+    const { data: taxReturnProfile } = await db
+      .from('profiles')
+      .select('*, userId')
+      .eq('id', taxReturn.profileId)
+      .single();
+
+    const { data: taxReturnUser } = await db
+      .from('users')
+      .select('email')
+      .eq('id', taxReturnProfile?.userId)
+      .single();
+
+    // Get documents for this tax return
+    const { data: documents } = await db
+      .from('documents')
+      .select('*')
+      .eq('taxReturnId', id);
 
     // Authorization check
     // Only preparers assigned to this client or admins can update status
@@ -97,14 +114,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (profile.role === 'admin') {
       isAuthorized = true;
     } else if (profile.role === 'PREPARER') {
-      const assignment = await prisma.clientPreparer.findFirst({
-        where: {
-          preparerId: profile.id,
-          clientId: taxReturn.profileId,
-          isActive: true,
-        },
-      });
-      if (assignment) {
+      const { data: assignments } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('preparerId', profile.id)
+        .eq('clientId', taxReturn.profileId)
+        .eq('isActive', true)
+        .limit(1);
+
+      if (assignments && assignments.length > 0) {
         isAuthorized = true;
       }
     }
@@ -120,56 +138,65 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const oldStatus = taxReturn.status;
 
     // Update the tax return
-    const updatedReturn = await prisma.taxReturn.update({
-      where: { id },
-      data: {
-        status,
-        ...(refundAmount !== undefined && { refundAmount }),
-        ...(oweAmount !== undefined && { oweAmount }),
-        ...(filedDate && { filedDate: new Date(filedDate) }),
-      },
-      include: {
-        profile: {
-          include: {
-            user: true,
-          },
-        },
-        documents: true,
-      },
-    });
+    const updateData: any = { status };
+    if (refundAmount !== undefined) updateData.refundAmount = refundAmount;
+    if (oweAmount !== undefined) updateData.oweAmount = oweAmount;
+    if (filedDate) updateData.filedDate = new Date(filedDate).toISOString();
+
+    const { data: updatedReturn, error: updateError } = await db
+      .from('tax_returns')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     // Get client information for emails
-    const clientEmail = taxReturn.profile.user.email;
-    const clientName = taxReturn.profile.firstName
-      ? `${taxReturn.profile.firstName} ${taxReturn.profile.lastName || ''}`?.trim()
+    const clientEmail = taxReturnUser?.email || '';
+    const clientName = taxReturnProfile?.firstName
+      ? `${taxReturnProfile.firstName} ${taxReturnProfile.lastName || ''}`.trim()
       : 'Valued Client';
 
     // Get preparer information
-    const preparerAssignment = await prisma.clientPreparer.findFirst({
-      where: {
-        clientId: taxReturn.profileId,
-        isActive: true,
-      },
-      include: {
-        preparer: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
+    const { data: preparerAssignments } = await db
+      .from('client_preparers')
+      .select('preparerId')
+      .eq('clientId', taxReturn.profileId)
+      .eq('isActive', true)
+      .limit(1);
 
-    const preparerName = preparerAssignment?.preparer.firstName
-      ? `${preparerAssignment.preparer.firstName} ${preparerAssignment.preparer.lastName || ''}`?.trim()
-      : 'Your Tax Preparer';
-    const preparerEmail = preparerAssignment?.preparer.user.email || 'support@taxgeniuspro.tax';
+    const preparerAssignment = firstOrNull(preparerAssignments);
+
+    let preparerName = 'Your Tax Preparer';
+    let preparerEmail = 'support@taxgeniuspro.tax';
+
+    if (preparerAssignment) {
+      const { data: preparerProfile } = await db
+        .from('profiles')
+        .select('firstName, lastName, userId')
+        .eq('id', preparerAssignment.preparerId)
+        .single();
+
+      if (preparerProfile) {
+        preparerName = `${preparerProfile.firstName || ''} ${preparerProfile.lastName || ''}`.trim() || 'Your Tax Preparer';
+        const { data: preparerUser } = await db
+          .from('users')
+          .select('email')
+          .eq('id', preparerProfile.userId)
+          .single();
+        preparerEmail = preparerUser?.email || 'support@taxgeniuspro.tax';
+      }
+    }
 
     // Email automation triggers based on status transitions
     const emailsSent: string[] = [];
 
     // DRAFT → IN_REVIEW: Send "Documents Received" email
     if (oldStatus === 'DRAFT' && status === 'IN_REVIEW') {
-      const documentCount = taxReturn.documents.length;
+      const documentCount = (documents || []).length;
 
       const success = await EmailService.sendDocumentsReceivedEmail(
         clientEmail,
@@ -217,61 +244,68 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
       // === EPIC 5 - STORY 5.2: COMMISSION AUTOMATION ===
       // When return is filed, create commission for referrer if applicable
-      const referral = await prisma.referral.findFirst({
-        where: {
-          clientId: taxReturn.profileId,
-          status: { in: ['PENDING', 'ACTIVE'] },
-        },
-        include: {
-          referrer: {
-            include: {
-              user: true,
-            },
-          },
-        },
-      });
+      const { data: referrals } = await db
+        .from('referrals')
+        .select('*')
+        .eq('clientId', taxReturn.profileId)
+        .in('status', ['PENDING', 'ACTIVE'])
+        .limit(1);
+
+      const referral = firstOrNull(referrals);
 
       if (referral) {
+        // Get referrer info
+        const { data: referrerProfile } = await db
+          .from('profiles')
+          .select('firstName, lastName, userId')
+          .eq('id', referral.referrerId)
+          .single();
+
+        const { data: referrerUser } = await db
+          .from('users')
+          .select('email')
+          .eq('id', referrerProfile?.userId)
+          .single();
+
         // Calculate commission based on package type
         const commissionAmount = calculateCommissionAmount(taxReturn.packageType || 'BASIC');
 
         // Create commission record
-        const commission = await prisma.commission.create({
-          data: {
+        await db
+          .from('commissions')
+          .insert({
             referrerId: referral.referrerId,
             referralId: referral.id,
             amount: commissionAmount,
             status: 'PENDING',
-          },
-        });
+          });
 
         // Update referral status to COMPLETED
-        await prisma.referral.update({
-          where: { id: referral.id },
-          data: {
+        await db
+          .from('referrals')
+          .update({
             status: 'COMPLETED',
-            returnFiledDate: new Date(),
+            returnFiledDate: new Date().toISOString(),
             commissionEarned: commissionAmount,
-          },
-        });
+          })
+          .eq('id', referral.id);
 
         // Get updated pending balance for email
-        const pendingCommissions = await prisma.commission.findMany({
-          where: {
-            referrerId: referral.referrerId,
-            status: 'PENDING',
-          },
-        });
+        const { data: pendingCommissions } = await db
+          .from('commissions')
+          .select('amount')
+          .eq('referrerId', referral.referrerId)
+          .eq('status', 'PENDING');
 
-        const pendingBalance = pendingCommissions.reduce((sum, c) => sum + Number(c.amount), 0);
+        const pendingBalance = (pendingCommissions || []).reduce((sum: number, c: any) => sum + Number(c.amount), 0);
 
         // Send commission earned email
-        const referrerName = referral.referrer.firstName
-          ? `${referral.referrer.firstName} ${referral.referrer.lastName || ''}`.trim()
+        const referrerName = referrerProfile?.firstName
+          ? `${referrerProfile.firstName} ${referrerProfile.lastName || ''}`.trim()
           : 'Referrer';
 
         const commissionEmailSuccess = await EmailService.sendCommissionEarnedEmail(
-          referral.referrer.user.email,
+          referrerUser?.email || '',
           referrerName,
           clientName,
           Number(commissionAmount),
@@ -283,7 +317,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
 
         logger.info(
-          `✅ Commission created: $${commissionAmount} for referrer ${referral.referrerId}`
+          `Commission created: $${commissionAmount} for referrer ${referral.referrerId}`
         );
       }
     }
@@ -315,29 +349,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
 
     // Find user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get the tax return
-    const taxReturn = await prisma.taxReturn.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        profileId: true,
-        status: true,
-        taxYear: true,
-        refundAmount: true,
-        oweAmount: true,
-        filedDate: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const { data: taxReturn } = await db
+      .from('tax_returns')
+      .select('id, profileId, status, taxYear, refundAmount, oweAmount, filedDate, createdAt, updatedAt')
+      .eq('id', id)
+      .single();
 
     if (!taxReturn) {
       return NextResponse.json({ error: 'Tax return not found' }, { status: 404 });
@@ -353,14 +382,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Assigned preparer can view
     if (profile.role === 'PREPARER') {
-      const assignment = await prisma.clientPreparer.findFirst({
-        where: {
-          preparerId: profile.id,
-          clientId: taxReturn.profileId,
-          isActive: true,
-        },
-      });
-      if (assignment) {
+      const { data: assignments } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('preparerId', profile.id)
+        .eq('clientId', taxReturn.profileId)
+        .eq('isActive', true)
+        .limit(1);
+
+      if (assignments && assignments.length > 0) {
         isAuthorized = true;
       }
     }

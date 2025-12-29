@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auth } from '@/lib/auth';
 import { getUserPermissions, UserRole } from '@/lib/permissions';
@@ -14,31 +14,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id: preparerId } = await params;
 
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        companyName: true,
-        phone: true,
-        avatarUrl: true,
-        publicAddress: true,
-        role: true,
-        bookingEnabled: true,
-        allowPhoneBookings: true,
-        allowVideoBookings: true,
-        allowInPersonBookings: true,
-        requireApprovalForBookings: true,
-        customBookingMessage: true,
-        bookingCalendarColor: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, companyName, phone, avatarUrl, publicAddress, role, bookingEnabled, allowPhoneBookings, allowVideoBookings, allowInPersonBookings, requireApprovalForBookings, customBookingMessage, bookingCalendarColor, userId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparerData);
 
     if (!preparer) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
@@ -50,6 +32,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         { error: 'This user is not available for booking' },
         { status: 400 }
       );
+    }
+
+    // Get user email
+    let email: string | undefined;
+    if (preparer.userId) {
+      const { data: userData } = await db
+        .from('users')
+        .select('email')
+        .eq('id', preparer.userId)
+        .limit(1);
+      email = userData?.[0]?.email;
     }
 
     // Calculate available booking methods
@@ -67,7 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         name: `${preparer.firstName} ${preparer.lastName}`,
         companyName: preparer.companyName,
         phone: preparer.phone,
-        email: preparer.user?.email,
+        email: email,
         avatarUrl: preparer.avatarUrl,
         publicAddress: preparer.publicAddress,
       },
@@ -101,9 +94,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const permissions = getUserPermissions(role || 'client');
 
     // Check if user is admin or the preparer themselves
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const userProfile = firstOrNull(userProfileData);
 
     const isAdmin = permissions.users === 'full';
     const isSelf = userProfile?.id === preparerId;
@@ -126,30 +123,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       bookingCalendarColor,
     } = body;
 
-    const updated = await prisma.profile.update({
-      where: { id: preparerId },
-      data: {
-        bookingEnabled: bookingEnabled !== undefined ? bookingEnabled : undefined,
-        allowPhoneBookings: allowPhoneBookings !== undefined ? allowPhoneBookings : undefined,
-        allowVideoBookings: allowVideoBookings !== undefined ? allowVideoBookings : undefined,
-        allowInPersonBookings:
-          allowInPersonBookings !== undefined ? allowInPersonBookings : undefined,
-        requireApprovalForBookings:
-          requireApprovalForBookings !== undefined ? requireApprovalForBookings : undefined,
-        customBookingMessage: customBookingMessage !== undefined ? customBookingMessage : undefined,
-        bookingCalendarColor: bookingCalendarColor !== undefined ? bookingCalendarColor : undefined,
-      },
-      select: {
-        id: true,
-        bookingEnabled: true,
-        allowPhoneBookings: true,
-        allowVideoBookings: true,
-        allowInPersonBookings: true,
-        requireApprovalForBookings: true,
-        customBookingMessage: true,
-        bookingCalendarColor: true,
-      },
-    });
+    // Build update object with only defined values
+    const updateData: Record<string, any> = {};
+    if (bookingEnabled !== undefined) updateData.bookingEnabled = bookingEnabled;
+    if (allowPhoneBookings !== undefined) updateData.allowPhoneBookings = allowPhoneBookings;
+    if (allowVideoBookings !== undefined) updateData.allowVideoBookings = allowVideoBookings;
+    if (allowInPersonBookings !== undefined) updateData.allowInPersonBookings = allowInPersonBookings;
+    if (requireApprovalForBookings !== undefined) updateData.requireApprovalForBookings = requireApprovalForBookings;
+    if (customBookingMessage !== undefined) updateData.customBookingMessage = customBookingMessage;
+    if (bookingCalendarColor !== undefined) updateData.bookingCalendarColor = bookingCalendarColor;
+
+    const { data: updatedData } = await db
+      .from('profiles')
+      .update(updateData)
+      .eq('id', preparerId)
+      .select('id, bookingEnabled, allowPhoneBookings, allowVideoBookings, allowInPersonBookings, requireApprovalForBookings, customBookingMessage, bookingCalendarColor');
+
+    const updated = firstOrNull(updatedData);
 
     logger.info('[Booking Preferences API] Updated booking preferences', {
       preparerId,

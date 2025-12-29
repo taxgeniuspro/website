@@ -1,7 +1,23 @@
 import { redirect } from 'next/navigation';
 import { isAdmin, getAuthenticatedUser } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+// TypeScript interfaces for Supabase data
+interface AffiliateProfile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+  role: string;
+  affiliateStatus: string | null;
+  totalConversions: number | null;
+  lifetimeEarnings: number | null;
+  currentTier: string | null;
+  createdAt: string;
+  user: { email: string } | null;
+  affiliateGroup: { name: string } | null;
+}
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,73 +46,80 @@ export default async function AdminAffiliatesPage() {
   // Fetch affiliate statistics
   // Note: 'affiliate' role was removed - affiliates are now users with affiliateStatus='APPROVED'
   // We query for tax_preparers (who auto-have affiliate features) OR any user with affiliateStatus
-  const [
-    totalAffiliates,
-    pendingAffiliates,
-    approvedAffiliates,
-    totalGroups,
-    totalCreatives,
-    recentAffiliates,
-    affiliateStats,
-  ] = await Promise.all([
-    // Count all users who are either tax_preparers or have affiliate status set
-    prisma.profile.count({
-      where: {
-        OR: [
-          { role: 'tax_preparer' },
-          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
-        ],
-      },
-    }),
-    prisma.profile.count({
-      where: { affiliateStatus: 'PENDING' },
-    }),
-    prisma.profile.count({
-      where: { affiliateStatus: 'APPROVED' },
-    }),
-    prisma.affiliateGroup.count(),
-    prisma.affiliateCreative.count(),
-    prisma.profile.findMany({
-      where: {
-        OR: [
-          { role: 'tax_preparer' },
-          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        user: {
-          select: { email: true },
-        },
-        avatarUrl: true,
-        role: true,
-        affiliateStatus: true,
-        totalConversions: true,
-        lifetimeEarnings: true,
-        currentTier: true,
-        affiliateGroup: {
-          select: { name: true },
-        },
-        createdAt: true,
-      },
-    }),
-    prisma.profile.aggregate({
-      where: {
-        OR: [
-          { role: 'tax_preparer' },
-          { affiliateStatus: { in: ['APPROVED', 'PENDING'] } },
-        ],
-      },
-      _sum: {
-        totalConversions: true,
-        lifetimeEarnings: true,
-      },
-    }),
-  ]);
+
+  // Count all users who are either tax_preparers or have affiliate status set
+  const { count: totalAffiliates } = await db
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .or('role.eq.tax_preparer,affiliateStatus.in.(APPROVED,PENDING)');
+
+  const { count: pendingAffiliates } = await db
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('affiliateStatus', 'PENDING');
+
+  const { count: approvedAffiliates } = await db
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('affiliateStatus', 'APPROVED');
+
+  const { count: totalGroups } = await db
+    .from('affiliate_groups')
+    .select('*', { count: 'exact', head: true });
+
+  const { count: totalCreatives } = await db
+    .from('affiliate_creatives')
+    .select('*', { count: 'exact', head: true });
+
+  // Get recent affiliates with user and affiliateGroup data
+  const { data: recentAffiliatesData } = await db
+    .from('profiles')
+    .select(`
+      id,
+      firstName,
+      lastName,
+      avatarUrl,
+      role,
+      affiliateStatus,
+      totalConversions,
+      lifetimeEarnings,
+      currentTier,
+      createdAt,
+      users!profiles_userId_fkey(email),
+      affiliate_groups!profiles_affiliateGroupId_fkey(name)
+    `)
+    .or('role.eq.tax_preparer,affiliateStatus.in.(APPROVED,PENDING)')
+    .order('createdAt', { ascending: false })
+    .limit(10);
+
+  // Transform data to match expected structure
+  const recentAffiliates: AffiliateProfile[] = (recentAffiliatesData || []).map((item: Record<string, unknown>) => ({
+    id: item.id as string,
+    firstName: item.firstName as string | null,
+    lastName: item.lastName as string | null,
+    avatarUrl: item.avatarUrl as string | null,
+    role: item.role as string,
+    affiliateStatus: item.affiliateStatus as string | null,
+    totalConversions: item.totalConversions as number | null,
+    lifetimeEarnings: item.lifetimeEarnings as number | null,
+    currentTier: item.currentTier as string | null,
+    createdAt: item.createdAt as string,
+    user: item.users ? { email: (item.users as { email: string }).email } : null,
+    affiliateGroup: item.affiliate_groups ? { name: (item.affiliate_groups as { name: string }).name } : null,
+  }));
+
+  // Calculate aggregate stats
+  const { data: statsData } = await db
+    .from('profiles')
+    .select('totalConversions, lifetimeEarnings')
+    .or('role.eq.tax_preparer,affiliateStatus.in.(APPROVED,PENDING)');
+
+  const affiliateStats = {
+    _sum: {
+      totalConversions: (statsData || []).reduce((sum: number, p: { totalConversions: number | null }) => sum + (p.totalConversions || 0), 0),
+      lifetimeEarnings: (statsData || []).reduce((sum: number, p: { lifetimeEarnings: number | null }) => sum + (p.lifetimeEarnings || 0), 0),
+    },
+  };
 
   return (
     <div className="min-h-screen bg-background">

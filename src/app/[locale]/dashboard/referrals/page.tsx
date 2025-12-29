@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getUserPermissions, type UserPermissions, type UserRole } from '@/lib/permissions';
 import { UnifiedReferralsPage } from '@/components/dashboard/UnifiedReferralsPage';
 
@@ -25,16 +25,13 @@ async function checkAccess() {
   let profileId = null;
   let affiliateStatus = null;
   if (hasAccess && user.id) {
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        affiliateStatus: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeFinalized: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, affiliateStatus, trackingCode, customTrackingCode, trackingCodeFinalized')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
     profileId = profile?.id || null;
     affiliateStatus = profile?.affiliateStatus || null;
   }

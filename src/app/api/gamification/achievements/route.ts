@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
+interface Profile {
+  role: string;
+}
+
+interface Achievement {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: string;
+  rarity: string;
+  points: number;
+  badgeColor: string | null;
+  badgeImage: string | null;
+  sortOrder: number;
+  targetRoles: string[];
+}
+
+interface UserAchievement {
+  id: string;
+  achievementId: string;
+  progress: number;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
+  viewedAt: string | null;
+}
 
 /**
  * GET /api/gamification/achievements
@@ -21,44 +47,50 @@ export async function GET(request: NextRequest) {
     const userId = user.id;
 
     // Get user role with flexible lookup
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: user?.email }
-        ]
-      },
-      select: { role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get all achievements for this role
-    const achievements = await prisma.achievement.findMany({
-      where: {
-        isActive: true,
-        targetRoles: {
-          has: profile.role,
-        },
-      },
-      orderBy: [
-        { category: 'asc' },
-        { sortOrder: 'asc' },
-      ],
-    });
+    // Note: Supabase uses @> operator for array contains, but we'll filter in JS for simplicity
+    const { data: allAchievements, error: achievementsError } = await db
+      .from('achievements')
+      .select('id, slug, title, description, category, icon, rarity, points, badgeColor, badgeImage, sortOrder, targetRoles')
+      .eq('isActive', true)
+      .order('category', { ascending: true })
+      .order('sortOrder', { ascending: true });
+
+    if (achievementsError) {
+      throw achievementsError;
+    }
+
+    // Filter achievements by role (since Supabase array contains is complex)
+    const achievements = ((allAchievements || []) as Achievement[]).filter(
+      (a) => a.targetRoles && a.targetRoles.includes(profile.role)
+    );
 
     // Get user's progress on these achievements
-    const userAchievements = await prisma.userAchievement.findMany({
-      where: {
-        userId,
-        achievementId: {
-          in: achievements.map((a) => a.id),
-        },
-      },
-    });
+    const achievementIds = achievements.map((a) => a.id);
+
+    const { data: userAchievementsData, error: userAchievementsError } = await db
+      .from('user_achievements')
+      .select('id, achievementId, progress, isUnlocked, unlockedAt, viewedAt')
+      .eq('userId', userId)
+      .in('achievementId', achievementIds);
+
+    if (userAchievementsError) {
+      throw userAchievementsError;
+    }
+
+    const userAchievements = (userAchievementsData || []) as UserAchievement[];
 
     // Combine achievement data with user progress
     const achievementsWithProgress = achievements.map((achievement) => {

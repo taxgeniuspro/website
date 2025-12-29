@@ -10,8 +10,31 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface TaxForm {
+  formNumber: string;
+  title: string;
+}
+
+interface ClientTaxForm {
+  id: string;
+  clientId: string;
+  status: string;
+  progress: number;
+  notes: string | null;
+  formData: Record<string, unknown> | null;
+  lastEditedAt: string | null;
+  completedAt: string | null;
+  reviewedAt: string | null;
+}
 
 /**
  * PATCH - Update form data or status
@@ -27,30 +50,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get the assignment
-    const assignment = await prisma.clientTaxForm.findUnique({
-      where: { id },
-      include: {
-        client: {
-          select: { id: true },
-        },
-      },
-    });
+    const { data: assignmentData } = await db
+      .from('client_tax_forms')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    const assignment = firstOrNull<ClientTaxForm>(assignmentData);
 
     if (!assignment) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
@@ -71,14 +90,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     // Tax preparer can edit if they're assigned to this client
     else if (profile.role === 'tax_preparer') {
-      const clientAssignment = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: assignment.clientId,
-          preparerId: profile.id,
-        },
-      });
+      const { data: clientAssignmentData } = await db
+        .from('client_preparers')
+        .select('clientId, preparerId')
+        .eq('clientId', assignment.clientId)
+        .eq('preparerId', profile.id)
+        .limit(1);
 
-      if (clientAssignment) {
+      if (clientAssignmentData && clientAssignmentData.length > 0) {
         hasAccess = true;
       }
     }
@@ -108,9 +127,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Update the assignment
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       lastEditedBy: profile.id,
-      lastEditedAt: new Date(),
+      lastEditedAt: new Date().toISOString(),
     };
 
     if (formData) {
@@ -119,7 +138,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // If client is starting to fill the form, update status
       if (isClient && assignment.status === 'ASSIGNED' && Object.keys(fieldChanges).length > 0) {
         updateData.status = 'IN_PROGRESS';
-        updateData.startedAt = new Date();
+        updateData.startedAt = new Date().toISOString();
       }
     }
 
@@ -128,12 +147,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       // Track completion time
       if (status === 'COMPLETED' && !assignment.completedAt) {
-        updateData.completedAt = new Date();
+        updateData.completedAt = new Date().toISOString();
       }
 
       // Track review time
       if (status === 'REVIEWED' && !assignment.reviewedAt) {
-        updateData.reviewedAt = new Date();
+        updateData.reviewedAt = new Date().toISOString();
         updateData.reviewedBy = reviewedBy || profile.id;
       }
     }
@@ -142,30 +161,38 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updateData.notes = notes;
     }
 
-    const updated = await prisma.clientTaxForm.update({
-      where: { id },
-      data: updateData,
-      include: {
-        taxForm: {
-          select: {
-            formNumber: true,
-            title: true,
-          },
-        },
-      },
-    });
+    const { data: updatedData, error: updateError } = await db
+      .from('client_tax_forms')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      logger.error('Error updating assignment:', updateError);
+      return NextResponse.json({ error: 'Failed to update assignment' }, { status: 500 });
+    }
+
+    // Get tax form details
+    const { data: taxFormData } = await db
+      .from('tax_forms')
+      .select('formNumber, title')
+      .eq('id', updatedData.taxFormId)
+      .limit(1);
+
+    const taxForm = firstOrNull<TaxForm>(taxFormData);
 
     // Create edit history record if there were field changes
     if (Object.keys(fieldChanges).length > 0) {
-      await prisma.taxFormEdit.create({
-        data: {
+      await db
+        .from('tax_form_edits')
+        .insert({
           clientTaxFormId: id,
           editedBy: profile.id,
           editedByRole: profile.role,
           fieldChanges,
           formDataSnapshot: newFormData,
-        },
-      });
+        });
 
       logger.info('Tax form edited', {
         clientTaxFormId: id,
@@ -177,12 +204,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({
       success: true,
       assignment: {
-        id: updated.id,
-        status: updated.status,
-        progress: updated.progress,
-        formData: updated.formData,
-        notes: updated.notes,
-        lastEditedAt: updated.lastEditedAt?.toISOString(),
+        id: updatedData.id,
+        status: updatedData.status,
+        progress: updatedData.progress,
+        formData: updatedData.formData,
+        notes: updatedData.notes,
+        lastEditedAt: updatedData.lastEditedAt,
       },
     });
   } catch (error) {
@@ -205,16 +232,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { id } = await params;
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -229,10 +253,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Get the assignment
-    const assignment = await prisma.clientTaxForm.findUnique({
-      where: { id },
-      select: { clientId: true },
-    });
+    const { data: assignmentData } = await db
+      .from('client_tax_forms')
+      .select('id, clientId')
+      .eq('id', id)
+      .limit(1);
+
+    const assignment = firstOrNull<ClientTaxForm>(assignmentData);
 
     if (!assignment) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
@@ -240,14 +267,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // For tax preparers, verify they have access to this client
     if (profile.role === 'tax_preparer') {
-      const clientAssignment = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: assignment.clientId,
-          preparerId: profile.id,
-        },
-      });
+      const { data: clientAssignmentData } = await db
+        .from('client_preparers')
+        .select('clientId, preparerId')
+        .eq('clientId', assignment.clientId)
+        .eq('preparerId', profile.id)
+        .limit(1);
 
-      if (!clientAssignment) {
+      if (!clientAssignmentData || clientAssignmentData.length === 0) {
         return NextResponse.json(
           { error: 'You do not have access to this client' },
           { status: 403 }
@@ -256,9 +283,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Delete the assignment (cascade will delete edit history)
-    await prisma.clientTaxForm.delete({
-      where: { id },
-    });
+    const { error: deleteError } = await db
+      .from('client_tax_forms')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      logger.error('Error deleting assignment:', deleteError);
+      return NextResponse.json({ error: 'Failed to unassign form' }, { status: 500 });
+    }
 
     logger.info('Tax form unassigned', {
       clientTaxFormId: id,

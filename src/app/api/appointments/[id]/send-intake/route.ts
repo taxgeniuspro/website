@@ -14,11 +14,41 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { getUserPermissions, UserRole } from '@/lib/permissions';
+
+// Local TypeScript interfaces
+interface AppointmentInfo {
+  id: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string | null;
+  preparerId: string;
+  status: string;
+}
+
+interface PreparerProfile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  shortLinkUsername: string | null;
+}
+
+interface UserProfile {
+  id: string;
+  role: string | null;
+  permissions: Record<string, unknown> | null;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+}
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
@@ -35,9 +65,12 @@ export async function POST(
     const { id: appointmentId } = await params;
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role, permissions')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<UserProfile>(userProfileData);
 
     const role = userProfile?.role as UserRole | undefined;
     const permissions = getUserPermissions(role || 'client', userProfile?.permissions as any);
@@ -53,34 +86,24 @@ export async function POST(
     const { sendMethod = 'email' } = body;
 
     // Get the appointment
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      select: {
-        id: true,
-        clientName: true,
-        clientEmail: true,
-        clientPhone: true,
-        preparerId: true,
-        status: true,
-      },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, clientName:client_name, clientEmail:client_email, clientPhone:client_phone, preparerId:preparer_id, status')
+      .eq('id', appointmentId)
+      .limit(1);
+    const appointment = firstOrNull<AppointmentInfo>(appointmentData);
 
     if (!appointment) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 });
     }
 
     // Get the preparer's tracking code to build the intake link
-    const preparer = await prisma.profile.findUnique({
-      where: { id: appointment.preparerId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        shortLinkUsername: true,
-      },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName:first_name, lastName:last_name, trackingCode:tracking_code, customTrackingCode:custom_tracking_code, shortLinkUsername:short_link_username')
+      .eq('id', appointment.preparerId)
+      .limit(1);
+    const preparer = firstOrNull<PreparerProfile>(preparerData);
 
     if (!preparer) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
@@ -194,20 +217,21 @@ export async function POST(
 
         // Create a CRM interaction to track this
         try {
-          const crmContact = await prisma.cRMContact.findUnique({
-            where: { email: appointment.clientEmail.toLowerCase() },
-          });
+          const { data: crmContactData } = await db
+            .from('crm_contacts')
+            .select('id, email')
+            .eq('email', appointment.clientEmail.toLowerCase())
+            .limit(1);
+          const crmContact = firstOrNull<CRMContact>(crmContactData);
 
           if (crmContact) {
-            await prisma.cRMInteraction.create({
-              data: {
-                contactId: crmContact.id,
-                type: 'EMAIL',
-                direction: 'OUTBOUND',
-                subject: 'Intake Form Link Sent',
-                body: `Tax preparer ${preparerName} sent the intake form link to ${appointment.clientEmail}`,
-                occurredAt: new Date(),
-              },
+            await db.from('crm_interactions').insert({
+              contact_id: crmContact.id,
+              type: 'EMAIL',
+              direction: 'OUTBOUND',
+              subject: 'Intake Form Link Sent',
+              body: `Tax preparer ${preparerName} sent the intake form link to ${appointment.clientEmail}`,
+              occurred_at: new Date().toISOString(),
             });
           }
         } catch (crmError) {

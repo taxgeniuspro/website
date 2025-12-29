@@ -6,8 +6,37 @@
  */
 
 import OpenAI from 'openai';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface TaxAssistantThreadRecord {
+  id: string;
+  userId: string;
+  openaiThreadId: string;
+  openaiAssistantId: string;
+  title?: string | null;
+  lastMessage?: string | null;
+  messageCount: number;
+  lastMessageAt?: Date | string | null;
+  tokensUsed: number;
+  costInCents: number;
+  isActive: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  messages?: TaxAssistantMessageRecord[];
+}
+
+interface TaxAssistantMessageRecord {
+  id: string;
+  threadId: string;
+  openaiMessageId: string;
+  role: string;
+  content: string;
+  formReferences: string[];
+  tokensUsed: number;
+  createdAt: Date | string;
+}
 
 // Lazy-initialize OpenAI client to avoid build-time errors
 let openaiClient: OpenAI | null = null;
@@ -63,14 +92,26 @@ export async function createThread(params: CreateThreadParams): Promise<ThreadRe
     const thread = await getOpenAIClient().beta.threads.create();
 
     // Store thread in database
-    const dbThread = await prisma.taxAssistantThread.create({
-      data: {
+    const { data: dbThreadData, error } = await db
+      .from('tax_assistant_threads')
+      .insert({
         userId,
         openaiThreadId: thread.id,
         openaiAssistantId: ASSISTANT_ID,
         title: initialMessage ? initialMessage.substring(0, 100) : 'New Conversation',
-      },
-    });
+        messageCount: 0,
+        tokensUsed: 0,
+        costInCents: 0,
+        isActive: true,
+      })
+      .select()
+      .single();
+
+    if (error || !dbThreadData) {
+      throw new Error(`Failed to create thread: ${error?.message}`);
+    }
+
+    const dbThread = dbThreadData as TaxAssistantThreadRecord;
 
     // If initial message provided, send it
     let messages: MessageResponse[] = [];
@@ -102,10 +143,13 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
 
   try {
     // Get thread from database
-    const dbThread = await prisma.taxAssistantThread.findUnique({
-      where: { id: threadId },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
-    });
+    const { data: threadData } = await db
+      .from('tax_assistant_threads')
+      .select('*')
+      .eq('id', threadId)
+      .limit(1);
+
+    const dbThread = firstOrNull(threadData) as TaxAssistantThreadRecord | null;
 
     if (!dbThread) {
       throw new Error('Thread not found');
@@ -167,42 +211,53 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
       // Extract form references from assistant response
       const formReferences = extractFormReferences(contentText);
 
-      const saved = await prisma.taxAssistantMessage.create({
-        data: {
+      const { data: savedData, error: saveError } = await db
+        .from('tax_assistant_messages')
+        .insert({
           threadId: dbThread.id,
           openaiMessageId: msg.id,
           role: msg.role as 'user' | 'assistant',
           content: contentText,
           formReferences,
           tokensUsed: 0, // OpenAI doesn't provide per-message tokens
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (saveError || !savedData) {
+        throw new Error(`Failed to save message: ${saveError?.message}`);
+      }
+
+      const saved = savedData as TaxAssistantMessageRecord;
 
       savedMessages.push({
         id: saved.id,
         role: saved.role as 'user' | 'assistant',
         content: saved.content,
         formReferences: saved.formReferences,
-        createdAt: saved.createdAt,
+        createdAt: new Date(saved.createdAt),
       });
     }
 
     // Update thread metadata
-    await prisma.taxAssistantThread.update({
-      where: { id: dbThread.id },
-      data: {
+    await db
+      .from('tax_assistant_threads')
+      .update({
         lastMessage: message.substring(0, 500),
-        messageCount: { increment: 2 }, // User + assistant
-        lastMessageAt: new Date(),
-        tokensUsed: { increment: runStatus.usage?.total_tokens || 0 },
-      },
-    });
+        messageCount: dbThread.messageCount + 2, // User + assistant
+        lastMessageAt: new Date().toISOString(),
+        tokensUsed: dbThread.tokensUsed + (runStatus.usage?.total_tokens || 0),
+      })
+      .eq('id', dbThread.id);
 
     // Get all messages for response
-    const allMessages = await prisma.taxAssistantMessage.findMany({
-      where: { threadId: dbThread.id },
-      orderBy: { createdAt: 'asc' },
-    });
+    const { data: allMessagesData } = await db
+      .from('tax_assistant_messages')
+      .select('*')
+      .eq('threadId', dbThread.id)
+      .order('createdAt', { ascending: true });
+
+    const allMessages = (allMessagesData || []) as TaxAssistantMessageRecord[];
 
     return {
       threadId: dbThread.id,
@@ -212,7 +267,7 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         formReferences: msg.formReferences,
-        createdAt: msg.createdAt,
+        createdAt: new Date(msg.createdAt),
       })),
     };
   } catch (error) {
@@ -225,10 +280,13 @@ export async function sendMessage(params: SendMessageParams): Promise<ThreadResp
  * Get thread history
  */
 export async function getThread(threadId: string, userId: string): Promise<ThreadResponse> {
-  const dbThread = await prisma.taxAssistantThread.findUnique({
-    where: { id: threadId },
-    include: { messages: { orderBy: { createdAt: 'asc' } } },
-  });
+  const { data: threadData } = await db
+    .from('tax_assistant_threads')
+    .select('*')
+    .eq('id', threadId)
+    .limit(1);
+
+  const dbThread = firstOrNull(threadData) as TaxAssistantThreadRecord | null;
 
   if (!dbThread) {
     throw new Error('Thread not found');
@@ -239,15 +297,24 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
     throw new Error('Unauthorized access to thread');
   }
 
+  // Get messages
+  const { data: messagesData } = await db
+    .from('tax_assistant_messages')
+    .select('*')
+    .eq('threadId', threadId)
+    .order('createdAt', { ascending: true });
+
+  const messages = (messagesData || []) as TaxAssistantMessageRecord[];
+
   return {
     threadId: dbThread.id,
     openaiThreadId: dbThread.openaiThreadId,
-    messages: dbThread.messages.map((msg) => ({
+    messages: messages.map((msg) => ({
       id: msg.id,
       role: msg.role as 'user' | 'assistant',
       content: msg.content,
       formReferences: msg.formReferences,
-      createdAt: msg.createdAt,
+      createdAt: new Date(msg.createdAt),
     })),
   };
 }
@@ -256,22 +323,23 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
  * List all threads for a user
  */
 export async function listThreads(userId: string) {
-  const threads = await prisma.taxAssistantThread.findMany({
-    where: {
-      userId,
-      isActive: true,
-    },
-    orderBy: { lastMessageAt: 'desc' },
-    take: 50,
-  });
+  const { data: threadsData } = await db
+    .from('tax_assistant_threads')
+    .select('*')
+    .eq('userId', userId)
+    .eq('isActive', true)
+    .order('lastMessageAt', { ascending: false })
+    .limit(50);
+
+  const threads = (threadsData || []) as TaxAssistantThreadRecord[];
 
   return threads.map((thread) => ({
     id: thread.id,
     title: thread.title || 'Untitled Conversation',
     lastMessage: thread.lastMessage,
     messageCount: thread.messageCount,
-    lastMessageAt: thread.lastMessageAt,
-    createdAt: thread.createdAt,
+    lastMessageAt: thread.lastMessageAt ? new Date(thread.lastMessageAt) : null,
+    createdAt: new Date(thread.createdAt),
   }));
 }
 
@@ -279,9 +347,13 @@ export async function listThreads(userId: string) {
  * Delete a thread
  */
 export async function deleteThread(threadId: string, userId: string) {
-  const dbThread = await prisma.taxAssistantThread.findUnique({
-    where: { id: threadId },
-  });
+  const { data: threadData } = await db
+    .from('tax_assistant_threads')
+    .select('id, userId')
+    .eq('id', threadId)
+    .limit(1);
+
+  const dbThread = firstOrNull(threadData) as { id: string; userId: string } | null;
 
   if (!dbThread) {
     throw new Error('Thread not found');
@@ -293,10 +365,10 @@ export async function deleteThread(threadId: string, userId: string) {
   }
 
   // Soft delete
-  await prisma.taxAssistantThread.update({
-    where: { id: threadId },
-    data: { isActive: false },
-  });
+  await db
+    .from('tax_assistant_threads')
+    .update({ isActive: false })
+    .eq('id', threadId);
 
   return { success: true };
 }
@@ -328,22 +400,28 @@ function extractFormReferences(text: string): string[] {
  * Get usage statistics for a user
  */
 export async function getUsageStats(userId: string) {
-  const stats = await prisma.taxAssistantThread.aggregate({
-    where: { userId },
-    _sum: {
-      tokensUsed: true,
-      costInCents: true,
-      messageCount: true,
-    },
-    _count: {
-      id: true,
-    },
-  });
+  const { data: threadsData } = await db
+    .from('tax_assistant_threads')
+    .select('id, tokensUsed, costInCents, messageCount')
+    .eq('userId', userId);
+
+  const threads = (threadsData || []) as Array<{
+    id: string;
+    tokensUsed: number;
+    costInCents: number;
+    messageCount: number;
+  }>;
+
+  // Calculate aggregates in JS
+  const totalThreads = threads.length;
+  const totalMessages = threads.reduce((sum, t) => sum + (t.messageCount || 0), 0);
+  const totalTokens = threads.reduce((sum, t) => sum + (t.tokensUsed || 0), 0);
+  const totalCostCents = threads.reduce((sum, t) => sum + (t.costInCents || 0), 0);
 
   return {
-    totalThreads: stats._count.id || 0,
-    totalMessages: stats._sum.messageCount || 0,
-    totalTokens: stats._sum.tokensUsed || 0,
-    totalCostCents: stats._sum.costInCents || 0,
+    totalThreads,
+    totalMessages,
+    totalTokens,
+    totalCostCents,
   };
 }

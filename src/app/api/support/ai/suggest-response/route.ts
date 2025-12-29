@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { suggestResponse } from '@/lib/services/ai-support.service';
 import { logger } from '@/lib/logger';
 
@@ -21,17 +21,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Only preparers and admins can use AI features
-    const canUseAI = profile.role === 'tax_preparer' || profile.role === 'admin';
+    const canUseAI = profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'super_admin';
 
     if (!canUseAI) {
       return NextResponse.json(
@@ -49,17 +52,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify ticket access
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      select: { assignedToId: true },
-    });
+    const { data: ticketData, error: ticketError } = await db
+      .from('support_tickets')
+      .select('assigned_to_id')
+      .eq('id', ticketId)
+      .limit(1);
 
-    if (!ticket) {
+    const ticket = firstOrNull(ticketData);
+
+    if (ticketError || !ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
-    const isAdmin = profile.role === 'admin';
-    if (ticket.assignedToId !== profile.id && !isAdmin) {
+    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+    if (ticket.assigned_to_id !== profile.id && !isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

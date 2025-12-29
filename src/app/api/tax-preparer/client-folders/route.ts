@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role: string;
+}
+
+interface ClientPreparer {
+  id: string;
+  clientId: string;
+  preparerId: string;
+  isActive: boolean;
+  assignedAt: string;
+}
 
 /**
  * GET /api/tax-preparer/client-folders
@@ -17,9 +35,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    // Get profile
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, userId, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -29,30 +52,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get all assigned clients with their folder info
-    const clientAssignments = await prisma.clientPreparer.findMany({
-      where: {
-        preparerId: profile.id,
-        isActive: true,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
+    // Get all assigned clients
+    const { data: clientAssignments } = await db
+      .from('client_preparers')
+      .select('id, clientId, preparerId, isActive, assignedAt')
+      .eq('preparerId', profile.id)
+      .eq('isActive', true);
+
+    if (!clientAssignments || clientAssignments.length === 0) {
+      return NextResponse.json({
+        clients: [],
+      });
+    }
+
+    // Get client profiles
+    const clientIds = clientAssignments.map((a: ClientPreparer) => a.clientId);
+    const { data: clientProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, email')
+      .in('id', clientIds);
+
+    // Create map for quick lookup
+    const clientProfileMap = new Map<string, Profile>();
+    for (const client of clientProfiles || []) {
+      clientProfileMap.set(client.id, client);
+    }
 
     // Get folder info for each client
     const clientsWithFolders = await Promise.all(
-      clientAssignments.map(async (assignment) => {
+      clientAssignments.map(async (assignment: ClientPreparer) => {
+        const client = clientProfileMap.get(assignment.clientId);
         const folders = await ClientFolderService.getClientFolders(assignment.clientId);
         return {
-          client: assignment.client,
+          client: client || { id: assignment.clientId, firstName: null, lastName: null, email: null },
           hasFolder: !!folders.rootFolder,
           rootFolder: folders.rootFolder,
           yearFolders: folders.yearFolders,
@@ -86,9 +118,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    // Get profile
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, userId, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -117,20 +154,18 @@ export async function POST(req: NextRequest) {
     );
 
     // Log the operation
-    await prisma.fileOperation.create({
-      data: {
-        operation: 'FOLDER_CREATE',
-        performedBy: profile.id,
-        folderId: result.folderId,
-        details: {
-          clientId,
-          taxYear,
-          createdByPreparer: true,
-          yearFolderId: result.yearFolderId,
-        },
-        ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-        userAgent: req.headers.get('user-agent') || undefined,
+    await db.from('file_operations').insert({
+      operation: 'FOLDER_CREATE',
+      performedBy: profile.id,
+      folderId: result.folderId,
+      details: {
+        clientId,
+        taxYear,
+        createdByPreparer: true,
+        yearFolderId: result.yearFolderId,
       },
+      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+      userAgent: req.headers.get('user-agent') || null,
     });
 
     logger.info('Tax preparer created folder structure for client', {

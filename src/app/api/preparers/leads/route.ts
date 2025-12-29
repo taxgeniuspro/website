@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -18,10 +18,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -36,34 +39,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Build query - tax preparers see only their assigned leads, admins see all
-    const where: any = {
-      convertedToClient: false, // Only show unconverted leads
-    };
+    let query = db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, phone, referrerUsername, referrerType, convertedToClient, created_at, updated_at')
+      .eq('convertedToClient', false)
+      .order('created_at', { ascending: false });
 
     if (profile.role === 'tax_preparer') {
-      where.assignedPreparerId = profile.id;
+      query = query.eq('assignedPreparerId', profile.id);
     }
 
-    // Fetch leads from TaxIntakeLead (CRM contacts)
-    const taxIntakeLeads = await prisma.taxIntakeLead.findMany({
-      where,
-      orderBy: { created_at: 'desc' },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        phone: true,
-        referrerUsername: true,
-        referrerType: true,
-        convertedToClient: true,
-        created_at: true,
-        updated_at: true,
-      },
-    });
+    const { data: taxIntakeLeads } = await query;
 
     // Format response
-    const leads = taxIntakeLeads.map((lead) => ({
+    const leads = (taxIntakeLeads || []).map((lead: any) => ({
       id: lead.id,
       email: lead.email || '',
       firstName: lead.first_name || '',
@@ -72,7 +61,7 @@ export async function GET(req: NextRequest) {
       referrerUsername: lead.referrerUsername,
       referrerType: lead.referrerType,
       status: lead.convertedToClient ? 'converted' : 'new',
-      createdAt: lead.created_at.toISOString(),
+      createdAt: lead.created_at,
     }));
 
     return NextResponse.json({
@@ -102,10 +91,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -126,9 +118,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Find the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leadData } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -139,13 +135,17 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Mark lead as converted
-    const updatedLead = await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    const { data: updatedLeadData } = await db
+      .from('tax_intake_leads')
+      .update({
         convertedToClient: true,
-        updated_at: new Date(),
-      },
-    });
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    const updatedLead = updatedLeadData;
 
     logger.info(
       `🔄 Lead converted: ${leadId} marked as converted by ${user.id} (${profile.role})`

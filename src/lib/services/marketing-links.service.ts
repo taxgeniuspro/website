@@ -11,7 +11,7 @@
  * - Auto-generates missing links with QR codes
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { generateQRCode } from './qr-code.service';
 import { logger } from '@/lib/logger';
 import {
@@ -29,6 +29,40 @@ const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
 // =============================================================================
 // TYPES
 // =============================================================================
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  userId?: string | null;
+  role: string;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  trackingCodeFinalized?: boolean;
+  qrCodeLogoUrl?: string | null;
+}
+
+interface MarketingLink {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  code: string;
+  url: string;
+  shortUrl?: string | null;
+  targetPage: string;
+  title?: string | null;
+  description?: string | null;
+  qrCodeImageUrl?: string | null;
+  qrCodeFormat?: string | null;
+  dateActivated?: string | null;
+  clicks: number;
+  uniqueClicks: number;
+  conversions: number;
+  intakeStarts?: number | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string | null;
+}
 
 export interface MarketingLinkData {
   id: string;
@@ -76,18 +110,13 @@ export async function getOrCreateMarketingLinks(
     logger.info('Getting/creating marketing links', { profileId });
 
     // 1. Get profile with tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        id: true,
-        userId: true,
-        role: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeFinalized: true,
-        qrCodeLogoUrl: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, userId, role, trackingCode, customTrackingCode, trackingCodeFinalized, qrCodeLogoUrl')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
@@ -128,34 +157,35 @@ export async function getOrCreateMarketingLinks(
     const expectedCodes = requiredLinkTypes.map((type) => buildLinkCode(trackingCode, type));
 
     // 6. Get existing links
-    const existingLinks = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: { in: expectedCodes },
-      },
-    });
+    const { data: existingLinks } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', expectedCodes);
+
+    const typedExistingLinks = (existingLinks || []) as MarketingLink[];
 
     // 7. Identify missing links
-    const existingLinkCodes = new Set(existingLinks.map((l) => l.code));
+    const existingLinkCodes = new Set(typedExistingLinks.map((l) => l.code));
     const missingTypes = requiredLinkTypes.filter(
       (type) => !existingLinkCodes.has(buildLinkCode(trackingCode, type))
     );
 
     logger.info('Link status', {
-      existing: existingLinks.length,
+      existing: typedExistingLinks.length,
       missing: missingTypes.length,
       missingTypes,
     });
 
     // 8. Create missing links
-    const newLinks = [];
+    const newLinks: MarketingLink[] = [];
     for (const type of missingTypes) {
       const link = await createMarketingLink(profile, trackingCode, type);
       newLinks.push(link);
     }
 
     // 9. Combine and format all links
-    const allLinks = [...existingLinks, ...newLinks];
+    const allLinks = [...typedExistingLinks, ...newLinks];
 
     const result: MarketingLinkData[] = allLinks.map((link) => {
       const linkType = extractLinkType(link.code) || 'lead';
@@ -203,15 +233,13 @@ export async function getOrCreateMarketingLinks(
  */
 export async function getMarketingLinks(profileId: string): Promise<MarketingLinksResult | null> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        id: true,
-        role: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return null;
@@ -225,14 +253,15 @@ export async function getMarketingLinks(profileId: string): Promise<MarketingLin
     const requiredLinkTypes = getLinkTypesForRole(profile.role);
     const expectedCodes = requiredLinkTypes.map((type) => buildLinkCode(trackingCode, type));
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: { in: expectedCodes },
-      },
-    });
+    const { data: links } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', expectedCodes);
 
-    const result: MarketingLinkData[] = links.map((link) => {
+    const typedLinks = (links || []) as MarketingLink[];
+
+    const result: MarketingLinkData[] = typedLinks.map((link) => {
       const linkType = extractLinkType(link.code) || 'lead';
       return {
         id: link.id,
@@ -273,15 +302,13 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
   try {
     logger.info('Regenerating QR codes', { profileId });
 
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        role: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('userId, trackingCode, customTrackingCode, role')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       throw new Error('Profile not found');
@@ -295,14 +322,15 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
     const requiredLinkTypes = getLinkTypesForRole(profile.role);
     const expectedCodes = requiredLinkTypes.map((type) => buildLinkCode(trackingCode, type));
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: { in: expectedCodes },
-      },
-    });
+    const { data: links } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', expectedCodes);
 
-    for (const link of links) {
+    const typedLinks = (links || []) as MarketingLink[];
+
+    for (const link of typedLinks) {
       const qr = await generateQRCode({
         url: link.shortUrl || link.url,
         materialId: link.code,
@@ -312,20 +340,20 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
         withLogo: true,
       });
 
-      await prisma.marketingLink.update({
-        where: { id: link.id },
-        data: {
+      await db
+        .from('marketing_links')
+        .update({
           qrCodeImageUrl: qr.dataUrl,
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', link.id);
 
       logger.info('Regenerated QR code', { linkId: link.id, code: link.code });
     }
 
     logger.info('Successfully regenerated all QR codes', {
       profileId,
-      count: links.length,
+      count: typedLinks.length,
     });
 
     return true;
@@ -340,14 +368,13 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
  */
 export async function deleteMarketingLinks(profileId: string): Promise<boolean> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-        role: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode, role')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return false;
@@ -361,12 +388,11 @@ export async function deleteMarketingLinks(profileId: string): Promise<boolean> 
     const requiredLinkTypes = getLinkTypesForRole(profile.role);
     const expectedCodes = requiredLinkTypes.map((type) => buildLinkCode(trackingCode, type));
 
-    await prisma.marketingLink.deleteMany({
-      where: {
-        creatorId: profileId,
-        code: { in: expectedCodes },
-      },
-    });
+    await db
+      .from('marketing_links')
+      .delete()
+      .eq('creatorId', profileId)
+      .in('code', expectedCodes);
 
     logger.info('Deleted marketing links', { profileId });
 
@@ -387,12 +413,12 @@ export async function deleteMarketingLinks(profileId: string): Promise<boolean> 
 async function createMarketingLink(
   profile: {
     id: string;
-    userId: string | null;
+    userId?: string | null;
     role: string;
   },
   trackingCode: string,
   linkType: LinkTypeValue
-) {
+): Promise<MarketingLink> {
   const config = getLinkConfig(linkType);
   const code = buildLinkCode(trackingCode, linkType);
   const url = config.buildUrl(trackingCode, APP_URL);
@@ -411,8 +437,9 @@ async function createMarketingLink(
   });
 
   // Create link in database
-  const link = await prisma.marketingLink.create({
-    data: {
+  const { data: link } = await db
+    .from('marketing_links')
+    .insert({
       creatorId: profile.id,
       creatorType: profile.role.toUpperCase().replace(/-/g, '_'),
       linkType: 'QR_CODE',
@@ -424,14 +451,17 @@ async function createMarketingLink(
       description: config.description,
       qrCodeImageUrl: qr.dataUrl,
       qrCodeFormat: 'PNG',
-      dateActivated: new Date(),
+      dateActivated: new Date().toISOString(),
       isActive: true,
-    },
-  });
+    })
+    .select()
+    .single();
 
-  logger.info(`Created ${linkType} link`, { id: link.id, code: link.code });
+  const createdLink = link as MarketingLink;
 
-  return link;
+  logger.info(`Created ${linkType} link`, { id: createdLink.id, code: createdLink.code });
+
+  return createdLink;
 }
 
 /**

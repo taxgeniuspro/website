@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { setReferrerVIPRate } from '@/lib/services/tiered-commission.service';
 import { logger } from '@/lib/logger';
 
@@ -33,10 +33,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -61,10 +64,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify referrer exists
-    const referrer = await prisma.profile.findUnique({
-      where: { id: referrerId },
-      select: { id: true, firstName: true, lastName: true },
-    });
+    const { data: referrerProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', referrerId)
+      .limit(1);
+
+    const referrer = firstOrNull(referrerProfiles);
 
     if (!referrer) {
       return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
@@ -111,10 +117,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

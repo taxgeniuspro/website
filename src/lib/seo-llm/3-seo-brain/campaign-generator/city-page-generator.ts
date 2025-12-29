@@ -11,9 +11,41 @@
  * 7. SEO metadata
  */
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
 import { generateCompleteCityContent } from './city-content-prompts'
 import type { CityData } from './city-data-types'
+
+// TypeScript interfaces (replaces Prisma types)
+interface City {
+  id: string
+  name: string
+  state: string
+  slug: string
+  population: number
+}
+
+interface CityLandingPage {
+  id: string
+  landingPageSetId: string
+  productId: string
+  cityId: string
+  slug: string
+  title: string
+  metaDesc: string
+  h1: string
+  aiIntro: string
+  aiBenefits: string
+  content: string
+  faqSchema: any
+  schemaMarkup: any
+  status: string
+  published: boolean
+  publishedAt: Date | null
+  views: number
+  clicks: number
+  orders: number
+  revenue: number
+}
 
 // Import existing Google AI image generation
 // @ts-expect-error - Will use existing implementation
@@ -109,14 +141,18 @@ export async function generate200CityPages(
   }
 
   // Update campaign status
-  await prisma.productCampaignQueue.update({
-    where: { id: campaignId },
-    data: {
+  const { error: updateError } = await db
+    .from('product_campaign_queues')
+    .update({
       citiesGenerated: generated,
-      generationCompletedAt: new Date(),
+      generationCompletedAt: new Date().toISOString(),
       status: generated === 200 ? 'OPTIMIZING' : 'GENERATING',
-    },
-  })
+    })
+    .eq('id', campaignId)
+
+  if (updateError) {
+    console.error('[SEO Brain] Failed to update campaign status:', updateError)
+  }
 
   return {
     success: generated > 0,
@@ -223,8 +259,9 @@ async function generateSingleCityPage(params: {
       .replace(/[^a-z0-9-]/g, '')}-${city.slug}`
 
     // Step 5: Create CityLandingPage record
-    const cityPage = await prisma.cityLandingPage.create({
-      data: {
+    const { data: cityPageData, error: insertError } = await db
+      .from('city_landing_pages')
+      .insert({
         id: `city-${campaignId}-${city.slug}`,
         landingPageSetId: campaignId,
         productId: campaignId, // Use campaign ID as product reference
@@ -260,15 +297,22 @@ async function generateSingleCityPage(params: {
         // Status
         status: 'published',
         published: true,
-        publishedAt: new Date(),
+        publishedAt: new Date().toISOString(),
 
         // Initialize metrics
         views: 0,
         clicks: 0,
         orders: 0,
         revenue: 0,
-      },
-    })
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      throw new Error(`Failed to create city page: ${insertError.message}`)
+    }
+
+    const cityPage = cityPageData as CityLandingPage
 
     return {
       success: true,
@@ -389,12 +433,18 @@ async function getTop200USCities(): Promise<CityData[]> {
   // For now, return placeholder
   // This should match your existing 200 cities data
 
-  const cities = await prisma.city.findMany({
-    take: 200,
-    orderBy: {
-      population: 'desc',
-    },
-  })
+  const { data: citiesData, error } = await db
+    .from('cities')
+    .select('id, name, state, slug, population')
+    .order('population', { ascending: false })
+    .limit(200)
+
+  if (error) {
+    console.error('[SEO Brain] Failed to fetch cities:', error)
+    return []
+  }
+
+  const cities = (citiesData || []) as City[]
 
   return cities.map((city) => ({
     id: city.id,

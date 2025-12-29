@@ -1,5 +1,22 @@
 import { MetadataRoute } from 'next'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
+
+// TypeScript interfaces (replaces Prisma types)
+interface ProductCategory {
+  slug: string
+  updatedAt: string
+}
+
+interface Product {
+  slug: string
+  updatedAt: string
+}
+
+interface City {
+  slug: string
+  updatedAt: string
+  Product: Array<{ slug: string }>
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 3600 // Revalidate every hour
@@ -96,38 +113,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 
   // Get all active product categories
-  const categories = await prisma.productCategory.findMany({
-    where: {
-      isActive: true,
-      isHidden: false,
-    },
-    select: {
-      slug: true,
-      updatedAt: true,
-    },
-  })
+  const { data: categoriesData } = await db
+    .from('product_categories')
+    .select('slug, updatedAt')
+    .eq('isActive', true)
+    .eq('isHidden', false)
+
+  const categories = (categoriesData || []) as ProductCategory[]
 
   const categoryPages: MetadataRoute.Sitemap = categories.map((category) => ({
     url: `${baseUrl}/category/${category.slug}`,
-    lastModified: category.updatedAt,
+    lastModified: new Date(category.updatedAt),
     changeFrequency: 'weekly' as const,
     priority: 0.8,
   }))
 
   // Get all active products
-  const products = await prisma.product.findMany({
-    where: {
-      isActive: true,
-    },
-    select: {
-      slug: true,
-      updatedAt: true,
-    },
-  })
+  const { data: productsData } = await db
+    .from('products')
+    .select('slug, updatedAt')
+    .eq('isActive', true)
+
+  const products = (productsData || []) as Product[]
 
   const productPages: MetadataRoute.Sitemap = products.map((product) => ({
     url: `${baseUrl}/products/${product.slug}`,
-    lastModified: product.updatedAt,
+    lastModified: new Date(product.updatedAt),
     changeFrequency: 'weekly' as const,
     priority: 0.7,
   }))
@@ -135,27 +146,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Get all city pages (if you have city-specific pages)
   const cityPages: MetadataRoute.Sitemap = []
   try {
-    const cities = await prisma.city.findMany({
-      where: { isActive: true },
-      select: {
-        slug: true,
-        updatedAt: true,
-        Product: {
-          select: {
-            slug: true,
-          },
-          where: {
-            isActive: true,
-          },
-        },
-      },
-    })
+    // Get cities and their active products
+    const { data: citiesData } = await db
+      .from('cities')
+      .select('slug, updatedAt')
+      .eq('isActive', true)
 
+    const cities = (citiesData || []) as Array<{ slug: string; updatedAt: string }>
+
+    // Get active products for city pages
+    const { data: activeProductsData } = await db
+      .from('products')
+      .select('slug')
+      .eq('isActive', true)
+
+    const activeProducts = (activeProductsData || []) as Array<{ slug: string }>
+
+    // Create city pages for each product-city combination
     cities.forEach((city) => {
-      city.Product.forEach((product) => {
+      activeProducts.forEach((product) => {
         cityPages.push({
           url: `${baseUrl}/print/${product.slug}/${city.slug}`,
-          lastModified: city.updatedAt,
+          lastModified: new Date(city.updatedAt),
           changeFrequency: 'weekly' as const,
           priority: 0.6,
         })

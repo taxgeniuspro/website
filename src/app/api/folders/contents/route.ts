@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -24,15 +24,10 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type');
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -49,14 +44,12 @@ export async function GET(req: NextRequest) {
 
       // For tax preparers, verify they're assigned to this client
       if (profile.role === 'tax_preparer') {
-        const assignment = await prisma.clientPreparer.findFirst({
-          where: {
-            clientId: clientId,
-            preparerId: profile.id,
-          },
-        });
+        const { data: assignments } = await db.from('client_preparers')
+          .select('*')
+          .eq('client_id', clientId)
+          .eq('preparer_id', profile.id);
 
-        if (!assignment) {
+        if (!assignments || assignments.length === 0) {
           return NextResponse.json({ error: 'Not authorized for this client' }, { status: 403 });
         }
       }
@@ -64,74 +57,58 @@ export async function GET(req: NextRequest) {
       profileId = clientId;
     }
 
-    // Build where clause
-    const where: any = {
-      profileId,
-      isDeleted: false,
-    };
+    // Build query
+    let query = db.from('documents')
+      .select('id, file_name, file_url, file_size, mime_type, type, tax_year, status, folder_id, tags, version, shared_with, created_at, updated_at')
+      .eq('profile_id', profileId)
+      .eq('is_deleted', false);
 
     // Folder filter
     if (folderId) {
-      where.folderId = folderId;
+      query = query.eq('folder_id', folderId);
     } else {
       // Root level - files without folder
-      where.folderId = null;
+      query = query.is('folder_id', null);
     }
 
     // Search filter
     if (search) {
-      where.fileName = {
-        contains: search,
-        mode: 'insensitive',
-      };
+      query = query.ilike('file_name', `%${search}%`);
     }
 
     // Tax year filter
     if (taxYear) {
-      where.taxYear = parseInt(taxYear);
+      query = query.eq('tax_year', parseInt(taxYear));
     }
 
     // Type filter
     if (type) {
-      where.type = type.toUpperCase();
+      query = query.eq('type', type.toUpperCase());
     }
 
-    // Fetch files
-    const files = await prisma.document.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }],
-      select: {
-        id: true,
-        fileName: true,
-        fileUrl: true,
-        fileSize: true,
-        mimeType: true,
-        type: true,
-        taxYear: true,
-        status: true,
-        folderId: true,
-        tags: true,
-        version: true,
-        sharedWith: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Order by created_at descending
+    query = query.order('created_at', { ascending: false });
+
+    const { data: files, error } = await query;
+
+    if (error) {
+      throw error;
+    }
 
     // Transform to match FileManagerFile interface
-    const transformedFiles = files.map((file) => ({
+    const transformedFiles = (files || []).map((file) => ({
       id: file.id,
-      fileName: file.fileName,
-      fileUrl: file.fileUrl,
-      fileSize: file.fileSize,
-      mimeType: file.mimeType,
+      fileName: file.file_name,
+      fileUrl: file.file_url,
+      fileSize: file.file_size,
+      mimeType: file.mime_type,
       type: file.type,
-      taxYear: file.taxYear,
+      taxYear: file.tax_year,
       status: file.status,
-      folderId: file.folderId,
+      folderId: file.folder_id,
       tags: file.tags,
-      createdAt: file.createdAt.toISOString(),
-      updatedAt: file.updatedAt.toISOString(),
+      createdAt: file.created_at,
+      updatedAt: file.updated_at,
     }));
 
     return NextResponse.json({ files: transformedFiles });

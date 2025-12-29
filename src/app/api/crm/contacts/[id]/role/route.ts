@@ -11,10 +11,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOneOfRoles } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
-import { UserRole } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client imports)
+type UserRole = 'client' | 'affiliate' | 'tax_preparer' | 'admin';
 
 const updateRoleSchema = z.object({
   role: z.enum(['client', 'affiliate', 'tax_preparer', 'admin']),
@@ -47,16 +49,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { role } = updateRoleSchema.parse(body);
 
     // Get the CRM contact
-    const contact = await prisma.cRMContact.findUnique({
-      where: { id: contactId },
-      select: {
-        id: true,
-        userId: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-      },
-    });
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('id, userId, firstName, lastName, email')
+      .eq('id', contactId)
+      .limit(1);
+
+    const contact = firstOrNull(contacts);
 
     if (!contact) {
       return NextResponse.json(
@@ -77,10 +76,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get current profile to check existing role
-    const currentProfile = await prisma.profile.findUnique({
-      where: { userId: contact.userId },
-      select: { role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('role')
+      .eq('userId', contact.userId)
+      .limit(1);
+
+    const currentProfile = firstOrNull(profiles);
 
     if (!currentProfile) {
       return NextResponse.json(
@@ -103,10 +105,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update the profile role
-    await prisma.profile.update({
-      where: { userId: contact.userId },
-      data: { role: role as UserRole },
-    });
+    await db
+      .from('profiles')
+      .update({ role: role as UserRole })
+      .eq('userId', contact.userId);
 
     // Also update the CRM contact type to match
     let contactType: 'CLIENT' | 'AFFILIATE' | 'PREPARER' | 'LEAD' = 'CLIENT';
@@ -125,10 +127,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         break;
     }
 
-    await prisma.cRMContact.update({
-      where: { id: contactId },
-      data: { contactType },
-    });
+    await db
+      .from('crm_contacts')
+      .update({ contactType })
+      .eq('id', contactId);
 
     logger.info('[CRM Role API] Role updated successfully', {
       contactId,

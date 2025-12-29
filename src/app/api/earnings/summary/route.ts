@@ -9,9 +9,15 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { getEarningsSummary } from '@/lib/services/commission.service';
 import { logger } from '@/lib/logger';
+
+interface Profile {
+  id: string;
+  shortLinkUsername: string | null;
+  role: string;
+}
 
 export async function GET() {
   try {
@@ -23,14 +29,17 @@ export async function GET() {
     }
 
     // Get user profile with username
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        shortLinkUsername: true,
-        role: true,
-      },
-    });
+    const { data: profileData, error } = await db
+      .from('profiles')
+      .select('id, shortLinkUsername, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile || !profile.shortLinkUsername) {
       return NextResponse.json({

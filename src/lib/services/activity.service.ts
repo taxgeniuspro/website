@@ -7,16 +7,49 @@
  * @module lib/services/activity
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { ActivityType } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client)
+type ActivityType =
+  | 'CONTACT_ATTEMPTED'
+  | 'CONTACT_MADE'
+  | 'EMAIL_SENT'
+  | 'EMAIL_OPENED'
+  | 'EMAIL_CLICKED'
+  | 'STATUS_CHANGED'
+  | 'NOTE_ADDED'
+  | 'TASK_CREATED'
+  | 'TASK_COMPLETED'
+  | 'FORM_VIEWED'
+  | 'DOCUMENT_UPLOADED'
+  | 'MEETING_SCHEDULED'
+  | 'MEETING_COMPLETED'
+  | 'CONVERTED'
+  | 'ASSIGNED';
+
+// Re-export ActivityType for consumers
+export { ActivityType };
+
+interface LeadActivity {
+  id: string;
+  leadId: string;
+  activityType: ActivityType;
+  title: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  automated: boolean;
+  createdAt: string;
+}
 
 export interface CreateActivityParams {
   leadId: string;
   activityType: ActivityType;
   title: string;
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdBy?: string; // Profile ID
   createdByName?: string;
   automated?: boolean;
@@ -29,7 +62,7 @@ export interface CreateActivityParams {
  * ```typescript
  * await createActivity({
  *   leadId: 'lead_123',
- *   activityType: ActivityType.EMAIL_SENT,
+ *   activityType: 'EMAIL_SENT',
  *   title: 'Welcome email sent',
  *   description: 'Automated welcome sequence email #1',
  *   metadata: { emailId: 'email_456', campaignId: 'campaign_789' },
@@ -51,10 +84,13 @@ export async function createActivity(params: CreateActivityParams) {
     } = params;
 
     // Verify lead exists
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: { id: true },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       logger.error(`Cannot create activity: Lead ${leadId} not found`);
@@ -64,10 +100,13 @@ export async function createActivity(params: CreateActivityParams) {
     // If createdBy is provided but no name, fetch it
     let finalCreatedByName = createdByName;
     if (createdBy && !createdByName) {
-      const profile = await prisma.profile.findUnique({
-        where: { id: createdBy },
-        select: { firstName: true, lastName: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('firstName, lastName')
+        .eq('id', createdBy)
+        .limit(1);
+
+      const profile = firstOrNull(profiles);
 
       if (profile) {
         finalCreatedByName = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
@@ -75,8 +114,9 @@ export async function createActivity(params: CreateActivityParams) {
     }
 
     // Create activity
-    const activity = await prisma.leadActivity.create({
-      data: {
+    const { data: activity, error } = await db
+      .from('lead_activities')
+      .insert({
         leadId,
         activityType,
         title: title.trim(),
@@ -85,8 +125,13 @@ export async function createActivity(params: CreateActivityParams) {
         createdBy: createdBy || null,
         createdByName: finalCreatedByName || (automated ? 'System' : 'Unknown'),
         automated,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     logger.info(`Activity created for lead ${leadId}`, {
       activityId: activity.id,
@@ -112,7 +157,7 @@ export async function logContactAttempt(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.CONTACT_ATTEMPTED,
+    activityType: 'CONTACT_ATTEMPTED',
     title: `Contact attempted via ${method}`,
     createdBy: preparerId,
     createdByName: preparerName,
@@ -132,7 +177,7 @@ export async function logContactMade(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.CONTACT_MADE,
+    activityType: 'CONTACT_MADE',
     title: `Contact made via ${method}`,
     description: notes,
     createdBy: preparerId,
@@ -153,7 +198,7 @@ export async function logEmailSent(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.EMAIL_SENT,
+    activityType: 'EMAIL_SENT',
     title: subject,
     description: automated ? 'Automated email campaign' : 'Manual email sent',
     metadata: { emailId, campaignId },
@@ -165,15 +210,21 @@ export async function logEmailSent(
  * Log email opened
  */
 export async function logEmailOpened(leadId: string, emailId: string, openCount: number = 1) {
-  // Update lead email opens counter
-  await prisma.taxIntakeLead.update({
-    where: { id: leadId },
-    data: { emailOpens: { increment: 1 } },
-  });
+  // Update lead email opens counter using raw SQL increment
+  const { data: currentLead } = await db
+    .from('tax_intake_leads')
+    .select('emailOpens')
+    .eq('id', leadId)
+    .single();
+
+  await db
+    .from('tax_intake_leads')
+    .update({ emailOpens: (currentLead?.emailOpens || 0) + 1 })
+    .eq('id', leadId);
 
   return createActivity({
     leadId,
-    activityType: ActivityType.EMAIL_OPENED,
+    activityType: 'EMAIL_OPENED',
     title: 'Email opened',
     description: openCount > 1 ? `Opened ${openCount} times` : 'First open',
     metadata: { emailId, openCount },
@@ -186,14 +237,20 @@ export async function logEmailOpened(leadId: string, emailId: string, openCount:
  */
 export async function logEmailClicked(leadId: string, emailId: string, url: string) {
   // Update lead email clicks counter
-  await prisma.taxIntakeLead.update({
-    where: { id: leadId },
-    data: { emailClicks: { increment: 1 } },
-  });
+  const { data: currentLead } = await db
+    .from('tax_intake_leads')
+    .select('emailClicks')
+    .eq('id', leadId)
+    .single();
+
+  await db
+    .from('tax_intake_leads')
+    .update({ emailClicks: (currentLead?.emailClicks || 0) + 1 })
+    .eq('id', leadId);
 
   return createActivity({
     leadId,
-    activityType: ActivityType.EMAIL_CLICKED,
+    activityType: 'EMAIL_CLICKED',
     title: 'Email link clicked',
     description: `Clicked: ${url}`,
     metadata: { emailId, url },
@@ -214,7 +271,7 @@ export async function logStatusChange(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.STATUS_CHANGED,
+    activityType: 'STATUS_CHANGED',
     title: `Status changed: ${fromStatus} → ${toStatus}`,
     description: reason,
     metadata: { fromStatus, toStatus },
@@ -235,7 +292,7 @@ export async function logNoteAdded(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.NOTE_ADDED,
+    activityType: 'NOTE_ADDED',
     title,
     description: note,
     createdBy: preparerId,
@@ -256,7 +313,7 @@ export async function logTaskCreated(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.TASK_CREATED,
+    activityType: 'TASK_CREATED',
     title: `Task created: ${taskTitle}`,
     description: dueDate ? `Due: ${dueDate.toLocaleDateString()}` : undefined,
     metadata: { taskId, dueDate: dueDate?.toISOString() },
@@ -277,7 +334,7 @@ export async function logTaskCompleted(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.TASK_COMPLETED,
+    activityType: 'TASK_COMPLETED',
     title: `Task completed: ${taskTitle}`,
     metadata: { taskId },
     createdBy: preparerId,
@@ -290,14 +347,14 @@ export async function logTaskCompleted(
  */
 export async function logFormViewed(leadId: string, formName: string) {
   // Update lastViewedAt
-  await prisma.taxIntakeLead.update({
-    where: { id: leadId },
-    data: { lastViewedAt: new Date() },
-  });
+  await db
+    .from('tax_intake_leads')
+    .update({ lastViewedAt: new Date().toISOString() })
+    .eq('id', leadId);
 
   return createActivity({
     leadId,
-    activityType: ActivityType.FORM_VIEWED,
+    activityType: 'FORM_VIEWED',
     title: `Form viewed: ${formName}`,
     automated: true,
   });
@@ -314,7 +371,7 @@ export async function logDocumentUploaded(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.DOCUMENT_UPLOADED,
+    activityType: 'DOCUMENT_UPLOADED',
     title: `Document uploaded: ${fileName}`,
     metadata: { fileName, fileType, fileSize },
     automated: true,
@@ -333,7 +390,7 @@ export async function logMeetingScheduled(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.MEETING_SCHEDULED,
+    activityType: 'MEETING_SCHEDULED',
     title: `${meetingType} scheduled`,
     description: `Scheduled for ${meetingDate.toLocaleString()}`,
     metadata: { meetingDate: meetingDate.toISOString(), meetingType },
@@ -354,7 +411,7 @@ export async function logMeetingCompleted(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.MEETING_COMPLETED,
+    activityType: 'MEETING_COMPLETED',
     title: `${meetingType} completed`,
     description: notes,
     metadata: { meetingType },
@@ -373,7 +430,7 @@ export async function logLeadConverted(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.CONVERTED,
+    activityType: 'CONVERTED',
     title: 'Lead converted to client',
     description: 'Successfully converted to paying client',
     createdBy: preparerId,
@@ -392,7 +449,7 @@ export async function logLeadAssigned(
 ) {
   return createActivity({
     leadId,
-    activityType: ActivityType.ASSIGNED,
+    activityType: 'ASSIGNED',
     title: `Lead assigned to ${assignedToName}`,
     description: assignedByName ? `Assigned by ${assignedByName}` : 'Auto-assigned',
     createdBy: assignedById,
@@ -405,16 +462,19 @@ export async function logLeadAssigned(
  * Get activity statistics for a lead
  */
 export async function getLeadActivityStats(leadId: string) {
-  const activities = await prisma.leadActivity.groupBy({
-    by: ['activityType'],
-    where: { leadId },
-    _count: true,
-  });
+  // Supabase doesn't support groupBy directly, so we'll get all and aggregate
+  const { data: activities } = await db
+    .from('lead_activities')
+    .select('activityType')
+    .eq('leadId', leadId);
 
   const stats: Record<string, number> = {};
-  activities.forEach((activity) => {
-    stats[activity.activityType] = activity._count;
-  });
+  if (activities) {
+    activities.forEach((activity: { activityType: string }) => {
+      const type = activity.activityType;
+      stats[type] = (stats[type] || 0) + 1;
+    });
+  }
 
   return stats;
 }
@@ -423,29 +483,37 @@ export async function getLeadActivityStats(leadId: string) {
  * Get recent activities across all leads (for dashboard)
  */
 export async function getRecentActivities(preparerId?: string, limit: number = 10) {
-  const where: any = {};
+  let query = db
+    .from('lead_activities')
+    .select(`
+      *,
+      lead:tax_intake_leads!leadId (
+        id,
+        first_name,
+        last_name
+      )
+    `)
+    .order('createdAt', { ascending: false })
+    .limit(limit);
 
   if (preparerId) {
-    // Only show activities for leads assigned to this preparer
-    where.lead = {
-      assignedTo: preparerId,
-    };
+    // Filter by leads assigned to this preparer
+    // This requires a subquery approach in Supabase
+    const { data: preparerLeads } = await db
+      .from('tax_intake_leads')
+      .select('id')
+      .eq('assignedTo', preparerId);
+
+    if (preparerLeads && preparerLeads.length > 0) {
+      const leadIds = preparerLeads.map((l: { id: string }) => l.id);
+      query = query.in('leadId', leadIds);
+    } else {
+      // No leads assigned, return empty array
+      return [];
+    }
   }
 
-  const activities = await prisma.leadActivity.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    include: {
-      lead: {
-        select: {
-          id: true,
-          first_name: true,
-          last_name: true,
-        },
-      },
-    },
-  });
+  const { data: activities } = await query;
 
-  return activities;
+  return activities || [];
 }

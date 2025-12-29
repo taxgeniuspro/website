@@ -14,8 +14,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase response types
+interface ReferralImage {
+  id: string;
+  imageUrl: string;
+  sortOrder: number;
+}
+
+interface ReferralImageSet {
+  id: string;
+  referral_images: ReferralImage[];
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,16 +38,14 @@ export async function GET(req: NextRequest) {
 
     // If preparer code is provided, look up the preparer
     if (preparerCode) {
-      const preparer = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { customTrackingCode: preparerCode },
-            { trackingCode: preparerCode },
-          ],
-          role: 'tax_preparer',
-        },
-        select: { id: true },
-      });
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id')
+        .or(`customTrackingCode.eq.${preparerCode},trackingCode.eq.${preparerCode}`)
+        .eq('role', 'tax_preparer')
+        .limit(1);
+
+      const preparer = firstOrNull(preparerData);
       preparerId = preparer?.id;
     }
 
@@ -43,45 +53,53 @@ export async function GET(req: NextRequest) {
     let imageUrl: string | null = null;
 
     if (preparerId) {
-      const preparerSet = await prisma.referralImageSet.findFirst({
-        where: {
-          preparerId,
-          folderType: 'preseason_loans',
-          category: 'preparer',
-          isActive: true,
-        },
-        include: {
-          images: {
-            orderBy: { sortOrder: 'asc' },
-            take: 1,
-          },
-        },
-      });
+      const { data: preparerSetData } = await db
+        .from('referral_image_sets')
+        .select(`
+          id,
+          referral_images (
+            id,
+            imageUrl,
+            sortOrder
+          )
+        `)
+        .eq('preparerId', preparerId)
+        .eq('folderType', 'preseason_loans')
+        .eq('category', 'preparer')
+        .eq('isActive', true)
+        .order('sortOrder', { referencedTable: 'referral_images', ascending: true })
+        .limit(1);
 
-      if (preparerSet?.images.length) {
-        imageUrl = preparerSet.images[0].imageUrl;
+      const preparerSet = firstOrNull(preparerSetData) as ReferralImageSet | null;
+
+      if (preparerSet?.referral_images?.length) {
+        imageUrl = preparerSet.referral_images[0].imageUrl;
       }
     }
 
     // Fallback to default images
     if (!imageUrl) {
-      const defaultSet = await prisma.referralImageSet.findFirst({
-        where: {
-          category: 'default',
-          preparerId: null,
-          folderType: 'preseason_loans',
-          isActive: true,
-        },
-        include: {
-          images: {
-            orderBy: { sortOrder: 'asc' },
-            take: 1,
-          },
-        },
-      });
+      const { data: defaultSetData } = await db
+        .from('referral_image_sets')
+        .select(`
+          id,
+          referral_images (
+            id,
+            imageUrl,
+            sortOrder
+          )
+        `)
+        .eq('category', 'default')
+        .is('preparerId', null)
+        .eq('folderType', 'preseason_loans')
+        .eq('isActive', true)
+        .order('sortOrder', { referencedTable: 'referral_images', ascending: true })
+        .limit(1);
 
-      if (defaultSet?.images.length) {
-        imageUrl = defaultSet.images[0].imageUrl;
+      const defaultSet = firstOrNull(defaultSetData) as ReferralImageSet | null;
+
+      if (defaultSet?.referral_images?.length) {
+        imageUrl = defaultSet.referral_images[0].imageUrl;
       }
     }
 

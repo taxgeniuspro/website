@@ -36,8 +36,22 @@ import {
   ExternalLink,
   UserPlus,
 } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
+
+// TypeScript interfaces for Supabase data
+interface ClientData {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  avatarUrl: string | null;
+  assignedAt: Date;
+  taxReturns: Array<{ taxYear: number; status: string }>;
+  user: { email: string } | null;
+  source: 'registered' | 'intake_form';
+  intakeLeadId?: string;
+}
 
 export const metadata = {
   title: 'My Clients - Tax Preparer | Tax Genius Pro',
@@ -82,10 +96,13 @@ export default async function MyClientsPage() {
   }
 
   // Get preparer's profile
-  const preparerProfile = await prisma.profile.findFirst({
-    where: { userId: user.id },
-    select: { id: true, firstName: true, lastName: true },
-  });
+  const { data: preparerProfiles } = await db
+    .from('profiles')
+    .select('id, firstName, lastName')
+    .eq('userId', user.id)
+    .limit(1);
+
+  const preparerProfile = firstOrNull(preparerProfiles);
 
   if (!preparerProfile) {
     redirect('/dashboard/tax-preparer');
@@ -94,78 +111,82 @@ export default async function MyClientsPage() {
   // Fetch clients from TWO sources:
   // 1. ClientPreparer relationships (registered users)
   // 2. Complete TaxIntakeLead records (intake forms with completed=true)
-  let clients: Array<{
-    id: string;
-    firstName: string | null;
-    lastName: string | null;
-    phone: string | null;
-    avatarUrl: string | null;
-    assignedAt: Date;
-    taxReturns: Array<{ taxYear: number; status: string }>;
-    user: { email: string } | null;
-    source: 'registered' | 'intake_form';
-    intakeLeadId?: string;
-  }> = [];
+  let clients: ClientData[] = [];
 
   try {
     // Source 1: Registered clients via ClientPreparer
-    const clientRelationships = await prisma.clientPreparer.findMany({
-      where: {
-        preparerId: preparerProfile.id,
-        isActive: true,
-      },
-      include: {
-        client: {
-          include: {
-            taxReturns: {
-              orderBy: { taxYear: 'desc' },
-              take: 1,
-            },
-            user: true,
-          },
-        },
-      },
-      orderBy: {
-        assignedAt: 'desc',
-      },
-    });
+    const { data: clientRelationshipsData } = await db
+      .from('client_preparers')
+      .select(`
+        assignedAt,
+        client:profiles!client_preparers_clientId_fkey(
+          id,
+          firstName,
+          lastName,
+          phone,
+          avatarUrl,
+          taxReturns:tax_returns(taxYear, status),
+          user:users!profiles_userId_fkey(email)
+        )
+      `)
+      .eq('preparerId', preparerProfile.id)
+      .eq('isActive', true)
+      .order('assignedAt', { ascending: false });
 
-    const registeredClients = clientRelationships.map((rel) => ({
-      id: rel.client.id,
-      firstName: rel.client.firstName,
-      lastName: rel.client.lastName,
-      phone: rel.client.phone,
-      avatarUrl: rel.client.avatarUrl,
-      assignedAt: rel.assignedAt,
-      taxReturns: rel.client.taxReturns.map(tr => ({ taxYear: tr.taxYear, status: tr.status })),
-      user: rel.client.user ? { email: rel.client.user.email } : null,
-      source: 'registered' as const,
-    }));
+    const registeredClients: ClientData[] = (clientRelationshipsData || []).map((rel: Record<string, unknown>) => {
+      const client = rel.client as {
+        id: string;
+        firstName: string | null;
+        lastName: string | null;
+        phone: string | null;
+        avatarUrl: string | null;
+        taxReturns: Array<{ taxYear: number; status: string }>;
+        user: { email: string } | null;
+      };
+      return {
+        id: client.id,
+        firstName: client.firstName,
+        lastName: client.lastName,
+        phone: client.phone,
+        avatarUrl: client.avatarUrl,
+        assignedAt: new Date(rel.assignedAt as string),
+        taxReturns: (client.taxReturns || []).slice(0, 1),
+        user: client.user,
+        source: 'registered' as const,
+      };
+    });
 
     // Source 2: Complete intake forms (TaxIntakeLead with completed=true)
-    const completeIntakeForms = await prisma.taxIntakeLead.findMany({
-      where: {
-        assignedPreparerId: preparerProfile.id,
-        completed: true,
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    const { data: completeIntakeForms } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('assignedPreparerId', preparerProfile.id)
+      .eq('completed', true)
+      .order('created_at', { ascending: false });
 
     // Get emails of registered clients to avoid duplicates
     const registeredEmails = new Set(
       registeredClients.map(c => c.user?.email?.toLowerCase()).filter(Boolean)
     );
 
-    const intakeFormClients = completeIntakeForms
+    const intakeFormClients: ClientData[] = (completeIntakeForms || [])
       // Filter out intake forms that are already registered clients
-      .filter(intake => !registeredEmails.has(intake.email.toLowerCase()))
-      .map((intake) => ({
+      .filter((intake: { email: string }) => !registeredEmails.has(intake.email.toLowerCase()))
+      .map((intake: {
+        id: string;
+        first_name: string;
+        last_name: string;
+        phone: string | null;
+        email: string;
+        created_at: string;
+        tax_year: number;
+      }) => ({
         id: `intake_${intake.id}`,
         firstName: intake.first_name,
         lastName: intake.last_name,
         phone: intake.phone,
         avatarUrl: null,
-        assignedAt: intake.created_at,
+        assignedAt: new Date(intake.created_at),
         taxReturns: [{ taxYear: intake.tax_year, status: 'INTAKE_RECEIVED' }],
         user: { email: intake.email },
         source: 'intake_form' as const,

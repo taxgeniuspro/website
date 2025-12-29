@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  customPermissions: any;
+}
+
+interface User {
+  email: string;
+  name: string | null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,22 +54,18 @@ export async function POST(request: NextRequest) {
     // Handle default permissions update (for all users of a role)
     if (userId === 'default' || profileId === 'default') {
       // Update all users with this role
-      const profiles = await prisma.profile.findMany({
-        where: { role },
-        select: { id: true },
-      });
+      const { data: profiles } = await db.from('profiles')
+        .select('id')
+        .eq('role', role);
 
-      await prisma.profile.updateMany({
-        where: { role },
-        data: {
-          customPermissions: permissions as any,
-        },
-      });
+      await db.from('profiles')
+        .update({ customPermissions: permissions })
+        .eq('role', role);
 
       return NextResponse.json({
         success: true,
-        message: `Updated permissions for ${profiles.length} ${role} users`,
-        affectedUsers: profiles.length,
+        message: `Updated permissions for ${(profiles || []).length} ${role} users`,
+        affectedUsers: (profiles || []).length,
       });
     }
 
@@ -80,18 +91,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Find the target profile
-    const targetProfile = await prisma.profile.findFirst({
-      where: profileId ? { id: profileId } : { userId: targetId },
-      include: {
-        user: {
-          select: { email: true },
-        },
-      },
-    });
+    let targetProfileQuery = db.from('profiles').select('*');
+    if (profileId) {
+      targetProfileQuery = targetProfileQuery.eq('id', profileId);
+    } else {
+      targetProfileQuery = targetProfileQuery.eq('userId', targetId);
+    }
+
+    const { data: profileData, error: profileError } = await targetProfileQuery.limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const targetProfile = firstOrNull<Profile>(profileData);
 
     if (!targetProfile) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    // Get user email
+    const { data: userData } = await db.from('users')
+      .select('email')
+      .eq('id', targetProfile.userId)
+      .limit(1);
+
+    const targetUser = firstOrNull<User>(userData);
 
     // Prevent admin from demoting themselves
     if (targetProfile.userId === user.id && role !== 'admin') {
@@ -102,25 +127,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Update role and permissions in database
-    const updatedProfile = await prisma.profile.update({
-      where: { id: targetProfile.id },
-      data: {
+    const { data: updatedProfile, error: updateError } = await db.from('profiles')
+      .update({
         role,
-        customPermissions: permissions as any,
-      },
-      include: {
-        user: {
-          select: { email: true },
-        },
-      },
-    });
+        customPermissions: permissions,
+      })
+      .eq('id', targetProfile.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     return NextResponse.json({
       success: true,
       user: {
         id: updatedProfile.id,
         userId: updatedProfile.userId,
-        email: updatedProfile.user.email,
+        email: targetUser?.email,
         firstName: updatedProfile.firstName,
         lastName: updatedProfile.lastName,
         role: updatedProfile.role,
@@ -162,28 +187,39 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile from database
-    const profile = await prisma.profile.findFirst({
-      where: profileId ? { id: profileId } : { userId: userId! },
-      include: {
-        user: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
-      },
-    });
+    let query = db.from('profiles').select('*');
+    if (profileId) {
+      query = query.eq('id', profileId);
+    } else {
+      query = query.eq('userId', userId!);
+    }
+
+    const { data: profileData, error: profileError } = await query.limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    // Get user info
+    const { data: userData } = await db.from('users')
+      .select('email, name')
+      .eq('id', profile.userId)
+      .limit(1);
+
+    const profileUser = firstOrNull<User>(userData);
 
     // Return user's current role and permissions
     return NextResponse.json({
       user: {
         id: profile.id,
         userId: profile.userId,
-        email: profile.user.email,
+        email: profileUser?.email,
         firstName: profile.firstName,
         lastName: profile.lastName,
         role: profile.role,

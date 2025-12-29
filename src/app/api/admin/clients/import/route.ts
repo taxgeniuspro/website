@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  role: string;
+  userId: string;
+}
+
+interface ClientPreparer {
+  id: string;
+  clientId: string;
+  preparerId: string;
+  isActive: boolean;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,14 +41,13 @@ export async function POST(request: NextRequest) {
 
     // Validate preparer if specified
     if (assignToPreparerId && assignToPreparerId !== 'none') {
-      const preparerExists = await prisma.profile.findFirst({
-        where: {
-          id: assignToPreparerId,
-          role: 'tax_preparer',
-        },
-      });
+      const { data: preparerData } = await db.from('profiles')
+        .select('id')
+        .eq('id', assignToPreparerId)
+        .eq('role', 'tax_preparer')
+        .limit(1);
 
-      if (!preparerExists) {
+      if (!firstOrNull(preparerData)) {
         return NextResponse.json({ error: 'Invalid preparer ID' }, { status: 400 });
       }
     }
@@ -78,36 +95,62 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Check if client already exists
-        let client = await prisma.profile.findFirst({
-          where: {
-            OR: [{ id: clientId }, { email: email }],
-          },
-        });
+        // Check if client already exists by id or email
+        let client: Profile | null = null;
+
+        // Try by ID first
+        if (clientId) {
+          const { data: byIdData } = await db.from('profiles')
+            .select('*')
+            .eq('id', clientId)
+            .limit(1);
+          client = firstOrNull<Profile>(byIdData);
+        }
+
+        // Try by email if not found by ID
+        if (!client && email) {
+          const { data: byEmailData } = await db.from('profiles')
+            .select('*')
+            .eq('email', email)
+            .limit(1);
+          client = firstOrNull<Profile>(byEmailData);
+        }
 
         if (client) {
           // Update existing client
-          client = await prisma.profile.update({
-            where: { id: client.id },
-            data: {
+          const { data: updatedClient, error: updateError } = await db.from('profiles')
+            .update({
               firstName: firstName || client.firstName,
               lastName: lastName || client.lastName,
               phone: phone || client.phone,
-            },
-          });
+            })
+            .eq('id', client.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            throw updateError;
+          }
+          client = updatedClient;
           updated++;
         } else if (email) {
           // Create new client
-          client = await prisma.profile.create({
-            data: {
+          const { data: newClient, error: createError } = await db.from('profiles')
+            .insert({
               email: email,
               firstName: firstName || null,
               lastName: lastName || null,
               phone: phone || null,
               role: 'client',
               userId: `imported_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            },
-          });
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            throw createError;
+          }
+          client = newClient;
           imported++;
         } else {
           errors.push(`Could not create client without email: ${firstName} ${lastName}`);
@@ -117,30 +160,29 @@ export async function POST(request: NextRequest) {
 
         // Assign to preparer if specified
         if (client && assignToPreparerId && assignToPreparerId !== 'none') {
-          const existingAssignment = await prisma.clientPreparer.findFirst({
-            where: {
-              clientId: client.id,
-              preparerId: assignToPreparerId,
-            },
-          });
+          const { data: existingAssignmentData } = await db.from('client_preparers')
+            .select('*')
+            .eq('clientId', client.id)
+            .eq('preparerId', assignToPreparerId)
+            .limit(1);
+
+          const existingAssignment = firstOrNull<ClientPreparer>(existingAssignmentData);
 
           if (existingAssignment) {
             // Update to active if it was inactive
             if (!existingAssignment.isActive) {
-              await prisma.clientPreparer.update({
-                where: { id: existingAssignment.id },
-                data: { isActive: true },
-              });
+              await db.from('client_preparers')
+                .update({ isActive: true })
+                .eq('id', existingAssignment.id);
             }
           } else {
             // Create new assignment
-            await prisma.clientPreparer.create({
-              data: {
+            await db.from('client_preparers')
+              .insert({
                 clientId: client.id,
                 preparerId: assignToPreparerId,
                 isActive: true,
-              },
-            });
+              });
           }
         }
       } catch (err) {

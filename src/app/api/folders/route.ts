@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -19,15 +19,10 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get('clientId');
 
     // Get user's profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -44,14 +39,12 @@ export async function GET(req: NextRequest) {
 
       // For tax preparers, verify they're assigned to this client
       if (profile.role === 'tax_preparer') {
-        const assignment = await prisma.clientPreparer.findFirst({
-          where: {
-            clientId: clientId,
-            preparerId: profile.id,
-          },
-        });
+        const { data: assignments } = await db.from('client_preparers')
+          .select('*')
+          .eq('client_id', clientId)
+          .eq('preparer_id', profile.id);
 
-        if (!assignment) {
+        if (!assignments || assignments.length === 0) {
           return NextResponse.json({ error: 'Not authorized for this client' }, { status: 403 });
         }
       }
@@ -60,36 +53,47 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch folders
-    const folders = await prisma.folder.findMany({
-      where: {
-        ownerId,
-        isDeleted: false,
-      },
-      include: {
-        _count: {
-          select: {
-            documents: {
-              where: {
-                isDeleted: false,
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ level: 'asc' }, { name: 'asc' }],
-    });
+    const { data: folders, error } = await db.from('folders')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .eq('is_deleted', false)
+      .order('level', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    // Get document counts for each folder
+    const folderIds = (folders || []).map(f => f.id);
+    let documentCounts: Record<string, number> = {};
+
+    if (folderIds.length > 0) {
+      // Count documents per folder
+      const { data: counts } = await db.from('documents')
+        .select('folder_id')
+        .in('folder_id', folderIds)
+        .eq('is_deleted', false);
+
+      // Aggregate counts
+      (counts || []).forEach((doc) => {
+        if (doc.folder_id) {
+          documentCounts[doc.folder_id] = (documentCounts[doc.folder_id] || 0) + 1;
+        }
+      });
+    }
 
     // Transform to include document count
-    const foldersWithCount = folders.map((folder) => ({
+    const foldersWithCount = (folders || []).map((folder) => ({
       id: folder.id,
       name: folder.name,
       description: folder.description,
       path: folder.path,
-      parentId: folder.parentId,
+      parentId: folder.parent_id,
       level: folder.level,
-      documentCount: folder._count.documents,
-      createdAt: folder.createdAt.toISOString(),
-      updatedAt: folder.updatedAt.toISOString(),
+      documentCount: documentCounts[folder.id] || 0,
+      createdAt: folder.created_at,
+      updatedAt: folder.updated_at,
     }));
 
     return NextResponse.json({ folders: foldersWithCount });
@@ -119,15 +123,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user's profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -144,14 +143,12 @@ export async function POST(req: NextRequest) {
 
       // For tax preparers, verify they're assigned to this client
       if (profile.role === 'tax_preparer') {
-        const assignment = await prisma.clientPreparer.findFirst({
-          where: {
-            clientId: clientId,
-            preparerId: profile.id,
-          },
-        });
+        const { data: assignments } = await db.from('client_preparers')
+          .select('*')
+          .eq('client_id', clientId)
+          .eq('preparer_id', profile.id);
 
-        if (!assignment) {
+        if (!assignments || assignments.length === 0) {
           return NextResponse.json({ error: 'Not authorized for this client' }, { status: 403 });
         }
       }
@@ -164,15 +161,16 @@ export async function POST(req: NextRequest) {
     let level = 0;
 
     if (parentId) {
-      const parentFolder = await prisma.folder.findUnique({
-        where: { id: parentId },
-      });
+      const { data: parentFolders } = await db.from('folders')
+        .select('*')
+        .eq('id', parentId);
+      const parentFolder = firstOrNull(parentFolders);
 
       if (!parentFolder) {
         return NextResponse.json({ error: 'Parent folder not found' }, { status: 404 });
       }
 
-      if (parentFolder.ownerId !== ownerId) {
+      if (parentFolder.owner_id !== ownerId) {
         return NextResponse.json(
           { error: 'Parent folder belongs to different user' },
           { status: 403 }
@@ -184,16 +182,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if folder with same name exists at this level
-    const existingFolder = await prisma.folder.findFirst({
-      where: {
-        ownerId,
-        parentId: parentId || null,
-        name: name.trim(),
-        isDeleted: false,
-      },
-    });
+    let existingQuery = db.from('folders')
+      .select('id')
+      .eq('owner_id', ownerId)
+      .eq('name', name.trim())
+      .eq('is_deleted', false);
 
-    if (existingFolder) {
+    if (parentId) {
+      existingQuery = existingQuery.eq('parent_id', parentId);
+    } else {
+      existingQuery = existingQuery.is('parent_id', null);
+    }
+
+    const { data: existingFolders } = await existingQuery;
+
+    if (existingFolders && existingFolders.length > 0) {
       return NextResponse.json(
         { error: 'A folder with this name already exists in this location' },
         { status: 409 }
@@ -201,42 +204,44 @@ export async function POST(req: NextRequest) {
     }
 
     // Create folder
-    const folder = await prisma.folder.create({
-      data: {
-        name: name.trim(),
-        description: description?.trim() || null,
-        ownerId,
-        parentId: parentId || null,
-        path,
-        level,
-      },
-    });
+    const { data: newFolders, error: createError } = await db.from('folders').insert({
+      name: name.trim(),
+      description: description?.trim() || null,
+      owner_id: ownerId,
+      parent_id: parentId || null,
+      path,
+      level,
+    }).select();
+
+    if (createError) {
+      throw createError;
+    }
+
+    const folder = firstOrNull(newFolders);
 
     // Log operation
-    await prisma.fileOperation.create({
-      data: {
-        operation: 'FOLDER_CREATE',
-        performedBy: profile.id,
-        folderId: folder.id,
-        details: {
-          folderName: folder.name,
-          path: folder.path,
-        },
-        ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-        userAgent: req.headers.get('user-agent') || undefined,
+    await db.from('file_operations').insert({
+      operation: 'FOLDER_CREATE',
+      performed_by: profile.id,
+      folder_id: folder?.id,
+      details: {
+        folderName: folder?.name,
+        path: folder?.path,
       },
+      ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+      user_agent: req.headers.get('user-agent') || null,
     });
 
     return NextResponse.json(
       {
         folder: {
-          id: folder.id,
-          name: folder.name,
-          description: folder.description,
-          path: folder.path,
-          parentId: folder.parentId,
-          level: folder.level,
-          createdAt: folder.createdAt.toISOString(),
+          id: folder?.id,
+          name: folder?.name,
+          description: folder?.description,
+          path: folder?.path,
+          parentId: folder?.parent_id,
+          level: folder?.level,
+          createdAt: folder?.created_at,
         },
       },
       { status: 201 }

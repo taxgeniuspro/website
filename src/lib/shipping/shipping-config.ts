@@ -1,5 +1,7 @@
-import { type Carrier } from '@prisma/client'
 import type { ShippingConfiguration } from './interfaces'
+
+// Local type definition (replacing @prisma/client)
+export type Carrier = 'FEDEX' | 'UPS' | 'SOUTHWEST_CARGO'
 
 // FedEx configuration
 export const fedexConfig: ShippingConfiguration = {

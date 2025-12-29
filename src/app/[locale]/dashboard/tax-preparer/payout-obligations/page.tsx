@@ -7,13 +7,19 @@
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { PayoutObligationsClient } from './payout-obligations-client';
 
 export const metadata = {
   title: 'Payout Obligations | Tax Genius Pro',
   description: 'Manage commission payouts to your referrers',
 };
+
+interface PreparerProfile {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+}
 
 async function getPreparerData() {
   const session = await auth();
@@ -24,12 +30,20 @@ async function getPreparerData() {
   const role = user?.role;
   if (role !== 'tax_preparer' && role !== 'admin') return null;
 
-  const profile = await prisma.profile.findUnique({
-    where: { userId: user.id },
-    select: { id: true, firstName: true, lastName: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('id, first_name, last_name')
+    .eq('user_id', user.id)
+    .limit(1);
 
-  return profile;
+  const profile = firstOrNull<PreparerProfile>(profileData);
+  if (!profile) return null;
+
+  return {
+    id: profile.id,
+    firstName: profile.first_name,
+    lastName: profile.last_name,
+  };
 }
 
 export default async function PayoutObligationsPage() {

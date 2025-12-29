@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 interface FunnelData {
@@ -34,6 +34,13 @@ interface FunnelData {
     start: string;
     end: string;
   };
+}
+
+interface MarketingLinkRow {
+  clicks: number | null;
+  intakeStarts: number | null;
+  intakeCompletes: number | null;
+  returnsFiled: number | null;
 }
 
 export async function GET(
@@ -81,33 +88,37 @@ export async function GET(
         break;
     }
 
-    // Build where clause
-    const whereClause: any = {
-      creatorId: targetUserId,
-      isActive: true,
-    };
+    // Build query for marketing links
+    let query = db
+      .from('marketing_links')
+      .select('clicks, intakeStarts, intakeCompletes, returnsFiled')
+      .eq('creatorId', targetUserId)
+      .eq('isActive', true);
 
     if (dateRange !== 'all') {
-      whereClause.createdAt = {
-        gte: start,
-        lte: now,
-      };
+      query = query.gte('createdAt', start.toISOString()).lte('createdAt', now.toISOString());
     }
 
     if (materialId) {
-      whereClause.id = materialId;
+      query = query.eq('id', materialId);
     }
 
-    // Aggregate funnel data from MarketingLink
-    const funnelData = await prisma.marketingLink.aggregate({
-      where: whereClause,
+    const { data: linksData, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    // Aggregate the sums manually
+    const links = (linksData || []) as MarketingLinkRow[];
+    const funnelData = {
       _sum: {
-        clicks: true,
-        intakeStarts: true,
-        intakeCompletes: true,
-        returnsFiled: true,
+        clicks: links.reduce((sum, l) => sum + (l.clicks || 0), 0),
+        intakeStarts: links.reduce((sum, l) => sum + (l.intakeStarts || 0), 0),
+        intakeCompletes: links.reduce((sum, l) => sum + (l.intakeCompletes || 0), 0),
+        returnsFiled: links.reduce((sum, l) => sum + (l.returnsFiled || 0), 0),
       },
-    });
+    };
 
     const stage1_clicks = funnelData._sum.clicks || 0;
     const stage2_intakeStarts = funnelData._sum.intakeStarts || 0;

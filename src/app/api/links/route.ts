@@ -6,9 +6,15 @@
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getUserShortLinks } from '@/lib/services/short-link.service';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for Profile
+interface Profile {
+  id: string;
+  role: string;
+}
 
 export async function GET() {
   try {
@@ -18,29 +24,37 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get or create profile using findFirst with flexible lookup
-    let profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    // Get or create profile using flexible lookup
+    const { data: profileData, error: findError } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    let profile = firstOrNull(profileData) as Profile | null;
 
     // Create profile if not found
     if (!profile) {
-      profile = await prisma.profile.create({
-        data: {
+      const { data: newProfile, error: createError } = await db
+        .from('profiles')
+        .insert({
           userId: userId,
           supabaseUserId: userId,
           email: session?.user?.email,
           role: 'client', // Default role for registered users
-        },
-        select: { id: true, role: true },
-      });
+        })
+        .select('id, role')
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+
+      profile = newProfile as Profile;
     }
 
     logger.info(`Profile resolved: ${profile.id}`);

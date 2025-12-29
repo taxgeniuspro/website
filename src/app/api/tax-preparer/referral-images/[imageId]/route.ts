@@ -7,16 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { v2 as cloudinary } from 'cloudinary';
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 
 export async function DELETE(
   request: NextRequest,
@@ -31,50 +24,62 @@ export async function DELETE(
     }
 
     // Get preparer profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile || !['tax_preparer', 'admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Not authorized as tax preparer' }, { status: 403 });
     }
 
     // Get the image and verify ownership
-    const image = await prisma.referralImage.findUnique({
-      where: { id: imageId },
-      include: {
-        set: {
-          select: { preparerId: true, category: true },
-        },
-      },
-    });
+    const { data: images } = await db
+      .from('referral_images')
+      .select(
+        `
+        id,
+        imageUrl,
+        set:referral_image_sets!setId (
+          preparerId,
+          category
+        )
+      `
+      )
+      .eq('id', imageId)
+      .limit(1);
+
+    const image = firstOrNull(images);
 
     if (!image) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
     // Verify the image belongs to this preparer (or they're admin)
-    if (image.set.preparerId !== profile.id && profile.role !== 'admin') {
+    const setData = image.set as { preparerId: string; category: string } | null;
+    if (setData?.preparerId !== profile.id && profile.role !== 'admin') {
       return NextResponse.json({ error: 'Not authorized to delete this image' }, { status: 403 });
     }
 
-    // Extract Cloudinary public_id from URL
-    const urlParts = image.imageUrl.split('/');
-    const publicIdWithExt = urlParts.slice(-4).join('/'); // taxgeniuspro/referral-images/...
-    const publicId = publicIdWithExt.replace(/\.[^.]+$/, ''); // Remove extension
-
-    // Delete from Cloudinary (don't fail if this errors)
-    try {
-      await cloudinary.uploader.destroy(publicId);
-    } catch (cloudinaryError) {
-      logger.warn('Failed to delete image from Cloudinary', { publicId, error: String(cloudinaryError) });
+    // Extract storage key from URL (format: /api/uploads/referral-images/...)
+    const urlMatch = image.imageUrl.match(/\/api\/uploads\/(.+)$/);
+    if (urlMatch) {
+      const storageKey = urlMatch[1];
+      try {
+        await DiskStorageService.deleteFile(storageKey);
+      } catch (storageError) {
+        logger.warn('Failed to delete image from disk storage', {
+          storageKey,
+          error: String(storageError),
+        });
+      }
     }
 
     // Delete from database
-    await prisma.referralImage.delete({
-      where: { id: imageId },
-    });
+    await db.from('referral_images').delete().eq('id', imageId);
 
     logger.info('Deleted referral image', {
       imageId,
@@ -84,10 +89,7 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     logger.error('Error deleting referral image', { error });
-    return NextResponse.json(
-      { error: 'Failed to delete image' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete image' }, { status: 500 });
   }
 }
 
@@ -104,46 +106,64 @@ export async function PATCH(
     }
 
     // Get preparer profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile || !['tax_preparer', 'admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Not authorized as tax preparer' }, { status: 403 });
     }
 
     // Get the image and verify ownership
-    const image = await prisma.referralImage.findUnique({
-      where: { id: imageId },
-      include: {
-        set: {
-          select: { preparerId: true },
-        },
-      },
-    });
+    const { data: images } = await db
+      .from('referral_images')
+      .select(
+        `
+        id,
+        set:referral_image_sets!setId (
+          preparerId
+        )
+      `
+      )
+      .eq('id', imageId)
+      .limit(1);
+
+    const image = firstOrNull(images);
 
     if (!image) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
     // Verify the image belongs to this preparer (or they're admin)
-    if (image.set.preparerId !== profile.id && profile.role !== 'admin') {
+    const setData = image.set as { preparerId: string } | null;
+    if (setData?.preparerId !== profile.id && profile.role !== 'admin') {
       return NextResponse.json({ error: 'Not authorized to update this image' }, { status: 403 });
     }
 
     const body = await request.json();
     const { altText, platform, sortOrder } = body;
 
+    // Build update data
+    const updateData: Record<string, unknown> = {};
+    if (altText !== undefined) updateData.altText = altText;
+    if (platform !== undefined) updateData.platform = platform;
+    if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+
     // Update the image
-    const updatedImage = await prisma.referralImage.update({
-      where: { id: imageId },
-      data: {
-        ...(altText !== undefined && { altText }),
-        ...(platform !== undefined && { platform }),
-        ...(sortOrder !== undefined && { sortOrder }),
-      },
-    });
+    const { data: updatedImage, error: updateError } = await db
+      .from('referral_images')
+      .update(updateData)
+      .eq('id', imageId)
+      .select('id, altText, platform, sortOrder')
+      .single();
+
+    if (updateError || !updatedImage) {
+      throw new Error(updateError?.message || 'Failed to update image');
+    }
 
     logger.info('Updated referral image', {
       imageId,
@@ -161,9 +181,6 @@ export async function PATCH(
     });
   } catch (error) {
     logger.error('Error updating referral image', { error });
-    return NextResponse.json(
-      { error: 'Failed to update image' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update image' }, { status: 500 });
   }
 }

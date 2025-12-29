@@ -1,19 +1,13 @@
 /**
  * Rate Limiting Module
  *
- * Uses ioredis for VPS Redis when available, falls back to in-memory store.
- * Coolify deployments use Redis on the same VPS network.
+ * Uses in-memory store for rate limiting.
+ * Suitable for single-instance deployments on Coolify VPS.
  */
 
-import Redis from 'ioredis';
 import { logger } from '@/lib/logger';
 
-// Check if we're in a build environment
-const isBuildTime = process.env.DOCKER_BUILD === 'true' ||
-                    process.env.NEXT_PHASE === 'phase-production-build' ||
-                    process.env.SKIP_REDIS === 'true';
-
-// In-memory store for rate limiting when Redis is unavailable
+// In-memory store for rate limiting
 class InMemoryRateLimitStore {
   private store: Map<string, { count: number; resetTime: number }> = new Map();
 
@@ -21,7 +15,7 @@ class InMemoryRateLimitStore {
     const now = Date.now();
     const entry = this.store.get(key);
 
-    // Cleanup expired entries periodically
+    // Cleanup expired entries periodically (10% chance per request)
     if (Math.random() < 0.1) {
       this.cleanup(now);
     }
@@ -52,43 +46,8 @@ class InMemoryRateLimitStore {
   }
 }
 
-// Try to create Redis client, fall back to in-memory if unavailable
-let redis: Redis | null = null;
-let usingInMemory = isBuildTime; // Start with in-memory during build
+// Singleton instance
 const inMemoryStore = new InMemoryRateLimitStore();
-
-// Only try to connect to Redis if not in build time
-if (!isBuildTime) {
-  try {
-    const redisUrl = process.env.REDIS_URL;
-    if (redisUrl) {
-      redis = new Redis(redisUrl, {
-        connectTimeout: 2000,
-        maxRetriesPerRequest: 1,
-        enableOfflineQueue: false,
-        lazyConnect: true,
-      });
-
-      // Test connection
-      redis.on('error', (err) => {
-        if (!usingInMemory) {
-          logger.warn('[RateLimit] Redis connection failed, using in-memory store', {
-            error: err.message,
-          });
-          usingInMemory = true;
-        }
-      });
-    } else {
-      // No REDIS_URL configured, use in-memory
-      usingInMemory = true;
-    }
-  } catch (error) {
-    logger.warn('[RateLimit] Redis initialization failed, using in-memory store');
-    usingInMemory = true;
-  }
-} else {
-  logger.debug('[RateLimit] Skipping Redis connection during build time');
-}
 
 // ============ Rate Limiter Implementation ============
 
@@ -103,42 +62,8 @@ interface RateLimiter {
   limit: (key: string) => Promise<RateLimitResult>;
 }
 
-// Helper to create rate limiter with fallback
+// Helper to create rate limiter
 function createRateLimiter(config: { max: number; windowMs: number; prefix: string }): RateLimiter {
-  if (redis && !usingInMemory) {
-    // Use Redis-based sliding window rate limiter
-    return {
-      limit: async (key: string): Promise<RateLimitResult> => {
-        const fullKey = `${config.prefix}:${key}`;
-        const now = Date.now();
-        const windowStart = now - config.windowMs;
-
-        try {
-          // Use sorted set for sliding window
-          const multi = redis!.multi();
-          multi.zremrangebyscore(fullKey, 0, windowStart);
-          multi.zadd(fullKey, now, `${now}-${Math.random()}`);
-          multi.zcard(fullKey);
-          multi.expire(fullKey, Math.ceil(config.windowMs / 1000));
-
-          const results = await multi.exec();
-          const count = (results?.[2]?.[1] as number) || 0;
-
-          return {
-            success: count <= config.max,
-            limit: config.max,
-            reset: now + config.windowMs,
-            remaining: Math.max(0, config.max - count),
-          };
-        } catch (error) {
-          // Fall back to in-memory on error
-          return inMemoryStore.limit(fullKey, config.max, config.windowMs);
-        }
-      },
-    };
-  }
-
-  // Return in-memory limiter
   return {
     limit: async (key: string): Promise<RateLimitResult> => {
       return inMemoryStore.limit(`${config.prefix}:${key}`, config.max, config.windowMs);

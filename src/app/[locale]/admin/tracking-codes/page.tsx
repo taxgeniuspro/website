@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -24,37 +24,29 @@ async function checkAdminAccess() {
 
 async function getAllTrackingCodes() {
   // Fetch all tracking codes with user details
-  const profiles = await prisma.profile.findMany({
-    where: {
-      OR: [{ trackingCode: { not: null } }, { customTrackingCode: { not: null } }],
-    },
-    select: {
-      id: true,
-      userId: true,
-      role: true,
-      trackingCode: true,
-      customTrackingCode: true,
-      trackingCodeChanged: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const { data: profiles, error } = await db
+    .from('profiles')
+    .select('id, user_id, role, tracking_code, custom_tracking_code, tracking_code_changed, created_at, updated_at')
+    .or('tracking_code.not.is.null,custom_tracking_code.not.is.null')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    logger.error('Error fetching profiles:', error);
+    return [];
+  }
 
   // Get Clerk user details for each profile
   const trackingCodes = await Promise.all(
-    profiles.map(async (profile) => {
+    (profiles || []).map(async (profile: any) => {
       let userName = 'Unknown User';
       let userEmail = 'unknown@example.com';
 
-      if (profile.userId) {
+      if (profile.user_id) {
         try {
           // In a real implementation, you'd fetch from Clerk API
           // For now, we'll use placeholder data
-          userName = `User ${profile.userId.substring(0, 8)}`;
-          userEmail = `user${profile.userId.substring(0, 8)}@example.com`;
+          userName = `User ${profile.user_id.substring(0, 8)}`;
+          userEmail = `user${profile.user_id.substring(0, 8)}@example.com`;
         } catch (error) {
           logger.error('Error fetching user details:', error);
         }
@@ -62,16 +54,16 @@ async function getAllTrackingCodes() {
 
       return {
         profileId: profile.id,
-        userId: profile.userId,
+        userId: profile.user_id,
         userName,
         userEmail,
         role: profile.role,
-        trackingCode: profile.trackingCode,
-        customTrackingCode: profile.customTrackingCode,
-        activeCode: profile.customTrackingCode || profile.trackingCode,
-        isCustomized: profile.trackingCodeChanged,
-        createdAt: profile.createdAt,
-        updatedAt: profile.updatedAt,
+        trackingCode: profile.tracking_code,
+        customTrackingCode: profile.custom_tracking_code,
+        activeCode: profile.custom_tracking_code || profile.tracking_code,
+        isCustomized: profile.tracking_code_changed,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
       };
     })
   );

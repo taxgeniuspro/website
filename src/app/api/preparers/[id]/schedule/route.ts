@@ -7,8 +7,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { parseISO, startOfMonth, endOfMonth, addMonths } from 'date-fns';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase responses
+interface PreparerAvailability {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isOverride: boolean;
+  overrideFrom: string | null;
+  overrideUntil: string | null;
+  overrideLabel: string | null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -28,9 +40,13 @@ export async function GET(
     const endDateStr = searchParams.get('endDate');
 
     // Check permissions: only the preparer, admin, or super_admin can view schedule
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const userProfile = firstOrNull(userProfileData);
 
     const isAuthorized =
       userProfile?.id === preparerId ||
@@ -77,23 +93,23 @@ export async function GET(
     );
 
     // Get preparer's availability rules
-    const availability = await prisma.preparerAvailability.findMany({
-      where: {
-        preparerId,
-        isActive: true,
-      },
-      orderBy: [{ isOverride: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
-    });
+    const { data: availability } = await db
+      .from('preparer_availability')
+      .select('id, dayOfWeek, startTime, endTime, isOverride, overrideFrom, overrideUntil, overrideLabel')
+      .eq('preparerId', preparerId)
+      .eq('isActive', true)
+      .order('isOverride', { ascending: true })
+      .order('dayOfWeek', { ascending: true })
+      .order('startTime', { ascending: true });
 
     // Get preparer's timezone
-    const preparerProfile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        timezone: true,
-        defaultAppointmentDuration: true,
-        appointmentBufferMinutes: true,
-      },
-    });
+    const { data: preparerProfileData } = await db
+      .from('profiles')
+      .select('timezone, defaultAppointmentDuration, appointmentBufferMinutes')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const preparerProfile = firstOrNull(preparerProfileData);
 
     return NextResponse.json({
       success: true,
@@ -114,14 +130,14 @@ export async function GET(
         subject: appt.subject,
         type: appt.type,
       })),
-      availability: availability.map((avail) => ({
+      availability: (availability || []).map((avail: PreparerAvailability) => ({
         id: avail.id,
         dayOfWeek: avail.dayOfWeek,
         startTime: avail.startTime,
         endTime: avail.endTime,
         isOverride: avail.isOverride,
-        overrideFrom: avail.overrideFrom?.toISOString(),
-        overrideUntil: avail.overrideUntil?.toISOString(),
+        overrideFrom: avail.overrideFrom,
+        overrideUntil: avail.overrideUntil,
         overrideLabel: avail.overrideLabel,
       })),
     });

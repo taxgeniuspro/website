@@ -6,11 +6,11 @@
  * - After 10 failed attempts: 1 hour lockout
  * - After 15 failed attempts: 24 hour lockout (notify admin)
  *
- * Uses Redis for distributed tracking across multiple instances.
+ * Uses in-memory cache for tracking (self-hosted, no external dependencies).
  */
 
-import { cache, redis } from '@/lib/redis';
-import { prisma } from '@/lib/prisma';
+import { cache, memoryCache } from '@/lib/redis';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 const LOCKOUT_THRESHOLDS = [
@@ -19,9 +19,18 @@ const LOCKOUT_THRESHOLDS = [
   { attempts: 15, lockoutMinutes: 60 * 24 }, // 24 hours
 ];
 
-const MAX_ATTEMPTS_WINDOW_SECONDS = 60 * 60; // 1 hour window for counting attempts
 const LOCKOUT_KEY_PREFIX = 'lockout:';
 const ATTEMPTS_KEY_PREFIX = 'login_attempts:';
+
+// Local type definitions (replacing @prisma/client)
+interface LoginAttempt {
+  id: string;
+  email: string;
+  ipAddress: string;
+  success: boolean;
+  reason?: string | null;
+  createdAt: string;
+}
 
 export interface FailedLoginResult {
   locked: boolean;
@@ -59,10 +68,10 @@ export class FailedLoginService {
         };
       }
 
-      // Get current attempt count
+      // Get current attempt count from memory cache
       const attemptsKey = `${ATTEMPTS_KEY_PREFIX}${email.toLowerCase()}`;
-      const attempts = await redis.get(attemptsKey);
-      const attemptCount = attempts ? parseInt(attempts, 10) : 0;
+      const attempts = memoryCache.get(attemptsKey) as number | undefined;
+      const attemptCount = attempts || 0;
 
       // Calculate attempts remaining until first lockout
       const attemptsRemaining = Math.max(0, LOCKOUT_THRESHOLDS[0].attempts - attemptCount);
@@ -73,7 +82,7 @@ export class FailedLoginService {
       };
     } catch (error) {
       logger.error('Failed to check lockout status', { email, error });
-      // Fail open - don't lock out if Redis is down
+      // Fail open - don't lock out if cache has issues
       return { locked: false, attemptsRemaining: 5 };
     }
   }
@@ -91,23 +100,18 @@ export class FailedLoginService {
     const lockKey = `${LOCKOUT_KEY_PREFIX}${emailLower}`;
 
     try {
-      // Increment attempt count
-      const attempts = await redis.incr(attemptsKey);
-
-      // Set expiry on first attempt
-      if (attempts === 1) {
-        await redis.expire(attemptsKey, MAX_ATTEMPTS_WINDOW_SECONDS);
-      }
+      // Get and increment attempt count from memory cache
+      const currentAttempts = (memoryCache.get(attemptsKey) as number) || 0;
+      const attempts = currentAttempts + 1;
+      memoryCache.set(attemptsKey, attempts);
 
       // Log the failed attempt to database for audit
       try {
-        await prisma.loginAttempt.create({
-          data: {
-            email: emailLower,
-            ipAddress,
-            success: false,
-            reason: reason || 'Invalid credentials',
-          },
+        await db.from('login_attempts').insert({
+          email: emailLower,
+          ipAddress,
+          success: false,
+          reason: reason || 'Invalid credentials',
         });
       } catch {
         // loginAttempt table might not exist yet, log to logger instead
@@ -153,10 +157,8 @@ export class FailedLoginService {
       }
 
       // Not locked yet - return attempts remaining
-      const nextThreshold = LOCKOUT_THRESHOLDS.find(t => t.attempts > attempts);
-      const attemptsRemaining = nextThreshold
-        ? nextThreshold.attempts - attempts
-        : 0;
+      const nextThreshold = LOCKOUT_THRESHOLDS.find((t) => t.attempts > attempts);
+      const attemptsRemaining = nextThreshold ? nextThreshold.attempts - attempts : 0;
 
       return {
         locked: false,
@@ -177,10 +179,9 @@ export class FailedLoginService {
     const lockKey = `${LOCKOUT_KEY_PREFIX}${emailLower}`;
 
     try {
-      await Promise.all([
-        cache.del(attemptsKey),
-        cache.del(lockKey),
-      ]);
+      // Clear from memory cache
+      memoryCache.delete(attemptsKey);
+      await cache.del(lockKey);
 
       logger.info('Cleared failed login attempts after successful login', { email: emailLower });
     } catch (error) {
@@ -198,12 +199,10 @@ export class FailedLoginService {
 
       // Log successful login
       try {
-        await prisma.loginAttempt.create({
-          data: {
-            email: email.toLowerCase(),
-            ipAddress,
-            success: true,
-          },
+        await db.from('login_attempts').insert({
+          email: email.toLowerCase(),
+          ipAddress,
+          success: true,
         });
       } catch {
         // loginAttempt table might not exist, log to logger
@@ -245,16 +244,19 @@ export class FailedLoginService {
    */
   static async getRecentAttempts(email: string, limit = 10): Promise<LoginAttemptRecord[]> {
     try {
-      const attempts = await prisma.loginAttempt.findMany({
-        where: { email: email.toLowerCase() },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      });
+      const { data: attempts } = await db
+        .from('login_attempts')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .order('createdAt', { ascending: false })
+        .limit(limit);
 
-      return attempts.map(a => ({
+      if (!attempts) return [];
+
+      return (attempts as LoginAttempt[]).map((a) => ({
         email: a.email,
         ipAddress: a.ipAddress,
-        timestamp: a.createdAt,
+        timestamp: new Date(a.createdAt),
         success: a.success,
         reason: a.reason || undefined,
       }));

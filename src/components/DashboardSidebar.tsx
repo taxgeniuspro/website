@@ -28,7 +28,8 @@ import {
 import { ShieldCheck, Settings } from 'lucide-react';
 import { PWASidebarInstall } from '@/components/PWASidebarInstall';
 import Image from 'next/image';
-import type { AffiliateStatus } from '@prisma/client';
+// Affiliate status type (migrated from Prisma to local interface)
+export type AffiliateStatus = 'INACTIVE' | 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 
 interface DashboardSidebarProps {
   role: UserRole;

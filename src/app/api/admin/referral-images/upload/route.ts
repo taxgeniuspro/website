@@ -1,25 +1,31 @@
 /**
  * POST /api/admin/referral-images/upload
  *
- * Upload promotional images to Cloudinary and associate with an image set.
+ * Upload promotional images to disk storage and associate with an image set.
  * Supports bulk upload of up to 4 images.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { v2 as cloudinary } from 'cloudinary';
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 
-// Lazy initialize Cloudinary
-const getCloudinary = () => {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
-    api_key: process.env.CLOUDINARY_API_KEY || '',
-    api_secret: process.env.CLOUDINARY_API_SECRET || '',
-  });
-  return cloudinary;
-};
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface ReferralImageSet {
+  id: string;
+  category: string;
+  preparerId: string | null;
+}
+
+interface ReferralImage {
+  sortOrder: number;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +36,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user is admin
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { role: true },
-    });
+    const { data: profileData } = await db.from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -66,15 +74,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify image set exists
-    const imageSet = await prisma.referralImageSet.findUnique({
-      where: { id: setId },
-      select: {
-        id: true,
-        category: true,
-        preparerId: true,
-        _count: { select: { images: true } },
-      },
-    });
+    const { data: imageSetData } = await db.from('referral_image_sets')
+      .select('id, category, preparerId')
+      .eq('id', setId)
+      .limit(1);
+
+    const imageSet = firstOrNull<ReferralImageSet>(imageSetData);
 
     if (!imageSet) {
       return NextResponse.json(
@@ -84,23 +89,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Get current highest sort order
-    const lastImage = await prisma.referralImage.findFirst({
-      where: { setId },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
-    });
-    let nextSortOrder = (lastImage?.sortOrder ?? -1) + 1;
+    const { data: lastImageData } = await db.from('referral_images')
+      .select('sortOrder')
+      .eq('setId', setId)
+      .order('sortOrder', { ascending: false })
+      .limit(1);
 
-    // Determine Cloudinary folder
-    let folder = `referral-images/${imageSet.category}`;
-    if (imageSet.preparerId) {
-      const preparer = await prisma.profile.findUnique({
-        where: { id: imageSet.preparerId },
-        select: { customTrackingCode: true, trackingCode: true },
-      });
-      const code = preparer?.customTrackingCode || preparer?.trackingCode || imageSet.preparerId;
-      folder = `referral-images/preparer-${code}`;
-    }
+    const lastImage = firstOrNull<ReferralImage>(lastImageData);
+    let nextSortOrder = (lastImage?.sortOrder ?? -1) + 1;
 
     // Upload files
     const uploadedImages = [];
@@ -120,66 +116,48 @@ export async function POST(req: NextRequest) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      // Upload to Cloudinary
-      const uploadResult = await new Promise<{
-        secure_url: string;
-        public_id: string;
-        width: number;
-        height: number;
-      }>((resolve, reject) => {
-        const uploadStream = getCloudinary().uploader.upload_stream(
-          {
-            folder,
-            resource_type: 'image',
-            public_id: `image_${Date.now()}_${nextSortOrder}`,
-            transformation: [
-              { quality: 'auto:good' },
-              { fetch_format: 'auto' },
-            ],
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result as {
-              secure_url: string;
-              public_id: string;
-              width: number;
-              height: number;
-            });
-          }
-        );
-        uploadStream.end(buffer);
+      // Generate storage key
+      const ownerId = imageSet.preparerId || profile.id;
+      const key = DiskStorageService.generateKey(ownerId, file.name, 'referral-images');
+
+      // Upload to disk storage
+      const uploadResult = await DiskStorageService.uploadFile(key, buffer, file.type, {
+        encrypt: false, // Public images
+        generateThumbnail: true,
+        thumbnailOptions: { width: 300, height: 300, fit: 'cover', quality: 80 },
       });
 
       // Determine platform from dimensions
       let platform: string | null = null;
-      if (uploadResult.width === uploadResult.height) {
-        platform = 'instagram'; // Square
-      } else if (uploadResult.width > uploadResult.height) {
-        platform = 'facebook'; // Landscape
-      } else {
-        platform = 'story'; // Portrait
+      if (uploadResult.width && uploadResult.height) {
+        if (uploadResult.width === uploadResult.height) {
+          platform = 'instagram'; // Square
+        } else if (uploadResult.width > uploadResult.height) {
+          platform = 'facebook'; // Landscape
+        } else {
+          platform = 'story'; // Portrait
+        }
       }
 
-      // Create thumbnail URL
-      const thumbnailUrl = uploadResult.secure_url.replace(
-        '/upload/',
-        '/upload/w_300,h_300,c_fill/'
-      );
-
       // Create database record
-      const image = await prisma.referralImage.create({
-        data: {
+      const { data: image, error: createError } = await db.from('referral_images')
+        .insert({
           setId,
-          imageUrl: uploadResult.secure_url,
-          thumbnailUrl,
+          imageUrl: uploadResult.url,
+          thumbnailUrl: uploadResult.thumbnailUrl || uploadResult.url,
           fileName: file.name,
           altText: `Promotional image for Tax Genius referral program`,
           sortOrder: nextSortOrder,
           platform,
           width: uploadResult.width,
           height: uploadResult.height,
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
 
       uploadedImages.push({
         id: image.id,

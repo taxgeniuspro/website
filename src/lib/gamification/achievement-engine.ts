@@ -1,7 +1,49 @@
-import { PrismaClient } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  userId: string;
+  role: string;
+  createdAt: Date | string;
+}
+
+interface AchievementRecord {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  points: number;
+  targetRoles: string[];
+  criteria: Record<string, unknown>;
+  isActive: boolean;
+}
+
+interface UserAchievementRecord {
+  id: string;
+  userId: string;
+  achievementId: string;
+  progress: number;
+  isUnlocked: boolean;
+  unlockedAt?: Date | string | null;
+}
+
+interface UserStatsRecord {
+  id: string;
+  userId: string;
+  totalXP: number;
+  level: number;
+  currentLevelXP: number;
+  nextLevelXP: number;
+  loginStreak: number;
+  longestLoginStreak: number;
+  lastLoginDate?: Date | string | null;
+  documentsProcessed?: number;
+  clientSatisfaction?: number;
+  linksCreated?: number;
+  messagesSent?: number;
+}
 
 /**
  * Achievement Engine - Core logic for gamification system
@@ -34,10 +76,13 @@ export class AchievementEngine {
       logger.info(`🎮 Checking achievements for user ${userId}, event: ${eventType}`);
 
       // Get user profile to check role
-      const profile = await prisma.profile.findUnique({
-        where: { userId: userId },
-        select: { role: true },
-      });
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('role')
+        .eq('userId', userId)
+        .limit(1);
+
+      const profile = firstOrNull(profileData) as { role: string } | null;
 
       if (!profile) {
         logger.warn(`Profile not found for user ${userId}`);
@@ -45,14 +90,14 @@ export class AchievementEngine {
       }
 
       // Get all active achievements for this user's role
-      const achievements = await prisma.achievement.findMany({
-        where: {
-          isActive: true,
-          targetRoles: {
-            has: profile.role,
-          },
-        },
-      });
+      // Note: Supabase array contains check uses @> or cs (contains)
+      const { data: achievementData } = await db
+        .from('achievements')
+        .select('*')
+        .eq('isActive', true)
+        .contains('targetRoles', [profile.role]);
+
+      const achievements = (achievementData || []) as AchievementRecord[];
 
       const results: AchievementCheckResult[] = [];
 
@@ -76,20 +121,20 @@ export class AchievementEngine {
    */
   private async checkSingleAchievement(
     userId: string,
-    achievement: any,
+    achievement: AchievementRecord,
     eventType: string,
     eventData: any
   ): Promise<AchievementCheckResult | null> {
     try {
-      // Get or create user achievement record
-      let userAchievement = await prisma.userAchievement.findUnique({
-        where: {
-          userId_achievementId: {
-            userId,
-            achievementId: achievement.id,
-          },
-        },
-      });
+      // Get or create user achievement record (composite key: userId + achievementId)
+      const { data: userAchievementData } = await db
+        .from('user_achievements')
+        .select('*')
+        .eq('userId', userId)
+        .eq('achievementId', achievement.id)
+        .limit(1);
+
+      let userAchievement = firstOrNull(userAchievementData) as UserAchievementRecord | null;
 
       // Skip if already unlocked
       if (userAchievement?.isUnlocked) {
@@ -98,13 +143,18 @@ export class AchievementEngine {
 
       // Create if doesn't exist
       if (!userAchievement) {
-        userAchievement = await prisma.userAchievement.create({
-          data: {
+        const { data: newData } = await db
+          .from('user_achievements')
+          .insert({
             userId,
             achievementId: achievement.id,
             progress: 0,
-          },
-        });
+            isUnlocked: false,
+          })
+          .select()
+          .single();
+
+        userAchievement = newData as UserAchievementRecord;
       }
 
       // Check criteria based on achievement type
@@ -118,14 +168,14 @@ export class AchievementEngine {
       // Update progress
       const shouldUnlock = checkResult.progress >= 100 || checkResult.achieved;
 
-      const updated = await prisma.userAchievement.update({
-        where: { id: userAchievement.id },
-        data: {
+      await db
+        .from('user_achievements')
+        .update({
           progress: checkResult.progress,
           isUnlocked: shouldUnlock,
-          unlockedAt: shouldUnlock ? new Date() : undefined,
-        },
-      });
+          unlockedAt: shouldUnlock ? new Date().toISOString() : null,
+        })
+        .eq('id', userAchievement.id);
 
       // Award XP if unlocked
       if (shouldUnlock && !userAchievement.isUnlocked) {
@@ -302,20 +352,30 @@ export class AchievementEngine {
   async awardXP(userId: string, amount: number): Promise<void> {
     try {
       // Get or create user stats
-      let userStats = await prisma.userStats.findUnique({
-        where: { userId },
-      });
+      const { data: statsData } = await db
+        .from('user_stats')
+        .select('*')
+        .eq('userId', userId)
+        .limit(1);
+
+      let userStats = firstOrNull(statsData) as UserStatsRecord | null;
 
       if (!userStats) {
-        userStats = await prisma.userStats.create({
-          data: {
+        const { data: newStats } = await db
+          .from('user_stats')
+          .insert({
             userId,
             totalXP: 0,
             level: 1,
             currentLevelXP: 0,
             nextLevelXP: 100,
-          },
-        });
+            loginStreak: 0,
+            longestLoginStreak: 0,
+          })
+          .select()
+          .single();
+
+        userStats = newStats as UserStatsRecord;
       }
 
       // Add XP
@@ -332,15 +392,15 @@ export class AchievementEngine {
       }
 
       // Update stats
-      await prisma.userStats.update({
-        where: { userId },
-        data: {
+      await db
+        .from('user_stats')
+        .update({
           totalXP: newTotalXP,
           level: newLevel,
           currentLevelXP: newCurrentLevelXP,
           nextLevelXP: newNextLevelXP,
-        },
-      });
+        })
+        .eq('userId', userId);
 
       // If leveled up, could trigger notification here
       if (newLevel > userStats.level) {
@@ -367,34 +427,42 @@ export class AchievementEngine {
    */
   async updateStreak(userId: string): Promise<void> {
     try {
-      let userStats = await prisma.userStats.findUnique({
-        where: { userId },
-      });
+      const { data: statsData } = await db
+        .from('user_stats')
+        .select('*')
+        .eq('userId', userId)
+        .limit(1);
+
+      let userStats = firstOrNull(statsData) as UserStatsRecord | null;
 
       if (!userStats) {
-        userStats = await prisma.userStats.create({
-          data: {
+        await db
+          .from('user_stats')
+          .insert({
             userId,
             loginStreak: 1,
             longestLoginStreak: 1,
-            lastLoginDate: new Date(),
-          },
-        });
+            lastLoginDate: new Date().toISOString(),
+            totalXP: 0,
+            level: 1,
+            currentLevelXP: 0,
+            nextLevelXP: 100,
+          });
         return;
       }
 
       const now = new Date();
-      const lastLogin = userStats.lastLoginDate;
+      const lastLogin = userStats.lastLoginDate ? new Date(userStats.lastLoginDate) : null;
 
       if (!lastLogin) {
-        await prisma.userStats.update({
-          where: { userId },
-          data: {
+        await db
+          .from('user_stats')
+          .update({
             loginStreak: 1,
             longestLoginStreak: 1,
-            lastLoginDate: now,
-          },
-        });
+            lastLoginDate: now.toISOString(),
+          })
+          .eq('userId', userId);
         return;
       }
 
@@ -415,14 +483,14 @@ export class AchievementEngine {
       const newStreak = isConsecutive ? userStats.loginStreak + 1 : 1;
       const newLongest = Math.max(newStreak, userStats.longestLoginStreak);
 
-      await prisma.userStats.update({
-        where: { userId },
-        data: {
+      await db
+        .from('user_stats')
+        .update({
           loginStreak: newStreak,
           longestLoginStreak: newLongest,
-          lastLoginDate: now,
-        },
-      });
+          lastLoginDate: now.toISOString(),
+        })
+        .eq('userId', userId);
 
       logger.info(`🔥 User ${userId} login streak: ${newStreak} days`);
     } catch (error) {
@@ -440,9 +508,13 @@ export class AchievementEngine {
     progress: number;
   } | null> {
     try {
-      const userStats = await prisma.userStats.findUnique({
-        where: { userId },
-      });
+      const { data: statsData } = await db
+        .from('user_stats')
+        .select('level, currentLevelXP, nextLevelXP')
+        .eq('userId', userId)
+        .limit(1);
+
+      const userStats = firstOrNull(statsData) as Pick<UserStatsRecord, 'level' | 'currentLevelXP' | 'nextLevelXP'> | null;
 
       if (!userStats) {
         return null;
@@ -465,24 +537,30 @@ export class AchievementEngine {
   // ========================================
 
   private async checkClientCount(userId: string, threshold: number) {
-    const count = await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: {
-              preparerId: userId,
-            },
-          },
-        },
-        status: {
-          in: ['FILED', 'ACCEPTED'],
-        },
-      },
-    });
+    // Get client IDs for this preparer
+    const { data: clientPreparers } = await db
+      .from('client_preparers')
+      .select('clientId')
+      .eq('preparerId', userId);
+
+    const clientIds = (clientPreparers || []).map((cp: { clientId: string }) => cp.clientId);
+
+    if (clientIds.length === 0) {
+      return { achieved: false, progress: 0 };
+    }
+
+    // Count filed returns for those clients
+    const { count } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('profileId', clientIds)
+      .in('status', ['FILED', 'ACCEPTED']);
+
+    const returnCount = count || 0;
 
     return {
-      achieved: count >= threshold,
-      progress: Math.min((count / threshold) * 100, 100),
+      achieved: returnCount >= threshold,
+      progress: Math.min((returnCount / threshold) * 100, 100),
     };
   }
 
@@ -490,44 +568,51 @@ export class AchievementEngine {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: {
-              preparerId: userId,
-            },
-          },
-        },
-        updatedAt: {
-          gte: today,
-        },
-        status: {
-          in: ['FILED', 'ACCEPTED'],
-        },
-      },
-    });
+    // Get client IDs for this preparer
+    const { data: clientPreparers } = await db
+      .from('client_preparers')
+      .select('clientId')
+      .eq('preparerId', userId);
+
+    const clientIds = (clientPreparers || []).map((cp: { clientId: string }) => cp.clientId);
+
+    if (clientIds.length === 0) {
+      return 0;
+    }
+
+    // Count filed returns for those clients today
+    const { count } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('profileId', clientIds)
+      .gte('updatedAt', today.toISOString())
+      .in('status', ['FILED', 'ACCEPTED']);
+
+    return count || 0;
   }
 
   private async checkActiveClients(userId: string, threshold: number) {
-    const count = await prisma.clientPreparer.count({
-      where: {
-        preparerId: userId,
-        // Could add additional filters for "active" definition
-      },
-    });
+    const { count } = await db
+      .from('client_preparers')
+      .select('id', { count: 'exact', head: true })
+      .eq('preparerId', userId);
+
+    const clientCount = count || 0;
 
     return {
-      achieved: count >= threshold,
-      progress: Math.min((count / threshold) * 100, 100),
+      achieved: clientCount >= threshold,
+      progress: Math.min((clientCount / threshold) * 100, 100),
     };
   }
 
   private async checkDocumentsProcessed(userId: string, threshold: number) {
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: statsData } = await db
+      .from('user_stats')
+      .select('documentsProcessed')
+      .eq('userId', userId)
+      .limit(1);
 
+    const userStats = firstOrNull(statsData) as { documentsProcessed?: number } | null;
     const count = userStats?.documentsProcessed || 0;
 
     return {
@@ -537,10 +622,13 @@ export class AchievementEngine {
   }
 
   private async checkSatisfactionRating(userId: string, threshold: number) {
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: statsData } = await db
+      .from('user_stats')
+      .select('clientSatisfaction')
+      .eq('userId', userId)
+      .limit(1);
 
+    const userStats = firstOrNull(statsData) as { clientSatisfaction?: number } | null;
     const rating = userStats?.clientSatisfaction || 0;
 
     return {
@@ -577,12 +665,13 @@ export class AchievementEngine {
   }
 
   private async checkEarnings(userId: string, threshold: number) {
-    const total = await prisma.commission.aggregate({
-      where: { userId },
-      _sum: { amount: true },
-    });
+    // Supabase doesn't have aggregate like Prisma, so we fetch and sum
+    const { data: commissions } = await db
+      .from('commissions')
+      .select('amount')
+      .eq('userId', userId);
 
-    const earnings = Number(total._sum.amount || 0);
+    const earnings = (commissions || []).reduce((sum: number, c: { amount: number }) => sum + Number(c.amount || 0), 0);
 
     return {
       achieved: earnings >= threshold,
@@ -591,21 +680,27 @@ export class AchievementEngine {
   }
 
   private async checkReferralCount(userId: string, threshold: number) {
-    const count = await prisma.referral.count({
-      where: { referrerId: userId },
-    });
+    const { count } = await db
+      .from('referrals')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrerId', userId);
+
+    const referralCount = count || 0;
 
     return {
-      achieved: count >= threshold,
-      progress: Math.min((count / threshold) * 100, 100),
+      achieved: referralCount >= threshold,
+      progress: Math.min((referralCount / threshold) * 100, 100),
     };
   }
 
   private async checkLinksCreated(userId: string, threshold: number) {
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: statsData } = await db
+      .from('user_stats')
+      .select('linksCreated')
+      .eq('userId', userId)
+      .limit(1);
 
+    const userStats = firstOrNull(statsData) as { linksCreated?: number } | null;
     const count = userStats?.linksCreated || 0;
 
     return {
@@ -624,9 +719,12 @@ export class AchievementEngine {
   }
 
   private async checkConversionRate(userId: string, threshold: number, minReferrals: number) {
-    const totalReferrals = await prisma.referral.count({
-      where: { referrerId: userId },
-    });
+    const { count: totalCount } = await db
+      .from('referrals')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrerId', userId);
+
+    const totalReferrals = totalCount || 0;
 
     if (totalReferrals < minReferrals) {
       return {
@@ -635,13 +733,13 @@ export class AchievementEngine {
       };
     }
 
-    const convertedReferrals = await prisma.referral.count({
-      where: {
-        referrerId: userId,
-        status: 'COMPLETED',
-      },
-    });
+    const { count: convertedCount } = await db
+      .from('referrals')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrerId', userId)
+      .eq('status', 'COMPLETED');
 
+    const convertedReferrals = convertedCount || 0;
     const rate = convertedReferrals / totalReferrals;
 
     return {
@@ -660,10 +758,13 @@ export class AchievementEngine {
   }
 
   private async checkLoginStreak(userId: string, days: number) {
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: statsData } = await db
+      .from('user_stats')
+      .select('loginStreak')
+      .eq('userId', userId)
+      .limit(1);
 
+    const userStats = firstOrNull(statsData) as { loginStreak?: number } | null;
     const streak = userStats?.loginStreak || 0;
 
     return {
@@ -673,10 +774,13 @@ export class AchievementEngine {
   }
 
   private async checkMessagesSent(userId: string, threshold: number) {
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: statsData } = await db
+      .from('user_stats')
+      .select('messagesSent')
+      .eq('userId', userId)
+      .limit(1);
 
+    const userStats = firstOrNull(statsData) as { messagesSent?: number } | null;
     const count = userStats?.messagesSent || 0;
 
     return {
@@ -686,9 +790,13 @@ export class AchievementEngine {
   }
 
   private async checkProfileComplete(userId: string, fields: string[]) {
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('*')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as Record<string, unknown> | null;
 
     if (!profile) {
       return {
@@ -698,7 +806,7 @@ export class AchievementEngine {
     }
 
     const completedFields = fields.filter((field) => {
-      const value = (profile as any)[field];
+      const value = profile[field];
       return value !== null && value !== undefined && value !== '';
     });
 
@@ -717,36 +825,43 @@ export class AchievementEngine {
     const peakStart = new Date(year, 2, 1); // March 1
     const peakEnd = new Date(year, 4, 15); // April 15
 
-    const count = await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: {
-              preparerId: userId,
-            },
-          },
-        },
-        updatedAt: {
-          gte: peakStart,
-          lte: peakEnd,
-        },
-        status: {
-          in: ['FILED', 'ACCEPTED'],
-        },
-      },
-    });
+    // Get client IDs for this preparer
+    const { data: clientPreparers } = await db
+      .from('client_preparers')
+      .select('clientId')
+      .eq('preparerId', userId);
+
+    const clientIds = (clientPreparers || []).map((cp: { clientId: string }) => cp.clientId);
+
+    if (clientIds.length === 0) {
+      return { achieved: false, progress: 0 };
+    }
+
+    // Count filed returns during peak season
+    const { count } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('profileId', clientIds)
+      .gte('updatedAt', peakStart.toISOString())
+      .lte('updatedAt', peakEnd.toISOString())
+      .in('status', ['FILED', 'ACCEPTED']);
+
+    const returnCount = count || 0;
 
     return {
-      achieved: count >= threshold,
-      progress: Math.min((count / threshold) * 100, 100),
+      achieved: returnCount >= threshold,
+      progress: Math.min((returnCount / threshold) * 100, 100),
     };
   }
 
   private async checkSignupDate(userId: string, before: string) {
-    const profile = await prisma.profile.findUnique({
-      where: { userId: userId },
-      select: { createdAt: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('createdAt')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { createdAt: string } | null;
 
     if (!profile) {
       return {
@@ -756,7 +871,8 @@ export class AchievementEngine {
     }
 
     const beforeDate = new Date(before);
-    const achieved = profile.createdAt < beforeDate;
+    const createdAt = new Date(profile.createdAt);
+    const achieved = createdAt < beforeDate;
 
     return {
       achieved,

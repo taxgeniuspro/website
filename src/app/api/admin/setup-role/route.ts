@@ -1,8 +1,25 @@
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { UserRole } from '@prisma/client';
+
+// Local type for user role
+type UserRole = 'admin' | 'client' | 'tax_preparer';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  trackingCode: string | null;
+}
+
+interface User {
+  email: string;
+  name: string | null;
+}
 
 /**
  * RESTRICTED ENDPOINT: Set current user's role
@@ -33,14 +50,14 @@ export async function POST(request: Request) {
 
     // Get the role to set from request body
     const body = await request.json();
-    const roleInput = body.role?.toUpperCase() || 'admin'; // Default to ADMIN
+    const roleInput = body.role?.toLowerCase() || 'admin'; // Default to admin
 
     // Validate role - only 3 valid roles: admin, client, tax_preparer
     const validRoles: UserRole[] = ['admin', 'client', 'tax_preparer'];
     if (!validRoles.includes(roleInput as UserRole)) {
       return NextResponse.json(
         {
-          error: 'Invalid role. Must be: ADMIN, CLIENT, or TAX_PREPARER',
+          error: 'Invalid role. Must be: admin, client, or tax_preparer',
         },
         { status: 400 }
       );
@@ -48,21 +65,29 @@ export async function POST(request: Request) {
 
     const role = roleInput as UserRole;
 
-    // Update user profile in database
-    await prisma.profile.upsert({
-      where: { userId },
-      create: {
-        userId,
-        role,
-        firstName: session.user.name?.split(' ')[0] || '',
-        lastName: session.user.name?.split(' ').slice(1).join(' ') || '',
-      },
-      update: {
-        role,
-      },
-    });
+    // Check if profile exists
+    const { data: existingProfile } = await db.from('profiles')
+      .select('id')
+      .eq('userId', userId)
+      .limit(1);
 
-    logger.info(`✅ Role set to ${role} for user ${userId}`);
+    if (existingProfile && existingProfile.length > 0) {
+      // Update existing profile
+      await db.from('profiles')
+        .update({ role })
+        .eq('userId', userId);
+    } else {
+      // Create new profile
+      await db.from('profiles')
+        .insert({
+          userId,
+          role,
+          firstName: session.user.name?.split(' ')[0] || '',
+          lastName: session.user.name?.split(' ').slice(1).join(' ') || '',
+        });
+    }
+
+    logger.info(`Role set to ${role} for user ${userId}`);
 
     return NextResponse.json({
       success: true,
@@ -96,24 +121,31 @@ export async function GET() {
     }
 
     // Get user profile from database
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      include: {
-        user: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .eq('userId', userId)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
+
+    // Get user info
+    const { data: userData } = await db.from('users')
+      .select('email, name')
+      .eq('id', userId)
+      .limit(1);
+
+    const user = firstOrNull<User>(userData);
 
     const currentRole = profile?.role || 'client';
 
     return NextResponse.json({
       userId: userId,
-      email: profile?.user.email || session.user.email,
-      name: profile?.user.name || session.user.name,
+      email: user?.email || session.user.email,
+      name: user?.name || session.user.name,
       currentRole: currentRole,
       profile: {
         firstName: profile?.firstName,

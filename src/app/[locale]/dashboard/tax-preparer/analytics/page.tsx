@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getMyPreparerAnalytics } from '@/lib/services/lead-analytics.service';
 import { TaxPreparerAnalyticsClient } from '@/components/analytics/TaxPreparerAnalyticsClient';
 
@@ -19,11 +19,13 @@ async function checkPreparerAccess() {
 
   // Fetch profile to get Profile.id (not User.id)
   // Analytics queries filter by Profile.id, not User.id
-  const profile = await prisma.profile.findFirst({
-    where: { userId: user.id },
-    select: { id: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id')
+    .eq('userId', user.id)
+    .limit(1);
 
+  const profile = firstOrNull(profiles);
   return { hasAccess, preparerId: profile?.id || null };
 }
 

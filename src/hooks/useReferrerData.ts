@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ReferrerStats, ReferralActivity } from '@/lib/services/referrer.service';
-import type { Contest, MarketingMaterial, Notification } from '@prisma/client';
+import type { Contest, MarketingMaterial, Notification } from '@/lib/types';
 
 // API helper functions
 const fetchApi = async (url: string) => {

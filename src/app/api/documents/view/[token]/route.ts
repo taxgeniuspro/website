@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -45,9 +45,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     };
 
     // Verify document still exists
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-    });
+    const { data: documents } = await db.from('documents')
+      .select('*')
+      .eq('id', documentId);
+    const document = firstOrNull(documents);
 
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -85,10 +86,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         success: true,
         document: {
           id: document.id,
-          fileName: document.fileName,
-          fileType: document.fileType,
-          fileSize: document.fileSize,
-          fileUrl: document.fileUrl,
+          fileName: document.file_name,
+          fileType: document.file_type,
+          fileSize: document.file_size,
+          fileUrl: document.file_url,
         },
         message: 'Document access granted. Use fileUrl to view/download.',
       },

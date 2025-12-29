@@ -6,11 +6,39 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
 type RouteParams = Promise<{ id: string }>;
+
+// Local TypeScript interfaces
+interface Appointment {
+  id: string;
+  preparerId: string;
+  clientId: string | null;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string | null;
+  type: string;
+  status: string;
+  scheduledFor: string | null;
+  scheduledEnd: string | null;
+  duration: number | null;
+  notes: string | null;
+  clientNotes: string | null;
+  subject: string | null;
+  location: string | null;
+  meetingLink: string | null;
+  timezone: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Profile {
+  id: string;
+  role: string | null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -24,9 +52,12 @@ export async function GET(
 
     const { id } = await params;
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, preparerId:preparer_id, clientId:client_id, clientName:client_name, clientEmail:client_email, clientPhone:client_phone, type, status, scheduledFor:scheduled_for, scheduledEnd:scheduled_end, duration, notes, clientNotes:client_notes, subject, location, meetingLink:meeting_link, timezone, createdAt:created_at, updatedAt:updated_at')
+      .eq('id', id)
+      .limit(1);
+    const appointment = firstOrNull<Appointment>(appointmentData);
 
     if (!appointment) {
       return NextResponse.json(
@@ -36,9 +67,12 @@ export async function GET(
     }
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<Profile>(userProfileData);
 
     const isAuthorized =
       userProfile?.id === appointment.preparerId ||
@@ -83,9 +117,12 @@ export async function PATCH(
     const body = await request.json();
 
     // Get existing appointment
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, preparerId:preparer_id, clientId:client_id, status, duration')
+      .eq('id', id)
+      .limit(1);
+    const appointment = firstOrNull<{ id: string; preparerId: string; clientId: string | null; status: string; duration: number | null }>(appointmentData);
 
     if (!appointment) {
       return NextResponse.json(
@@ -95,9 +132,12 @@ export async function PATCH(
     }
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<Profile>(userProfileData);
 
     const isAuthorized =
       userProfile?.id === appointment.preparerId ||
@@ -112,18 +152,18 @@ export async function PATCH(
       );
     }
 
-    // Build update data
-    const updateData: any = {
-      updatedAt: new Date(),
+    // Build update data (snake_case for Supabase)
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
     };
 
     // Allow updating specific fields
     if (body.status) updateData.status = body.status;
     if (body.subject !== undefined) updateData.subject = body.subject;
     if (body.notes !== undefined) updateData.notes = body.notes;
-    if (body.clientNotes !== undefined) updateData.clientNotes = body.clientNotes;
+    if (body.clientNotes !== undefined) updateData.client_notes = body.clientNotes;
     if (body.location !== undefined) updateData.location = body.location;
-    if (body.meetingLink !== undefined) updateData.meetingLink = body.meetingLink;
+    if (body.meetingLink !== undefined) updateData.meeting_link = body.meetingLink;
     if (body.type) updateData.type = body.type;
     if (body.duration) updateData.duration = body.duration;
 
@@ -135,12 +175,12 @@ export async function PATCH(
 
     // Special handling for scheduling
     if (body.scheduledFor) {
-      updateData.scheduledFor = new Date(body.scheduledFor);
+      updateData.scheduled_for = new Date(body.scheduledFor).toISOString();
       if (body.duration || appointment.duration) {
         const duration = body.duration || appointment.duration;
-        updateData.scheduledEnd = new Date(
-          new Date(body.scheduledFor).getTime() + duration * 60000
-        );
+        updateData.scheduled_end = new Date(
+          new Date(body.scheduledFor).getTime() + (duration || 30) * 60000
+        ).toISOString();
       }
       if (appointment.status === 'REQUESTED') {
         updateData.status = 'SCHEDULED';
@@ -148,10 +188,17 @@ export async function PATCH(
     }
 
     // Update appointment
-    const updatedAppointment = await prisma.appointment.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: updatedData, error: updateError } = await db
+      .from('appointments')
+      .update(updateData)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateError) {
+      throw new Error(`Failed to update appointment: ${updateError.message}`);
+    }
+    const updatedAppointment = updatedData;
 
     logger.info('Appointment updated:', {
       id: updatedAppointment.id,
@@ -188,9 +235,12 @@ export async function DELETE(
     const { id } = await params;
 
     // Only admins can delete appointments
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<Profile>(userProfileData);
 
     if (
       userProfile?.role !== 'admin' &&
@@ -202,9 +252,14 @@ export async function DELETE(
       );
     }
 
-    await prisma.appointment.delete({
-      where: { id },
-    });
+    const { error: deleteError } = await db
+      .from('appointments')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw new Error(`Failed to delete appointment: ${deleteError.message}`);
+    }
 
     logger.info('Appointment deleted:', { id });
 

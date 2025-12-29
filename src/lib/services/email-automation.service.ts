@@ -2,19 +2,64 @@
  * Email Automation Service
  *
  * Handles automated email campaigns, sequences, and tracking for tax leads.
- * Integrates with Resend for email delivery and tracks opens/clicks.
+ * Integrates with nodemailer for email delivery and tracks opens/clicks.
  *
  * @module lib/services/email-automation
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { CampaignStatus, EmailActivityStatus } from '@prisma/client';
 import {
   logEmailSent,
   logEmailOpened,
   logEmailClicked,
 } from './activity.service';
+
+// Local type definitions (replacing @prisma/client)
+type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'SENT' | 'PAUSED' | 'CANCELLED';
+type EmailActivityStatus = 'SENT' | 'DELIVERED' | 'OPENED' | 'CLICKED' | 'BOUNCED' | 'FAILED' | 'UNSUBSCRIBED';
+
+interface CampaignRecord {
+  id: string;
+  name: string;
+  subject: string;
+  htmlBody: string;
+  plainTextBody?: string | null;
+  fromName?: string | null;
+  fromEmail?: string | null;
+  replyTo?: string | null;
+  status: CampaignStatus;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  recipientCount: number;
+  sentCount: number;
+  openedCount: number;
+  clickedCount: number;
+  bouncedCount: number;
+  segmentRules?: Record<string, unknown> | null;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+interface SequenceRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  triggerEvent: string;
+  triggerDelay: number;
+  steps: EmailSequenceStep[];
+  campaignId?: string | null;
+  createdBy?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+}
 
 export interface SendEmailParams {
   to: string;
@@ -47,7 +92,7 @@ export interface EmailCampaignParams {
   fromEmail?: string;
   replyTo?: string;
   scheduledAt?: Date;
-  segmentRules?: Record<string, any>;
+  segmentRules?: Record<string, unknown>;
   createdBy: string;
 }
 
@@ -97,15 +142,18 @@ export async function sendEmail(params: SendEmailParams) {
       campaignId,
     } = params;
 
-    // TODO: Integrate with Resend API when ready
+    // TODO: Integrate with nodemailer when ready
     // For now, we'll log the email and track it in the database
 
     // Verify lead exists if leadId provided
     if (leadId) {
-      const lead = await prisma.taxIntakeLead.findUnique({
-        where: { id: leadId },
-        select: { id: true, email: true },
-      });
+      const { data: leadData } = await db
+        .from('tax_intake_leads')
+        .select('id, email')
+        .eq('id', leadId)
+        .limit(1);
+
+      const lead = firstOrNull(leadData) as TaxIntakeLeadRecord | null;
 
       if (!lead) {
         logger.error(`Cannot send email: Lead ${leadId} not found`);
@@ -131,7 +179,7 @@ export async function sendEmail(params: SendEmailParams) {
 
     return {
       success: true,
-      emailId: `email_${Date.now()}`, // Placeholder until Resend integration
+      emailId: `email_${Date.now()}`, // Placeholder until nodemailer integration
     };
   } catch (error) {
     logger.error('Error sending email:', error);
@@ -176,8 +224,9 @@ export async function sendBulkEmail(
  */
 export async function createEmailCampaign(params: EmailCampaignParams) {
   try {
-    const campaign = await prisma.cRMEmailCampaign.create({
-      data: {
+    const { data: campaign, error } = await db
+      .from('crm_email_campaigns')
+      .insert({
         name: params.name,
         subject: params.subject,
         htmlBody: params.htmlBody,
@@ -185,19 +234,27 @@ export async function createEmailCampaign(params: EmailCampaignParams) {
         fromName: params.fromName || 'Tax Genius Pro',
         fromEmail: params.fromEmail || 'noreply@taxgeniuspro.tax',
         replyTo: params.replyTo,
-        status: params.scheduledAt ? CampaignStatus.SCHEDULED : CampaignStatus.DRAFT,
-        scheduledAt: params.scheduledAt,
+        status: params.scheduledAt ? ('SCHEDULED' as CampaignStatus) : ('DRAFT' as CampaignStatus),
+        scheduledAt: params.scheduledAt?.toISOString(),
         segmentRules: params.segmentRules || null,
         createdBy: params.createdBy,
-      },
+        recipientCount: 0,
+        sentCount: 0,
+        openedCount: 0,
+        clickedCount: 0,
+        bouncedCount: 0,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`Email campaign created: ${campaign?.id}`, {
+      name: campaign?.name,
+      status: campaign?.status,
     });
 
-    logger.info(`Email campaign created: ${campaign.id}`, {
-      name: campaign.name,
-      status: campaign.status,
-    });
-
-    return { success: true, campaign };
+    return { success: true, campaign: campaign as CampaignRecord };
   } catch (error) {
     logger.error('Error creating email campaign:', error);
     return { success: false, error: 'Failed to create campaign' };
@@ -209,33 +266,32 @@ export async function createEmailCampaign(params: EmailCampaignParams) {
  */
 export async function sendCampaign(campaignId: string) {
   try {
-    const campaign = await prisma.cRMEmailCampaign.findUnique({
-      where: { id: campaignId },
-    });
+    const { data: campaignData } = await db
+      .from('crm_email_campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .limit(1);
+
+    const campaign = firstOrNull(campaignData) as CampaignRecord | null;
 
     if (!campaign) {
       return { success: false, error: 'Campaign not found' };
     }
 
-    if (campaign.status === CampaignStatus.SENT) {
+    if (campaign.status === 'SENT') {
       return { success: false, error: 'Campaign already sent' };
     }
 
     // Get leads matching segment rules
     // TODO: Implement segment filtering based on segmentRules
-    // For now, we'll get all leads
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        email: { not: null },
-      },
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-      },
-      take: 100, // Limit for safety
-    });
+    // For now, we'll get all leads with email
+    const { data: leadsData } = await db
+      .from('tax_intake_leads')
+      .select('id, email, first_name, last_name')
+      .not('email', 'is', null)
+      .limit(100); // Limit for safety
+
+    const leads = (leadsData || []) as TaxIntakeLeadRecord[];
 
     // Send emails
     const recipients = leads
@@ -249,7 +305,7 @@ export async function sendCampaign(campaignId: string) {
     const result = await sendBulkEmail(recipients, {
       subject: campaign.subject,
       htmlBody: campaign.htmlBody,
-      plainTextBody: campaign.plainTextBody,
+      plainTextBody: campaign.plainTextBody || undefined,
       fromName: campaign.fromName || undefined,
       fromEmail: campaign.fromEmail || undefined,
       replyTo: campaign.replyTo || undefined,
@@ -257,15 +313,15 @@ export async function sendCampaign(campaignId: string) {
     });
 
     // Update campaign stats
-    await prisma.cRMEmailCampaign.update({
-      where: { id: campaignId },
-      data: {
-        status: CampaignStatus.SENT,
-        sentAt: new Date(),
+    await db
+      .from('crm_email_campaigns')
+      .update({
+        status: 'SENT' as CampaignStatus,
+        sentAt: new Date().toISOString(),
         recipientCount: result.total,
         sentCount: result.successful,
-      },
-    });
+      })
+      .eq('id', campaignId);
 
     logger.info(`Campaign sent: ${campaignId}`, {
       total: result.total,
@@ -290,8 +346,9 @@ export async function sendCampaign(campaignId: string) {
  */
 export async function createEmailSequence(params: EmailSequenceParams) {
   try {
-    const sequence = await prisma.cRMEmailSequence.create({
-      data: {
+    const { data: sequence, error } = await db
+      .from('crm_email_sequences')
+      .insert({
         name: params.name,
         description: params.description,
         triggerEvent: params.triggerEvent,
@@ -300,15 +357,18 @@ export async function createEmailSequence(params: EmailSequenceParams) {
         campaignId: params.campaignId,
         createdBy: params.createdBy,
         isActive: false, // Must be manually activated
-      },
-    });
+      })
+      .select()
+      .single();
 
-    logger.info(`Email sequence created: ${sequence.id}`, {
-      name: sequence.name,
+    if (error) throw error;
+
+    logger.info(`Email sequence created: ${sequence?.id}`, {
+      name: sequence?.name,
       steps: params.steps.length,
     });
 
-    return { success: true, sequence };
+    return { success: true, sequence: sequence as SequenceRecord };
   } catch (error) {
     logger.error('Error creating email sequence:', error);
     return { success: false, error: 'Failed to create sequence' };
@@ -320,14 +380,18 @@ export async function createEmailSequence(params: EmailSequenceParams) {
  */
 export async function activateEmailSequence(sequenceId: string) {
   try {
-    const sequence = await prisma.cRMEmailSequence.update({
-      where: { id: sequenceId },
-      data: { isActive: true },
-    });
+    const { data: sequence, error } = await db
+      .from('crm_email_sequences')
+      .update({ isActive: true })
+      .eq('id', sequenceId)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     logger.info(`Email sequence activated: ${sequenceId}`);
 
-    return { success: true, sequence };
+    return { success: true, sequence: sequence as SequenceRecord };
   } catch (error) {
     logger.error('Error activating email sequence:', error);
     return { success: false, error: 'Failed to activate sequence' };
@@ -339,14 +403,18 @@ export async function activateEmailSequence(sequenceId: string) {
  */
 export async function deactivateEmailSequence(sequenceId: string) {
   try {
-    const sequence = await prisma.cRMEmailSequence.update({
-      where: { id: sequenceId },
-      data: { isActive: false },
-    });
+    const { data: sequence, error } = await db
+      .from('crm_email_sequences')
+      .update({ isActive: false })
+      .eq('id', sequenceId)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     logger.info(`Email sequence deactivated: ${sequenceId}`);
 
-    return { success: true, sequence };
+    return { success: true, sequence: sequence as SequenceRecord };
   } catch (error) {
     logger.error('Error deactivating email sequence:', error);
     return { success: false, error: 'Failed to deactivate sequence' };
@@ -378,20 +446,13 @@ export function replaceEmailVariables(
  */
 export async function getCampaignStats(campaignId: string) {
   try {
-    const campaign = await prisma.cRMEmailCampaign.findUnique({
-      where: { id: campaignId },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        recipientCount: true,
-        sentCount: true,
-        openedCount: true,
-        clickedCount: true,
-        bouncedCount: true,
-        sentAt: true,
-      },
-    });
+    const { data: campaignData } = await db
+      .from('crm_email_campaigns')
+      .select('id, name, status, recipientCount, sentCount, openedCount, clickedCount, bouncedCount, sentAt')
+      .eq('id', campaignId)
+      .limit(1);
+
+    const campaign = firstOrNull(campaignData) as CampaignRecord | null;
 
     if (!campaign) {
       return { success: false, error: 'Campaign not found' };
@@ -432,30 +493,20 @@ export async function getCampaignStats(campaignId: string) {
  */
 export async function getAllCampaigns(createdBy?: string) {
   try {
-    const where: any = {};
+    let query = db
+      .from('crm_email_campaigns')
+      .select('id, name, subject, status, recipientCount, sentCount, openedCount, clickedCount, scheduledAt, sentAt, createdAt')
+      .order('createdAt', { ascending: false });
+
     if (createdBy) {
-      where.createdBy = createdBy;
+      query = query.eq('createdBy', createdBy);
     }
 
-    const campaigns = await prisma.cRMEmailCampaign.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        subject: true,
-        status: true,
-        recipientCount: true,
-        sentCount: true,
-        openedCount: true,
-        clickedCount: true,
-        scheduledAt: true,
-        sentAt: true,
-        createdAt: true,
-      },
-    });
+    const { data: campaigns, error } = await query;
 
-    return { success: true, campaigns };
+    if (error) throw error;
+
+    return { success: true, campaigns: (campaigns || []) as CampaignRecord[] };
   } catch (error) {
     logger.error('Error getting campaigns:', error);
     return { success: false, error: 'Failed to get campaigns' };
@@ -467,17 +518,20 @@ export async function getAllCampaigns(createdBy?: string) {
  */
 export async function getAllSequences(createdBy?: string) {
   try {
-    const where: any = {};
+    let query = db
+      .from('crm_email_sequences')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
     if (createdBy) {
-      where.createdBy = createdBy;
+      query = query.eq('createdBy', createdBy);
     }
 
-    const sequences = await prisma.cRMEmailSequence.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: sequences, error } = await query;
 
-    return { success: true, sequences };
+    if (error) throw error;
+
+    return { success: true, sequences: (sequences || []) as SequenceRecord[] };
   } catch (error) {
     logger.error('Error getting sequences:', error);
     return { success: false, error: 'Failed to get sequences' };
@@ -489,9 +543,12 @@ export async function getAllSequences(createdBy?: string) {
  */
 export async function deleteCampaign(campaignId: string) {
   try {
-    await prisma.cRMEmailCampaign.delete({
-      where: { id: campaignId },
-    });
+    const { error } = await db
+      .from('crm_email_campaigns')
+      .delete()
+      .eq('id', campaignId);
+
+    if (error) throw error;
 
     logger.info(`Email campaign deleted: ${campaignId}`);
 
@@ -507,9 +564,12 @@ export async function deleteCampaign(campaignId: string) {
  */
 export async function deleteSequence(sequenceId: string) {
   try {
-    await prisma.cRMEmailSequence.delete({
-      where: { id: sequenceId },
-    });
+    const { error } = await db
+      .from('crm_email_sequences')
+      .delete()
+      .eq('id', sequenceId);
+
+    if (error) throw error;
 
     logger.info(`Email sequence deleted: ${sequenceId}`);
 

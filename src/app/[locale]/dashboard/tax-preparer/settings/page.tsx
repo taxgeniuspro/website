@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -55,10 +55,14 @@ async function checkAccess() {
   if (!hasAccess) return { hasAccess: false, profileId: null };
 
   // Get profile ID
-  const profile = await prisma.profile.findUnique({
-    where: { userId: user.id },
-    select: { id: true },
-  });
+  const { data: profiles, error } = await db
+    .from('profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .limit(1);
+
+  if (error) console.error('Error fetching profile:', error);
+  const profile = firstOrNull(profiles);
 
   return { hasAccess, profileId: profile?.id || null };
 }

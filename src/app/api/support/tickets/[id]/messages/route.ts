@@ -5,11 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { addTicketMessage } from '@/lib/services/support-ticket.service';
 import { executeWorkflows } from '@/lib/services/ticket-workflow.service';
-import { WorkflowTrigger, UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces to replace @prisma/client types
+type WorkflowTrigger = 'TICKET_CREATED' | 'TICKET_UPDATED' | 'PREPARER_RESPONSE' | 'CLIENT_RESPONSE';
+type UserRole = 'CLIENT' | 'LEAD' | 'TAX_PREPARER' | 'ADMIN' | 'SUPER_ADMIN';
 
 /**
  * POST /api/support/tickets/[id]/messages
@@ -24,35 +27,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, first_name')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
 
     // Verify ticket exists and user has access
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      select: {
-        id: true,
-        creatorId: true,
-        assignedToId: true,
-      },
-    });
+    const { data: ticketData, error: ticketError } = await db
+      .from('support_tickets')
+      .select('id, creator_id, assigned_to_id')
+      .eq('id', ticketId)
+      .limit(1);
 
-    if (!ticket) {
+    const ticket = firstOrNull(ticketData);
+
+    if (ticketError || !ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
     // Check authorization
-    const isAdmin = profile.role === UserRole.SUPER_ADMIN || profile.role === UserRole.ADMIN;
-    const isCreator = ticket.creatorId === profile.id;
-    const isAssigned = ticket.assignedToId === profile.id;
+    const profileRole = (profile.role || '').toUpperCase();
+    const isAdmin = profileRole === 'SUPER_ADMIN' || profileRole === 'ADMIN';
+    const isCreator = ticket.creator_id === profile.id;
+    const isAssigned = ticket.assigned_to_id === profile.id;
 
     if (!isAdmin && !isCreator && !isAssigned) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -81,14 +87,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     // Determine workflow trigger and notification target
-    const isPreparer = profile.role === UserRole.TAX_PREPARER || isAdmin;
-    const trigger = isPreparer
-      ? WorkflowTrigger.PREPARER_RESPONSE
-      : WorkflowTrigger.CLIENT_RESPONSE;
+    const isPreparer = profileRole === 'TAX_PREPARER' || isAdmin;
+    const trigger: WorkflowTrigger = isPreparer
+      ? 'PREPARER_RESPONSE'
+      : 'CLIENT_RESPONSE';
 
     // Send notification to the other party (client sends → notify preparer, preparer sends → notify client)
     if (!isInternal) {
-      const notifyUserId = isPreparer ? ticket.creatorId : ticket.assignedToId;
+      const notifyUserId = isPreparer ? ticket.creator_id : ticket.assigned_to_id;
 
       if (notifyUserId) {
         // Dynamic import to avoid circular dependencies
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               userId: notifyUserId,
               type: isPreparer ? 'TICKET_REPLY' : 'TICKET_REPLY',
               title: isPreparer ? 'New Response from Your Tax Preparer' : 'Client Replied to Ticket',
-              message: `${profile.firstName || 'Someone'} replied: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+              message: `${profile.first_name || 'Someone'} replied: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
               channels: ['IN_APP', 'EMAIL', 'PUSH'],
               metadata: {
                 ticketId,

@@ -10,11 +10,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOneOfRoles } from '@/lib/auth';
 import { CRMService } from '@/lib/services/crm.service';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
-import { ContactType, PipelineStage, UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import type { CRMAccessContext } from '@/types/crm';
+import { ContactType, PipelineStage } from '@/types/crm';
 
 // Validation schema for creating a contact
 const createContactSchema = z.object({
@@ -56,9 +56,12 @@ export async function GET(request: NextRequest) {
     // Get preparer ID if user is a tax preparer
     let preparerId: string | undefined;
     if (role === 'tax_preparer') {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+      const profile = firstOrNull(profiles);
       preparerId = profile?.id;
     }
 
@@ -81,36 +84,51 @@ export async function GET(request: NextRequest) {
 
     // Fetch TaxIntakeLead data for folder information
     const emails = result.contacts.map((c: any) => c.email.toLowerCase());
-    const taxIntakeLeads = await prisma.taxIntakeLead.findMany({
-      where: {
-        email: { in: emails },
-      },
-      select: {
-        email: true,
-        clientFolderId: true,
-        clientFolder: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-      },
-    });
 
-    // Create a lookup map by email
+    // Fetch leads without nested include (Supabase requires separate queries for relations)
+    const { data: taxIntakeLeads } = await db
+      .from('tax_intake_leads')
+      .select('email, clientFolderId')
+      .in('email', emails);
+
+    // Fetch client folders for leads that have them
+    const folderIds = (taxIntakeLeads || [])
+      .filter((lead: any) => lead.clientFolderId)
+      .map((lead: any) => lead.clientFolderId);
+
+    const { data: clientFolders } = folderIds.length > 0
+      ? await db
+          .from('client_folders')
+          .select('id, name, path')
+          .in('id', folderIds)
+      : { data: [] };
+
+    // Create folder lookup map
+    const foldersById = new Map((clientFolders || []).map((f: any) => [f.id, f]));
+
+    // Create a lookup map by email (including folder data)
     const leadsByEmail = new Map(
-      taxIntakeLeads.map((lead) => [lead.email.toLowerCase(), lead])
+      (taxIntakeLeads || []).map((lead: any) => [
+        lead.email.toLowerCase(),
+        {
+          ...lead,
+          clientFolder: lead.clientFolderId ? foldersById.get(lead.clientFolderId) : null,
+        },
+      ])
     );
 
     // Fetch user roles for contacts with userId
     const contactsWithUsers = result.contacts.filter((c: any) => c.userId);
     const userIds = contactsWithUsers.map((c: any) => c.userId);
-    const profiles = await prisma.profile.findMany({
-      where: { userId: { in: userIds } },
-      select: { userId: true, role: true },
-    });
-    const profilesByUserId = new Map(profiles.map((p) => [p.userId, p]));
+
+    const { data: profiles } = userIds.length > 0
+      ? await db
+          .from('profiles')
+          .select('userId, role')
+          .in('userId', userIds)
+      : { data: [] };
+
+    const profilesByUserId = new Map((profiles || []).map((p: any) => [p.userId, p]));
 
     // Enrich contacts with folder data and user role
     const enrichedContacts = result.contacts.map((contact: any) => {
@@ -168,10 +186,12 @@ export async function POST(request: NextRequest) {
 
     // Auto-assign to creating tax preparer if not already assigned
     if (role === 'tax_preparer' && !validatedData.assignedPreparerId) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+      const profile = firstOrNull(profiles);
       if (profile) {
         validatedData.assignedPreparerId = profile.id;
         logger.info('[CRM API] Auto-assigning contact to tax preparer', {

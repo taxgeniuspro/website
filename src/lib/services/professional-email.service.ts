@@ -12,9 +12,39 @@
  * 5. Send welcome email with Gmail Send-As setup instructions
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { cloudflareEmailService } from './cloudflare-email.service';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfessionalEmailAliasRecord {
+  id: string;
+  profileId: string;
+  emailAddress: string;
+  forwardToEmail: string;
+  displayName: string;
+  status: string;
+  cloudflareRuleId?: string | null;
+  dnsConfigured: boolean;
+  forwardingActive: boolean;
+  annualPrice: number;
+  isPrimary: boolean;
+  gmailSendAsConfigured: boolean;
+  smtpEnabled: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+  user?: {
+    email: string;
+  } | null;
+  professionalEmails?: ProfessionalEmailAliasRecord[];
+}
 
 const DOMAIN = 'taxgeniuspro.tax';
 
@@ -60,9 +90,13 @@ async function generateAvailableUsername(
     const emailAddress = `${username}@${DOMAIN}`;
 
     // Check if email is already taken
-    const existing = await prisma.professionalEmailAlias.findUnique({
-      where: { emailAddress },
-    });
+    const { data: existingData } = await db
+      .from('professional_email_aliases')
+      .select('id')
+      .eq('emailAddress', emailAddress)
+      .limit(1);
+
+    const existing = firstOrNull(existingData);
 
     if (!existing) {
       logger.info('Found available username', { username, emailAddress });
@@ -101,22 +135,14 @@ export async function provisionProfessionalEmail(
   try {
     logger.info('Starting professional email provisioning', { profileId });
 
-    // Get preparer profile with user email
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      include: {
-        user: {
-          select: {
-            email: true,
-          },
-        },
-        professionalEmails: {
-          where: {
-            status: 'ACTIVE',
-          },
-        },
-      },
-    });
+    // Get preparer profile
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role, userId')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return { success: false, error: 'Profile not found' };
@@ -126,9 +152,26 @@ export async function provisionProfessionalEmail(
       return { success: false, error: 'Only tax preparers can have professional emails' };
     }
 
+    // Get user email
+    const { data: userData } = await db
+      .from('users')
+      .select('email')
+      .eq('id', (profile as { userId?: string }).userId)
+      .limit(1);
+
+    const user = firstOrNull(userData) as { email: string } | null;
+
     // Check if they already have an active professional email
-    if (profile.professionalEmails.length > 0) {
-      const existingEmail = profile.professionalEmails[0].emailAddress;
+    const { data: existingEmailsData } = await db
+      .from('professional_email_aliases')
+      .select('id, emailAddress')
+      .eq('profileId', profileId)
+      .eq('status', 'ACTIVE');
+
+    const existingEmails = (existingEmailsData || []) as ProfessionalEmailAliasRecord[];
+
+    if (existingEmails.length > 0) {
+      const existingEmail = existingEmails[0].emailAddress;
       logger.info('Preparer already has professional email', {
         profileId,
         email: existingEmail,
@@ -136,12 +179,12 @@ export async function provisionProfessionalEmail(
       return {
         success: true,
         email: existingEmail,
-        aliasId: profile.professionalEmails[0].id,
+        aliasId: existingEmails[0].id,
       };
     }
 
     // Get forwarding destination (their signup email)
-    const forwardToEmail = profile.user?.email;
+    const forwardToEmail = user?.email;
     if (!forwardToEmail) {
       return { success: false, error: 'No email address found for user' };
     }
@@ -171,28 +214,28 @@ export async function provisionProfessionalEmail(
       displayName,
     });
 
-    // Use a transaction to prevent race conditions
-    // First, try to create the DB record (will fail if email already exists due to unique constraint)
-    let alias;
-    try {
-      alias = await prisma.professionalEmailAlias.create({
-        data: {
-          profileId: profile.id,
-          emailAddress,
-          forwardToEmail,
-          displayName,
-          status: 'PROVISIONING', // Set to provisioning until Cloudflare confirms
-          annualPrice: 0, // Free for tax preparers
-          isPrimary: true,
-          gmailSendAsConfigured: false,
-          smtpEnabled: true,
-          dnsConfigured: false, // Will be set true after Cloudflare success
-          forwardingActive: false, // Will be set true after Cloudflare success
-        },
-      });
-    } catch (dbError) {
+    // Create the DB record (will fail if email already exists due to unique constraint)
+    const { data: aliasData, error: insertError } = await db
+      .from('professional_email_aliases')
+      .insert({
+        profileId: profile.id,
+        emailAddress,
+        forwardToEmail,
+        displayName,
+        status: 'PROVISIONING', // Set to provisioning until Cloudflare confirms
+        annualPrice: 0, // Free for tax preparers
+        isPrimary: true,
+        gmailSendAsConfigured: false,
+        smtpEnabled: true,
+        dnsConfigured: false, // Will be set true after Cloudflare success
+        forwardingActive: false, // Will be set true after Cloudflare success
+      })
+      .select()
+      .single();
+
+    if (insertError) {
       // If unique constraint violation, the email was taken by another concurrent request
-      if ((dbError as { code?: string }).code === 'P2002') {
+      if (insertError.code === '23505') {
         logger.warn('Email address taken by concurrent request, retrying with new username', {
           profileId,
           emailAddress,
@@ -200,8 +243,10 @@ export async function provisionProfessionalEmail(
         // Retry the entire provisioning (will generate a different username)
         return provisionProfessionalEmail(profileId, retryCount + 1);
       }
-      throw dbError;
+      throw insertError;
     }
+
+    const alias = aliasData as ProfessionalEmailAliasRecord;
 
     // Create Cloudflare forwarding rule
     const cloudflareResult = await cloudflareEmailService.createForwardingRule(
@@ -219,14 +264,17 @@ export async function provisionProfessionalEmail(
         error: cloudflareResult.message,
       });
 
-      await prisma.professionalEmailAlias.delete({
-        where: { id: alias.id },
-      }).catch((deleteErr) => {
-        logger.error('Failed to rollback DB record after Cloudflare failure', {
-          aliasId: alias.id,
-          error: deleteErr,
+      await db
+        .from('professional_email_aliases')
+        .delete()
+        .eq('id', alias.id)
+        .then(() => {})
+        .catch((deleteErr) => {
+          logger.error('Failed to rollback DB record after Cloudflare failure', {
+            aliasId: alias.id,
+            error: deleteErr,
+          });
         });
-      });
 
       return {
         success: false,
@@ -235,15 +283,15 @@ export async function provisionProfessionalEmail(
     }
 
     // Update the alias to ACTIVE status with Cloudflare rule ID
-    await prisma.professionalEmailAlias.update({
-      where: { id: alias.id },
-      data: {
+    await db
+      .from('professional_email_aliases')
+      .update({
         status: 'ACTIVE',
         cloudflareRuleId: cloudflareResult.ruleId,
         dnsConfigured: true,
         forwardingActive: true,
-      },
-    });
+      })
+      .eq('id', alias.id);
 
     logger.info('Professional email provisioned successfully', {
       aliasId: alias.id,
@@ -321,9 +369,13 @@ export async function deprovisionProfessionalEmail(
   try {
     logger.info('Starting professional email deprovisioning', { aliasId });
 
-    const alias = await prisma.professionalEmailAlias.findUnique({
-      where: { id: aliasId },
-    });
+    const { data: aliasData } = await db
+      .from('professional_email_aliases')
+      .select('*')
+      .eq('id', aliasId)
+      .limit(1);
+
+    const alias = firstOrNull(aliasData) as ProfessionalEmailAliasRecord | null;
 
     if (!alias) {
       return { success: false, error: 'Alias not found' };
@@ -344,13 +396,13 @@ export async function deprovisionProfessionalEmail(
     }
 
     // Update alias status to SUSPENDED
-    await prisma.professionalEmailAlias.update({
-      where: { id: aliasId },
-      data: {
+    await db
+      .from('professional_email_aliases')
+      .update({
         status: 'SUSPENDED',
         forwardingActive: false,
-      },
-    });
+      })
+      .eq('id', aliasId);
 
     logger.info('Professional email deprovisioned', {
       aliasId,
@@ -383,9 +435,13 @@ export async function updateForwardingDestination(
   try {
     logger.info('Updating forwarding destination', { aliasId, newForwardToEmail });
 
-    const alias = await prisma.professionalEmailAlias.findUnique({
-      where: { id: aliasId },
-    });
+    const { data: aliasData } = await db
+      .from('professional_email_aliases')
+      .select('*')
+      .eq('id', aliasId)
+      .limit(1);
+
+    const alias = firstOrNull(aliasData) as ProfessionalEmailAliasRecord | null;
 
     if (!alias) {
       return { success: false, error: 'Alias not found' };
@@ -404,12 +460,10 @@ export async function updateForwardingDestination(
     }
 
     // Update database record
-    await prisma.professionalEmailAlias.update({
-      where: { id: aliasId },
-      data: {
-        forwardToEmail: newForwardToEmail,
-      },
-    });
+    await db
+      .from('professional_email_aliases')
+      .update({ forwardToEmail: newForwardToEmail })
+      .eq('id', aliasId);
 
     logger.info('Forwarding destination updated', {
       aliasId,
@@ -442,22 +496,47 @@ export async function backfillProfessionalEmails(): Promise<{
 }> {
   logger.info('Starting professional email backfill');
 
-  // Get all tax preparers without active professional emails
-  const preparers = await prisma.profile.findMany({
-    where: {
-      role: 'tax_preparer',
-      professionalEmails: {
-        none: {
-          status: 'ACTIVE',
-        },
-      },
-    },
-    include: {
-      user: {
-        select: { email: true },
-      },
-    },
-  });
+  // Get all tax preparers
+  const { data: preparersData } = await db
+    .from('profiles')
+    .select('id, userId')
+    .eq('role', 'tax_preparer');
+
+  const allPreparers = (preparersData || []) as Array<{ id: string; userId?: string | null }>;
+
+  // Get preparers who already have active professional emails
+  const { data: existingAliasesData } = await db
+    .from('professional_email_aliases')
+    .select('profileId')
+    .eq('status', 'ACTIVE');
+
+  const existingProfileIds = new Set(
+    (existingAliasesData || []).map((a: { profileId: string }) => a.profileId)
+  );
+
+  // Filter to only those without active professional emails
+  const preparersWithoutEmail = allPreparers.filter((p) => !existingProfileIds.has(p.id));
+
+  // Get user emails for all preparers
+  const userIds = preparersWithoutEmail
+    .map((p) => p.userId)
+    .filter((id): id is string => id !== null && id !== undefined);
+
+  const { data: usersData } = await db
+    .from('users')
+    .select('id, email')
+    .in('id', userIds);
+
+  const userEmailMap = new Map<string, string>();
+  for (const user of (usersData || []) as Array<{ id: string; email: string }>) {
+    userEmailMap.set(user.id, user.email);
+  }
+
+  // Attach user email to preparers
+  const preparers = preparersWithoutEmail.map((p) => ({
+    ...p,
+    user: p.userId ? { email: userEmailMap.get(p.userId) } : null,
+  }));
 
   logger.info(`Found ${preparers.length} preparers without professional email`);
 

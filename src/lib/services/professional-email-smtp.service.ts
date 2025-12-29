@@ -23,8 +23,16 @@
  */
 
 import { logger } from '@/lib/logger';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { getResendClient } from '@/lib/resend';
+
+// Local type definition (replacing @prisma/client)
+interface ProfessionalEmailAliasRecord {
+  id: string;
+  emailAddress: string;
+  status: string;
+  forwardingActive: boolean;
+}
 
 /**
  * Email sending options
@@ -76,9 +84,13 @@ export class ProfessionalEmailSMTPService {
    */
   private async validateProfessionalEmail(professionalEmail: string): Promise<boolean> {
     try {
-      const alias = await prisma.professionalEmailAlias.findUnique({
-        where: { emailAddress: professionalEmail },
-      });
+      const { data } = await db
+        .from('professional_email_aliases')
+        .select('id, emailAddress, status, forwardingActive')
+        .eq('emailAddress', professionalEmail)
+        .limit(1);
+
+      const alias = firstOrNull(data) as ProfessionalEmailAliasRecord | null;
 
       if (!alias) {
         logger.error('Professional email alias not found', { professionalEmail });

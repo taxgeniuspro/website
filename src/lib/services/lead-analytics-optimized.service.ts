@@ -13,8 +13,83 @@
  * TODO: After testing, replace the original lead-analytics.service.ts with this version
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+import { logger } from '@/lib/logger';
 import { UserRole } from '@/lib/permissions';
+
+// Local type definitions (replacing @prisma/client)
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  title?: string | null;
+  url: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface LinkClickRecord {
+  id: string;
+  linkId: string;
+}
+
+interface LeadRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  source?: string | null;
+  createdAt: Date | string;
+  lastContactedAt?: Date | string | null;
+  contactMethod?: string | null;
+}
+
+interface ClientIntakeRecord {
+  id: string;
+  sourceLink?: string | null;
+  profileId: string;
+}
+
+interface PaymentRecord {
+  id: string;
+  amount: number | string;
+  status: string;
+  profileId: string;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  userId?: string | null;
+  role?: string | null;
+}
+
+interface TaxReturnRecord {
+  id: string;
+  profileId: string;
+}
+
+interface CommissionRecord {
+  id: string;
+  referrerId: string;
+  amount: number | string;
+  status: string;
+}
+
+interface MarketingCampaignRecord {
+  id: string;
+  name: string;
+  type: string;
+  creatorId: string;
+  clicks: number;
+  signups: number;
+  createdAt: Date | string;
+}
 import type {
   LeadMetrics,
   CompanyLeadsSummary,
@@ -41,26 +116,18 @@ async function batchFetchLinkMetrics(
   creatorType: 'TAX_PREPARER' | 'AFFILIATE' | 'REFERRER',
   creatorIds?: string[]
 ) {
-  const where = {
-    creatorType,
-    ...(creatorIds && { creatorId: { in: creatorIds } }),
-  };
-
   // 1. Fetch all links
-  const links = await prisma.marketingLink.findMany({
-    where,
-    select: {
-      id: true,
-      code: true,
-      creatorId: true,
-      creatorType: true,
-      linkType: true,
-      title: true,
-      url: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  let query = db
+    .from('marketing_links')
+    .select('id, code, creatorId, creatorType, linkType, title, url, createdAt, updatedAt')
+    .eq('creatorType', creatorType);
+
+  if (creatorIds && creatorIds.length > 0) {
+    query = query.in('creatorId', creatorIds);
+  }
+
+  const { data: linksData } = await query;
+  const links = (linksData || []) as MarketingLinkRecord[];
 
   const linkIds = links.map((l) => l.id);
   const linkCodes = links.map((l) => l.code);
@@ -75,29 +142,42 @@ async function batchFetchLinkMetrics(
     };
   }
 
-  // 2. Fetch clicks grouped by linkId
-  const clicksData = await prisma.linkClick.groupBy({
-    by: ['linkId'],
-    where: { linkId: { in: linkIds } },
-    _count: { id: true },
-  });
-  const clicksByLink = new Map(clicksData.map((c) => [c.linkId, c._count.id]));
+  // 2. Fetch clicks and group by linkId in JS (Supabase doesn't have groupBy)
+  const { data: clicksData } = await db
+    .from('link_clicks')
+    .select('id, linkId')
+    .in('linkId', linkIds);
 
-  // 3. Fetch leads grouped by source (link code)
-  const leadsData = await prisma.lead.groupBy({
-    by: ['source'],
-    where: { source: { in: linkCodes } },
-    _count: { id: true },
+  const clicksByLink = new Map<string, number>();
+  ((clicksData || []) as LinkClickRecord[]).forEach((click) => {
+    clicksByLink.set(click.linkId, (clicksByLink.get(click.linkId) || 0) + 1);
   });
-  const leadsBySource = new Map(leadsData.map((l) => [l.source!, l._count.id]));
 
-  // 4. Fetch conversions (clientIntakes) grouped by sourceLink
-  const conversionsData = await prisma.clientIntake.groupBy({
-    by: ['sourceLink'],
-    where: { sourceLink: { in: linkCodes } },
-    _count: { id: true },
+  // 3. Fetch leads and group by source in JS
+  const { data: leadsData } = await db
+    .from('leads')
+    .select('id, source')
+    .in('source', linkCodes);
+
+  const leadsBySource = new Map<string, number>();
+  ((leadsData || []) as { id: string; source: string }[]).forEach((lead) => {
+    if (lead.source) {
+      leadsBySource.set(lead.source, (leadsBySource.get(lead.source) || 0) + 1);
+    }
   });
-  const conversionsBySource = new Map(conversionsData.map((c) => [c.sourceLink!, c._count.id]));
+
+  // 4. Fetch conversions (clientIntakes) and group by sourceLink in JS
+  const { data: conversionsData } = await db
+    .from('client_intakes')
+    .select('id, sourceLink')
+    .in('sourceLink', linkCodes);
+
+  const conversionsBySource = new Map<string, number>();
+  ((conversionsData || []) as { id: string; sourceLink: string }[]).forEach((intake) => {
+    if (intake.sourceLink) {
+      conversionsBySource.set(intake.sourceLink, (conversionsBySource.get(intake.sourceLink) || 0) + 1);
+    }
+  });
 
   // 5. Fetch revenue by source (complex query - we'll do this differently)
   // For each link, we need to sum payments from profiles who have clientIntakes with that sourceLink
@@ -132,13 +212,12 @@ async function batchFetchRevenueBySource(linkCodes: string[]): Promise<Map<strin
   if (linkCodes.length === 0) return new Map();
 
   // Get all profiles with intakes from these sources
-  const intakes = await prisma.clientIntake.findMany({
-    where: { sourceLink: { in: linkCodes } },
-    select: {
-      sourceLink: true,
-      profileId: true,
-    },
-  });
+  const { data: intakesData } = await db
+    .from('client_intakes')
+    .select('sourceLink, profileId')
+    .in('sourceLink', linkCodes);
+
+  const intakes = (intakesData || []) as ClientIntakeRecord[];
 
   // Group profile IDs by source
   const profilesBySource = new Map<string, Set<string>>();
@@ -150,18 +229,41 @@ async function batchFetchRevenueBySource(linkCodes: string[]): Promise<Map<strin
     profilesBySource.get(intake.sourceLink)!.add(intake.profileId);
   });
 
-  // For each source, get sum of completed payments
+  // Collect all profile IDs for batch payment query
+  const allProfileIds = new Set<string>();
+  for (const profileIds of profilesBySource.values()) {
+    for (const id of profileIds) {
+      allProfileIds.add(id);
+    }
+  }
+
+  if (allProfileIds.size === 0) return new Map();
+
+  // Fetch all completed payments in one query
+  const { data: paymentsData } = await db
+    .from('payments')
+    .select('profileId, amount')
+    .eq('status', 'COMPLETED')
+    .in('profileId', Array.from(allProfileIds));
+
+  const payments = (paymentsData || []) as PaymentRecord[];
+
+  // Build payment totals by profileId
+  const paymentsByProfile = new Map<string, number>();
+  payments.forEach((payment) => {
+    const current = paymentsByProfile.get(payment.profileId) || 0;
+    paymentsByProfile.set(payment.profileId, current + Number(payment.amount || 0));
+  });
+
+  // Calculate revenue by source
   const revenueBySource = new Map<string, number>();
 
   for (const [source, profileIds] of profilesBySource) {
-    const revenue = await prisma.payment.aggregate({
-      where: {
-        status: 'COMPLETED',
-        profileId: { in: Array.from(profileIds) },
-      },
-      _sum: { amount: true },
-    });
-    revenueBySource.set(source, Number(revenue._sum.amount || 0));
+    let sourceRevenue = 0;
+    for (const profileId of profileIds) {
+      sourceRevenue += paymentsByProfile.get(profileId) || 0;
+    }
+    revenueBySource.set(source, sourceRevenue);
   }
 
   return revenueBySource;
@@ -178,11 +280,14 @@ async function batchFetchRecentLeads(
 ): Promise<Map<string, LeadSummary[]>> {
   if (linkCodes.length === 0) return new Map();
 
-  const leads = await prisma.lead.findMany({
-    where: { source: { in: linkCodes } },
-    orderBy: { createdAt: 'desc' },
-    take: limit * linkCodes.length, // Get enough for all links
-  });
+  const { data: leadsData } = await db
+    .from('leads')
+    .select('id, firstName, lastName, email, phone, status, source, createdAt, lastContactedAt, contactMethod')
+    .in('source', linkCodes)
+    .order('createdAt', { ascending: false })
+    .limit(limit * linkCodes.length); // Get enough for all links
+
+  const leads = (leadsData || []) as LeadRecord[];
 
   // Group by source
   const leadsBySource = new Map<string, LeadSummary[]>();
@@ -194,13 +299,13 @@ async function batchFetchRecentLeads(
       id: lead.id,
       firstName: lead.firstName,
       lastName: lead.lastName,
-      name: `${lead.firstName} ${lead.lastName}`.trim(),
+      name: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
       email: lead.email,
       phone: lead.phone,
       status: lead.status,
       source: lead.source,
-      createdAt: lead.createdAt,
-      lastContactedAt: lead.lastContactedAt,
+      createdAt: new Date(lead.createdAt),
+      lastContactedAt: lead.lastContactedAt ? new Date(lead.lastContactedAt) : null,
       contactMethod: lead.contactMethod,
     };
 
@@ -218,16 +323,24 @@ async function batchFetchRecentLeads(
 // ============ Helper Functions (from original) ============
 
 async function getProfileId(userIdOrProfileId: string): Promise<string | null> {
-  let profile = await prisma.profile.findUnique({
-    where: { userId: userIdOrProfileId },
-    select: { id: true },
-  });
+  // Try by userId first
+  const { data: byUserIdData } = await db
+    .from('profiles')
+    .select('id')
+    .eq('userId', userIdOrProfileId)
+    .limit(1);
+
+  let profile = firstOrNull(byUserIdData) as { id: string } | null;
 
   if (!profile) {
-    profile = await prisma.profile.findUnique({
-      where: { id: userIdOrProfileId },
-      select: { id: true },
-    });
+    // Try by id
+    const { data: byIdData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('id', userIdOrProfileId)
+      .limit(1);
+
+    profile = firstOrNull(byIdData) as { id: string } | null;
   }
 
   return profile?.id || null;
@@ -289,18 +402,17 @@ export async function getPreparersAnalyticsOptimized(
   }
 
   // 1. Fetch all preparers (or specific one)
-  const preparers = await prisma.profile.findMany({
-    where: {
-      role: 'TAX_PREPARER',
-      ...(filterPreparerId && { id: filterPreparerId }),
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  let query = db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('role', 'tax_preparer');
+
+  if (filterPreparerId) {
+    query = query.eq('id', filterPreparerId);
+  }
+
+  const { data: preparersData } = await query;
+  const preparers = (preparersData || []) as ProfileRecord[];
 
   if (preparers.length === 0) return [];
 
@@ -319,21 +431,35 @@ export async function getPreparersAnalyticsOptimized(
     linksByPreparer.get(link.creatorId)!.push(link);
   });
 
-  // 4. Fetch all returns filed (1 query for all preparers)
-  const returnsData = await prisma.taxReturn.groupBy({
-    by: ['profileId'],
-    where: {
-      profile: {
-        clientIntakes: {
-          some: {
-            assignedPreparerId: { in: preparerIds },
-          },
-        },
-      },
-    },
-    _count: { id: true },
+  // 4. Fetch all returns filed - need to get via client_intakes relationship
+  // First get client intakes assigned to these preparers
+  const { data: intakesData } = await db
+    .from('client_intakes')
+    .select('profileId, assignedPreparerId')
+    .in('assignedPreparerId', preparerIds);
+
+  const intakes = (intakesData || []) as { profileId: string; assignedPreparerId: string }[];
+  const profileIdsWithIntakes = intakes.map((i) => i.profileId);
+  const profileToPreparerMap = new Map(intakes.map((i) => [i.profileId, i.assignedPreparerId]));
+
+  // Now get tax returns for those profiles
+  const { data: taxReturnsData } = profileIdsWithIntakes.length > 0
+    ? await db
+        .from('tax_returns')
+        .select('id, profileId')
+        .in('profileId', profileIdsWithIntakes)
+    : { data: [] };
+
+  const taxReturns = (taxReturnsData || []) as TaxReturnRecord[];
+
+  // Count returns by preparer
+  const returnsByPreparer = new Map<string, number>();
+  taxReturns.forEach((ret) => {
+    const preparerId = profileToPreparerMap.get(ret.profileId);
+    if (preparerId) {
+      returnsByPreparer.set(preparerId, (returnsByPreparer.get(preparerId) || 0) + 1);
+    }
   });
-  const returnsByProfileId = new Map(returnsData.map((r) => [r.profileId, r._count.id]));
 
   // 5. Build analytics for each preparer (in-memory aggregation)
   const analyticsResults = preparers.map((preparer) => {
@@ -345,7 +471,7 @@ export async function getPreparersAnalyticsOptimized(
     const totalLeads = linkIds.reduce((sum, id) => sum + (leadsByLink.get(id) || 0), 0);
     const totalConversions = linkIds.reduce((sum, id) => sum + (conversionsByLink.get(id) || 0), 0);
     const totalRevenue = linkIds.reduce((sum, id) => sum + (revenueByLink.get(id) || 0), 0);
-    const totalReturnsFiled = returnsByProfileId.get(preparer.id) || 0;
+    const totalReturnsFiled = returnsByPreparer.get(preparer.id) || 0;
 
     // Build link breakdown
     const linkBreakdown: LinkPerformance[] = preparerLinks.map((link) => ({
@@ -440,23 +566,28 @@ export async function getMyPreparerAnalyticsOptimized(
   const preparer = results[0];
   const linkCodes = preparer.linkBreakdown.map((l) => l.linkCode);
 
-  const recentLeadsData = await prisma.lead.findMany({
-    where: { source: { in: linkCodes } },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  const { data: recentLeadsData } = linkCodes.length > 0
+    ? await db
+        .from('leads')
+        .select('id, firstName, lastName, email, phone, status, source, createdAt, lastContactedAt, contactMethod')
+        .in('source', linkCodes)
+        .order('createdAt', { ascending: false })
+        .limit(10)
+    : { data: [] };
 
-  const recentLeads: LeadSummary[] = recentLeadsData.map((lead) => ({
+  const leads = (recentLeadsData || []) as LeadRecord[];
+
+  const recentLeads: LeadSummary[] = leads.map((lead) => ({
     id: lead.id,
     firstName: lead.firstName,
     lastName: lead.lastName,
-    name: `${lead.firstName} ${lead.lastName}`.trim(),
+    name: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
     email: lead.email,
     phone: lead.phone,
     status: lead.status,
     source: lead.source,
-    createdAt: lead.createdAt,
-    lastContactedAt: lead.lastContactedAt,
+    createdAt: new Date(lead.createdAt),
+    lastContactedAt: lead.lastContactedAt ? new Date(lead.lastContactedAt) : null,
     contactMethod: lead.contactMethod,
   }));
 
@@ -480,18 +611,17 @@ export async function getAffiliatesAnalyticsOptimized(
   }
 
   // 1. Fetch all affiliates
-  const affiliates = await prisma.profile.findMany({
-    where: {
-      role: 'AFFILIATE',
-      ...(filterAffiliateId && { id: filterAffiliateId }),
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  let query = db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('role', 'affiliate');
+
+  if (filterAffiliateId) {
+    query = query.eq('id', filterAffiliateId);
+  }
+
+  const { data: affiliatesData } = await query;
+  const affiliates = (affiliatesData || []) as ProfileRecord[];
 
   if (affiliates.length === 0) return [];
 
@@ -504,14 +634,12 @@ export async function getAffiliatesAnalyticsOptimized(
   );
 
   // 3. Fetch commissions (1 query for all affiliates)
-  const commissions = await prisma.commission.findMany({
-    where: { referrerId: { in: affiliateIds } },
-    select: {
-      referrerId: true,
-      amount: true,
-      status: true,
-    },
-  });
+  const { data: commissionsData } = await db
+    .from('commissions')
+    .select('referrerId, amount, status')
+    .in('referrerId', affiliateIds);
+
+  const commissions = (commissionsData || []) as CommissionRecord[];
 
   // Group commissions by affiliate
   const commissionsByAffiliate = new Map<string, typeof commissions>();
@@ -523,9 +651,12 @@ export async function getAffiliatesAnalyticsOptimized(
   });
 
   // 4. Fetch campaigns (1 query for all affiliates)
-  const campaigns = await prisma.marketingCampaign.findMany({
-    where: { creatorId: { in: affiliateIds } },
-  });
+  const { data: campaignsData } = await db
+    .from('marketing_campaigns')
+    .select('id, name, type, creatorId, clicks, signups, createdAt')
+    .in('creatorId', affiliateIds);
+
+  const campaigns = (campaignsData || []) as MarketingCampaignRecord[];
 
   const campaignsByAffiliate = new Map<string, typeof campaigns>();
   campaigns.forEach((campaign) => {

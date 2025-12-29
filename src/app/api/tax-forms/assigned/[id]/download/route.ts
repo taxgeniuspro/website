@@ -7,11 +7,37 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { fillPDFForm } from '@/lib/services/pdf-form-parser.service';
 import { logger } from '@/lib/logger';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+
+// TypeScript interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  fileUrl: string;
+  fileName: string;
+}
+
+interface ClientTaxForm {
+  id: string;
+  clientId: string;
+  taxFormId: string;
+  formData: Record<string, string | boolean> | null;
+}
+
+interface ClientPreparer {
+  clientId: string;
+  preparerId: string;
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -24,42 +50,42 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Get the assignment with tax form details
-    const assignment = await prisma.clientTaxForm.findUnique({
-      where: { id },
-      include: {
-        taxForm: {
-          select: {
-            id: true,
-            formNumber: true,
-            title: true,
-            fileUrl: true,
-            fileName: true,
-          },
-        },
-        client: {
-          select: { id: true },
-        },
-      },
-    });
+    // Get the assignment
+    const { data: assignmentData } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, taxFormId, formData')
+      .eq('id', id)
+      .limit(1);
+
+    const assignment = firstOrNull<ClientTaxForm>(assignmentData);
 
     if (!assignment) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+    }
+
+    // Get tax form details
+    const { data: taxFormData } = await db
+      .from('tax_forms')
+      .select('id, formNumber, title, fileUrl, fileName')
+      .eq('id', assignment.taxFormId)
+      .limit(1);
+
+    const taxForm = firstOrNull<TaxForm>(taxFormData);
+
+    if (!taxForm) {
+      return NextResponse.json({ error: 'Tax form not found' }, { status: 404 });
     }
 
     // Verify access
@@ -75,14 +101,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
     // Tax preparer can download if assigned to this client
     else if (profile.role === 'tax_preparer') {
-      const clientAssignment = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: assignment.clientId,
-          preparerId: profile.id,
-        },
-      });
+      const { data: clientAssignmentData } = await db
+        .from('client_preparers')
+        .select('clientId, preparerId')
+        .eq('clientId', assignment.clientId)
+        .eq('preparerId', profile.id)
+        .limit(1);
 
-      if (clientAssignment) {
+      if (clientAssignmentData && clientAssignmentData.length > 0) {
         hasAccess = true;
       }
     }
@@ -92,7 +118,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Read the original PDF
-    const pdfPath = join(process.cwd(), 'public', assignment.taxForm.fileUrl);
+    const pdfPath = join(process.cwd(), 'public', taxForm.fileUrl);
     const pdfBuffer = await readFile(pdfPath);
 
     // Fill the PDF with form data
@@ -102,7 +128,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Log download
     logger.info('Filled PDF downloaded', {
       assignmentId: id,
-      formNumber: assignment.taxForm.formNumber,
+      formNumber: taxForm.formNumber,
       downloadedBy: profile.id,
     });
 
@@ -110,7 +136,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse(filledPDFBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${assignment.taxForm.formNumber}_Filled.pdf"`,
+        'Content-Disposition': `attachment; filename="${taxForm.formNumber}_Filled.pdf"`,
         'Cache-Control': 'no-cache',
       },
     });

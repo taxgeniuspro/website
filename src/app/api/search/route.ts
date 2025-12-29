@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   Users,
@@ -26,6 +26,25 @@ import {
   Calendar,
   Mail,
 } from 'lucide-react';
+
+// TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string;
+  userId: string;
+  fullName?: string | null;
+  email?: string | null;
+  taxPreparerId?: string | null;
+}
+
+interface CRMContact {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  assignedToId?: string | null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,9 +61,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, userId, fullName, email, taxPreparerId')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -68,39 +91,31 @@ export async function GET(request: NextRequest) {
       profile.role === 'admin' ||
       profile.role === 'admin'
     ) {
-      const clients = await prisma.profile.findMany({
-        where: {
-          AND: [
-            { role: 'client' },
-            {
-              OR: [
-                { fullName: { contains: query, mode: 'insensitive' } },
-                { email: { contains: query, mode: 'insensitive' } },
-              ],
-            },
-          ],
-          // For preparers, only show their assigned clients
-          ...(profile.role === 'tax_preparer'
-            ? [{ taxPreparerId: profile.id }]
-            : []),
-        },
-        take: 5,
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-        },
-      });
+      let clientQuery = db
+        .from('profiles')
+        .select('id, fullName, email')
+        .eq('role', 'client')
+        .or(`fullName.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(5);
 
-      results.push(
-        ...clients.map((client) => ({
-          id: `client-${client.id}`,
-          title: client.fullName || client.email || 'Unknown Client',
-          description: client.email,
-          category: 'clients',
-          href: `/dashboard/tax-preparer/clients?clientId=${client.id}`,
-        }))
-      );
+      // For preparers, only show their assigned clients
+      if (profile.role === 'tax_preparer') {
+        clientQuery = clientQuery.eq('taxPreparerId', profile.id);
+      }
+
+      const { data: clients } = await clientQuery;
+
+      if (clients) {
+        results.push(
+          ...clients.map((client: any) => ({
+            id: `client-${client.id}`,
+            title: client.fullName || client.email || 'Unknown Client',
+            description: client.email,
+            category: 'clients',
+            href: `/dashboard/tax-preparer/clients?clientId=${client.id}`,
+          }))
+        );
+      }
     }
 
     // Search leads (for preparers and admins)
@@ -109,36 +124,30 @@ export async function GET(request: NextRequest) {
       profile.role === 'admin' ||
       profile.role === 'admin'
     ) {
-      const leads = await prisma.cRMContact.findMany({
-        where: {
-          OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { email: { contains: query, mode: 'insensitive' } },
-            { phone: { contains: query, mode: 'insensitive' } },
-          ],
-          // For preparers, only show their assigned leads
-          ...(profile.role === 'tax_preparer'
-            ? [{ assignedToId: profile.id }]
-            : []),
-        },
-        take: 5,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          status: true,
-        },
-      });
+      let leadsQuery = db
+        .from('crm_contacts')
+        .select('id, name, email, phone, status')
+        .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+        .limit(5);
 
-      results.push(
-        ...leads.map((lead) => ({
-          id: `lead-${lead.id}`,
-          title: lead.name,
-          description: `${lead.email} • ${lead.status}`,
-          category: 'clients',
-          href: `/dashboard/tax-preparer/leads?leadId=${lead.id}`,
-        }))
-      );
+      // For preparers, only show their assigned leads
+      if (profile.role === 'tax_preparer') {
+        leadsQuery = leadsQuery.eq('assignedToId', profile.id);
+      }
+
+      const { data: leads } = await leadsQuery;
+
+      if (leads) {
+        results.push(
+          ...leads.map((lead: any) => ({
+            id: `lead-${lead.id}`,
+            title: lead.name,
+            description: `${lead.email} - ${lead.status}`,
+            category: 'clients',
+            href: `/dashboard/tax-preparer/leads?leadId=${lead.id}`,
+          }))
+        );
+      }
     }
 
     // Limit total results

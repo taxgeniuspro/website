@@ -12,15 +12,43 @@ vi.mock('stripe', () => {
   };
 });
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => ({
-    order: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    },
-  })),
+// Mock Supabase client
+vi.mock('@/lib/db', () => ({
+  db: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(),
+          limit: vi.fn(),
+        })),
+      })),
+      insert: vi.fn(() => ({
+        select: vi.fn(() => ({
+          single: vi.fn(),
+        })),
+      })),
+      update: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(),
+          })),
+        })),
+      })),
+    })),
+  },
+  firstOrNull: vi.fn((data) => (data && data.length > 0 ? data[0] : null)),
 }));
+
+// TypeScript interfaces for database entities
+interface Order {
+  id: string;
+  userId: string;
+  stripeSessionId: string;
+  items: unknown;
+  total: number;
+  status: string;
+  email: string;
+}
 
 describe('Stripe Webhook - Signature Verification (AC22)', () => {
   it('should verify webhook signature before processing', () => {

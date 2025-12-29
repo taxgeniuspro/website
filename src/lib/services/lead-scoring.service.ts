@@ -12,16 +12,52 @@
  * @module lib/services/lead-scoring
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { LeadUrgency } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client)
+type LeadUrgency = 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
+
+// Re-export for consumers
+export { LeadUrgency };
+
+interface TaxIntakeLead {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  state?: string | null;
+  filing_status?: string | null;
+  source?: string | null;
+  emailOpens: number;
+  emailClicks: number;
+  estimated_income?: number | null;
+  previous_year_agi?: number | null;
+  leadScore?: number | null;
+  urgency?: LeadUrgency | null;
+  convertedToClient: boolean;
+  created_at: string;
+  activities?: LeadActivity[];
+  tasks?: LeadTask[];
+}
+
+interface LeadActivity {
+  id: string;
+  createdAt: string;
+}
+
+interface LeadTask {
+  id: string;
+  status: string;
+}
 
 export interface LeadScoreFactors {
-  profileCompleteness: number;  // 0-25 points
-  engagement: number;            // 0-25 points
-  sourceQuality: number;         // 0-20 points
-  timing: number;                // 0-15 points
-  demographics: number;          // 0-15 points
+  profileCompleteness: number; // 0-25 points
+  engagement: number; // 0-25 points
+  sourceQuality: number; // 0-20 points
+  timing: number; // 0-15 points
+  demographics: number; // 0-15 points
 }
 
 export interface LeadScoreResult {
@@ -42,22 +78,36 @@ export interface LeadScoreResult {
  */
 export async function calculateLeadScore(leadId: string): Promise<LeadScoreResult> {
   try {
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      include: {
-        activities: {
-          take: 50,
-          orderBy: { createdAt: 'desc' },
-        },
-        tasks: {
-          where: { status: { in: ['TODO', 'IN_PROGRESS'] } },
-        },
-      },
-    });
+    // Get lead with activities and tasks
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       throw new Error('Lead not found');
     }
+
+    // Get recent activities
+    const { data: activities } = await db
+      .from('lead_activities')
+      .select('id, createdAt')
+      .eq('leadId', leadId)
+      .order('createdAt', { ascending: false })
+      .limit(50);
+
+    // Get open tasks
+    const { data: tasks } = await db
+      .from('lead_tasks')
+      .select('id, status')
+      .eq('leadId', leadId)
+      .in('status', ['TODO', 'IN_PROGRESS']);
+
+    lead.activities = (activities || []) as LeadActivity[];
+    lead.tasks = (tasks || []) as LeadTask[];
 
     const factors: LeadScoreFactors = {
       profileCompleteness: calculateProfileCompleteness(lead),
@@ -69,10 +119,10 @@ export async function calculateLeadScore(leadId: string): Promise<LeadScoreResul
 
     const totalScore = Math.round(
       factors.profileCompleteness +
-      factors.engagement +
-      factors.sourceQuality +
-      factors.timing +
-      factors.demographics
+        factors.engagement +
+        factors.sourceQuality +
+        factors.timing +
+        factors.demographics
     );
 
     // Cap at 100
@@ -85,14 +135,14 @@ export async function calculateLeadScore(leadId: string): Promise<LeadScoreResul
     const reason = generateScoreReason(factors, score);
 
     // Update lead score in database
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    await db
+      .from('tax_intake_leads')
+      .update({
         leadScore: score,
-        leadScoreUpdatedAt: new Date(),
+        leadScoreUpdatedAt: new Date().toISOString(),
         urgency,
-      },
-    });
+      })
+      .eq('id', leadId);
 
     logger.info(`Lead ${leadId} scored: ${score} (${urgency})`);
 
@@ -111,7 +161,7 @@ export async function calculateLeadScore(leadId: string): Promise<LeadScoreResul
 /**
  * Calculate profile completeness score (0-25 points)
  */
-function calculateProfileCompleteness(lead: any): number {
+function calculateProfileCompleteness(lead: TaxIntakeLead): number {
   let score = 0;
 
   // Required fields (5 points each)
@@ -130,7 +180,7 @@ function calculateProfileCompleteness(lead: any): number {
 /**
  * Calculate engagement score (0-25 points)
  */
-function calculateEngagement(lead: any): number {
+function calculateEngagement(lead: TaxIntakeLead): number {
   let score = 0;
 
   // Email engagement (up to 10 points)
@@ -145,8 +195,9 @@ function calculateEngagement(lead: any): number {
 
   // Recent activity (up to 5 points)
   if (lead.activities && lead.activities.length > 0) {
-    const recentActivityCount = lead.activities.filter((activity: any) => {
-      const daysSince = (Date.now() - new Date(activity.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    const recentActivityCount = lead.activities.filter((activity) => {
+      const daysSince =
+        (Date.now() - new Date(activity.createdAt).getTime()) / (1000 * 60 * 60 * 24);
       return daysSince <= 7;
     }).length;
 
@@ -159,17 +210,17 @@ function calculateEngagement(lead: any): number {
 /**
  * Calculate source quality score (0-20 points)
  */
-function calculateSourceQuality(lead: any): number {
+function calculateSourceQuality(lead: TaxIntakeLead): number {
   // Score based on lead source
   const sourceScores: Record<string, number> = {
-    'referral': 20,           // Highest quality
-    'website': 15,
-    'organic': 15,
-    'paid_search': 12,
-    'social_media': 10,
-    'email_campaign': 10,
-    'direct': 8,
-    'other': 5,
+    referral: 20, // Highest quality
+    website: 15,
+    organic: 15,
+    paid_search: 12,
+    social_media: 10,
+    email_campaign: 10,
+    direct: 8,
+    other: 5,
   };
 
   const source = lead.source?.toLowerCase() || 'other';
@@ -187,22 +238,23 @@ function calculateSourceQuality(lead: any): number {
 /**
  * Calculate timing score (0-15 points)
  */
-function calculateTiming(lead: any): number {
+function calculateTiming(lead: TaxIntakeLead): number {
   let score = 0;
 
   // Time since creation (fresher leads score higher)
-  const hoursSinceCreation = (Date.now() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60);
+  const hoursSinceCreation =
+    (Date.now() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60);
 
   if (hoursSinceCreation < 1) {
     score += 15; // Super fresh
   } else if (hoursSinceCreation < 24) {
     score += 12; // Within 24 hours
   } else if (hoursSinceCreation < 72) {
-    score += 8;  // Within 3 days
+    score += 8; // Within 3 days
   } else if (hoursSinceCreation < 168) {
-    score += 4;  // Within 1 week
+    score += 4; // Within 1 week
   } else {
-    score += 1;  // Older leads
+    score += 1; // Older leads
   }
 
   return score;
@@ -211,16 +263,16 @@ function calculateTiming(lead: any): number {
 /**
  * Calculate demographics score (0-15 points)
  */
-function calculateDemographics(lead: any): number {
+function calculateDemographics(lead: TaxIntakeLead): number {
   let score = 0;
 
   // Filing status (higher complexity = higher value)
   const filingStatusScores: Record<string, number> = {
-    'married_filing_jointly': 5,
-    'head_of_household': 4,
-    'married_filing_separately': 4,
-    'single': 3,
-    'qualifying_widow': 4,
+    married_filing_jointly: 5,
+    head_of_household: 4,
+    married_filing_separately: 4,
+    single: 3,
+    qualifying_widow: 4,
   };
 
   const filingStatus = lead.filing_status?.toLowerCase();
@@ -230,7 +282,7 @@ function calculateDemographics(lead: any): number {
 
   // Income indicators (if available)
   if (lead.estimated_income || lead.previous_year_agi) {
-    const income = lead.estimated_income || lead.previous_year_agi;
+    const income = lead.estimated_income || lead.previous_year_agi || 0;
 
     if (income > 150000) {
       score += 10; // High-value client
@@ -249,29 +301,30 @@ function calculateDemographics(lead: any): number {
 /**
  * Determine urgency level based on score and factors
  */
-function determineUrgency(score: number, lead: any): LeadUrgency {
+function determineUrgency(score: number, lead: TaxIntakeLead): LeadUrgency {
   // High score always gets priority
   if (score >= 80) {
-    return LeadUrgency.URGENT;
+    return 'URGENT';
   }
 
   if (score >= 60) {
-    return LeadUrgency.HIGH;
+    return 'HIGH';
   }
 
   // Check for time-sensitive factors
-  const hoursSinceCreation = (Date.now() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60);
+  const hoursSinceCreation =
+    (Date.now() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60);
 
   // Very fresh high-engagement leads
   if (hoursSinceCreation < 2 && (lead.emailOpens > 0 || lead.emailClicks > 0)) {
-    return LeadUrgency.HIGH;
+    return 'HIGH';
   }
 
   if (score >= 40) {
-    return LeadUrgency.NORMAL;
+    return 'NORMAL';
   }
 
-  return LeadUrgency.LOW;
+  return 'LOW';
 }
 
 /**
@@ -314,19 +367,21 @@ function generateScoreReason(factors: LeadScoreFactors, totalScore: number): str
  */
 export async function recalculateAllLeadScores() {
   try {
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        convertedToClient: false, // Only score active leads
-      },
-      select: { id: true },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id')
+      .eq('convertedToClient', false);
+
+    if (!leads) {
+      return { success: true, total: 0, successful: 0, failed: 0 };
+    }
 
     logger.info(`Recalculating scores for ${leads.length} leads`);
 
     let successful = 0;
     let failed = 0;
 
-    for (const lead of leads) {
+    for (const lead of leads as { id: string }[]) {
       try {
         await calculateLeadScore(lead.id);
         successful++;
@@ -355,36 +410,23 @@ export async function recalculateAllLeadScores() {
  */
 export async function getTopLeads(limit: number = 10, preparerId?: string) {
   try {
-    const where: any = {
-      convertedToClient: false,
-      leadScore: { not: null },
-    };
+    let query = db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, leadScore, urgency, source, created_at')
+      .eq('convertedToClient', false)
+      .not('leadScore', 'is', null);
 
     if (preparerId) {
-      where.assignedTo = preparerId;
+      query = query.eq('assignedTo', preparerId);
     }
 
-    const leads = await prisma.taxIntakeLead.findMany({
-      where,
-      orderBy: [
-        { leadScore: 'desc' },
-        { urgency: 'desc' },
-        { created_at: 'desc' },
-      ],
-      take: limit,
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        leadScore: true,
-        urgency: true,
-        source: true,
-        created_at: true,
-      },
-    });
+    const { data: leads } = await query
+      .order('leadScore', { ascending: false })
+      .order('urgency', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
-    return { success: true, leads };
+    return { success: true, leads: leads || [] };
   } catch (error) {
     logger.error('Error getting top leads:', error);
     return { success: false, error: 'Failed to get top leads' };
@@ -396,22 +438,37 @@ export async function getTopLeads(limit: number = 10, preparerId?: string) {
  */
 export async function getScoreDistribution() {
   try {
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        convertedToClient: false,
-        leadScore: { not: null },
-      },
-      select: { leadScore: true, urgency: true },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('leadScore, urgency')
+      .eq('convertedToClient', false)
+      .not('leadScore', 'is', null);
+
+    if (!leads) {
+      return {
+        success: true,
+        distribution: {
+          hot: 0,
+          warm: 0,
+          cold: 0,
+          urgent: 0,
+          high: 0,
+          normal: 0,
+          low: 0,
+        },
+      };
+    }
+
+    const typedLeads = leads as { leadScore: number; urgency: LeadUrgency }[];
 
     const distribution = {
-      hot: leads.filter((l) => l.leadScore! >= 80).length,      // 80-100
-      warm: leads.filter((l) => l.leadScore! >= 60 && l.leadScore! < 80).length,  // 60-79
-      cold: leads.filter((l) => l.leadScore! < 60).length,      // 0-59
-      urgent: leads.filter((l) => l.urgency === LeadUrgency.URGENT).length,
-      high: leads.filter((l) => l.urgency === LeadUrgency.HIGH).length,
-      normal: leads.filter((l) => l.urgency === LeadUrgency.NORMAL).length,
-      low: leads.filter((l) => l.urgency === LeadUrgency.LOW).length,
+      hot: typedLeads.filter((l) => l.leadScore >= 80).length, // 80-100
+      warm: typedLeads.filter((l) => l.leadScore >= 60 && l.leadScore < 80).length, // 60-79
+      cold: typedLeads.filter((l) => l.leadScore < 60).length, // 0-59
+      urgent: typedLeads.filter((l) => l.urgency === 'URGENT').length,
+      high: typedLeads.filter((l) => l.urgency === 'HIGH').length,
+      normal: typedLeads.filter((l) => l.urgency === 'NORMAL').length,
+      low: typedLeads.filter((l) => l.urgency === 'LOW').length,
     };
 
     return { success: true, distribution };

@@ -4,9 +4,33 @@
  * Protected by admin key or admin session
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  userId: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  hashedPassword: string | null;
+  emailVerified: string | null;
+}
+
+interface Account {
+  userId: string;
+  provider: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,54 +50,63 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get all tax preparers with their user authentication info
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        role: true,
-        userId: true,
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            hashedPassword: true,
-            emailVerified: true,
-            accounts: {
-              select: {
-                provider: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        firstName: 'asc',
-      },
+    // Get all tax preparers
+    const { data: preparers, error: preparersError } = await db.from('profiles')
+      .select('id, firstName, lastName, email, phone, role, userId')
+      .eq('role', 'tax_preparer')
+      .order('firstName', { ascending: true });
+
+    if (preparersError) {
+      throw preparersError;
+    }
+
+    // Get user IDs
+    const userIds = (preparers || []).map((p: Profile) => p.userId);
+
+    // Get users for these profiles
+    const { data: users } = await db.from('users')
+      .select('id, email, name, hashedPassword, emailVerified')
+      .in('id', userIds);
+
+    // Get accounts for these users
+    const { data: accounts } = await db.from('accounts')
+      .select('userId, provider')
+      .in('userId', userIds);
+
+    // Create lookup maps
+    const usersById = new Map<string, User>();
+    (users || []).forEach((u: User) => {
+      usersById.set(u.id, u);
+    });
+
+    const accountsByUserId = new Map<string, Account[]>();
+    (accounts || []).forEach((a: Account) => {
+      if (!accountsByUserId.has(a.userId)) {
+        accountsByUserId.set(a.userId, []);
+      }
+      accountsByUserId.get(a.userId)!.push(a);
     });
 
     // Format the response
-    const formattedPreparers = preparers.map(p => ({
-      profileId: p.id,
-      userId: p.userId,
-      name: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
-      email: p.user?.email || p.email,
-      phone: p.phone,
-      role: p.role,
-      authStatus: {
-        hasPassword: !!p.user?.hashedPassword,
-        emailVerified: !!p.user?.emailVerified,
-        oauthProviders: p.user?.accounts.map(a => a.provider) || [],
-        canLogin: !!p.user?.hashedPassword || (p.user?.accounts?.length || 0) > 0,
-      },
-    }));
+    const formattedPreparers = (preparers || []).map((p: Profile) => {
+      const user = usersById.get(p.userId);
+      const userAccounts = accountsByUserId.get(p.userId) || [];
+
+      return {
+        profileId: p.id,
+        userId: p.userId,
+        name: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+        email: user?.email || p.email,
+        phone: p.phone,
+        role: p.role,
+        authStatus: {
+          hasPassword: !!user?.hashedPassword,
+          emailVerified: !!user?.emailVerified,
+          oauthProviders: userAccounts.map(a => a.provider),
+          canLogin: !!user?.hashedPassword || userAccounts.length > 0,
+        },
+      };
+    });
 
     return NextResponse.json({
       success: true,

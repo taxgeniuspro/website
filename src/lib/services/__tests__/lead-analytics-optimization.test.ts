@@ -8,23 +8,26 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 
 // Mock data setup
 const setupTestData = async () => {
   // Create 5 test preparers
   const preparers = await Promise.all(
     Array.from({ length: 5 }, async (_, i) => {
-      return await prisma.profile.create({
-        data: {
-          userId: `test-preparer-${i}@test.com`,
+      const { data } = await db
+        .from('profiles')
+        .insert({
+          clerkUserId: `test-preparer-${i}@test.com`,
           email: `test-preparer-${i}@test.com`,
           firstName: `Preparer`,
           lastName: `${i}`,
           role: 'TAX_PREPARER',
           status: 'ACTIVE',
-        },
-      });
+        })
+        .select()
+        .single();
+      return data;
     })
   );
 
@@ -32,8 +35,10 @@ const setupTestData = async () => {
   const links = await Promise.all(
     preparers.flatMap((preparer) =>
       Array.from({ length: 3 }, async (_, i) => {
-        return await prisma.marketingLink.create({
-          data: {
+        if (!preparer) return null;
+        const { data } = await db
+          .from('marketing_links')
+          .insert({
             code: `PREP${preparer.id.slice(0, 4)}-LINK${i}`,
             url: `https://taxgeniuspro.tax/start?ref=PREP${preparer.id.slice(0, 4)}-LINK${i}`,
             creatorId: preparer.id,
@@ -41,72 +46,69 @@ const setupTestData = async () => {
             linkType: 'GENERAL',
             title: `Test Link ${i}`,
             isActive: true,
-          },
-        });
+          })
+          .select()
+          .single();
+        return data;
       })
     )
   );
 
+  // Filter out null values
+  const validLinks = links.filter((link): link is NonNullable<typeof link> => link !== null);
+
   // Create clicks for each link (5 clicks per link = 75 total)
   await Promise.all(
-    links.flatMap((link) =>
+    validLinks.flatMap((link) =>
       Array.from({ length: 5 }, async () => {
-        return await prisma.linkClick.create({
-          data: {
+        await db
+          .from('link_clicks')
+          .insert({
             linkId: link.id,
-            clickedAt: new Date(),
-          },
-        });
+            clickedAt: new Date().toISOString(),
+          });
       })
     )
   );
 
   // Create leads for each link (2 leads per link = 30 total)
   await Promise.all(
-    links.flatMap((link) =>
+    validLinks.flatMap((link) =>
       Array.from({ length: 2 }, async (_, i) => {
-        return await prisma.lead.create({
-          data: {
+        await db
+          .from('leads')
+          .insert({
             firstName: `Lead`,
             lastName: `${i}`,
             email: `lead-${link.code}-${i}@test.com`,
             phone: '1234567890',
             source: link.code,
             status: 'NEW',
-          },
-        });
+          });
       })
     )
   );
 
-  return { preparers, links };
+  return { preparers: preparers.filter(Boolean), links: validLinks };
 };
 
 const cleanupTestData = async () => {
   // Clean up in reverse order to avoid foreign key constraints
-  await prisma.linkClick.deleteMany({
-    where: {
-      link: {
-        creatorType: 'TAX_PREPARER',
-        code: { startsWith: 'PREP' },
-      },
-    },
-  });
-  await prisma.lead.deleteMany({
-    where: {
-      source: { startsWith: 'PREP' },
-    },
-  });
-  await prisma.marketingLink.deleteMany({
-    where: {
-      code: { startsWith: 'PREP' },
-    },
-  });
-  await prisma.profile.deleteMany({
-    where: {
-      email: { startsWith: 'test-preparer-' },
-    },
-  });
+  // Get link IDs for cleanup
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('id')
+    .eq('creatorType', 'TAX_PREPARER')
+    .ilike('code', 'PREP%');
+
+  if (links && links.length > 0) {
+    const linkIds = links.map((l) => l.id);
+    await db.from('link_clicks').delete().in('linkId', linkIds);
+  }
+
+  await db.from('leads').delete().ilike('source', 'PREP%');
+  await db.from('marketing_links').delete().ilike('code', 'PREP%');
+  await db.from('profiles').delete().ilike('email', 'test-preparer-%');
 };
 
 describe('Lead Analytics Optimization', () => {
@@ -124,11 +126,13 @@ describe('Lead Analytics Optimization', () => {
     const { getMyPreparerAnalyticsOptimized } = await import('../lead-analytics-optimized.service');
 
     // Get a test preparer
-    const testPreparer = await prisma.profile.findFirst({
-      where: {
-        email: { startsWith: 'test-preparer-' },
-      },
-    });
+    const { data: testPreparerData } = await db
+      .from('profiles')
+      .select('*')
+      .ilike('email', 'test-preparer-%')
+      .limit(1);
+
+    const testPreparer = testPreparerData?.[0];
 
     if (!testPreparer) {
       throw new Error('Test preparer not found');
@@ -160,7 +164,7 @@ describe('Lead Analytics Optimization', () => {
 
   it('should demonstrate performance improvement with query counting', async () => {
     // Note: This is a conceptual test. Actual query counting would require
-    // Prisma middleware or database query logging.
+    // Supabase middleware or database query logging.
 
     const { getPreparersAnalyticsOptimized } = await import('../lead-analytics-optimized.service');
 
@@ -186,11 +190,13 @@ describe('Lead Analytics Optimization', () => {
   it('should correctly aggregate metrics across all links', async () => {
     const { getMyPreparerAnalyticsOptimized } = await import('../lead-analytics-optimized.service');
 
-    const testPreparer = await prisma.profile.findFirst({
-      where: {
-        email: { startsWith: 'test-preparer-' },
-      },
-    });
+    const { data: testPreparerData } = await db
+      .from('profiles')
+      .select('*')
+      .ilike('email', 'test-preparer-%')
+      .limit(1);
+
+    const testPreparer = testPreparerData?.[0];
 
     if (!testPreparer) {
       throw new Error('Test preparer not found');

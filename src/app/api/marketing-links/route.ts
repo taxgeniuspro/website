@@ -9,12 +9,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   getOrCreateMarketingLinks,
   regenerateQRCodes,
 } from '@/lib/services/marketing-links.service';
+
+// Local TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,10 +32,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Get current user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -73,10 +82,13 @@ export async function POST(req: NextRequest) {
     const { action, profileId } = body;
 
     // Get current user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

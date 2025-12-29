@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // Simple rate limiting using in-memory store
@@ -60,20 +60,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Find the most recent application for this email
-    const application = await prisma.preparerApplication.findFirst({
-      where: { email: email.toLowerCase() },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        status: true,
-        stage: true,
-        createdAt: true,
-        updatedAt: true,
-        // Do NOT expose: notes, interviewNotes, rejectionReason (admin-only)
-      },
-    });
+    const { data: applicationData } = await db
+      .from('preparer_applications')
+      .select('id, firstName, lastName, status, stage, createdAt, updatedAt')
+      .eq('email', email.toLowerCase())
+      .order('createdAt', { ascending: false })
+      .limit(1);
+
+    const application = firstOrNull(applicationData);
 
     if (!application) {
       return NextResponse.json(

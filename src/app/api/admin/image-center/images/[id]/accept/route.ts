@@ -1,10 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { copyFile, mkdir } from 'fs/promises';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  role: string;
+  supabaseUserId?: string | null;
+  userId?: string | null;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+}
+
+interface GeneratedImage {
+  id: string;
+  prompt: string;
+  status: string;
+  imageUrl: string;
+  createdBy?: string | null;
+  acceptedBy?: string | null;
+}
 
 /**
  * POST /api/admin/image-center/images/[id]/accept
@@ -18,34 +39,42 @@ export async function POST(
   try {
     const session = await auth();
     const userId = session?.user?.id;
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get the image
-    const image = await prisma.generatedImage.findUnique({
-      where: { id: params.id },
-    });
+    const { data: imageData, error: fetchError } = await db
+      .from('generated_images')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!image) {
+    if (fetchError || !imageData) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
+
+    const image = imageData as GeneratedImage;
 
     if (image.status === 'accepted') {
       return NextResponse.json({
@@ -74,33 +103,53 @@ export async function POST(
     }
 
     // Update database
-    const updatedImage = await prisma.generatedImage.update({
-      where: { id: params.id },
-      data: {
+    const { data: updatedImageData, error: updateError } = await db
+      .from('generated_images')
+      .update({
         status: 'accepted',
-        imageUrl: newImageUrl,
-        acceptedBy: profile.id,
-        acceptedAt: new Date(),
-      },
-      include: {
-        createdByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-        acceptedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-    });
+        image_url: newImageUrl,
+        accepted_by: profile.id,
+        accepted_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError || !updatedImageData) {
+      logger.error('Failed to update image', { error: updateError?.message });
+      return NextResponse.json({ error: 'Failed to accept image' }, { status: 500 });
+    }
+
+    const updatedImage = updatedImageData as GeneratedImage;
+
+    // Fetch related profiles
+    const profileIds = [updatedImage.createdBy, updatedImage.acceptedBy].filter(Boolean);
+    let profilesMap: Record<string, { id: string; firstName: string | null; lastName: string | null; avatarUrl: string | null }> = {};
+
+    if (profileIds.length > 0) {
+      const { data: relatedProfiles } = await db
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', profileIds);
+
+      if (relatedProfiles) {
+        profilesMap = relatedProfiles.reduce((acc, p) => {
+          acc[p.id] = {
+            id: p.id,
+            firstName: p.first_name,
+            lastName: p.last_name,
+            avatarUrl: p.avatar_url,
+          };
+          return acc;
+        }, {} as typeof profilesMap);
+      }
+    }
+
+    const imageWithProfiles = {
+      ...updatedImage,
+      createdByProfile: updatedImage.createdBy ? profilesMap[updatedImage.createdBy] || null : null,
+      acceptedByProfile: updatedImage.acceptedBy ? profilesMap[updatedImage.acceptedBy] || null : null,
+    };
 
     logger.info('Image accepted', {
       imageId: updatedImage.id,
@@ -109,7 +158,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      image: updatedImage,
+      image: imageWithProfiles,
       message: 'Image accepted successfully',
     });
   } catch (error) {

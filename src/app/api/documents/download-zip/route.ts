@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import archiver from 'archiver';
 import { Readable } from 'stream';
@@ -27,42 +27,29 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Fetch documents
-    const documents = await prisma.document.findMany({
-      where: {
-        id: { in: fileIds },
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        fileName: true,
-        fileUrl: true,
-        profileId: true,
-      },
-    });
+    const { data: documents } = await db.from('documents')
+      .select('id, file_name, file_url, profile_id')
+      .in('id', fileIds)
+      .eq('is_deleted', false);
 
-    if (documents.length === 0) {
+    if (!documents || documents.length === 0) {
       return NextResponse.json({ error: 'No documents found' }, { status: 404 });
     }
 
     // Verify permissions
     const authorizedDocs = documents.filter((doc) => {
       // Owner can download
-      if (doc.profileId === profile.id) return true;
+      if (doc.profile_id === profile.id) return true;
 
       // Admins can download
       if (profile.role === 'admin') return true;
@@ -105,15 +92,15 @@ export async function POST(req: NextRequest) {
         (async () => {
           for (const doc of authorizedDocs) {
             try {
-              // Extract file path from fileUrl (assuming local storage)
-              // fileUrl format: /uploads/documents/{profileId}/{taxYear}/{filename}
-              const filePath = join(process.cwd(), 'uploads', ...doc.fileUrl.split('/').slice(2));
+              // Extract file path from file_url (assuming local storage)
+              // file_url format: /uploads/documents/{profileId}/{taxYear}/{filename}
+              const filePath = join(process.cwd(), 'uploads', ...doc.file_url.split('/').slice(2));
 
               // Read file and add to archive
               const fileBuffer = await readFile(filePath);
-              archive.append(fileBuffer, { name: doc.fileName });
+              archive.append(fileBuffer, { name: doc.file_name });
             } catch (error) {
-              logger.error(`Error adding file ${doc.fileName} to archive:`, error);
+              logger.error(`Error adding file ${doc.file_name} to archive:`, error);
               // Continue with other files
             }
           }
@@ -126,19 +113,17 @@ export async function POST(req: NextRequest) {
 
     // Log download operations
     for (const doc of authorizedDocs) {
-      await prisma.fileOperation.create({
-        data: {
-          operation: 'DOWNLOAD',
-          performedBy: profile.id,
-          documentId: doc.id,
-          details: {
-            bulkDownload: true,
-            fileCount: authorizedDocs.length,
-          },
-          ipAddress:
-            req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-          userAgent: req.headers.get('user-agent') || undefined,
+      await db.from('file_operations').insert({
+        operation: 'DOWNLOAD',
+        performed_by: profile.id,
+        document_id: doc.id,
+        details: {
+          bulkDownload: true,
+          fileCount: authorizedDocs.length,
         },
+        ip_address:
+          req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+        user_agent: req.headers.get('user-agent') || null,
       });
     }
 

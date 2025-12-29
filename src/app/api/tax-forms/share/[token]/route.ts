@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// TypeScript interfaces
+interface TaxFormShare {
+  id: string;
+  taxFormId: string;
+  shareToken: string;
+  expiresAt: string | null;
+  accessCount: number;
+}
+
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  fileUrl: string;
+  fileName: string;
+  downloadCount: number;
+}
 
 /**
  * GET /api/tax-forms/share/[token]
@@ -17,44 +35,68 @@ export async function GET(
     const { token } = await params;
 
     // Find share by token
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: token },
-      include: {
-        taxForm: true,
-      },
-    });
+    const { data: shareData, error: shareError } = await db
+      .from('tax_form_shares')
+      .select('id, taxFormId, shareToken, expiresAt, accessCount')
+      .eq('shareToken', token)
+      .limit(1);
+
+    if (shareError) {
+      logger.error('Error fetching share:', shareError);
+      return NextResponse.json({ error: 'Failed to fetch share' }, { status: 500 });
+    }
+
+    const share = firstOrNull<TaxFormShare>(shareData);
 
     if (!share) {
       return NextResponse.json({ error: 'Share not found' }, { status: 404 });
     }
 
     // Check if share has expired
-    if (share.expiresAt && new Date() > share.expiresAt) {
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
       return NextResponse.json({ error: 'Share has expired' }, { status: 410 });
     }
 
+    // Get tax form details
+    const { data: taxFormData, error: taxFormError } = await db
+      .from('tax_forms')
+      .select('id, formNumber, title, fileUrl, fileName, downloadCount')
+      .eq('id', share.taxFormId)
+      .limit(1);
+
+    if (taxFormError) {
+      logger.error('Error fetching tax form:', taxFormError);
+      return NextResponse.json({ error: 'Failed to fetch tax form' }, { status: 500 });
+    }
+
+    const taxForm = firstOrNull<TaxForm>(taxFormData);
+
+    if (!taxForm) {
+      return NextResponse.json({ error: 'Tax form not found' }, { status: 404 });
+    }
+
     // Update access count and last access time
-    await prisma.taxFormShare.update({
-      where: { id: share.id },
-      data: {
-        accessCount: { increment: 1 },
-        lastAccessAt: new Date(),
-      },
-    });
+    await db
+      .from('tax_form_shares')
+      .update({
+        accessCount: share.accessCount + 1,
+        lastAccessAt: new Date().toISOString(),
+      })
+      .eq('id', share.id);
 
     // Increment form download count
-    await prisma.taxForm.update({
-      where: { id: share.taxForm.id },
-      data: { downloadCount: { increment: 1 } },
-    });
+    await db
+      .from('tax_forms')
+      .update({ downloadCount: taxForm.downloadCount + 1 })
+      .eq('id', taxForm.id);
 
-    logger.info(`Tax form shared accessed: ${share.taxForm.formNumber} via token ${token}`);
+    logger.info(`Tax form shared accessed: ${taxForm.formNumber} via token ${token}`);
 
     // Read the file
     const filePath = path.join(
       process.cwd(),
       'public',
-      share.taxForm.fileUrl.startsWith('/') ? share.taxForm.fileUrl.slice(1) : share.taxForm.fileUrl
+      taxForm.fileUrl.startsWith('/') ? taxForm.fileUrl.slice(1) : taxForm.fileUrl
     );
 
     if (!fs.existsSync(filePath)) {
@@ -68,7 +110,7 @@ export async function GET(
     return new NextResponse(fileBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${share.taxForm.fileName}"`,
+        'Content-Disposition': `attachment; filename="${taxForm.fileName}"`,
         'Content-Length': fileBuffer.length.toString(),
       },
     });

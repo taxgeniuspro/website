@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { ContactFormNotification } from '../../../../../emails/contact-form-notification';
@@ -7,6 +7,42 @@ import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/ra
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateContactFormPDF } from '@/lib/services/pdf-form-generator.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
+
+// Local TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string;
+  userId: string;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  contactType: string;
+  source: string | null;
+  stage: string;
+  lastContactedAt: Date | null;
+  assignedPreparerId: string | null;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  attributionMethod: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
+
+interface ProfessionalEmail {
+  emailAddress: string;
+  isPrimary: boolean;
+  status: string;
+}
 
 /**
  * POST /api/contact/submit - Handle contact form submissions
@@ -114,21 +150,14 @@ export async function POST(req: NextRequest) {
 
     if (ref) {
       // Look up the preparer by tracking code
-      preparerProfile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { trackingCode: ref },
-            { customTrackingCode: ref },
-            { shortLinkUsername: ref },
-          ],
-          role: 'tax_preparer',
-        },
-        select: {
-          id: true,
-          role: true,
-          userId: true,
-        },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id, role, userId:user_id')
+        .or(`tracking_code.eq.${ref},custom_tracking_code.eq.${ref},short_link_username.eq.${ref}`)
+        .eq('role', 'tax_preparer')
+        .limit(1);
+
+      preparerProfile = firstOrNull(profiles) as Profile | null;
 
       if (preparerProfile) {
         // Use Profile.id (not User.id) to match dashboard queries
@@ -144,49 +173,59 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if CRMContact already exists
-    let crmContact = await prisma.cRMContact.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    const { data: existingContacts } = await db
+      .from('crm_contacts')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .limit(1);
+
+    let crmContact = firstOrNull(existingContacts) as CRMContact | null;
 
     if (crmContact) {
       // Update existing contact
-      crmContact = await prisma.cRMContact.update({
-        where: { email: email.toLowerCase() },
-        data: {
-          firstName,
-          lastName,
+      const { data: updatedContacts } = await db
+        .from('crm_contacts')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
           phone: phone || crmContact.phone,
-          lastContactedAt: new Date(),
+          last_contacted_at: new Date().toISOString(),
           // Update preparer assignment if ref was provided and not already assigned
-          assignedPreparerId: crmContact.assignedPreparerId || assignedPreparerId,
+          assigned_preparer_id: crmContact.assignedPreparerId || assignedPreparerId,
           // Update referrer info if ref provided and not already set
-          referrerUsername: crmContact.referrerUsername || ref || null,
-          referrerType: crmContact.referrerType || (ref ? 'tax_preparer' : null),
-          attributionMethod: crmContact.attributionMethod || (ref ? 'ref_param' : null),
-        },
-      });
+          referrer_username: crmContact.referrerUsername || ref || null,
+          referrer_type: crmContact.referrerType || (ref ? 'tax_preparer' : null),
+          attribution_method: crmContact.attributionMethod || (ref ? 'ref_param' : null),
+        })
+        .eq('email', email.toLowerCase())
+        .select()
+        .single();
 
+      crmContact = updatedContacts as CRMContact;
       logger.info('Updated existing CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     } else {
       // Create new CRM contact
-      crmContact = await prisma.cRMContact.create({
-        data: {
-          contactType: 'LEAD',
-          firstName,
-          lastName,
+      const { data: newContact } = await db
+        .from('crm_contacts')
+        .insert({
+          contact_type: 'LEAD',
+          first_name: firstName,
+          last_name: lastName,
           email: email.toLowerCase(),
           phone: phone || null,
           source: 'contact_form',
           stage: 'NEW',
-          lastContactedAt: new Date(),
+          last_contacted_at: new Date().toISOString(),
           // Set preparer assignment if ref was provided
-          assignedPreparerId,
-          referrerUsername: ref || null,
-          referrerType: ref ? 'tax_preparer' : null,
-          attributionMethod: ref ? 'ref_param' : null,
-        },
-      });
+          assigned_preparer_id: assignedPreparerId,
+          referrer_username: ref || null,
+          referrer_type: ref ? 'tax_preparer' : null,
+          attribution_method: ref ? 'ref_param' : null,
+        })
+        .select()
+        .single();
 
+      crmContact = newContact as CRMContact;
       logger.info('Created new CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     }
 
@@ -194,12 +233,13 @@ export async function POST(req: NextRequest) {
     // CRM INTEGRATION: Create interaction to log contact form submission
     // ========================================
     try {
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: crmContact.id,
+      await db
+        .from('crm_interactions')
+        .insert({
+          contact_id: crmContact.id,
           type: 'OTHER',
           direction: 'INBOUND',
-          subject: `📧 Contact Form: ${service}`,
+          subject: `Contact Form: ${service}`,
           body: `**Service Inquiry:** ${service}
 
 **Message:**
@@ -213,9 +253,8 @@ ${message}
 **Attribution:**
 - Source: Contact form submission
 ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
-          occurredAt: new Date(),
-        },
-      });
+          occurred_at: new Date().toISOString(),
+        });
 
       logger.info('CRM interaction created for contact form submission', {
         contactId: crmContact.id,
@@ -243,26 +282,33 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
 
     if (assignedPreparerId && preparerProfile) {
       // Get preparer's email address - use preparerProfile.userId (not assignedPreparerId which is Profile.id)
-      const preparer = await prisma.user.findUnique({
-        where: { id: preparerProfile.userId },
-        select: {
-          email: true,
-          profile: {
-            select: {
-              firstName: true,
-              professionalEmails: {
-                where: { isPrimary: true, status: 'ACTIVE' },
-                select: { emailAddress: true },
-                take: 1,
-              },
-            },
-          },
-        },
-      });
+      const { data: userData } = await db
+        .from('users')
+        .select('id, email')
+        .eq('id', preparerProfile.userId)
+        .single();
+
+      // Get profile with firstName
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('first_name')
+        .eq('user_id', preparerProfile.userId)
+        .single();
+
+      // Get professional emails
+      const { data: professionalEmails } = await db
+        .from('professional_emails')
+        .select('email_address')
+        .eq('profile_id', preparerProfile.id)
+        .eq('is_primary', true)
+        .eq('status', 'ACTIVE')
+        .limit(1);
+
+      const primaryProfEmail = firstOrNull(professionalEmails) as { email_address: string } | null;
 
       // Use professional email if available, otherwise use signup email
-      primaryRecipient = preparer?.profile?.professionalEmails?.[0]?.emailAddress || preparer?.email || recipients.primary;
-      recipientName = preparer?.profile?.firstName || 'Tax Preparer';
+      primaryRecipient = primaryProfEmail?.email_address || userData?.email || recipients.primary;
+      recipientName = profileData?.first_name || 'Tax Preparer';
 
       logger.info('Contact form routed to assigned preparer', {
         ref,

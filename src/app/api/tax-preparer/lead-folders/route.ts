@@ -9,9 +9,44 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { ClientFolderService } from '@/lib/services/client-folder.service';
+
+// Local type definitions
+interface Profile {
+  id: string;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  phone: string | null;
+  clientFolderId: string | null;
+  convertedToClient: boolean;
+  assignedPreparerId: string | null;
+  created_at: string;
+}
+
+interface Folder {
+  id: string;
+  name: string;
+  path: string;
+}
+
+interface Document {
+  id: string;
+  folderId: string;
+}
+
+interface ChildFolder {
+  id: string;
+  name: string;
+  path: string;
+  parentId: string;
+}
 
 /**
  * GET /api/tax-preparer/lead-folders
@@ -27,7 +62,7 @@ export async function GET(req: NextRequest) {
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' ;
+    const isAdmin = role === 'admin';
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {
@@ -38,10 +73,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Get preparer profile ID
-    const preparerProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const preparerProfile = firstOrNull(profiles) as Profile | null;
 
     if (!preparerProfile) {
       return NextResponse.json(
@@ -54,91 +92,126 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
 
-    // Get all leads with folders for this preparer
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        assignedPreparerId: isTaxPreparer ? user.id : undefined,
-        ...(search && {
-          OR: [
-            { first_name: { contains: search, mode: 'insensitive' } },
-            { last_name: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        phone: true,
-        clientFolderId: true,
-        convertedToClient: true,
-        created_at: true,
-        clientFolder: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-            _count: {
-              select: { documents: true },
-            },
-            children: {
-              where: { isDeleted: false },
-              select: {
-                id: true,
-                name: true,
-                path: true,
-                _count: {
-                  select: { documents: true },
-                },
-              },
-              orderBy: { name: 'desc' },
-            },
-          },
-        },
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    // Build leads query
+    let query = db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, phone, clientFolderId, convertedToClient, assignedPreparerId, created_at');
+
+    // Tax preparers can only see their assigned leads
+    if (isTaxPreparer) {
+      query = query.eq('assignedPreparerId', preparerProfile.id);
+    }
+
+    // Search filter
+    if (search) {
+      query = query.or(
+        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+      );
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data: leads, error: leadsError } = await query;
+
+    if (leadsError) {
+      throw new Error(leadsError.message);
+    }
+
+    // Get folder IDs from leads
+    const folderIds = (leads || [])
+      .map((l: TaxIntakeLead) => l.clientFolderId)
+      .filter(Boolean) as string[];
+
+    // Get folders
+    let foldersMap = new Map<string, Folder>();
+    let childFoldersMap = new Map<string, ChildFolder[]>();
+    let docCountMap = new Map<string, number>();
+
+    if (folderIds.length > 0) {
+      // Get parent folders
+      const { data: folders } = await db
+        .from('folders')
+        .select('id, name, path')
+        .in('id', folderIds);
+
+      for (const f of folders || []) {
+        foldersMap.set(f.id, f);
+      }
+
+      // Get child folders (year folders)
+      const { data: childFolders } = await db
+        .from('folders')
+        .select('id, name, path, parentId')
+        .in('parentId', folderIds)
+        .eq('isDeleted', false)
+        .order('name', { ascending: false });
+
+      for (const cf of childFolders || []) {
+        if (!childFoldersMap.has(cf.parentId)) {
+          childFoldersMap.set(cf.parentId, []);
+        }
+        childFoldersMap.get(cf.parentId)!.push(cf);
+      }
+
+      // Get document counts for all folders (parent and children)
+      const allFolderIds = [
+        ...folderIds,
+        ...(childFolders || []).map((cf: ChildFolder) => cf.id),
+      ];
+
+      const { data: documents } = await db
+        .from('documents')
+        .select('id, folderId')
+        .in('folderId', allFolderIds);
+
+      for (const doc of documents || []) {
+        docCountMap.set(doc.folderId, (docCountMap.get(doc.folderId) || 0) + 1);
+      }
+    }
 
     // Transform the data for the frontend
-    const leadFolders = leads.map((lead) => ({
-      lead: {
-        id: lead.id,
-        firstName: lead.first_name,
-        lastName: lead.last_name,
-        email: lead.email,
-        phone: lead.phone,
-        convertedToClient: lead.convertedToClient,
-        createdAt: lead.created_at,
-      },
-      folder: lead.clientFolder
-        ? {
-            id: lead.clientFolder.id,
-            name: lead.clientFolder.name,
-            path: lead.clientFolder.path,
-            documentCount: lead.clientFolder._count.documents,
-            yearFolders: lead.clientFolder.children.map((child) => ({
-              id: child.id,
-              name: child.name,
-              path: child.path,
-              documentCount: child._count.documents,
-            })),
-          }
-        : null,
-    }));
+    const leadFolders = (leads || []).map((lead: TaxIntakeLead) => {
+      const folder = lead.clientFolderId ? foldersMap.get(lead.clientFolderId) : null;
+      const children = lead.clientFolderId ? childFoldersMap.get(lead.clientFolderId) || [] : [];
+
+      return {
+        lead: {
+          id: lead.id,
+          firstName: lead.first_name,
+          lastName: lead.last_name,
+          email: lead.email,
+          phone: lead.phone,
+          convertedToClient: lead.convertedToClient,
+          createdAt: lead.created_at,
+        },
+        folder: folder
+          ? {
+              id: folder.id,
+              name: folder.name,
+              path: folder.path,
+              documentCount: docCountMap.get(folder.id) || 0,
+              yearFolders: children.map((child: ChildFolder) => ({
+                id: child.id,
+                name: child.name,
+                path: child.path,
+                documentCount: docCountMap.get(child.id) || 0,
+              })),
+            }
+          : null,
+      };
+    });
 
     // Calculate stats
     const stats = {
-      totalLeads: leads.length,
-      leadsWithFolders: leads.filter((l) => l.clientFolderId).length,
-      leadsWithoutFolders: leads.filter((l) => !l.clientFolderId).length,
-      totalDocuments: leads.reduce(
-        (sum, l) =>
+      totalLeads: (leads || []).length,
+      leadsWithFolders: (leads || []).filter((l: TaxIntakeLead) => l.clientFolderId).length,
+      leadsWithoutFolders: (leads || []).filter((l: TaxIntakeLead) => !l.clientFolderId).length,
+      totalDocuments: leadFolders.reduce(
+        (sum: number, lf: { folder: { documentCount: number; yearFolders: { documentCount: number }[] } | null }) =>
           sum +
-          (l.clientFolder?._count.documents || 0) +
-          (l.clientFolder?.children.reduce(
-            (childSum, c) => childSum + c._count.documents,
+          (lf.folder?.documentCount || 0) +
+          (lf.folder?.yearFolders.reduce(
+            (childSum: number, c: { documentCount: number }) => childSum + c.documentCount,
             0
           ) || 0),
         0
@@ -147,7 +220,7 @@ export async function GET(req: NextRequest) {
 
     logger.info('Lead folders fetched', {
       userId: user.id,
-      leadCount: leads.length,
+      leadCount: (leads || []).length,
     });
 
     return NextResponse.json({
@@ -178,7 +251,7 @@ export async function POST(req: NextRequest) {
     }
 
     const role = user?.role as string;
-    const isAdmin = role === 'admin' ;
+    const isAdmin = role === 'admin';
     const isTaxPreparer = role === 'tax_preparer';
 
     if (!isAdmin && !isTaxPreparer) {
@@ -199,40 +272,45 @@ export async function POST(req: NextRequest) {
     }
 
     // Get the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        clientFolderId: true,
-        assignedPreparerId: true,
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, clientFolderId, assignedPreparerId')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
     // Verify preparer has access to this lead
-    if (isTaxPreparer && lead.assignedPreparerId !== user.id) {
-      return NextResponse.json(
-        { error: 'You do not have access to this lead' },
-        { status: 403 }
-      );
+    if (isTaxPreparer) {
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles) as Profile | null;
+
+      if (lead.assignedPreparerId !== preparerProfile?.id) {
+        return NextResponse.json(
+          { error: 'You do not have access to this lead' },
+          { status: 403 }
+        );
+      }
     }
 
     // Check if folder already exists
     if (lead.clientFolderId) {
-      const existingFolder = await prisma.folder.findUnique({
-        where: { id: lead.clientFolderId },
-        select: {
-          id: true,
-          name: true,
-          path: true,
-        },
-      });
+      const { data: existingFolders } = await db
+        .from('folders')
+        .select('id, name, path')
+        .eq('id', lead.clientFolderId)
+        .limit(1);
+
+      const existingFolder = firstOrNull(existingFolders);
 
       if (existingFolder) {
         return NextResponse.json({
@@ -244,10 +322,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Get preparer profile ID for folder ownership
-    const preparerProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const preparerProfile = firstOrNull(profiles) as Profile | null;
 
     if (!preparerProfile) {
       return NextResponse.json(
@@ -266,10 +347,10 @@ export async function POST(req: NextRequest) {
     );
 
     // Link folder to lead
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: { clientFolderId: folderResult.folderId },
-    });
+    await db
+      .from('tax_intake_leads')
+      .update({ clientFolderId: folderResult.folderId })
+      .eq('id', leadId);
 
     logger.info('Lead folder created', {
       leadId,

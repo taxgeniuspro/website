@@ -1,10 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+}
+
+interface Document {
+  id: string;
+  profileId: string;
+  fileUrl: string;
+}
+
+interface ClientPreparer {
+  id: string;
+}
 
 /**
  * PATCH /api/tax-preparer/documents/[documentId]
@@ -13,22 +33,21 @@ import { existsSync } from 'fs';
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -46,13 +65,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ do
     const { documentId } = await params;
 
     // Get the document
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-      select: {
-        id: true,
-        profileId: true,
-      },
-    });
+    const { data: documents } = await db
+      .from('documents')
+      .select('id, profileId')
+      .eq('id', documentId)
+      .limit(1);
+
+    const document = firstOrNull(documents) as Document | null;
 
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -60,13 +79,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ do
 
     // Check if preparer has access to this client's documents
     if (role === 'tax_preparer') {
-      const hasAccess = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: document.profileId,
-          preparerId: profile.id,
-          isActive: true,
-        },
-      });
+      const { data: hasAccessData } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('clientId', document.profileId)
+        .eq('preparerId', profile.id)
+        .eq('isActive', true)
+        .limit(1);
+
+      const hasAccess = firstOrNull(hasAccessData);
 
       if (!hasAccess) {
         return NextResponse.json(
@@ -86,32 +107,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ do
       return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
     }
 
+    // Build update data
+    const updateData: Record<string, unknown> = {};
+    if (status) {
+      updateData.status = status;
+      updateData.reviewedBy = profile.id;
+      updateData.reviewedAt = new Date().toISOString();
+    }
+    if (reviewNotes !== undefined) {
+      updateData.reviewNotes = reviewNotes;
+    }
+
     // Update document
-    const updatedDocument = await prisma.document.update({
-      where: { id: documentId },
-      data: {
-        ...(status && { status }),
-        ...(reviewNotes !== undefined && { reviewNotes }),
-        ...(status && {
-          reviewedBy: profile.id,
-          reviewedAt: new Date(),
-        }),
-      },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
+    const { data: updatedDocument, error: updateError } = await db
+      .from('documents')
+      .update(updateData)
+      .eq('id', documentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    // Get client profile info
+    const { data: clientProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, email')
+      .eq('id', document.profileId)
+      .limit(1);
+
+    const clientProfile = firstOrNull(clientProfiles) as Profile | null;
 
     return NextResponse.json({
       success: true,
-      document: updatedDocument,
+      document: {
+        ...updatedDocument,
+        profile: clientProfile,
+      },
     });
   } catch (error) {
     logger.error('Error updating document:', error);
@@ -125,22 +158,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ do
  */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -158,9 +190,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ d
     const { documentId } = await params;
 
     // Get the document with full info
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-    });
+    const { data: documents } = await db
+      .from('documents')
+      .select('*')
+      .eq('id', documentId)
+      .limit(1);
+
+    const document = firstOrNull(documents);
 
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -168,13 +204,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ d
 
     // Check if preparer has access to this client's documents
     if (role === 'tax_preparer') {
-      const hasAccess = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: document.profileId,
-          preparerId: profile.id,
-          isActive: true,
-        },
-      });
+      const { data: hasAccessData } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('clientId', document.profileId)
+        .eq('preparerId', profile.id)
+        .eq('isActive', true)
+        .limit(1);
+
+      const hasAccess = firstOrNull(hasAccessData);
 
       if (!hasAccess) {
         return NextResponse.json(
@@ -197,9 +235,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ d
     }
 
     // Delete document from database
-    await prisma.document.delete({
-      where: { id: documentId },
-    });
+    await db.from('documents').delete().eq('id', documentId);
 
     return NextResponse.json({
       success: true,
@@ -217,22 +253,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ d
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -250,20 +285,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
     const { documentId } = await params;
 
     // Get the document
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
+    const { data: documents } = await db
+      .from('documents')
+      .select('*')
+      .eq('id', documentId)
+      .limit(1);
+
+    const document = firstOrNull(documents);
 
     if (!document) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -271,13 +299,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
 
     // Check if preparer has access to this client's documents
     if (role === 'tax_preparer') {
-      const hasAccess = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: document.profileId,
-          preparerId: profile.id,
-          isActive: true,
-        },
-      });
+      const { data: hasAccessData } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('clientId', document.profileId)
+        .eq('preparerId', profile.id)
+        .eq('isActive', true)
+        .limit(1);
+
+      const hasAccess = firstOrNull(hasAccessData);
 
       if (!hasAccess) {
         return NextResponse.json(
@@ -287,7 +317,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docu
       }
     }
 
-    return NextResponse.json({ document });
+    // Get client profile
+    const { data: clientProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, email, phone')
+      .eq('id', document.profileId)
+      .limit(1);
+
+    const clientProfile = firstOrNull(clientProfiles);
+
+    return NextResponse.json({
+      document: {
+        ...document,
+        profile: clientProfile,
+      },
+    });
   } catch (error) {
     logger.error('Error fetching document:', error);
     return NextResponse.json({ error: 'Failed to fetch document' }, { status: 500 });

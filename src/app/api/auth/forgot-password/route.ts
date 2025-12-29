@@ -3,11 +3,30 @@
  * Sends a password reset email to the user
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import { Resend } from '@/lib/resend';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  hashedPassword: string | null;
+  emailVerified: Date | null;
+  image: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+}
 
 // Stricter rate limit for password reset: 5 requests per minute per IP
 const PASSWORD_RESET_MAX_REQUESTS = 5;
@@ -98,17 +117,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Find user by email (case-insensitive)
-    const user = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email.toLowerCase(),
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        profile: true,
-      },
-    });
+    const { data: usersData, error: userError } = await db
+      .from('users')
+      .select('*')
+      .ilike('email', email.toLowerCase())
+      .limit(1);
+
+    if (userError) {
+      logger.error('[ForgotPassword] Error finding user', { error: userError.message });
+      return NextResponse.json(
+        { error: 'Failed to process request' },
+        { status: 500 }
+      );
+    }
+
+    const user = firstOrNull<User>(usersData);
 
     // Always return success to prevent email enumeration attacks
     // But only send email if user exists
@@ -120,26 +143,43 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Get user's profile for the name
+    const { data: profilesData } = await db
+      .from('profiles')
+      .select('firstName, lastName')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profilesData);
+
     // Generate reset token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
 
     // Store reset token in magic_links table (reusing existing table)
-    await prisma.magicLink.create({
-      data: {
+    const { error: magicLinkError } = await db
+      .from('magic_links')
+      .insert({
         userId: user.id,
         token,
-        expiresAt,
+        expiresAt: expiresAt.toISOString(),
         used: false,
-      },
-    });
+      });
+
+    if (magicLinkError) {
+      logger.error('[ForgotPassword] Error creating magic link', { error: magicLinkError.message });
+      return NextResponse.json(
+        { error: 'Failed to process request' },
+        { status: 500 }
+      );
+    }
 
     // Build reset URL
     const baseUrl = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
     const resetUrl = `${baseUrl}/en/auth/reset-password?token=${token}`;
 
     // Send email
-    const name = user.profile?.firstName || user.name?.split(' ')[0] || '';
+    const name = profile?.firstName || user.name?.split(' ')[0] || '';
     await sendPasswordResetEmail(user.email!, resetUrl, name);
 
     logger.info(`Password reset email sent to: ${user.email}`);

@@ -12,7 +12,8 @@ import { SearchDrawer } from '@/components/mobile/SearchDrawer';
 import { UserRole, UserPermissions } from '@/lib/permissions';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { type UserRole as MobileNavRole } from '@/lib/mobile-navigation-config';
-import type { AffiliateStatus } from '@prisma/client';
+// Affiliate status type (migrated from Prisma to local interface)
+export type AffiliateStatus = 'INACTIVE' | 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 import { ViewModeProvider } from '@/context/ViewModeContext';
 
 interface DashboardLayoutClientProps {

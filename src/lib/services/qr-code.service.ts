@@ -10,7 +10,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { logger } from '@/lib/logger';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 
 export interface GenerateQROptions {
   url: string;
@@ -73,35 +73,31 @@ export async function generateQRCode(options: GenerateQROptions): Promise<QRCode
 
       // Add logo if requested
       if (withLogo) {
-        logger.info('🎨 Adding logo to QR code...', { userId, size });
+        logger.info('Adding logo to QR code...', { userId, size });
         // Check if user has custom QR code logo
         let customLogoUrl: string | undefined;
         if (userId) {
-          const userProfile = await prisma.profile.findFirst({
-            where: {
-              OR: [
-                { id: userId },
-                { userId: userId }
-              ]
-            },
-            select: {
-              qrCodeLogoUrl: true,
-            },
-          });
+          const { data: profiles } = await db
+            .from('profiles')
+            .select('qrCodeLogoUrl')
+            .or(`id.eq.${userId},userId.eq.${userId}`)
+            .limit(1);
+
+          const userProfile = firstOrNull(profiles);
 
           if (userProfile?.qrCodeLogoUrl) {
             customLogoUrl = userProfile.qrCodeLogoUrl;
-            logger.info('📸 Using custom QR logo from profile', { userId, logoUrl: customLogoUrl });
+            logger.info('Using custom QR logo from profile', { userId, logoUrl: customLogoUrl });
           } else {
-            logger.info('🏢 No custom logo found, will use default Tax Genius logo');
+            logger.info('No custom logo found, will use default Tax Genius logo');
           }
         } else {
-          logger.info('🏢 No userId provided, using default Tax Genius logo');
+          logger.info('No userId provided, using default Tax Genius logo');
         }
 
         qrBuffer = await addLogoToQRCode(qrBuffer, size, customLogoUrl);
       } else {
-        logger.info('⏭️ Skipping logo - withLogo is false');
+        logger.info('Skipping logo - withLogo is false');
       }
 
       // Add white bevel border around entire QR code
@@ -162,35 +158,31 @@ export async function generateQRBuffer(options: GenerateQROptions): Promise<Buff
 
       // Add logo if requested
       if (withLogo) {
-        logger.info('🎨 [Buffer] Adding logo to QR code...', { userId, size });
+        logger.info('[Buffer] Adding logo to QR code...', { userId, size });
         // Check if user has custom QR code logo
         let customLogoUrl: string | undefined;
         if (userId) {
-          const userProfile = await prisma.profile.findFirst({
-            where: {
-              OR: [
-                { id: userId },
-                { userId: userId }
-              ]
-            },
-            select: {
-              qrCodeLogoUrl: true,
-            },
-          });
+          const { data: profiles } = await db
+            .from('profiles')
+            .select('qrCodeLogoUrl')
+            .or(`id.eq.${userId},userId.eq.${userId}`)
+            .limit(1);
+
+          const userProfile = firstOrNull(profiles);
 
           if (userProfile?.qrCodeLogoUrl) {
             customLogoUrl = userProfile.qrCodeLogoUrl;
-            logger.info('📸 [Buffer] Using custom QR logo from profile', { userId, logoUrl: customLogoUrl });
+            logger.info('[Buffer] Using custom QR logo from profile', { userId, logoUrl: customLogoUrl });
           } else {
-            logger.info('🏢 [Buffer] No custom logo found, will use default Tax Genius logo');
+            logger.info('[Buffer] No custom logo found, will use default Tax Genius logo');
           }
         } else {
-          logger.info('🏢 [Buffer] No userId provided, using default Tax Genius logo');
+          logger.info('[Buffer] No userId provided, using default Tax Genius logo');
         }
 
         qrBuffer = await addLogoToQRCode(qrBuffer, size, customLogoUrl);
       } else {
-        logger.info('⏭️ [Buffer] Skipping logo - withLogo is false');
+        logger.info('[Buffer] Skipping logo - withLogo is false');
       }
 
       // Add white bevel border around entire QR code
@@ -231,7 +223,7 @@ async function addLogoToQRCode(qrBuffer: Buffer, qrSize: number, customLogoUrl?:
         if (response.ok) {
           const arrayBuffer = await response.arrayBuffer();
           logoBuffer = Buffer.from(arrayBuffer);
-          logger.info('✅ Custom logo fetched successfully');
+          logger.info('Custom logo fetched successfully');
         } else {
           throw new Error(`Failed to fetch custom logo: ${response.status} ${response.statusText}`);
         }
@@ -250,14 +242,14 @@ async function addLogoToQRCode(qrBuffer: Buffer, qrSize: number, customLogoUrl?:
 
       try {
         logoBuffer = await fs.readFile(logoPath);
-        logger.info('✅ Default logo loaded successfully');
+        logger.info('Default logo loaded successfully');
       } catch (error) {
         // Fallback to icon if logo not found
         logger.warn('Default logo not found, trying fallback icon:', error);
         const iconPath = path.join(process.cwd(), 'public', 'icon-512x512.png');
         try {
           logoBuffer = await fs.readFile(iconPath);
-          logger.info('✅ Fallback icon loaded successfully');
+          logger.info('Fallback icon loaded successfully');
         } catch (iconError) {
           logger.error('Failed to load fallback icon:', iconError);
           throw new Error('No logo file available');
@@ -295,12 +287,12 @@ async function addLogoToQRCode(qrBuffer: Buffer, qrSize: number, customLogoUrl?:
       .png()
       .toBuffer();
 
-    logger.info('✅ Logo successfully composited onto QR code');
+    logger.info('Logo successfully composited onto QR code');
     return qrWithLogo;
   } catch (error) {
-    logger.error('❌ Failed to add logo to QR code:', error);
+    logger.error('Failed to add logo to QR code:', error);
     // Return original QR code if logo overlay fails
-    logger.warn('⚠️ Returning QR code without logo');
+    logger.warn('Returning QR code without logo');
     return qrBuffer;
   }
 }

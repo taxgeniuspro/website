@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { subHours, subDays } from 'date-fns';
 
 interface ActivityItem {
@@ -17,6 +17,17 @@ interface ActivityItem {
   description: string;
   timestamp: string;
   priority?: 'high' | 'medium' | 'low';
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  completed: boolean;
+  convertedToClient: boolean;
+  created_at: string;
+  lastContactedAt: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -36,42 +47,40 @@ export async function GET(request: NextRequest) {
     let profileId: string | null = null;
 
     if (role === 'tax_preparer' || preparerId) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: preparerId || user.id },
-        select: { id: true },
-      });
-      profileId = profile?.id || null;
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', preparerId || user.id)
+        .limit(1);
+      profileId = firstOrNull(profileData)?.id || null;
     }
 
     const now = new Date();
     const last24Hours = subHours(now, 24);
     const last7Days = subDays(now, 7);
 
-    // Build filter
-    const baseFilter = profileId ? { assignedPreparerId: profileId } : {};
+    // Build query for recent leads
+    let query = db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, completed, convertedToClient, created_at, lastContactedAt')
+      .gte('created_at', last7Days.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
-    // Get recent leads
-    const recentLeads = await prisma.taxIntakeLead.findMany({
-      where: {
-        ...baseFilter,
-        created_at: { gte: last7Days },
-      },
-      orderBy: { created_at: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        completed: true,
-        convertedToClient: true,
-        created_at: true,
-        lastContactedAt: true,
-      },
-    });
+    if (profileId) {
+      query = query.eq('assignedPreparerId', profileId);
+    }
+
+    const { data: recentLeads, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    const leads = (recentLeads || []) as TaxIntakeLead[];
 
     // Build activity items from leads
-    const activities: ActivityItem[] = recentLeads.map((lead) => {
+    const activities: ActivityItem[] = leads.map((lead) => {
       // Determine activity type and priority
       let type: ActivityItem['type'] = 'new_lead';
       let priority: ActivityItem['priority'] = 'low';
@@ -99,7 +108,7 @@ export async function GET(request: NextRequest) {
         type,
         title,
         description,
-        timestamp: lead.created_at.toISOString(),
+        timestamp: lead.created_at,
         priority,
       };
     });
@@ -113,11 +122,11 @@ export async function GET(request: NextRequest) {
     });
 
     // Count stats
-    const newLeadsCount = recentLeads.filter(
+    const newLeadsCount = leads.filter(
       (l) => new Date(l.created_at) >= last24Hours
     ).length;
 
-    const hotLeadsCount = recentLeads.filter(
+    const hotLeadsCount = leads.filter(
       (l) => !l.lastContactedAt && !l.convertedToClient && new Date(l.created_at) < subHours(now, 4)
     ).length;
 

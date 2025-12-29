@@ -1,7 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  category: string | null;
+  type: string;
+  isActive: boolean;
+  recurring: boolean;
+  interval: string | null;
+  availableFor: string[];
+  printable: boolean;
+  digitalDownload: boolean;
+  stock: number | null;
+  sku: string | null;
+  images: any[];
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * GET /api/admin/products
@@ -16,28 +43,31 @@ export async function GET() {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const products = await prisma.product.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const { data: products, error: productsError } = await db.from('products')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (productsError) {
+      throw productsError;
+    }
 
     // Serialize products (convert Decimal to number, parse JSON fields)
-    const serializedProducts = products.map((product) => ({
+    const serializedProducts = (products || []).map((product: Product) => ({
       ...product,
       price: Number(product.price),
       images: Array.isArray(product.images) ? product.images : [],
@@ -63,15 +93,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -101,8 +132,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Create product
-    const product = await prisma.product.create({
-      data: {
+    const { data: product, error: createError } = await db.from('products')
+      .insert({
         name,
         description: description || null,
         price,
@@ -122,8 +153,13 @@ export async function POST(req: NextRequest) {
           images && images.length > 0
             ? images.find((img: any) => img.isPrimary)?.url || images[0]?.url
             : null,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
 
     logger.info('Product created', { productId: product.id, name: product.name });
 

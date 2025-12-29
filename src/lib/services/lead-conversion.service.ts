@@ -13,10 +13,54 @@
  * 6. Links everything together
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { assignTrackingCodeToUser } from './tracking-code.service';
-import type { TaxIntakeLead, Profile, TaxReturn } from '@prisma/client';
+
+// Local type definitions (migrated from Prisma types)
+interface TaxIntakeLead {
+  id: string;
+  email: string;
+  first_name: string;
+  middle_name?: string | null;
+  last_name: string;
+  phone?: string | null;
+  tax_year: number;
+  address_line_1?: string | null;
+  address_line_2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  full_form_data?: Record<string, unknown> | null;
+  convertedToClient: boolean;
+  profileId?: string | null;
+  taxReturnId?: string | null;
+  assignedPreparerId?: string | null;
+  contactNotes?: string | null;
+  referrerUsername?: string | null;
+  updated_at?: Date;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  affiliateStatus?: string | null;
+  affiliateApprovedAt?: Date | null;
+  address?: Record<string, unknown> | null;
+  customTrackingCode?: string | null;
+}
+
+interface TaxReturn {
+  id: string;
+  profileId: string;
+  taxYear: number;
+  status: string;
+  formData?: Record<string, unknown> | null;
+}
 
 /**
  * Get Owliver's Profile ID
@@ -32,21 +76,25 @@ async function getOwliverProfileId(): Promise<string | null> {
   }
 
   // Fall back to dynamic lookup by tracking code
-  const owliver = await prisma.profile.findFirst({
-    where: { customTrackingCode: 'ow' },
-    select: { id: true },
-  });
+  const { data: owliverProfiles } = await db
+    .from('profiles')
+    .select('id')
+    .eq('customTrackingCode', 'ow')
+    .limit(1);
 
+  const owliver = firstOrNull(owliverProfiles);
   if (owliver) {
     return owliver.id;
   }
 
   // Last resort: lookup by email
-  const owliverUser = await prisma.user.findUnique({
-    where: { email: 'taxgenius.tax@gmail.com' },
-    include: { profile: { select: { id: true } } },
-  });
+  const { data: owliverUsers } = await db
+    .from('users')
+    .select('id, profile:profiles!userId (id)')
+    .eq('email', 'taxgenius.tax@gmail.com')
+    .limit(1);
 
+  const owliverUser = firstOrNull(owliverUsers) as { id: string; profile?: { id: string } | null } | null;
   return owliverUser?.profile?.id || null;
 }
 
@@ -64,27 +112,23 @@ async function assignClientToOwliver(clientProfileId: string, clientEmail: strin
     }
 
     // Check if assignment already exists
-    const existingAssignment = await prisma.clientPreparer.findUnique({
-      where: {
-        clientId_preparerId: {
-          clientId: clientProfileId,
-          preparerId: owliverProfileId,
-        },
-      },
-    });
+    const { data: existingAssignments } = await db
+      .from('client_preparers')
+      .select('id')
+      .eq('clientId', clientProfileId)
+      .eq('preparerId', owliverProfileId)
+      .limit(1);
 
-    if (existingAssignment) {
+    if (existingAssignments && existingAssignments.length > 0) {
       logger.info(`Client ${clientEmail} already assigned to Owliver`);
       return true;
     }
 
     // Create new assignment
-    await prisma.clientPreparer.create({
-      data: {
-        clientId: clientProfileId,
-        preparerId: owliverProfileId,
-        isActive: true,
-      },
+    await db.from('client_preparers').insert({
+      clientId: clientProfileId,
+      preparerId: owliverProfileId,
+      isActive: true,
     });
 
     logger.info(`✅ Assigned rejected preparer ${clientEmail} to Owliver as client`);
@@ -108,12 +152,14 @@ interface ConversionResult {
  */
 export async function findLeadByEmail(email: string): Promise<TaxIntakeLead | null> {
   try {
-    const lead = await prisma.taxIntakeLead.findFirst({
-      where: { email: email.toLowerCase() },
-      orderBy: { tax_year: 'desc' },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .order('tax_year', { ascending: false })
+      .limit(1);
 
-    return lead;
+    return firstOrNull(leads) as TaxIntakeLead | null;
   } catch (error) {
     logger.error('Error finding lead by email:', { email, error });
     return null;
@@ -131,9 +177,13 @@ export async function convertLeadToClient(
     logger.info(`Starting lead-to-client conversion for lead ${leadId}`);
 
     // 1. Get the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       return { success: false, error: 'Lead not found' };
@@ -164,12 +214,10 @@ export async function convertLeadToClient(
 
     if (preparerId) {
       try {
-        await prisma.clientPreparer.create({
-          data: {
-            clientId: profile.id,
-            preparerId: preparerId,
-            isActive: true,
-          },
+        await db.from('client_preparers').insert({
+          clientId: profile.id,
+          preparerId: preparerId,
+          isActive: true,
         });
 
         if (lead.assignedPreparerId) {
@@ -213,25 +261,30 @@ export async function convertLeadToClient(
  */
 async function createProfileFromLead(lead: TaxIntakeLead, userId: string): Promise<Profile> {
   // Check if profile already exists for this Clerk user
-  const existingProfile = await prisma.profile.findUnique({
-    where: { userId },
-  });
+  const { data: existingProfiles } = await db
+    .from('profiles')
+    .select('*')
+    .eq('userId', userId)
+    .limit(1);
+
+  const existingProfile = firstOrNull(existingProfiles) as Profile | null;
 
   if (existingProfile) {
     logger.info(`Profile already exists for ${userId}, using existing profile`);
     return existingProfile;
   }
 
-  const profile = await prisma.profile.create({
-    data: {
+  const { data: newProfile, error } = await db
+    .from('profiles')
+    .insert({
       userId,
       role: 'client',
       firstName: lead.first_name,
       lastName: lead.last_name,
       phone: lead.phone,
       affiliateStatus: 'APPROVED',
-      affiliateApprovedAt: new Date(),
-      // Store address in encrypted JSON format
+      affiliateApprovedAt: new Date().toISOString(),
+      // Store address in JSON format
       address: lead.address_line_1
         ? {
             line1: lead.address_line_1,
@@ -240,11 +293,16 @@ async function createProfileFromLead(lead: TaxIntakeLead, userId: string): Promi
             state: lead.state,
             zipCode: lead.zip_code,
           }
-        : undefined,
-    },
-  });
+        : null,
+    })
+    .select()
+    .single();
 
-  return profile;
+  if (error || !newProfile) {
+    throw new Error(`Failed to create profile: ${error?.message || 'Unknown error'}`);
+  }
+
+  return newProfile as Profile;
 }
 
 /**
@@ -255,14 +313,14 @@ async function createTaxReturnFromLead(lead: TaxIntakeLead, profileId: string): 
   const taxYear = currentYear - 1; // Previous year's taxes
 
   // Check if tax return already exists for this year
-  const existingReturn = await prisma.taxReturn.findUnique({
-    where: {
-      profileId_taxYear: {
-        profileId,
-        taxYear,
-      },
-    },
-  });
+  const { data: existingReturns } = await db
+    .from('tax_returns')
+    .select('*')
+    .eq('profileId', profileId)
+    .eq('taxYear', taxYear)
+    .limit(1);
+
+  const existingReturn = firstOrNull(existingReturns) as TaxReturn | null;
 
   if (existingReturn) {
     logger.info(`TaxReturn already exists for profile ${profileId} year ${taxYear}`);
@@ -270,16 +328,22 @@ async function createTaxReturnFromLead(lead: TaxIntakeLead, profileId: string): 
   }
 
   // Create tax return with form data from lead
-  const taxReturn = await prisma.taxReturn.create({
-    data: {
+  const { data: newReturn, error } = await db
+    .from('tax_returns')
+    .insert({
       profileId,
       taxYear,
       status: 'DRAFT',
       formData: lead.full_form_data || {},
-    },
-  });
+    })
+    .select()
+    .single();
 
-  return taxReturn;
+  if (error || !newReturn) {
+    throw new Error(`Failed to create tax return: ${error?.message || 'Unknown error'}`);
+  }
+
+  return newReturn as TaxReturn;
 }
 
 /**
@@ -290,15 +354,15 @@ async function linkLeadToProfile(
   profileId: string,
   taxReturnId: string
 ): Promise<void> {
-  await prisma.taxIntakeLead.update({
-    where: { id: leadId },
-    data: {
+  await db
+    .from('tax_intake_leads')
+    .update({
       profileId,
       taxReturnId,
       convertedToClient: true,
-      convertedAt: new Date(),
-    },
-  });
+      convertedAt: new Date().toISOString(),
+    })
+    .eq('id', leadId);
 }
 
 /**
@@ -340,9 +404,13 @@ export async function convertLeadToAffiliateClient(
     logger.info(`Starting lead-to-affiliate-client conversion for lead ${leadId}`);
 
     // 1. Get the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       return { success: false, error: 'Lead not found' };
@@ -372,12 +440,10 @@ export async function convertLeadToAffiliateClient(
     const preparerId = lead.assignedPreparerId || process.env.TAX_GENIUS_PREPARER_ID;
     if (preparerId) {
       try {
-        await prisma.clientPreparer.create({
-          data: {
-            clientId: profile.id,
-            preparerId: preparerId,
-            isActive: true,
-          },
+        await db.from('client_preparers').insert({
+          clientId: profile.id,
+          preparerId: preparerId,
+          isActive: true,
         });
         logger.info(`Auto-assigned affiliate client ${profile.id} to preparer ${preparerId}`);
       } catch (error) {
@@ -415,32 +481,43 @@ export async function convertLeadToAffiliateClient(
  */
 async function createAffiliateProfileFromLead(lead: TaxIntakeLead, userId: string): Promise<Profile> {
   // Check if profile already exists
-  const existingProfile = await prisma.profile.findUnique({
-    where: { userId },
-  });
+  const { data: existingProfiles } = await db
+    .from('profiles')
+    .select('*')
+    .eq('userId', userId)
+    .limit(1);
+
+  const existingProfile = firstOrNull(existingProfiles) as Profile | null;
 
   if (existingProfile) {
     // Update existing profile to have affiliate status
-    const updatedProfile = await prisma.profile.update({
-      where: { id: existingProfile.id },
-      data: {
+    const { data: updatedProfile, error } = await db
+      .from('profiles')
+      .update({
         affiliateStatus: 'APPROVED',
-        affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date(),
-      },
-    });
+        affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date().toISOString(),
+      })
+      .eq('id', existingProfile.id)
+      .select()
+      .single();
+
+    if (error || !updatedProfile) {
+      throw new Error(`Failed to update profile: ${error?.message || 'Unknown error'}`);
+    }
     logger.info(`Updated existing profile ${userId} to affiliate status`);
-    return updatedProfile;
+    return updatedProfile as Profile;
   }
 
-  const profile = await prisma.profile.create({
-    data: {
+  const { data: newProfile, error } = await db
+    .from('profiles')
+    .insert({
       userId,
       role: 'client',
       firstName: lead.first_name,
       lastName: lead.last_name,
       phone: lead.phone,
       affiliateStatus: 'APPROVED',
-      affiliateApprovedAt: new Date(),
+      affiliateApprovedAt: new Date().toISOString(),
       address: lead.address_line_1
         ? {
             line1: lead.address_line_1,
@@ -449,11 +526,16 @@ async function createAffiliateProfileFromLead(lead: TaxIntakeLead, userId: strin
             state: lead.state,
             zipCode: lead.zip_code,
           }
-        : undefined,
-    },
-  });
+        : null,
+    })
+    .select()
+    .single();
 
-  return profile;
+  if (error || !newProfile) {
+    throw new Error(`Failed to create profile: ${error?.message || 'Unknown error'}`);
+  }
+
+  return newProfile as Profile;
 }
 
 interface PreparerApplicationResult {
@@ -481,18 +563,26 @@ export async function createPreparerApplicationFromLead(
     logger.info(`Creating preparer application from lead ${leadId}`);
 
     // 1. Get the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       return { success: false, error: 'Lead not found' };
     }
 
     // 2. Check if application already exists for this email
-    const existingApp = await prisma.preparerApplication.findFirst({
-      where: { email: lead.email.toLowerCase() },
-    });
+    const { data: existingApps } = await db
+      .from('preparer_applications')
+      .select('id, status')
+      .eq('email', lead.email.toLowerCase())
+      .limit(1);
+
+    const existingApp = firstOrNull(existingApps) as { id: string; status: string } | null;
 
     if (existingApp) {
       return {
@@ -502,8 +592,9 @@ export async function createPreparerApplicationFromLead(
     }
 
     // 3. Create preparer application with lead data
-    const application = await prisma.preparerApplication.create({
-      data: {
+    const { data: application, error: createError } = await db
+      .from('preparer_applications')
+      .insert({
         firstName: lead.first_name,
         middleName: lead.middle_name,
         lastName: lead.last_name,
@@ -515,31 +606,34 @@ export async function createPreparerApplicationFromLead(
         notes: notes
           ? `Converted from tax intake lead (ID: ${leadId}).\n\nConversion Notes: ${notes}`
           : `Converted from tax intake lead (ID: ${leadId}).`,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError || !application) {
+      throw new Error(`Failed to create preparer application: ${createError?.message || 'Unknown error'}`);
+    }
 
     // 4. Update lead with conversion info (but don't mark as convertedToClient since they're becoming a preparer)
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    await db
+      .from('tax_intake_leads')
+      .update({
         contactNotes: lead.contactNotes
           ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Converted to preparer application (ID: ${application.id})`
           : `[${new Date().toISOString()}] Converted to preparer application (ID: ${application.id})`,
-        updated_at: new Date(),
-      },
-    });
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId);
 
     // 5. Create lead activity
-    await prisma.leadActivity.create({
-      data: {
-        leadId,
-        activityType: 'STATUS_CHANGED',
-        title: 'Lead converted to Tax Preparer Application',
-        description: `Created preparer application ${application.id}. Awaiting admin approval.`,
-        metadata: {
-          applicationId: application.id,
-          conversionType: 'preparer',
-        },
+    await db.from('lead_activities').insert({
+      leadId,
+      activityType: 'STATUS_CHANGED',
+      title: 'Lead converted to Tax Preparer Application',
+      description: `Created preparer application ${application.id}. Awaiting admin approval.`,
+      metadata: {
+        applicationId: application.id,
+        conversionType: 'preparer',
       },
     });
 
@@ -573,30 +667,48 @@ export async function convertRejectedPreparerToClient(
     logger.info(`Converting rejected preparer application ${applicationId} to ${conversionType}`);
 
     // 1. Get the preparer application
-    const application = await prisma.preparerApplication.findUnique({
-      where: { id: applicationId },
-    });
+    const { data: applications } = await db
+      .from('preparer_applications')
+      .select('*')
+      .eq('id', applicationId)
+      .limit(1);
+
+    const application = firstOrNull(applications) as {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      notes?: string;
+    } | null;
 
     if (!application) {
       return { success: false, error: 'Application not found' };
     }
 
     // 2. Check if user already exists with this email
-    const existingUser = await prisma.user.findUnique({
-      where: { email: application.email.toLowerCase() },
-      include: { profile: true },
-    });
+    const { data: existingUsers } = await db
+      .from('users')
+      .select('id, email, profile:profiles!userId (*)')
+      .eq('email', application.email.toLowerCase())
+      .limit(1);
+
+    const existingUser = firstOrNull(existingUsers) as {
+      id: string;
+      email: string;
+      profile?: Profile | null;
+    } | null;
 
     if (existingUser && existingUser.profile) {
       // User already exists - update their profile if needed
       if (conversionType === 'affiliate' && existingUser.profile.affiliateStatus !== 'APPROVED') {
-        await prisma.profile.update({
-          where: { id: existingUser.profile.id },
-          data: {
+        await db
+          .from('profiles')
+          .update({
             affiliateStatus: 'APPROVED',
-            affiliateApprovedAt: existingUser.profile.affiliateApprovedAt || new Date(),
-          },
-        });
+            affiliateApprovedAt: existingUser.profile.affiliateApprovedAt || new Date().toISOString(),
+          })
+          .eq('id', existingUser.profile.id);
 
         // Assign tracking code if affiliate and doesn't have one
         if (!existingUser.profile.customTrackingCode) {
@@ -610,14 +722,14 @@ export async function convertRejectedPreparerToClient(
       }
 
       // Update application with converted profile reference
-      await prisma.preparerApplication.update({
-        where: { id: applicationId },
-        data: {
+      await db
+        .from('preparer_applications')
+        .update({
           notes: application.notes
             ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but converted to ${conversionType}. Profile ID: ${existingUser.profile.id}`
             : `[${new Date().toISOString()}] Rejected but converted to ${conversionType}. Profile ID: ${existingUser.profile.id}`,
-        },
-      });
+        })
+        .eq('id', applicationId);
 
       // Assign to Owliver as their managing preparer
       await assignClientToOwliver(existingUser.profile.id, application.email);
@@ -631,14 +743,14 @@ export async function convertRejectedPreparerToClient(
     // 3. User doesn't exist - they need to sign up first
     // Store the conversion intent in application notes
     // Also mark for Owliver assignment when they sign up
-    await prisma.preparerApplication.update({
-      where: { id: applicationId },
-      data: {
+    await db
+      .from('preparer_applications')
+      .update({
         notes: application.notes
           ? `${application.notes}\n\n[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]\n[ASSIGN_TO_OWLIVER]`
           : `[${new Date().toISOString()}] Rejected but marked for ${conversionType} conversion. Awaiting user signup.\n[PENDING_CONVERSION:${conversionType}]\n[ASSIGN_TO_OWLIVER]`,
-      },
-    });
+      })
+      .eq('id', applicationId);
 
     logger.info(`Marked application ${applicationId} for ${conversionType} conversion + Owliver assignment - awaiting signup`);
 
@@ -668,29 +780,44 @@ export async function createClientFromPreparerApplication(
     logger.info(`Creating ${conversionType} profile from preparer application ${applicationId}`);
 
     // 1. Get the preparer application
-    const application = await prisma.preparerApplication.findUnique({
-      where: { id: applicationId },
-    });
+    const { data: applications } = await db
+      .from('preparer_applications')
+      .select('*')
+      .eq('id', applicationId)
+      .limit(1);
+
+    const application = firstOrNull(applications) as {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      notes?: string;
+    } | null;
 
     if (!application) {
       return { success: false, error: 'Application not found' };
     }
 
     // 2. Check if profile already exists
-    const existingProfile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    const { data: existingProfiles } = await db
+      .from('profiles')
+      .select('*')
+      .eq('userId', userId)
+      .limit(1);
+
+    const existingProfile = firstOrNull(existingProfiles) as Profile | null;
 
     if (existingProfile) {
       // Update existing profile if converting to affiliate
       if (conversionType === 'affiliate' && existingProfile.affiliateStatus !== 'APPROVED') {
-        await prisma.profile.update({
-          where: { id: existingProfile.id },
-          data: {
+        await db
+          .from('profiles')
+          .update({
             affiliateStatus: 'APPROVED',
-            affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date(),
-          },
-        });
+            affiliateApprovedAt: existingProfile.affiliateApprovedAt || new Date().toISOString(),
+          })
+          .eq('id', existingProfile.id);
 
         if (!existingProfile.customTrackingCode) {
           await assignTrackingCodeToUser(
@@ -712,18 +839,25 @@ export async function createClientFromPreparerApplication(
     }
 
     // 3. Create new profile
-    const profile = await prisma.profile.create({
-      data: {
+    const { data: newProfile, error: createError } = await db
+      .from('profiles')
+      .insert({
         userId,
         role: 'client',
         firstName: application.firstName,
         lastName: application.lastName,
         phone: application.phone,
-        affiliateStatus: conversionType === 'affiliate' ? 'APPROVED' : 'APPROVED',
-        affiliateApprovedAt: new Date(),
-      },
-    });
+        affiliateStatus: 'APPROVED',
+        affiliateApprovedAt: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
+    if (createError || !newProfile) {
+      throw new Error(`Failed to create profile: ${createError?.message || 'Unknown error'}`);
+    }
+
+    const profile = newProfile as Profile;
     logger.info(`Created ${conversionType} profile ${profile.id} from application ${applicationId}`);
 
     // 4. Assign tracking code (for both client and affiliate - all clients get tracking)
@@ -739,14 +873,14 @@ export async function createClientFromPreparerApplication(
     }
 
     // 6. Update application with profile reference
-    await prisma.preparerApplication.update({
-      where: { id: applicationId },
-      data: {
+    await db
+      .from('preparer_applications')
+      .update({
         notes: application.notes
           ? `${application.notes}\n\n[${new Date().toISOString()}] Profile created: ${profile.id} as ${conversionType}`
           : `[${new Date().toISOString()}] Profile created: ${profile.id} as ${conversionType}`,
-      },
-    });
+      })
+      .eq('id', applicationId);
 
     return {
       success: true,

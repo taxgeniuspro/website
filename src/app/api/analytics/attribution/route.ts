@@ -9,9 +9,23 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getReferrerAttributionStats } from '@/lib/services/attribution.service';
 import { logger } from '@/lib/logger';
+
+interface Profile {
+  id: string;
+  shortLinkUsername: string | null;
+  role: string;
+}
+
+interface Lead {
+  id: string;
+  status: string;
+  commissionRate: number | null;
+  source: string | null;
+  createdAt: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,20 +37,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile with username
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: {
-        id: true,
-        shortLinkUsername: true,
-        role: true,
-      },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, shortLinkUsername, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile || !profile.shortLinkUsername) {
       return NextResponse.json({
@@ -70,19 +77,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Get leads with commission data for the period
-    const leads = await prisma.lead.findMany({
-      where: {
-        referrerUsername: profile.shortLinkUsername,
-        createdAt: dateRange ? { gte: dateRange } : undefined,
-      },
-      select: {
-        id: true,
-        status: true,
-        commissionRate: true,
-        source: true,
-        createdAt: true,
-      },
-    });
+    let leadsQuery = db
+      .from('leads')
+      .select('id, status, commissionRate, source, createdAt')
+      .eq('referrerUsername', profile.shortLinkUsername);
+
+    if (dateRange) {
+      leadsQuery = leadsQuery.gte('createdAt', dateRange.toISOString());
+    }
+
+    const { data: leadsData, error: leadsError } = await leadsQuery;
+
+    if (leadsError) {
+      throw leadsError;
+    }
+
+    const leads = (leadsData || []) as Lead[];
 
     // Calculate conversion rate (converted leads / total leads)
     const convertedLeads = leads.filter((l) =>

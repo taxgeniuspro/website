@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { StorageService } from '@/lib/services/storage.service';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { DocumentType } from '@prisma/client';
+
+// DocumentType enum replacement for Prisma
+type DocumentType = 'W2' | 'FORM_1099' | 'TAX_RETURN' | 'RECEIPT' | 'ID_DOCUMENT' | 'OTHER';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,15 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: user.id },
-          { userId: user.id },
-          { email: user.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -74,33 +71,30 @@ export async function POST(request: NextRequest) {
     // Save document record if it's a document upload
     if (type === 'document') {
       const documentType: DocumentType = file.name.toLowerCase().includes('w2')
-        ? DocumentType.W2
+        ? 'W2'
         : file.name.toLowerCase().includes('1099')
-          ? DocumentType.FORM_1099
+          ? 'FORM_1099'
           : file.type === 'application/pdf'
-            ? DocumentType.TAX_RETURN
-            : DocumentType.OTHER;
+            ? 'TAX_RETURN'
+            : 'OTHER';
 
-      await prisma.document.create({
-        data: {
-          profileId: profile.id,
-          taxReturnId: taxReturnId,
-          type: documentType,
-          fileName: file.name,
-          fileUrl: url,
-          fileSize: file.size,
-          mimeType: file.type,
-          isEncrypted: true,
-        },
+      await db.from('documents').insert({
+        profile_id: profile.id,
+        tax_return_id: taxReturnId,
+        type: documentType,
+        file_name: file.name,
+        file_url: url,
+        file_size: file.size,
+        mime_type: file.type,
+        is_encrypted: true,
       });
     }
 
     // Update avatar URL if it's an avatar upload
     if (type === 'avatar') {
-      await prisma.profile.update({
-        where: { id: profile.id },
-        data: { avatarUrl: url },
-      });
+      await db.from('profiles')
+        .update({ avatar_url: url })
+        .eq('id', profile.id);
     }
 
     return NextResponse.json({
@@ -136,15 +130,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: user.id },
-          { userId: user.id },
-          { email: user.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

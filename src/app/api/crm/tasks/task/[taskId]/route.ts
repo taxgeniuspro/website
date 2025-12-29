@@ -12,11 +12,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { checkCRMPermission, CRMFeature } from '@/lib/permissions/crm-permissions';
 import { logger } from '@/lib/logger';
-import { TaskStatus, TaskPriority } from '@prisma/client';
 import { logTaskCompleted } from '@/lib/services/activity.service';
+
+// Local type definitions (replacing @prisma/client imports)
+type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
+type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 /**
  * PATCH /api/crm/tasks/task/[taskId]
@@ -56,35 +59,38 @@ export async function PATCH(
       );
     }
 
-    const taskId = params.taskId;
+    const { taskId } = await params;
 
-    // Fetch existing task with lead info
-    const existingTask = await prisma.leadTask.findUnique({
-      where: { id: taskId },
-      include: {
-        lead: {
-          select: {
-            id: true,
-            assignedTo: true,
-          },
-        },
-      },
-    });
+    // Fetch existing task
+    const { data: existingTasks } = await db
+      .from('lead_tasks')
+      .select('*')
+      .eq('id', taskId)
+      .limit(1);
+
+    const existingTask = firstOrNull(existingTasks);
 
     if (!existingTask) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
+    // Fetch lead info
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, assignedTo')
+      .eq('id', existingTask.leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
+
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -92,7 +98,7 @@ export async function PATCH(
 
     // Check access
     const isAdmin = profile.role === 'admin';
-    const isAssignedPreparer = existingTask.lead.assignedTo === profile.id;
+    const isAssignedPreparer = lead?.assignedTo === profile.id;
 
     if (!isAdmin && !isAssignedPreparer) {
       return NextResponse.json(
@@ -104,28 +110,32 @@ export async function PATCH(
     // Parse request body
     const updates = await req.json();
 
+    // Valid statuses and priorities
+    const validStatuses: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE'];
+    const validPriorities: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
     // Validate status if provided
-    if (updates.status && !Object.values(TaskStatus).includes(updates.status)) {
+    if (updates.status && !validStatuses.includes(updates.status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
 
     // Validate priority if provided
-    if (updates.priority && !Object.values(TaskPriority).includes(updates.priority)) {
+    if (updates.priority && !validPriorities.includes(updates.priority)) {
       return NextResponse.json({ error: 'Invalid priority' }, { status: 400 });
     }
 
     // Build update data
-    const updateData: any = {};
+    const updateData: Record<string, any> = {};
 
     if (updates.title !== undefined) updateData.title = updates.title.trim();
     if (updates.description !== undefined) updateData.description = updates.description?.trim() || null;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
-    if (updates.dueDate !== undefined) updateData.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+    if (updates.dueDate !== undefined) updateData.dueDate = updates.dueDate ? new Date(updates.dueDate).toISOString() : null;
 
     // If status is being changed to DONE, set completedAt
-    if (updates.status === TaskStatus.DONE && existingTask.status !== TaskStatus.DONE) {
-      updateData.completedAt = new Date();
+    if (updates.status === 'DONE' && existingTask.status !== 'DONE') {
+      updateData.completedAt = new Date().toISOString();
 
       // Log task completion activity
       const createdByName = [profile.firstName, profile.lastName]
@@ -142,15 +152,21 @@ export async function PATCH(
     }
 
     // If status is being changed from DONE to something else, clear completedAt
-    if (updates.status !== TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
+    if (updates.status !== 'DONE' && existingTask.status === 'DONE') {
       updateData.completedAt = null;
     }
 
     // Update task
-    const task = await prisma.leadTask.update({
-      where: { id: taskId },
-      data: updateData,
-    });
+    const { data: task, error: updateError } = await db
+      .from('lead_tasks')
+      .update(updateData)
+      .eq('id', taskId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
 
     logger.info(`User ${userId} updated task ${taskId}`, { updates });
 
@@ -193,34 +209,42 @@ export async function DELETE(
       );
     }
 
-    const taskId = params.taskId;
+    const { taskId } = await params;
 
-    // Fetch task with lead info
-    const task = await prisma.leadTask.findUnique({
-      where: { id: taskId },
-      include: {
-        lead: {
-          select: {
-            id: true,
-            assignedTo: true,
-          },
-        },
-      },
-    });
+    // Fetch task
+    const { data: tasks } = await db
+      .from('lead_tasks')
+      .select('id, leadId')
+      .eq('id', taskId)
+      .limit(1);
+
+    const task = firstOrNull(tasks);
 
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
+    // Fetch lead info
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, assignedTo')
+      .eq('id', task.leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
+
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     // Check access
     const isAdmin = profile?.role === 'admin';
-    const isAssignedPreparer = task.lead.assignedTo === profile?.id;
+    const isAssignedPreparer = lead?.assignedTo === profile?.id;
 
     if (!isAdmin && !isAssignedPreparer) {
       return NextResponse.json(
@@ -230,9 +254,10 @@ export async function DELETE(
     }
 
     // Delete task
-    await prisma.leadTask.delete({
-      where: { id: taskId },
-    });
+    await db
+      .from('lead_tasks')
+      .delete()
+      .eq('id', taskId);
 
     logger.info(`User ${userId} deleted task ${taskId}`);
 

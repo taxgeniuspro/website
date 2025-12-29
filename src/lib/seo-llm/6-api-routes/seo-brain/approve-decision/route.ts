@@ -8,8 +8,18 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
 import { seoBrain } from '@/lib/seo-brain/orchestrator'
+
+// TypeScript interfaces (replaces Prisma types)
+interface SEOBrainDecision {
+  id: string
+  status: string
+  selectedOption: string | null
+  userFeedback: string | null
+  respondedAt: string | null
+  createdAt: string
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,9 +41,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get decision
-    const decision = await prisma.sEOBrainDecision.findUnique({
-      where: { id: decisionId },
-    })
+    const { data: decisionData } = await db
+      .from('seo_brain_decisions')
+      .select('*')
+      .eq('id', decisionId)
+      .limit(1)
+
+    const decision = firstOrNull<SEOBrainDecision>(decisionData)
 
     if (!decision) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
@@ -44,15 +58,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Update decision with user response
-    await prisma.sEOBrainDecision.update({
-      where: { id: decisionId },
-      data: {
+    const { error: updateError } = await db
+      .from('seo_brain_decisions')
+      .update({
         selectedOption: selectedOption.toUpperCase(),
         userFeedback: feedback || null,
-        respondedAt: new Date(),
+        respondedAt: new Date().toISOString(),
         status: 'APPROVED',
-      },
-    })
+      })
+      .eq('id', decisionId)
+
+    if (updateError) {
+      throw new Error(`Failed to update decision: ${updateError.message}`)
+    }
 
     // Execute the decision
     await seoBrain.executeDecision(decisionId, selectedOption.toUpperCase())
@@ -75,13 +93,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get pending decisions
-    const pendingDecisions = await prisma.sEOBrainDecision.findMany({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    })
+    const { data: pendingDecisions } = await db
+      .from('seo_brain_decisions')
+      .select('*')
+      .eq('status', 'PENDING')
+      .order('createdAt', { ascending: false })
+      .limit(20)
 
-    return NextResponse.json({ decisions: pendingDecisions })
+    return NextResponse.json({ decisions: pendingDecisions || [] })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch decisions' }, { status: 500 })
   }

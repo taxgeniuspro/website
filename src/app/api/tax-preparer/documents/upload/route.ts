@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -14,6 +14,15 @@ const CATEGORY_TO_TYPE: Record<string, string> = {
   mortgage: 'OTHER',
   other: 'OTHER',
 };
+
+// Local type definitions
+interface Profile {
+  id: string;
+  role: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}
 
 /**
  * POST /api/tax-preparer/documents/upload
@@ -32,22 +41,21 @@ const CATEGORY_TO_TYPE: Record<string, string> = {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -55,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'tax_preparer' && role !== 'admin' ) {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -85,10 +93,13 @@ export async function POST(req: NextRequest) {
     const taxYear = parseInt(taxYearStr);
 
     // Verify client exists
-    const client = await prisma.profile.findUnique({
-      where: { id: clientId },
-      select: { id: true, role: true },
-    });
+    const { data: clientProfiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('id', clientId)
+      .limit(1);
+
+    const client = firstOrNull(clientProfiles) as Profile | null;
 
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
@@ -100,13 +111,15 @@ export async function POST(req: NextRequest) {
 
     // Check if preparer has access to this client
     if (role === 'tax_preparer') {
-      const hasAccess = await prisma.clientPreparer.findFirst({
-        where: {
-          clientId: clientId,
-          preparerId: profile.id,
-          isActive: true,
-        },
-      });
+      const { data: hasAccessData } = await db
+        .from('client_preparers')
+        .select('id')
+        .eq('clientId', clientId)
+        .eq('preparerId', profile.id)
+        .eq('isActive', true)
+        .limit(1);
+
+      const hasAccess = firstOrNull(hasAccessData);
 
       if (!hasAccess) {
         return NextResponse.json(
@@ -128,7 +141,6 @@ export async function POST(req: NextRequest) {
 
     // Generate unique filename
     const timestamp = Date.now();
-    const extension = file.name.split('.').pop();
     const fileName = `${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = join(uploadDir, fileName);
 
@@ -142,8 +154,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Save document record to database
-    const document = await prisma.document.create({
-      data: {
+    const { data: document, error: insertError } = await db
+      .from('documents')
+      .insert({
         profileId: clientId,
         type: CATEGORY_TO_TYPE[category] || 'OTHER',
         fileName: file.name,
@@ -152,9 +165,9 @@ export async function POST(req: NextRequest) {
         mimeType: file.type,
         isEncrypted: false,
         taxYear: taxYear,
-        status: status as any,
+        status: status,
         reviewedBy: profile.id,
-        reviewedAt: new Date(),
+        reviewedAt: new Date().toISOString(),
         reviewNotes: reviewNotes || null,
         metadata: {
           category,
@@ -162,18 +175,22 @@ export async function POST(req: NextRequest) {
           uploadedBy: profile.id,
           uploaderRole: 'tax_preparer',
         },
-      },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+
+    // Get client profile info
+    const { data: clientInfoProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, email')
+      .eq('id', clientId)
+      .limit(1);
+
+    const clientInfo = firstOrNull(clientInfoProfiles) as Profile | null;
 
     logger.info(
       `Tax preparer ${profile.id} uploaded document ${document.id} for client ${clientId}`
@@ -190,9 +207,9 @@ export async function POST(req: NextRequest) {
         status: document.status,
         category,
         client: {
-          id: document.profile.id,
-          name: `${document.profile.firstName || ''} ${document.profile.lastName || ''}`.trim(),
-          email: document.profile.email,
+          id: clientInfo?.id || clientId,
+          name: `${clientInfo?.firstName || ''} ${clientInfo?.lastName || ''}`.trim(),
+          email: clientInfo?.email || null,
         },
       },
     });

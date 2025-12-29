@@ -2,8 +2,34 @@ import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces (replaces @prisma/client imports)
+interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  type: string;
+  category: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Order {
+  id: string;
+  user_id: string;
+  stripe_session_id: string;
+  items: any;
+  total: number;
+  status: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // Payment mode: 'test' or 'stripe'
 const PAYMENT_MODE = (process.env.PAYMENT_MODE || 'stripe') as 'test' | 'stripe';
@@ -55,16 +81,21 @@ export async function POST(request: NextRequest) {
 
     // STEP 3: Fetch products from database (source of truth for prices)
     const productIds = cartItems.map((item) => item.productId);
-    const products = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        isActive: true,
-      },
-    });
+
+    const { data: products, error: productsError } = await db
+      .from('products')
+      .select('*')
+      .in('id', productIds)
+      .eq('is_active', true);
+
+    if (productsError) {
+      logger.error('Failed to fetch products:', productsError);
+      return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
+    }
 
     // STEP 4: Validate all products exist and are active
-    if (products.length !== productIds.length) {
-      const foundIds = products.map((p) => p.id);
+    if (!products || products.length !== productIds.length) {
+      const foundIds = (products || []).map((p: any) => p.id);
       const missingIds = productIds.filter((id) => !foundIds.includes(id));
 
       return NextResponse.json(
@@ -77,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     // STEP 5: Create price map from database (CRITICAL: Server-side validation)
-    const priceMap = new Map(products.map((p) => [p.id, { price: Number(p.price), name: p.name }]));
+    const priceMap = new Map(products.map((p: any) => [p.id, { price: Number(p.price), name: p.name }]));
 
     // STEP 6: Validate client-submitted prices match database prices (AC24)
     const priceMismatches: string[] = [];
@@ -99,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (priceMismatches.length > 0) {
-      logger.error('❌ Price tampering detected:', priceMismatches);
+      logger.error('Price tampering detected:', priceMismatches);
       return NextResponse.json(
         {
           error: 'Price validation failed',
@@ -115,27 +146,34 @@ export async function POST(request: NextRequest) {
       return sum + dbProduct.price * item.quantity;
     }, 0);
 
-    logger.info(`💳 Payment mode: ${PAYMENT_MODE}`);
+    logger.info(`Payment mode: ${PAYMENT_MODE}`);
 
     // STEP 7: Handle different payment modes
     if (PAYMENT_MODE === 'test') {
       // TEST MODE: Create order immediately, skip payment processor
-      logger.info('🧪 TEST MODE: Creating test order without payment');
+      logger.info('TEST MODE: Creating test order without payment');
 
       const testSessionId = `test_session_${Date.now()}_${userId}`;
 
-      const order = await prisma.order.create({
-        data: {
-          userId,
-          stripeSessionId: testSessionId,
+      const { data: order, error: orderError } = await db
+        .from('orders')
+        .insert({
+          user_id: userId,
+          stripe_session_id: testSessionId,
           items: cartItems,
           total,
           status: 'COMPLETED',
           email: 'test@example.com',
-        },
-      });
+        })
+        .select()
+        .single();
 
-      logger.info(`✅ Test order created: ${order.id}`);
+      if (orderError) {
+        logger.error('Failed to create test order:', orderError);
+        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
+      }
+
+      logger.info(`Test order created: ${order.id}`);
 
       // Redirect to success page with test session ID
       const successUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3005'}/store/success?session_id=${testSessionId}`;
@@ -147,7 +185,7 @@ export async function POST(request: NextRequest) {
       });
     } else if (PAYMENT_MODE === 'stripe') {
       // STRIPE MODE: Create Stripe Checkout Session
-      logger.info('💳 STRIPE MODE: Creating Stripe checkout session');
+      logger.info('STRIPE MODE: Creating Stripe checkout session');
 
       const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = cartItems.map((item) => {
         const dbProduct = priceMap.get(item.productId)!;
@@ -166,7 +204,7 @@ export async function POST(request: NextRequest) {
       });
 
       const stripe = getStripe();
-      const session = await stripe.checkout.sessions.create({
+      const stripeSession = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: lineItems,
         success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3005'}/store/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -182,14 +220,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      logger.info(`✅ Stripe session created: ${session.id}`);
+      logger.info(`Stripe session created: ${stripeSession.id}`);
 
-      return NextResponse.json({ url: session.url, mode: 'stripe' });
+      return NextResponse.json({ url: stripeSession.url, mode: 'stripe' });
     } else {
       return NextResponse.json({ error: 'Invalid payment mode configured' }, { status: 500 });
     }
   } catch (error) {
-    logger.error('❌ Checkout session creation failed:', error);
+    logger.error('Checkout session creation failed:', error);
     return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
   }
 }

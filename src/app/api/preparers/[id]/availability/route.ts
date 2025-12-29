@@ -4,10 +4,24 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { parseISO } from 'date-fns';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase responses
+interface PreparerAvailability {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  serviceIds: string[];
+  isOverride: boolean;
+  overrideFrom: string | null;
+  overrideUntil: string | null;
+  overrideLabel: string | null;
+  isActive: boolean;
+}
 
 export async function GET(
   request: NextRequest,
@@ -22,9 +36,13 @@ export async function GET(
     const { id: preparerId } = await params;
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const userProfile = firstOrNull(userProfileData);
 
     const isAuthorized =
       userProfile?.id === preparerId ||
@@ -39,41 +57,36 @@ export async function GET(
     }
 
     // Get all availability rules
-    const availability = await prisma.preparerAvailability.findMany({
-      where: { preparerId },
-      orderBy: [{ isOverride: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
-    });
+    const { data: availability } = await db
+      .from('preparer_availability')
+      .select('*')
+      .eq('preparerId', preparerId)
+      .order('isOverride', { ascending: true })
+      .order('dayOfWeek', { ascending: true })
+      .order('startTime', { ascending: true });
 
     // Get booking preferences from profile
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        bookingEnabled: true,
-        allowPhoneBookings: true,
-        allowVideoBookings: true,
-        allowInPersonBookings: true,
-        requireApprovalForBookings: true,
-        customBookingMessage: true,
-        bookingCalendarColor: true,
-        appointmentBufferMinutes: true,
-        defaultAppointmentDuration: true,
-        timezone: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('bookingEnabled, allowPhoneBookings, allowVideoBookings, allowInPersonBookings, requireApprovalForBookings, customBookingMessage, bookingCalendarColor, appointmentBufferMinutes, defaultAppointmentDuration, timezone')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData);
 
     return NextResponse.json({
       success: true,
       preparerId,
       bookingPreferences: profile,
-      availability: availability.map((avail) => ({
+      availability: (availability || []).map((avail: PreparerAvailability) => ({
         id: avail.id,
         dayOfWeek: avail.dayOfWeek,
         startTime: avail.startTime,
         endTime: avail.endTime,
         serviceIds: avail.serviceIds,
         isOverride: avail.isOverride,
-        overrideFrom: avail.overrideFrom?.toISOString(),
-        overrideUntil: avail.overrideUntil?.toISOString(),
+        overrideFrom: avail.overrideFrom,
+        overrideUntil: avail.overrideUntil,
         overrideLabel: avail.overrideLabel,
         isActive: avail.isActive,
       })),
@@ -105,9 +118,13 @@ export async function PUT(
     const { weeklySchedule, overrides, bookingPreferences } = body;
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const userProfile = firstOrNull(userProfileData);
 
     const isAuthorized =
       userProfile?.id === preparerId ||
@@ -123,9 +140,9 @@ export async function PUT(
 
     // Update booking preferences in Profile if provided
     if (bookingPreferences) {
-      await prisma.profile.update({
-        where: { id: preparerId },
-        data: {
+      await db
+        .from('profiles')
+        .update({
           bookingEnabled: bookingPreferences.bookingEnabled,
           allowPhoneBookings: bookingPreferences.allowPhoneBookings,
           allowVideoBookings: bookingPreferences.allowVideoBookings,
@@ -136,33 +153,34 @@ export async function PUT(
           appointmentBufferMinutes: bookingPreferences.appointmentBufferMinutes,
           defaultAppointmentDuration: bookingPreferences.defaultAppointmentDuration,
           timezone: bookingPreferences.timezone,
-        },
-      });
+        })
+        .eq('id', preparerId);
     }
 
     // Update weekly schedule if provided
     if (weeklySchedule && Array.isArray(weeklySchedule)) {
       // Delete existing regular (non-override) availability
-      await prisma.preparerAvailability.deleteMany({
-        where: {
-          preparerId,
-          isOverride: false,
-        },
-      });
+      await db
+        .from('preparer_availability')
+        .delete()
+        .eq('preparerId', preparerId)
+        .eq('isOverride', false);
 
       // Create new weekly schedule
       if (weeklySchedule.length > 0) {
-        await prisma.preparerAvailability.createMany({
-          data: weeklySchedule.map((schedule: any) => ({
-            preparerId,
-            dayOfWeek: schedule.dayOfWeek,
-            startTime: schedule.startTime,
-            endTime: schedule.endTime,
-            serviceIds: schedule.serviceIds || [],
-            isOverride: false,
-            isActive: true,
-          })),
-        });
+        await db
+          .from('preparer_availability')
+          .insert(
+            weeklySchedule.map((schedule: any) => ({
+              preparerId,
+              dayOfWeek: schedule.dayOfWeek,
+              startTime: schedule.startTime,
+              endTime: schedule.endTime,
+              serviceIds: schedule.serviceIds || [],
+              isOverride: false,
+              isActive: true,
+            }))
+          );
       }
     }
 
@@ -171,60 +189,64 @@ export async function PUT(
       // Process each override (create, update, or delete)
       for (const override of overrides) {
         if (override.action === 'delete' && override.id) {
-          await prisma.preparerAvailability.delete({
-            where: { id: override.id },
-          });
+          await db
+            .from('preparer_availability')
+            .delete()
+            .eq('id', override.id);
         } else if (override.action === 'update' && override.id) {
-          await prisma.preparerAvailability.update({
-            where: { id: override.id },
-            data: {
+          await db
+            .from('preparer_availability')
+            .update({
               startTime: override.startTime,
               endTime: override.endTime,
-              overrideFrom: override.overrideFrom ? parseISO(override.overrideFrom) : undefined,
-              overrideUntil: override.overrideUntil ? parseISO(override.overrideUntil) : undefined,
+              overrideFrom: override.overrideFrom ? parseISO(override.overrideFrom).toISOString() : undefined,
+              overrideUntil: override.overrideUntil ? parseISO(override.overrideUntil).toISOString() : undefined,
               overrideLabel: override.overrideLabel,
               serviceIds: override.serviceIds || [],
               isActive: override.isActive !== undefined ? override.isActive : true,
-            },
-          });
+            })
+            .eq('id', override.id);
         } else if (override.action === 'create') {
-          await prisma.preparerAvailability.create({
-            data: {
+          await db
+            .from('preparer_availability')
+            .insert({
               preparerId,
               dayOfWeek: 0, // Not used for overrides
               startTime: override.startTime || '00:00',
               endTime: override.endTime || '00:00',
               serviceIds: override.serviceIds || [],
               isOverride: true,
-              overrideFrom: parseISO(override.overrideFrom),
-              overrideUntil: parseISO(override.overrideUntil),
+              overrideFrom: parseISO(override.overrideFrom).toISOString(),
+              overrideUntil: parseISO(override.overrideUntil).toISOString(),
               overrideLabel: override.overrideLabel,
               isActive: true,
-            },
-          });
+            });
         }
       }
     }
 
     // Return updated availability
-    const updatedAvailability = await prisma.preparerAvailability.findMany({
-      where: { preparerId },
-      orderBy: [{ isOverride: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
-    });
+    const { data: updatedAvailability } = await db
+      .from('preparer_availability')
+      .select('*')
+      .eq('preparerId', preparerId)
+      .order('isOverride', { ascending: true })
+      .order('dayOfWeek', { ascending: true })
+      .order('startTime', { ascending: true });
 
     return NextResponse.json({
       success: true,
       message: 'Availability updated successfully',
       preparerId,
-      availability: updatedAvailability.map((avail) => ({
+      availability: (updatedAvailability || []).map((avail: PreparerAvailability) => ({
         id: avail.id,
         dayOfWeek: avail.dayOfWeek,
         startTime: avail.startTime,
         endTime: avail.endTime,
         serviceIds: avail.serviceIds,
         isOverride: avail.isOverride,
-        overrideFrom: avail.overrideFrom?.toISOString(),
-        overrideUntil: avail.overrideUntil?.toISOString(),
+        overrideFrom: avail.overrideFrom,
+        overrideUntil: avail.overrideUntil,
         overrideLabel: avail.overrideLabel,
         isActive: avail.isActive,
       })),

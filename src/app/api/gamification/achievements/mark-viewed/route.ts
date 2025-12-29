@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-
-const prisma = new PrismaClient();
 
 /**
  * POST /api/gamification/achievements/mark-viewed
@@ -30,18 +28,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Mark as viewed
-    await prisma.userAchievement.updateMany({
-      where: {
-        userId,
-        achievementId: {
-          in: achievementIds,
-        },
-        viewedAt: null,
-      },
-      data: {
-        viewedAt: new Date(),
-      },
-    });
+    const { error } = await db
+      .from('user_achievements')
+      .update({ viewedAt: new Date().toISOString() })
+      .eq('userId', userId)
+      .in('achievementId', achievementIds)
+      .is('viewedAt', null);
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,10 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { customAlphabet } from 'nanoid';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateReferralSignupPDF } from '@/lib/services/pdf-form-generator.service';
+
+// TypeScript interfaces for database tables (replacing @prisma/client types)
+interface ReferrerApplication {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  referralCode: string;
+  status: string;
+  createdAt: Date;
+}
+
+interface CRMContact {
+  id: string;
+  contactType: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  stage: string;
+  source: string | null;
+  lastContactedAt: Date | null;
+}
 
 // Generate unique referral codes
 const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 8);
@@ -28,9 +52,13 @@ export async function POST(req: NextRequest) {
       email.endsWith('@example.com'); // Allow test emails
 
     // Try to find existing application
-    let application = await prisma.referrerApplication.findUnique({
-      where: { email },
-    });
+    const { data: existingApplicationData } = await db
+      .from('referrer_applications')
+      .select('*')
+      .eq('email', email)
+      .limit(1);
+
+    let application: ReferrerApplication | null = firstOrNull(existingApplicationData);
 
     if (application && !allowDuplicates) {
       return NextResponse.json(
@@ -62,10 +90,13 @@ export async function POST(req: NextRequest) {
 
     // Ensure code is unique
     while (codeExists) {
-      const existing = await prisma.referrerApplication.findUnique({
-        where: { referralCode },
-      });
-      if (!existing) {
+      const { data: existingCodeData } = await db
+        .from('referrer_applications')
+        .select('id')
+        .eq('referral_code', referralCode)
+        .limit(1);
+
+      if (!existingCodeData || existingCodeData.length === 0) {
         codeExists = false;
       } else {
         referralCode = nanoid();
@@ -73,16 +104,35 @@ export async function POST(req: NextRequest) {
     }
 
     // Create new referrer application
-    application = await prisma.referrerApplication.create({
-      data: {
-        firstName,
-        lastName,
+    const { data: newApplicationData, error: createError } = await db
+      .from('referrer_applications')
+      .insert({
+        first_name: firstName,
+        last_name: lastName,
         email,
         phone,
-        referralCode,
+        referral_code: referralCode,
         status: 'ACTIVE',
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError || !newApplicationData) {
+      logger.error('Failed to create referrer application', { error: createError });
+      return NextResponse.json({ error: 'Failed to create referral signup' }, { status: 500 });
+    }
+
+    // Map snake_case DB fields to camelCase
+    application = {
+      id: newApplicationData.id,
+      firstName: newApplicationData.first_name,
+      lastName: newApplicationData.last_name,
+      email: newApplicationData.email,
+      phone: newApplicationData.phone,
+      referralCode: newApplicationData.referral_code,
+      status: newApplicationData.status,
+      createdAt: new Date(newApplicationData.created_at),
+    };
 
     logger.info('Referrer application created', {
       applicationId: application.id,
@@ -96,25 +146,75 @@ export async function POST(req: NextRequest) {
     const referralLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://taxgeniuspro.tax'}?ref=${referralCode}`;
 
     try {
-      const crmContact = await prisma.cRMContact.upsert({
-        where: { email: email.toLowerCase() },
-        create: {
-          contactType: 'AFFILIATE',
-          firstName,
-          lastName,
-          email: email.toLowerCase(),
-          phone,
-          stage: 'NEW',
-          source: 'referral_program_signup',
-          lastContactedAt: new Date(),
-        },
-        update: {
-          firstName,
-          lastName,
-          phone,
-          lastContactedAt: new Date(),
-        },
-      });
+      // First try to find existing CRM contact
+      const { data: existingContact } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .limit(1);
+
+      let crmContact: CRMContact;
+
+      if (existingContact && existingContact.length > 0) {
+        // Update existing contact
+        const { data: updatedContact, error: updateError } = await db
+          .from('crm_contacts')
+          .update({
+            first_name: firstName,
+            last_name: lastName,
+            phone,
+            last_contacted_at: new Date().toISOString(),
+          })
+          .eq('email', email.toLowerCase())
+          .select()
+          .single();
+
+        if (updateError || !updatedContact) {
+          throw new Error('Failed to update CRM contact');
+        }
+        crmContact = {
+          id: updatedContact.id,
+          contactType: updatedContact.contact_type,
+          firstName: updatedContact.first_name,
+          lastName: updatedContact.last_name,
+          email: updatedContact.email,
+          phone: updatedContact.phone,
+          stage: updatedContact.stage,
+          source: updatedContact.source,
+          lastContactedAt: updatedContact.last_contacted_at ? new Date(updatedContact.last_contacted_at) : null,
+        };
+      } else {
+        // Create new contact
+        const { data: newContact, error: createError } = await db
+          .from('crm_contacts')
+          .insert({
+            contact_type: 'AFFILIATE',
+            first_name: firstName,
+            last_name: lastName,
+            email: email.toLowerCase(),
+            phone,
+            stage: 'NEW',
+            source: 'referral_program_signup',
+            last_contacted_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (createError || !newContact) {
+          throw new Error('Failed to create CRM contact');
+        }
+        crmContact = {
+          id: newContact.id,
+          contactType: newContact.contact_type,
+          firstName: newContact.first_name,
+          lastName: newContact.last_name,
+          email: newContact.email,
+          phone: newContact.phone,
+          stage: newContact.stage,
+          source: newContact.source,
+          lastContactedAt: newContact.last_contacted_at ? new Date(newContact.last_contacted_at) : null,
+        };
+      }
 
       logger.info('CRM contact created/updated from referral signup', {
         contactId: crmContact.id,
@@ -123,13 +223,12 @@ export async function POST(req: NextRequest) {
       });
 
       // Create CRMInteraction to log the referral signup
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: crmContact.id,
-          type: 'NOTE',
-          direction: 'INBOUND',
-          subject: '🤝 Referral Program Signup',
-          body: `**Referral Program Signup**
+      await db.from('crm_interactions').insert({
+        contact_id: crmContact.id,
+        type: 'NOTE',
+        direction: 'INBOUND',
+        subject: 'Referral Program Signup',
+        body: `**Referral Program Signup**
 
 **Referrer Information:**
 - Name: ${firstName} ${lastName}
@@ -144,8 +243,7 @@ export async function POST(req: NextRequest) {
 **Application ID:** ${application.id}
 
 This person has joined the referral program and can now start earning commissions by referring clients.`,
-          occurredAt: new Date(),
-        },
+        occurred_at: new Date().toISOString(),
       });
 
       logger.info('CRM interaction created for referral signup', {
@@ -292,23 +390,33 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Email or code parameter required' }, { status: 400 });
     }
 
-    const application = await prisma.referrerApplication.findFirst({
-      where: email ? { email } : { referralCode: code || undefined },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        referralCode: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    let query = db
+      .from('referrer_applications')
+      .select('id, first_name, last_name, email, phone, referral_code, status, created_at');
 
-    if (!application) {
+    if (email) {
+      query = query.eq('email', email);
+    } else if (code) {
+      query = query.eq('referral_code', code);
+    }
+
+    const { data: applicationData, error } = await query.limit(1);
+
+    if (error || !applicationData || applicationData.length === 0) {
       return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
     }
+
+    const dbApp = applicationData[0];
+    const application = {
+      id: dbApp.id,
+      firstName: dbApp.first_name,
+      lastName: dbApp.last_name,
+      email: dbApp.email,
+      phone: dbApp.phone,
+      referralCode: dbApp.referral_code,
+      status: dbApp.status,
+      createdAt: dbApp.created_at,
+    };
 
     return NextResponse.json({
       application,

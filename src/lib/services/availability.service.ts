@@ -4,7 +4,50 @@
  * existing appointments, and booking preferences.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  bookingEnabled?: boolean | null;
+  allowPhoneBookings?: boolean | null;
+  allowVideoBookings?: boolean | null;
+  allowInPersonBookings?: boolean | null;
+  requireApprovalForBookings?: boolean | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  timezone?: string | null;
+}
+
+interface PreparerAvailabilityRecord {
+  id: string;
+  preparerId: string;
+  dayOfWeek?: number | null;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+  isOverride: boolean;
+  overrideFrom?: string | null;
+  overrideUntil?: string | null;
+  serviceIds: string[];
+}
+
+interface AppointmentRecord {
+  id: string;
+  preparerId: string;
+  scheduledFor?: string | null;
+  scheduledEnd?: string | null;
+  duration?: number | null;
+  status: string;
+  clientName: string;
+  subject?: string | null;
+  type: string;
+}
+
+interface BookingServiceRecord {
+  id: string;
+  bufferAfter: number;
+}
 import {
   startOfDay,
   endOfDay,
@@ -63,19 +106,13 @@ export async function calculateAvailableSlots(
   const { preparerId, date, duration, serviceId, timezone = 'America/New_York', includeUnavailable = false } = params;
 
   // 1. Get preparer profile and check if booking is enabled
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      bookingEnabled: true,
-      allowPhoneBookings: true,
-      allowVideoBookings: true,
-      allowInPersonBookings: true,
-      requireApprovalForBookings: true,
-      firstName: true,
-      lastName: true,
-      timezone: true, // Get preparer's timezone
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id, bookingEnabled, allowPhoneBookings, allowVideoBookings, allowInPersonBookings, requireApprovalForBookings, firstName, lastName, timezone')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(profiles) as Profile | null;
 
   if (!preparer || !preparer.bookingEnabled) {
     return [];
@@ -92,25 +129,32 @@ export async function calculateAvailableSlots(
   const dayOfWeek = getDay(dateInPreparerTz);
 
   // 3. Get preparer's availability for this day
-  const availability = await prisma.preparerAvailability.findMany({
-    where: {
-      preparerId,
-      isActive: true,
-      OR: [
-        // Regular weekly schedule for this day
-        {
-          dayOfWeek,
-          isOverride: false,
-        },
-        // Override periods that include this date
-        {
-          isOverride: true,
-          overrideFrom: { lte: date },
-          overrideUntil: { gte: date },
-        },
-      ],
-    },
-  });
+  // Supabase doesn't support complex OR like Prisma, so we run two queries
+  const dateStr = date.toISOString();
+
+  // Regular weekly schedule for this day
+  const { data: regularAvail } = await db
+    .from('preparer_availability')
+    .select('*')
+    .eq('preparerId', preparerId)
+    .eq('isActive', true)
+    .eq('dayOfWeek', dayOfWeek)
+    .eq('isOverride', false);
+
+  // Override periods that include this date
+  const { data: overrideAvail } = await db
+    .from('preparer_availability')
+    .select('*')
+    .eq('preparerId', preparerId)
+    .eq('isActive', true)
+    .eq('isOverride', true)
+    .lte('overrideFrom', dateStr)
+    .gte('overrideUntil', dateStr);
+
+  const availability = [
+    ...((regularAvail || []) as PreparerAvailabilityRecord[]),
+    ...((overrideAvail || []) as PreparerAvailabilityRecord[]),
+  ];
 
   if (availability.length === 0) {
     return []; // No availability configured
@@ -122,7 +166,7 @@ export async function calculateAvailableSlots(
       avail.isOverride &&
       avail.overrideFrom &&
       avail.overrideUntil &&
-      isWithinInterval(date, { start: avail.overrideFrom, end: avail.overrideUntil }) &&
+      isWithinInterval(date, { start: new Date(avail.overrideFrom), end: new Date(avail.overrideUntil) }) &&
       avail.startTime === '00:00' &&
       avail.endTime === '00:00'
   );
@@ -148,10 +192,13 @@ export async function calculateAvailableSlots(
   // 7. Get booking service details (for buffer time)
   let bufferAfter = 15; // Default 15 minutes
   if (serviceId) {
-    const service = await prisma.bookingService.findUnique({
-      where: { id: serviceId },
-      select: { bufferAfter: true },
-    });
+    const { data: services } = await db
+      .from('booking_services')
+      .select('bufferAfter')
+      .eq('id', serviceId)
+      .limit(1);
+
+    const service = firstOrNull(services) as BookingServiceRecord | null;
     if (service) {
       bufferAfter = service.bufferAfter;
     }
@@ -161,23 +208,19 @@ export async function calculateAvailableSlots(
   const dayStart = startOfDay(date);
   const dayEnd = endOfDay(date);
 
-  const existingAppointments = await prisma.appointment.findMany({
-    where: {
-      preparerId,
-      scheduledFor: {
-        gte: dayStart,
-        lte: dayEnd,
-      },
-      status: {
-        in: ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL'],
-      },
-    },
-    select: {
-      scheduledFor: true,
-      scheduledEnd: true,
-      duration: true,
-    },
-  });
+  const { data: existingAppointmentsData } = await db
+    .from('appointments')
+    .select('scheduledFor, scheduledEnd, duration')
+    .eq('preparerId', preparerId)
+    .gte('scheduledFor', dayStart.toISOString())
+    .lte('scheduledFor', dayEnd.toISOString())
+    .in('status', ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL']);
+
+  const existingAppointments = (existingAppointmentsData || []).map((appt: { scheduledFor?: string; scheduledEnd?: string; duration?: number }) => ({
+    scheduledFor: appt.scheduledFor ? new Date(appt.scheduledFor) : null,
+    scheduledEnd: appt.scheduledEnd ? new Date(appt.scheduledEnd) : null,
+    duration: appt.duration,
+  }));
 
   // 9. Generate time slots
   const slots: TimeSlot[] = [];
@@ -252,25 +295,26 @@ export async function checkConflicts(
   endTime: Date,
   excludeAppointmentId?: string
 ): Promise<boolean> {
-  const conflicts = await prisma.appointment.findMany({
-    where: {
-      preparerId,
-      id: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
-      scheduledFor: {
-        gte: startOfDay(startTime),
-        lte: endOfDay(startTime),
-      },
-      status: {
-        in: ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL'],
-      },
-    },
-    select: {
-      scheduledFor: true,
-      scheduledEnd: true,
-    },
-  });
+  let query = db
+    .from('appointments')
+    .select('id, scheduledFor, scheduledEnd')
+    .eq('preparerId', preparerId)
+    .gte('scheduledFor', startOfDay(startTime).toISOString())
+    .lte('scheduledFor', endOfDay(startTime).toISOString())
+    .in('status', ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL']);
 
-  return conflicts.some((appt) => {
+  if (excludeAppointmentId) {
+    query = query.neq('id', excludeAppointmentId);
+  }
+
+  const { data: conflictsData } = await query;
+
+  const conflicts = (conflictsData || []).map((appt: { scheduledFor?: string; scheduledEnd?: string }) => ({
+    scheduledFor: appt.scheduledFor ? new Date(appt.scheduledFor) : null,
+    scheduledEnd: appt.scheduledEnd ? new Date(appt.scheduledEnd) : null,
+  }));
+
+  return conflicts.some((appt: { scheduledFor: Date | null; scheduledEnd: Date | null }) => {
     if (!appt.scheduledFor || !appt.scheduledEnd) return false;
 
     // Check for overlap
@@ -290,42 +334,28 @@ export async function getPreparerSchedule(
   startDate: Date,
   endDate: Date
 ): Promise<PreparerSchedule> {
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      firstName: true,
-      lastName: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('firstName, lastName')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(profiles) as Profile | null;
 
   if (!preparer) {
     throw new Error('Preparer not found');
   }
 
-  const appointments = await prisma.appointment.findMany({
-    where: {
-      preparerId,
-      scheduledFor: {
-        gte: startDate,
-        lte: endDate,
-      },
-      status: {
-        in: ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL', 'REQUESTED'],
-      },
-    },
-    select: {
-      id: true,
-      clientName: true,
-      scheduledFor: true,
-      scheduledEnd: true,
-      status: true,
-      subject: true,
-      type: true,
-    },
-    orderBy: {
-      scheduledFor: 'asc',
-    },
-  });
+  const { data: appointmentsData } = await db
+    .from('appointments')
+    .select('id, clientName, scheduledFor, scheduledEnd, status, subject, type')
+    .eq('preparerId', preparerId)
+    .gte('scheduledFor', startDate.toISOString())
+    .lte('scheduledFor', endDate.toISOString())
+    .in('status', ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL', 'REQUESTED'])
+    .order('scheduledFor', { ascending: true });
+
+  const appointments = (appointmentsData || []) as AppointmentRecord[];
 
   return {
     preparerId,
@@ -333,8 +363,8 @@ export async function getPreparerSchedule(
     appointments: appointments.map((appt) => ({
       id: appt.id,
       clientName: appt.clientName,
-      scheduledFor: appt.scheduledFor!,
-      scheduledEnd: appt.scheduledEnd!,
+      scheduledFor: appt.scheduledFor ? new Date(appt.scheduledFor) : new Date(),
+      scheduledEnd: appt.scheduledEnd ? new Date(appt.scheduledEnd) : new Date(),
       status: appt.status,
       subject: appt.subject || undefined,
       type: appt.type,
@@ -352,13 +382,13 @@ export async function validateBookingSlot(
   serviceId?: string
 ): Promise<{ valid: boolean; error?: string }> {
   // 1. Check if preparer has booking enabled
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      bookingEnabled: true,
-      requireApprovalForBookings: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('bookingEnabled, requireApprovalForBookings')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(profiles) as Profile | null;
 
   if (!preparer) {
     return { valid: false, error: 'Preparer not found' };
@@ -384,34 +414,43 @@ export async function validateBookingSlot(
   // 4. Check if time falls within preparer's availability
   const dayOfWeek = getDay(scheduledFor);
   const timeStr = format(scheduledFor, 'HH:mm');
+  const endTimeStr = format(scheduledEnd, 'HH:mm');
+  const scheduledForStr = scheduledFor.toISOString();
 
-  const availability = await prisma.preparerAvailability.findFirst({
-    where: {
-      preparerId,
-      isActive: true,
-      OR: [
-        {
-          dayOfWeek,
-          isOverride: false,
-          startTime: { lte: timeStr },
-          endTime: { gte: format(scheduledEnd, 'HH:mm') },
-        },
-        {
-          isOverride: true,
-          overrideFrom: { lte: scheduledFor },
-          overrideUntil: { gte: scheduledFor },
-        },
-      ],
-    },
-  });
+  // Check regular availability for this day
+  const { data: regularAvail } = await db
+    .from('preparer_availability')
+    .select('*')
+    .eq('preparerId', preparerId)
+    .eq('isActive', true)
+    .eq('dayOfWeek', dayOfWeek)
+    .eq('isOverride', false)
+    .lte('startTime', timeStr)
+    .gte('endTime', endTimeStr)
+    .limit(1);
+
+  // Check override availability
+  const { data: overrideAvail } = await db
+    .from('preparer_availability')
+    .select('*')
+    .eq('preparerId', preparerId)
+    .eq('isActive', true)
+    .eq('isOverride', true)
+    .lte('overrideFrom', scheduledForStr)
+    .gte('overrideUntil', scheduledForStr)
+    .limit(1);
+
+  const availability = firstOrNull(regularAvail) || firstOrNull(overrideAvail);
 
   if (!availability) {
     return { valid: false, error: 'Preparer is not available at this time' };
   }
 
+  const typedAvailability = availability as PreparerAvailabilityRecord;
+
   // 5. Check service restrictions
-  if (serviceId && availability.serviceIds.length > 0) {
-    if (!availability.serviceIds.includes(serviceId)) {
+  if (serviceId && typedAvailability.serviceIds && typedAvailability.serviceIds.length > 0) {
+    if (!typedAvailability.serviceIds.includes(serviceId)) {
       return { valid: false, error: 'This service is not available at this time' };
     }
   }

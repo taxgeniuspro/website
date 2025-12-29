@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { buildTrackingUrl } from '@/lib/utils/tracking-integration';
 import { logger } from '@/lib/logger';
 
@@ -24,17 +24,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const code = rawCode.trim();
 
     // Look up user by tracking code (could be TGP-XXXXXX or custom vanity name)
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [{ trackingCode: code }, { customTrackingCode: code }],
-      },
-      select: {
-        id: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        role: true,
-      },
-    });
+    const { data: profiles, error: profileError } = await db
+      .from('profiles')
+      .select('id, tracking_code, custom_tracking_code, role')
+      .or(`tracking_code.eq.${code},custom_tracking_code.eq.${code}`);
+
+    if (profileError) throw profileError;
+    const profile = firstOrNull(profiles);
 
     // Handle not found
     if (!profile) {
@@ -43,7 +39,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Get the active tracking code (custom takes precedence)
-    const activeCode = profile.customTrackingCode || profile.trackingCode;
+    const activeCode = profile.custom_tracking_code || profile.tracking_code;
 
     // Record click tracking - try to find or create a MarketingLink for tracking
     // This allows us to track clicks even if auto-generated link doesn't exist yet
@@ -56,35 +52,45 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         undefined;
 
       // Find the intake link for this user
-      const intakeLink = await prisma.marketingLink.findFirst({
-        where: {
-          creatorId: profile.id,
-          code: {
-            contains: '-intake',
-          },
-        },
-      });
+      const { data: intakeLinks, error: intakeLinkError } = await db
+        .from('marketing_links')
+        .select('id')
+        .eq('creator_id', profile.id)
+        .ilike('code', '%-intake')
+        .limit(1);
+
+      if (intakeLinkError) throw intakeLinkError;
+      const intakeLink = firstOrNull(intakeLinks);
 
       if (intakeLink) {
         // Create link click record
-        await prisma.linkClick.create({
-          data: {
-            linkId: intakeLink.id,
-            ipAddress: ip,
-            userAgent,
+        await db
+          .from('link_clicks')
+          .insert({
+            link_id: intakeLink.id,
+            ip_address: ip,
+            user_agent: userAgent,
             referrer: referer,
-            clickedAt: new Date(),
-          },
-        });
+            clicked_at: new Date().toISOString(),
+          });
 
-        // Increment click counter
-        await prisma.marketingLink.update({
-          where: { id: intakeLink.id },
-          data: {
-            clicks: { increment: 1 },
-            uniqueClicks: { increment: 1 },
-          },
-        });
+        // Increment click counter using RPC or raw SQL
+        // Note: Supabase doesn't support increment directly, so we fetch and update
+        const { data: currentLink } = await db
+          .from('marketing_links')
+          .select('clicks, unique_clicks')
+          .eq('id', intakeLink.id)
+          .single();
+
+        if (currentLink) {
+          await db
+            .from('marketing_links')
+            .update({
+              clicks: (currentLink.clicks || 0) + 1,
+              unique_clicks: (currentLink.unique_clicks || 0) + 1,
+            })
+            .eq('id', intakeLink.id);
+        }
       }
     } catch (err) {
       logger.error('Error recording tracking code click:', err);

@@ -10,8 +10,29 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  crmEmailAutomation: boolean;
+  crmWorkflowAutomation: boolean;
+  crmActivityTracking: boolean;
+  crmAdvancedAnalytics: boolean;
+  crmTaskManagement: boolean;
+  crmLeadScoring: boolean;
+  crmBulkActions: boolean;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
 
 /**
  * GET /api/admin/crm/tax-preparers
@@ -40,10 +61,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Verify admin permission
-    const adminProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { role: true },
-    });
+    const { data: adminProfileData } = await db.from('profiles')
+      .select('role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const adminProfile = firstOrNull<{ role: string }>(adminProfileData);
 
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json(
@@ -53,43 +76,34 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch all tax preparers with their permissions
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-      },
-      select: {
-        id: true,
-        userId: true,
-        firstName: true,
-        lastName: true,
-        // CRM Permissions
-        crmEmailAutomation: true,
-        crmWorkflowAutomation: true,
-        crmActivityTracking: true,
-        crmAdvancedAnalytics: true,
-        crmTaskManagement: true,
-        crmLeadScoring: true,
-        crmBulkActions: true,
-        // Get user email
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-      orderBy: [
-        { lastName: 'asc' },
-        { firstName: 'asc' },
-      ],
+    const { data: preparers, error: preparersError } = await db.from('profiles')
+      .select('id, userId, firstName, lastName, crmEmailAutomation, crmWorkflowAutomation, crmActivityTracking, crmAdvancedAnalytics, crmTaskManagement, crmLeadScoring, crmBulkActions')
+      .eq('role', 'tax_preparer')
+      .order('lastName', { ascending: true })
+      .order('firstName', { ascending: true });
+
+    if (preparersError) {
+      throw preparersError;
+    }
+
+    // Get user emails for all preparers
+    const userIds = (preparers || []).map((p: Profile) => p.userId);
+    const { data: users } = await db.from('users')
+      .select('id, email')
+      .in('id', userIds);
+
+    const userEmailMap = new Map<string, string>();
+    (users || []).forEach((u: User) => {
+      userEmailMap.set(u.id, u.email);
     });
 
     // Format response to match TaxPreparer interface
-    const formattedPreparers = preparers.map((preparer) => ({
+    const formattedPreparers = (preparers || []).map((preparer: Profile) => ({
       id: preparer.id,
       userId: preparer.userId,
       firstName: preparer.firstName,
       lastName: preparer.lastName,
-      email: preparer.user.email || '',
+      email: userEmailMap.get(preparer.userId) || '',
       crmEmailAutomation: preparer.crmEmailAutomation,
       crmWorkflowAutomation: preparer.crmWorkflowAutomation,
       crmActivityTracking: preparer.crmActivityTracking,

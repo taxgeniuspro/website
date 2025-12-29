@@ -1,42 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { v2 as cloudinary } from 'cloudinary';
-
-// Lazy initialize Cloudinary to avoid build errors
-const getCloudinary = () => {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
-    api_key: process.env.CLOUDINARY_API_KEY || '',
-    api_secret: process.env.CLOUDINARY_API_SECRET || '',
-  });
-  return cloudinary;
-};
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 
 /**
  * POST /api/crm/marketing-assets/upload
- * Upload a new marketing asset to Cloudinary CDN
+ * Upload a new marketing asset to disk storage
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -65,35 +53,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    // Convert File to Buffer for Cloudinary upload
+    // Convert File to Buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary
-    const uploadResult = await new Promise<any>((resolve, reject) => {
-      const uploadStream = getCloudinary().uploader.upload_stream(
-        {
-          folder: `marketing-assets/${profile.id}/${category}`,
-          resource_type: 'image',
-          public_id: `${category}_${Date.now()}`,
-          overwrite: false,
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
+    // Generate storage key
+    const key = DiskStorageService.generateKey(profile.id, file.name, 'marketing');
 
-      uploadStream.end(buffer);
+    // Upload to disk storage
+    const uploadResult = await DiskStorageService.uploadFile(key, buffer, file.type, {
+      encrypt: false, // Marketing assets are public
+      generateThumbnail: true,
+      thumbnailOptions: { width: 300, height: 300, fit: 'cover', quality: 80 },
     });
 
-    const fileUrl = uploadResult.secure_url;
+    const fileUrl = uploadResult.url;
 
-    logger.info('File uploaded to Cloudinary:', {
+    logger.info('File uploaded to disk storage:', {
       profileId: profile.id,
       fileName: file.name,
       fileUrl,
-      cloudinaryPublicId: uploadResult.public_id,
+      storageKey: key,
     });
 
     // Create MarketingAsset record
@@ -103,19 +83,18 @@ export async function POST(req: NextRequest) {
     try {
       if (isPrimary) {
         // Unset other primary photos
-        await prisma.marketingAsset.updateMany({
-          where: {
-            profileId: profile.id,
-            category: 'profile_photo',
-            isPrimary: true,
-          },
-          data: { isPrimary: false },
-        });
+        await db
+          .from('marketing_assets')
+          .update({ isPrimary: false })
+          .eq('profileId', profile.id)
+          .eq('category', 'profile_photo')
+          .eq('isPrimary', true);
       }
 
       // Create database record
-      asset = await prisma.marketingAsset.create({
-        data: {
+      const { data: newAsset, error: insertError } = await db
+        .from('marketing_assets')
+        .insert({
           profileId: profile.id,
           category,
           fileName: file.name,
@@ -123,8 +102,15 @@ export async function POST(req: NextRequest) {
           fileSize: file.size,
           mimeType: file.type,
           isPrimary,
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (insertError || !newAsset) {
+        throw new Error(insertError?.message || 'Failed to insert asset');
+      }
+
+      asset = newAsset;
 
       logger.info('Marketing asset created in database:', {
         assetId: asset.id,
@@ -132,21 +118,21 @@ export async function POST(req: NextRequest) {
         category,
       });
     } catch (dbError: unknown) {
-      // Database error is critical - we have an orphaned file in Cloudinary
+      // Database error is critical - we have an orphaned file on disk
       const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
       logger.error('Failed to create MarketingAsset database record:', {
         error: errorMessage,
         category,
         profileId: profile.id,
-        cloudinaryUrl: fileUrl,
+        storageUrl: fileUrl,
       });
 
-      // Try to delete the orphaned Cloudinary file
+      // Try to delete the orphaned file
       try {
-        await getCloudinary().uploader.destroy(uploadResult.public_id);
-        logger.info('Cleaned up orphaned Cloudinary file:', { publicId: uploadResult.public_id });
+        await DiskStorageService.deleteFile(key);
+        logger.info('Cleaned up orphaned file:', { storageKey: key });
       } catch (cleanupError) {
-        logger.error('Failed to cleanup orphaned Cloudinary file:', { publicId: uploadResult.public_id });
+        logger.error('Failed to cleanup orphaned file:', { storageKey: key });
       }
 
       return NextResponse.json(
@@ -157,10 +143,7 @@ export async function POST(req: NextRequest) {
 
     // Always update Profile.avatarUrl for profile photos
     if (isPrimary && category === 'profile_photo') {
-      await prisma.profile.update({
-        where: { id: profile.id },
-        data: { avatarUrl: fileUrl },
-      });
+      await db.from('profiles').update({ avatarUrl: fileUrl }).eq('id', profile.id);
       logger.info('Updated profile avatarUrl:', { profileId: profile.id, avatarUrl: fileUrl });
     }
 
@@ -181,14 +164,17 @@ export async function POST(req: NextRequest) {
         fileUrl: asset.fileUrl,
         fileSize: asset.fileSize,
         isPrimary: asset.isPrimary,
-        createdAt: asset.createdAt.toISOString(),
+        createdAt: asset.createdAt, // Supabase returns ISO string directly
       },
     });
   } catch (error) {
     logger.error('Error uploading marketing asset:', error);
-    return NextResponse.json({
-      error: 'Failed to upload asset',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Failed to upload asset',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
   }
 }

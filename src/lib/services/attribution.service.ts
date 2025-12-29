@@ -17,9 +17,44 @@
  * - Confidence scoring for attribution quality
  */
 
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getAttributionCookie, type AttributionCookie } from '@/lib/utils/cookie-manager';
+import { getAttributionCookie } from '@/lib/utils/cookie-manager';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  userId?: string | null;
+  role?: string | null;
+  shortLinkUsername?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  affiliateBondedToPreparerId?: string | null;
+}
+
+interface LinkClickRecord {
+  id: string;
+  linkId: string;
+  userEmail?: string | null;
+  userPhone?: string | null;
+  clickedAt: string;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  clicks: number;
+  uniqueClicks?: number | null;
+}
+
+interface AffiliateBondingRecord {
+  id: string;
+  affiliateId: string;
+  preparerId: string;
+  isActive: boolean;
+  commissionStructure?: CommissionStructure | null;
+}
 
 // ============ Types ============
 
@@ -80,22 +115,14 @@ async function getAttributionFromCookie(): Promise<Partial<AttributionData> | nu
     }
 
     // Validate referrer exists - check tracking codes and short link username
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { shortLinkUsername: cookie.referrerUsername },
-          { trackingCode: cookie.referrerUsername },
-          { customTrackingCode: cookie.referrerUsername },
-        ],
-      },
-      select: {
-        id: true,
-        role: true,
-        shortLinkUsername: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    // Supabase doesn't support complex OR in same query easily, so we do separate queries
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, shortLinkUsername, trackingCode, customTrackingCode')
+      .or(`shortLinkUsername.eq.${cookie.referrerUsername},trackingCode.eq.${cookie.referrerUsername},customTrackingCode.eq.${cookie.referrerUsername}`)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       logger.warn('Attribution cookie has invalid referrer username', {
@@ -122,40 +149,44 @@ async function getAttributionFromCookie(): Promise<Partial<AttributionData> | nu
  */
 async function getAttributionByEmail(email: string): Promise<Partial<AttributionData> | null> {
   try {
-    // Find most recent LinkClick with this email
-    const linkClick = await prisma.linkClick.findFirst({
-      where: {
-        userEmail: email,
-        clickedAt: {
-          // Within 14-day attribution window
-          gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-        },
-      },
-      include: {
-        link: {
-          select: {
-            creatorId: true,
-            creatorType: true,
-          },
-        },
-      },
-      orderBy: {
-        clickedAt: 'desc',
-      },
-    });
+    // Find most recent LinkClick with this email within 14-day window
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: clickData } = await db
+      .from('link_clicks')
+      .select('id, linkId')
+      .eq('userEmail', email)
+      .gte('clickedAt', fourteenDaysAgo)
+      .order('clickedAt', { ascending: false })
+      .limit(1);
+
+    const linkClick = firstOrNull(clickData) as LinkClickRecord | null;
 
     if (!linkClick) {
       return null;
     }
 
+    // Get the link
+    const { data: linkData } = await db
+      .from('marketing_links')
+      .select('creatorId, creatorType')
+      .eq('id', linkClick.linkId)
+      .limit(1);
+
+    const link = firstOrNull(linkData) as MarketingLinkRecord | null;
+
+    if (!link) {
+      return null;
+    }
+
     // Get referrer username from profile
-    const profile = await prisma.profile.findUnique({
-      where: { id: linkClick.link.creatorId },
-      select: {
-        shortLinkUsername: true,
-        role: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('shortLinkUsername, role')
+      .eq('id', link.creatorId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile?.shortLinkUsername) {
       return null;
@@ -163,7 +194,7 @@ async function getAttributionByEmail(email: string): Promise<Partial<Attribution
 
     return {
       referrerUsername: profile.shortLinkUsername,
-      referrerType: linkClick.link.creatorType,
+      referrerType: link.creatorType,
       attributionMethod: 'email_match',
       attributionConfidence: ATTRIBUTION_CONFIDENCE.EMAIL_MATCH,
     };
@@ -181,40 +212,43 @@ async function getAttributionByPhone(phone: string): Promise<Partial<Attribution
   try {
     // Normalize phone (remove non-digits)
     const normalizedPhone = phone.replace(/\D/g, '');
+    const last10Digits = normalizedPhone.slice(-10);
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
-    const linkClick = await prisma.linkClick.findFirst({
-      where: {
-        userPhone: {
-          contains: normalizedPhone.slice(-10), // Match last 10 digits
-        },
-        clickedAt: {
-          gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-        },
-      },
-      include: {
-        link: {
-          select: {
-            creatorId: true,
-            creatorType: true,
-          },
-        },
-      },
-      orderBy: {
-        clickedAt: 'desc',
-      },
-    });
+    const { data: clickData } = await db
+      .from('link_clicks')
+      .select('id, linkId')
+      .ilike('userPhone', `%${last10Digits}`)
+      .gte('clickedAt', fourteenDaysAgo)
+      .order('clickedAt', { ascending: false })
+      .limit(1);
+
+    const linkClick = firstOrNull(clickData) as LinkClickRecord | null;
 
     if (!linkClick) {
       return null;
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { id: linkClick.link.creatorId },
-      select: {
-        shortLinkUsername: true,
-        role: true,
-      },
-    });
+    // Get the link
+    const { data: linkData } = await db
+      .from('marketing_links')
+      .select('creatorId, creatorType')
+      .eq('id', linkClick.linkId)
+      .limit(1);
+
+    const link = firstOrNull(linkData) as MarketingLinkRecord | null;
+
+    if (!link) {
+      return null;
+    }
+
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('shortLinkUsername, role')
+      .eq('id', link.creatorId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile?.shortLinkUsername) {
       return null;
@@ -222,7 +256,7 @@ async function getAttributionByPhone(phone: string): Promise<Partial<Attribution
 
     return {
       referrerUsername: profile.shortLinkUsername,
-      referrerType: linkClick.link.creatorType,
+      referrerType: link.creatorType,
       attributionMethod: 'phone_match',
       attributionConfidence: ATTRIBUTION_CONFIDENCE.PHONE_MATCH,
     };
@@ -334,36 +368,32 @@ async function getCommissionRate(
 ): Promise<CommissionRateInfo> {
   try {
     // Get referrer profile
-    const profile = await prisma.profile.findUnique({
-      where: { shortLinkUsername: referrerUsername },
-      select: {
-        id: true,
-        role: true,
-        affiliateBondedToPreparerId: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, affiliateBondedToPreparerId')
+      .eq('shortLinkUsername', referrerUsername)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return { rate: DEFAULT_COMMISSION_RATE, source: 'default' };
     }
 
     // If client with affiliate access, check for custom commission structure from bonded preparer
-    // Note: 'affiliate' is not a role - it's a status (affiliateStatus)
     if (profile.role === 'client' && profile.affiliateBondedToPreparerId) {
-      const bonding = await prisma.affiliateBonding.findFirst({
-        where: {
-          affiliateId: profile.id,
-          preparerId: profile.affiliateBondedToPreparerId,
-          isActive: true,
-        },
-        select: {
-          commissionStructure: true,
-        },
-      });
+      const { data: bondingData } = await db
+        .from('affiliate_bondings')
+        .select('commissionStructure')
+        .eq('affiliateId', profile.id)
+        .eq('preparerId', profile.affiliateBondedToPreparerId)
+        .eq('isActive', true)
+        .limit(1);
+
+      const bonding = firstOrNull(bondingData) as AffiliateBondingRecord | null;
 
       if (bonding?.commissionStructure) {
         // Extract rate from commission structure JSON
-        // Structure: {"tier1": {"count": 5, "rate": 50}, "tier2": {...}}
         const structure = bonding.commissionStructure as CommissionStructure;
 
         // For now, use tier1 rate (could be enhanced to track referral count)
@@ -397,17 +427,19 @@ export async function saveLeadAttribution(
   attribution: AttributionData
 ): Promise<boolean> {
   try {
-    await prisma.lead.update({
-      where: { id: leadId },
-      data: {
+    const { error } = await db
+      .from('leads')
+      .update({
         referrerUsername: attribution.referrerUsername,
         referrerType: attribution.referrerType,
         commissionRate: attribution.commissionRate || 0,
-        commissionRateLockedAt: new Date(),
+        commissionRateLockedAt: new Date().toISOString(),
         attributionMethod: attribution.attributionMethod,
         attributionConfidence: attribution.attributionConfidence,
-      },
-    });
+      })
+      .eq('id', leadId);
+
+    if (error) throw error;
 
     logger.info('Lead attribution saved', {
       leadId,
@@ -431,14 +463,16 @@ export async function saveTaxIntakeAttribution(
   attribution: AttributionData
 ): Promise<boolean> {
   try {
-    await prisma.taxIntakeLead.update({
-      where: { id: intakeId },
-      data: {
+    const { error } = await db
+      .from('tax_intake_leads')
+      .update({
         referrerUsername: attribution.referrerUsername,
         referrerType: attribution.referrerType,
         attributionMethod: attribution.attributionMethod,
-      },
-    });
+      })
+      .eq('id', intakeId);
+
+    if (error) throw error;
 
     logger.info('Tax intake attribution saved', {
       intakeId,
@@ -471,28 +505,36 @@ export async function recordLinkClick(
   }
 ): Promise<void> {
   try {
-    await prisma.linkClick.create({
-      data: {
-        linkId,
-        ipAddress: metadata.ipAddress,
-        userAgent: metadata.userAgent,
-        referrer: metadata.referrer,
-        city: metadata.city,
-        state: metadata.state,
-        userEmail: metadata.userEmail,
-        userPhone: metadata.userPhone,
-        clickedAt: new Date(),
-      },
+    await db.from('link_clicks').insert({
+      linkId,
+      ipAddress: metadata.ipAddress,
+      userAgent: metadata.userAgent,
+      referrer: metadata.referrer,
+      city: metadata.city,
+      state: metadata.state,
+      userEmail: metadata.userEmail,
+      userPhone: metadata.userPhone,
+      clickedAt: new Date().toISOString(),
     });
 
-    // Increment click count on MarketingLink
-    await prisma.marketingLink.update({
-      where: { id: linkId },
-      data: {
-        clicks: { increment: 1 },
-        uniqueClicks: { increment: 1 },
-      },
-    });
+    // Get current counts and increment
+    const { data: linkData } = await db
+      .from('marketing_links')
+      .select('clicks, uniqueClicks')
+      .eq('id', linkId)
+      .limit(1);
+
+    const link = firstOrNull(linkData) as MarketingLinkRecord | null;
+
+    if (link) {
+      await db
+        .from('marketing_links')
+        .update({
+          clicks: (link.clicks || 0) + 1,
+          uniqueClicks: (link.uniqueClicks || 0) + 1,
+        })
+        .eq('id', linkId);
+    }
 
     logger.info('Link click recorded', { linkId });
   } catch (error) {
@@ -507,43 +549,43 @@ export async function recordLinkClick(
  */
 export async function getReferrerAttributionStats(referrerUsername: string) {
   try {
-    const [cookieAttribution, emailAttribution, phoneAttribution, totalLeads] = await Promise.all([
+    const [{ count: cookieAttribution }, { count: emailAttribution }, { count: phoneAttribution }, { count: totalLeads }] = await Promise.all([
       // Cookie-based attributions
-      prisma.lead.count({
-        where: {
-          referrerUsername,
-          attributionMethod: 'cookie',
-        },
-      }),
+      db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrerUsername', referrerUsername)
+        .eq('attributionMethod', 'cookie'),
       // Email-matched attributions
-      prisma.lead.count({
-        where: {
-          referrerUsername,
-          attributionMethod: 'email_match',
-        },
-      }),
+      db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrerUsername', referrerUsername)
+        .eq('attributionMethod', 'email_match'),
       // Phone-matched attributions
-      prisma.lead.count({
-        where: {
-          referrerUsername,
-          attributionMethod: 'phone_match',
-        },
-      }),
+      db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrerUsername', referrerUsername)
+        .eq('attributionMethod', 'phone_match'),
       // Total leads
-      prisma.lead.count({
-        where: { referrerUsername },
-      }),
+      db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrerUsername', referrerUsername),
     ]);
 
     return {
-      totalLeads,
+      totalLeads: totalLeads || 0,
       byMethod: {
-        cookie: cookieAttribution,
-        emailMatch: emailAttribution,
-        phoneMatch: phoneAttribution,
+        cookie: cookieAttribution || 0,
+        emailMatch: emailAttribution || 0,
+        phoneMatch: phoneAttribution || 0,
       },
       crossDeviceRate:
-        totalLeads > 0 ? ((emailAttribution + phoneAttribution) / totalLeads) * 100 : 0,
+        totalLeads && totalLeads > 0
+          ? (((emailAttribution || 0) + (phoneAttribution || 0)) / totalLeads) * 100
+          : 0,
     };
   } catch (error) {
     logger.error('Error getting referrer attribution stats', { referrerUsername, error });

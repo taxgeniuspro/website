@@ -16,10 +16,40 @@
  */
 
 import { drive_v3 } from 'googleapis';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { googleAuthService } from './google-auth.service';
 import { logger } from '@/lib/logger';
 import { Readable } from 'stream';
+
+// Local type definitions (replacing @prisma/client)
+interface GoogleDriveFolderRecord {
+  id: string;
+  folderId: string;
+  folderType?: string | null;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+  googleDriveFolderId?: string | null;
+  googleDriveFolderUrl?: string | null;
+  userId?: string | null;
+}
+
+interface UserRecord {
+  id: string;
+  email: string;
+}
+
+interface ProfessionalEmailRecord {
+  id: string;
+  emailAddress: string;
+  status: string;
+  isPrimary: boolean;
+  profileId: string;
+}
 
 // Root folder for all preparers
 const PREPARERS_ROOT = 'Tax Preparers';
@@ -169,9 +199,13 @@ class GoogleDrivePreparerService {
     }
 
     // Check database first
-    const existing = await prisma.googleDriveFolder.findFirst({
-      where: { folderType: 'ROOT' },
-    });
+    const { data: existingData } = await db
+      .from('google_drive_folders')
+      .select('id, folderId')
+      .eq('folderType', 'ROOT')
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as GoogleDriveFolderRecord | null;
 
     if (existing) {
       this.taxGeniusRootId = existing.folderId;
@@ -286,13 +320,13 @@ class GoogleDrivePreparerService {
     }
 
     // Update profile with folder info
-    await prisma.profile.update({
-      where: { id: preparerId },
-      data: {
+    await db
+      .from('profiles')
+      .update({
         googleDriveFolderId: mainFolderId,
         googleDriveFolderUrl: mainFolderUrl,
-      },
-    });
+      })
+      .eq('id', preparerId);
 
     logger.info('Preparer folder setup complete', {
       preparerId,
@@ -327,10 +361,13 @@ class GoogleDrivePreparerService {
     const drive = await this.getClient();
 
     // Get preparer's folder
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleDriveFolderId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleDriveFolderId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleDriveFolderId: string | null } | null;
 
     if (!profile?.googleDriveFolderId) {
       throw new Error('Preparer does not have a Google Drive folder');
@@ -382,10 +419,13 @@ class GoogleDrivePreparerService {
     const drive = await this.getClient();
 
     // Get preparer's folder
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleDriveFolderId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleDriveFolderId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleDriveFolderId: string | null } | null;
 
     if (!profile?.googleDriveFolderId) {
       return [];
@@ -429,10 +469,13 @@ class GoogleDrivePreparerService {
    * Get preparer's folder URL
    */
   async getPreparerFolderUrl(preparerId: string): Promise<string | null> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleDriveFolderUrl: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleDriveFolderUrl')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleDriveFolderUrl: string | null } | null;
 
     return profile?.googleDriveFolderUrl || null;
   }
@@ -441,10 +484,13 @@ class GoogleDrivePreparerService {
    * Create year subfolder under Clients
    */
   async createClientYearFolder(preparerId: string, year: number): Promise<string> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleDriveFolderId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleDriveFolderId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleDriveFolderId: string | null } | null;
 
     if (!profile?.googleDriveFolderId) {
       throw new Error('Preparer does not have a Google Drive folder');
@@ -480,20 +526,34 @@ class GoogleDrivePreparerService {
     logger.info('Starting preparer Drive folder backfill');
 
     // Get all tax preparers without Drive folders
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-        googleDriveFolderId: null,
-      },
-      include: {
-        user: { select: { email: true } },
-        professionalEmails: {
-          where: { status: 'ACTIVE', isPrimary: true },
-          select: { emailAddress: true },
-          take: 1,
-        },
-      },
-    });
+    const { data: preparersData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, userId')
+      .eq('role', 'tax_preparer')
+      .is('googleDriveFolderId', null);
+
+    const preparers = (preparersData || []) as ProfileRecord[];
+
+    // Get user emails
+    const userIds = [...new Set(preparers.map((p) => p.userId).filter(Boolean))] as string[];
+    const { data: usersData } = userIds.length > 0
+      ? await db.from('users').select('id, email').in('id', userIds)
+      : { data: [] };
+    const users = (usersData || []) as UserRecord[];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    // Get professional emails
+    const preparerIds = preparers.map((p) => p.id);
+    const { data: emailsData } = preparerIds.length > 0
+      ? await db
+          .from('professional_email_aliases')
+          .select('id, emailAddress, profileId')
+          .in('profileId', preparerIds)
+          .eq('status', 'ACTIVE')
+          .eq('isPrimary', true)
+      : { data: [] };
+    const emails = (emailsData || []) as ProfessionalEmailRecord[];
+    const emailMap = new Map(emails.map((e) => [e.profileId, e]));
 
     logger.info(`Found ${preparers.length} preparers without Drive folders`);
 
@@ -503,14 +563,17 @@ class GoogleDrivePreparerService {
     const results: Array<{ profileId: string; folderId?: string; error?: string }> = [];
 
     for (const preparer of preparers) {
+      const user = preparer.userId ? userMap.get(preparer.userId) : null;
+
       // Skip test accounts
-      if (preparer.user?.email?.includes('@taxgeniuspro.test')) {
+      if (user?.email?.includes('@taxgeniuspro.test')) {
         skipped++;
         continue;
       }
 
       // Use professional email if available, otherwise personal email
-      const email = preparer.professionalEmails[0]?.emailAddress || preparer.user?.email;
+      const professionalEmail = emailMap.get(preparer.id);
+      const email = professionalEmail?.emailAddress || user?.email;
       if (!email) {
         failed++;
         results.push({ profileId: preparer.id, error: 'No email address found' });

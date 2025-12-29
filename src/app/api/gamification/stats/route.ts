@@ -1,9 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
+interface UserStats {
+  totalXP: number;
+  level: number;
+  currentLevelXP: number;
+  nextLevelXP: number;
+  loginStreak: number;
+  longestLoginStreak: number;
+}
+
+interface UserAchievementWithDetails {
+  id: string;
+  achievementId: string;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
+  viewedAt: string | null;
+  achievements: {
+    slug: string;
+    title: string;
+    description: string;
+    icon: string;
+    rarity: string;
+    points: number;
+    badgeColor: string | null;
+  };
+}
+
+interface UserAchievementCount {
+  isUnlocked: boolean;
+}
 
 /**
  * GET /api/gamification/stats
@@ -21,44 +49,69 @@ export async function GET(request: NextRequest) {
     const userId = user.id;
 
     // Get user stats
-    const userStats = await prisma.userStats.findUnique({
-      where: { userId },
-    });
+    const { data: userStatsData, error: statsError } = await db
+      .from('user_stats')
+      .select('totalXP, level, currentLevelXP, nextLevelXP, loginStreak, longestLoginStreak')
+      .eq('userId', userId)
+      .limit(1);
 
-    // Get achievement counts
-    const achievementCounts = await prisma.userAchievement.groupBy({
-      by: ['isUnlocked'],
-      where: { userId },
-      _count: true,
-    });
+    const userStats = firstOrNull(userStatsData) as UserStats | null;
 
-    const unlockedCount =
-      achievementCounts.find((c) => c.isUnlocked)?._count || 0;
-    const totalCount = achievementCounts.reduce((sum, c) => sum + c._count, 0);
+    // Get all user achievements for counting
+    const { data: allUserAchievements, error: countError } = await db
+      .from('user_achievements')
+      .select('isUnlocked')
+      .eq('userId', userId);
 
-    // Get recently unlocked achievements (last 5)
-    const recentAchievements = await prisma.userAchievement.findMany({
-      where: {
-        userId,
-        isUnlocked: true,
-      },
-      include: {
-        achievement: true,
-      },
-      orderBy: {
-        unlockedAt: 'desc',
-      },
-      take: 5,
-    });
+    if (countError) {
+      throw countError;
+    }
 
-    // Get new achievements (unlocked but not viewed)
-    const newAchievements = await prisma.userAchievement.count({
-      where: {
-        userId,
-        isUnlocked: true,
-        viewedAt: null,
-      },
-    });
+    const achievementsList = (allUserAchievements || []) as UserAchievementCount[];
+    const unlockedCount = achievementsList.filter((a) => a.isUnlocked).length;
+    const totalCount = achievementsList.length;
+
+    // Get recently unlocked achievements (last 5) with achievement details
+    const { data: recentAchievementsData, error: recentError } = await db
+      .from('user_achievements')
+      .select(`
+        id,
+        achievementId,
+        isUnlocked,
+        unlockedAt,
+        viewedAt,
+        achievements (
+          slug,
+          title,
+          description,
+          icon,
+          rarity,
+          points,
+          badgeColor
+        )
+      `)
+      .eq('userId', userId)
+      .eq('isUnlocked', true)
+      .order('unlockedAt', { ascending: false })
+      .limit(5);
+
+    if (recentError) {
+      throw recentError;
+    }
+
+    const recentAchievements = (recentAchievementsData || []) as UserAchievementWithDetails[];
+
+    // Get new achievements count (unlocked but not viewed)
+    const { count: newAchievements, error: newError } = await db
+      .from('user_achievements')
+      .select('id', { count: 'exact', head: true })
+      .eq('userId', userId)
+      .eq('isUnlocked', true)
+      .is('viewedAt', null);
+
+    if (newError) {
+      throw newError;
+    }
 
     return NextResponse.json({
       stats: userStats || {
@@ -72,16 +125,16 @@ export async function GET(request: NextRequest) {
       achievements: {
         unlocked: unlockedCount,
         total: totalCount,
-        new: newAchievements,
+        new: newAchievements || 0,
         recent: recentAchievements.map((ua) => ({
           id: ua.id,
-          slug: ua.achievement.slug,
-          title: ua.achievement.title,
-          description: ua.achievement.description,
-          icon: ua.achievement.icon,
-          rarity: ua.achievement.rarity,
-          points: ua.achievement.points,
-          badgeColor: ua.achievement.badgeColor,
+          slug: ua.achievements?.slug,
+          title: ua.achievements?.title,
+          description: ua.achievements?.description,
+          icon: ua.achievements?.icon,
+          rarity: ua.achievements?.rarity,
+          points: ua.achievements?.points,
+          badgeColor: ua.achievements?.badgeColor,
           unlockedAt: ua.unlockedAt,
           viewed: ua.viewedAt !== null,
         })),

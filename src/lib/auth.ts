@@ -9,17 +9,16 @@
  * - Role-based access control via database profile
  */
 import { createClient } from '@/lib/supabase/server';
-import { prisma } from '@/lib/prisma';
-import { UserRole } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import bcrypt from 'bcryptjs';
 
-// Re-export UserRole for convenience
-export { UserRole } from '@prisma/client';
+// Local type definition (replacing @prisma/client)
+export type UserRole = 'admin' | 'client' | 'tax_preparer' | 'affiliate' | 'lead';
 
 /**
  * User role types for Tax Genius platform
- * @deprecated Use UserRole from @prisma/client instead
+ * @deprecated Use UserRole instead
  */
 export type UserRoleType = 'SUPER_ADMIN' | 'ADMIN' | 'LEAD' | 'CLIENT' | 'TAX_PREPARER' | 'AFFILIATE';
 
@@ -35,6 +34,17 @@ interface SessionUser {
 
 interface Session {
   user: SessionUser;
+}
+
+// Profile record type
+interface ProfileRecord {
+  id: string;
+  role: UserRole;
+  isActive?: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  supabaseUserId?: string | null;
 }
 
 /**
@@ -57,42 +67,41 @@ export async function auth(): Promise<Session | null> {
 
     // Get role and additional data from database profile
     try {
-      let profile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { supabaseUserId: user.id },
-            { userId: user.id },
-            { email: user.email }
-          ]
-        },
-        select: {
-          id: true,
-          role: true,
-          isActive: true,
-          firstName: true,
-          lastName: true,
-          avatarUrl: true,
-          supabaseUserId: true
-        }
-      });
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id, role, isActive, firstName, lastName, avatarUrl, supabaseUserId')
+        .or(`supabaseUserId.eq.${user.id},userId.eq.${user.id},email.eq.${user.email}`)
+        .limit(1);
+
+      let profile = firstOrNull(profileData) as ProfileRecord | null;
 
       // Auto-create profile for new Supabase users (email/password login)
       if (!profile && user.email) {
         try {
-          // First create User record if it doesn't exist
-          let dbUser = await prisma.user.findUnique({
-            where: { email: user.email.toLowerCase() }
-          });
+          // First check if User record exists
+          const { data: existingUserData } = await db
+            .from('users')
+            .select('id')
+            .eq('email', user.email.toLowerCase())
+            .limit(1);
+
+          let dbUser = firstOrNull(existingUserData) as { id: string } | null;
 
           if (!dbUser) {
-            dbUser = await prisma.user.create({
-              data: {
+            // Create User record
+            const { data: newUser, error: userError } = await db
+              .from('users')
+              .insert({
                 email: user.email.toLowerCase(),
                 name: user.user_metadata?.full_name || user.user_metadata?.name || null,
                 image: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-                emailVerified: new Date(),
-              }
-            });
+                emailVerified: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (userError) throw userError;
+            dbUser = newUser as { id: string };
             logger.info('[Auth] Created User for Supabase email/password user', {
               userId: dbUser.id,
               supabaseUserId: user.id
@@ -107,7 +116,7 @@ export async function auth(): Promise<Session | null> {
 
           // Determine role - test accounts get specific roles
           const emailLower = user.email.toLowerCase();
-          let autoRole: string = 'client';
+          let autoRole: UserRole = 'client';
           if (emailLower === 'testpreparer@taxgeniuspro.tax') {
             autoRole = 'tax_preparer';
           } else if (emailLower === 'testaffiliate@taxgeniuspro.tax') {
@@ -119,8 +128,9 @@ export async function auth(): Promise<Session | null> {
           }
 
           // Create profile
-          profile = await prisma.profile.create({
-            data: {
+          const { data: newProfile, error: profileError } = await db
+            .from('profiles')
+            .insert({
               userId: dbUser.id,
               supabaseUserId: user.id,
               email: user.email.toLowerCase(),
@@ -128,18 +138,13 @@ export async function auth(): Promise<Session | null> {
               firstName,
               lastName,
               affiliateStatus: 'APPROVED',
-              affiliateApprovedAt: new Date(),
-            },
-            select: {
-              id: true,
-              role: true,
-              isActive: true,
-              firstName: true,
-              lastName: true,
-              avatarUrl: true,
-              supabaseUserId: true
-            }
-          });
+              affiliateApprovedAt: new Date().toISOString(),
+            })
+            .select('id, role, isActive, firstName, lastName, avatarUrl, supabaseUserId')
+            .single();
+
+          if (profileError) throw profileError;
+          profile = newProfile as ProfileRecord;
           logger.info('[Auth] Created Profile for Supabase email/password user', {
             profileId: profile.id,
             supabaseUserId: user.id
@@ -150,10 +155,11 @@ export async function auth(): Promise<Session | null> {
       } else if (profile && !profile.supabaseUserId) {
         // Update existing profile with supabaseUserId if missing
         try {
-          await prisma.profile.update({
-            where: { id: profile.id },
-            data: { supabaseUserId: user.id }
-          });
+          await db
+            .from('profiles')
+            .update({ supabaseUserId: user.id })
+            .eq('id', profile.id);
+
           logger.info('[Auth] Updated profile with supabaseUserId', {
             profileId: profile.id,
             supabaseUserId: user.id
@@ -304,15 +310,13 @@ export async function requireOneOfRoles(allowedRoles: (UserRole | string)[]) {
   }
 
   // Fetch actual profile.id from database
-  const profile = await prisma.profile.findFirst({
-    where: {
-      OR: [
-        { userId: user.id },
-        { supabaseUserId: user.id }
-      ]
-    },
-    select: { id: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('id')
+    .or(`userId.eq.${user.id},supabaseUserId.eq.${user.id}`)
+    .limit(1);
+
+  const profile = firstOrNull(profileData) as { id: string } | null;
 
   return { user, role: userRole, profile: { id: profile?.id ?? user.id } };
 }
@@ -369,16 +373,21 @@ export async function updateUserRole(userId: string, role: UserRole): Promise<vo
     throw new Error('Only admins can update user roles');
   }
 
-  // Update role in profile
-  await prisma.profile.updateMany({
-    where: {
-      OR: [
-        { userId },
-        { supabaseUserId: userId }
-      ]
-    },
-    data: { role },
-  });
+  // Find profiles matching the userId
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id')
+    .or(`userId.eq.${userId},supabaseUserId.eq.${userId}`);
+
+  const profiles = (profilesData || []) as { id: string }[];
+
+  // Update each matching profile
+  for (const profile of profiles) {
+    await db
+      .from('profiles')
+      .update({ role })
+      .eq('id', profile.id);
+  }
 }
 
 /**

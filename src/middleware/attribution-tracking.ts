@@ -8,9 +8,24 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { ATTRIBUTION_COOKIE_NAME, ATTRIBUTION_COOKIE_MAX_AGE } from '@/lib/utils/cookie-manager';
+
+// Local type definitions
+interface ProfileRecord {
+  id: string;
+  role: string;
+  shortLinkUsername?: string | null;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  creatorId: string;
+  slug?: string | null;
+  clicks: number;
+  uniqueClicks: number;
+}
 
 // Route redirects
 const ROUTE_REDIRECTS = {
@@ -50,14 +65,13 @@ export async function attributionTrackingMiddleware(
 
   try {
     // Validate username exists in database
-    const profile = await prisma.profile.findUnique({
-      where: { shortLinkUsername: username },
-      select: {
-        id: true,
-        role: true,
-        shortLinkUsername: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, shortLinkUsername')
+      .eq('shortLinkUsername', username)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       logger.warn('Attribution link has invalid username', { username, type });
@@ -115,40 +129,70 @@ async function recordLinkClick(
   request: NextRequest
 ): Promise<void> {
   try {
-    // Get or create MarketingLink for this profile
-    const marketingLink = await prisma.marketingLink.upsert({
-      where: {
-        creatorId_slug: {
+    // Check if MarketingLink already exists for this profile and slug
+    const { data: existingLinkData } = await db
+      .from('marketing_links')
+      .select('id, clicks, uniqueClicks')
+      .eq('creatorId', profileId)
+      .eq('slug', linkType)
+      .limit(1);
+
+    const existingLink = firstOrNull(existingLinkData) as MarketingLinkRecord | null;
+
+    let marketingLink: MarketingLinkRecord;
+
+    if (existingLink) {
+      // Update existing link
+      const { data: updatedLink, error: updateError } = await db
+        .from('marketing_links')
+        .update({
+          clicks: existingLink.clicks + 1,
+          uniqueClicks: existingLink.uniqueClicks + 1,
+        })
+        .eq('id', existingLink.id)
+        .select('id, creatorId, slug, clicks, uniqueClicks')
+        .single();
+
+      if (updateError) throw updateError;
+      marketingLink = updatedLink as MarketingLinkRecord;
+    } else {
+      // Create new link
+      const creatorType = await getCreatorType(profileId);
+      const username = await getUsername(profileId);
+
+      const { data: newLink, error: createError } = await db
+        .from('marketing_links')
+        .insert({
           creatorId: profileId,
+          creatorType,
           slug: linkType,
-        },
-      },
-      create: {
-        creatorId: profileId,
-        creatorType: await getCreatorType(profileId),
-        slug: linkType,
-        originalUrl: linkType === 'lead' ? '/start-filing' : '/personal-tax-filing',
-        shortUrl: `/${linkType}/${await getUsername(profileId)}`,
-        isActive: true,
-        clicks: 1,
-        uniqueClicks: 1,
-      },
-      update: {
-        clicks: { increment: 1 },
-        uniqueClicks: { increment: 1 },
-      },
-    });
+          originalUrl: linkType === 'lead' ? '/start-filing' : '/personal-tax-filing',
+          shortUrl: `/${linkType}/${username}`,
+          isActive: true,
+          clicks: 1,
+          uniqueClicks: 1,
+          conversions: 0,
+          conversionRate: 0,
+        })
+        .select('id, creatorId, slug, clicks, uniqueClicks')
+        .single();
+
+      if (createError) throw createError;
+      marketingLink = newLink as MarketingLinkRecord;
+    }
 
     // Record detailed click metadata
-    await prisma.linkClick.create({
-      data: {
+    const { error: clickError } = await db
+      .from('link_clicks')
+      .insert({
         linkId: marketingLink.id,
         ipAddress: getClientIP(request),
-        userAgent: request.headers.get('user-agent') || undefined,
-        referrer: request.headers.get('referer') || undefined,
-        clickedAt: new Date(),
-      },
-    });
+        userAgent: request.headers.get('user-agent') || null,
+        referrer: request.headers.get('referer') || null,
+        clickedAt: new Date().toISOString(),
+      });
+
+    if (clickError) throw clickError;
 
     logger.info('Link click recorded', {
       profileId,
@@ -183,10 +227,13 @@ function getClientIP(request: NextRequest): string | undefined {
  * Get creator type from profile ID
  */
 async function getCreatorType(profileId: string): Promise<string> {
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { role: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profileData) as { role: string } | null;
   return profile?.role || 'UNKNOWN';
 }
 
@@ -194,9 +241,12 @@ async function getCreatorType(profileId: string): Promise<string> {
  * Get username from profile ID
  */
 async function getUsername(profileId: string): Promise<string> {
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { shortLinkUsername: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('shortLinkUsername')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profileData) as { shortLinkUsername?: string | null } | null;
   return profile?.shortLinkUsername || 'unknown';
 }

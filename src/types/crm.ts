@@ -4,15 +4,99 @@
  * Type definitions for CRM Contact Management, Interactions, and Pipeline Management
  */
 
-import {
-  ContactType,
-  InteractionType,
-  Direction,
-  PipelineStage,
-  CRMContact,
-  CRMInteraction,
-  CRMStageHistory,
-} from '@prisma/client';
+// Local enum-like objects and types (replacing @prisma/client)
+export const ContactType = {
+  CLIENT: 'CLIENT',
+  LEAD: 'LEAD',
+  AFFILIATE: 'AFFILIATE',
+  PREPARER: 'PREPARER',
+} as const;
+export type ContactType = (typeof ContactType)[keyof typeof ContactType];
+
+export const InteractionType = {
+  EMAIL: 'EMAIL',
+  PHONE_CALL: 'PHONE_CALL',
+  MEETING: 'MEETING',
+  NOTE: 'NOTE',
+  OTHER: 'OTHER',
+} as const;
+export type InteractionType = (typeof InteractionType)[keyof typeof InteractionType];
+
+export const Direction = {
+  INBOUND: 'INBOUND',
+  OUTBOUND: 'OUTBOUND',
+} as const;
+export type Direction = (typeof Direction)[keyof typeof Direction];
+
+export const PipelineStage = {
+  NEW: 'NEW',
+  CONTACTED: 'CONTACTED',
+  DOCUMENTS: 'DOCUMENTS',
+  PREPARING: 'PREPARING',
+  COMPLETE: 'COMPLETE',
+} as const;
+export type PipelineStage = (typeof PipelineStage)[keyof typeof PipelineStage];
+
+// CRM Contact type (replacing @prisma/client CRMContact)
+export interface CRMContact {
+  id: string;
+  userId?: string | null;
+  contactType: ContactType;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string | null;
+  company?: string | null;
+  filingStatus?: string | null;
+  dependents?: number | null;
+  previousYearAGI?: number | null;
+  taxYear?: number | null;
+  stage: PipelineStage;
+  source?: string | null;
+  assignedPreparerId?: string | null;
+  lastContactedAt?: Date | string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  commissionRate?: number | null;
+  commissionRateLockedAt?: Date | string | null;
+  attributionMethod?: string | null;
+  attributionConfidence?: number | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+// CRM Interaction type (replacing @prisma/client CRMInteraction)
+export interface CRMInteraction {
+  id: string;
+  contactId: string;
+  userId?: string | null;
+  type: InteractionType;
+  direction: Direction;
+  subject?: string | null;
+  body?: string | null;
+  duration?: number | null;
+  occurredAt: Date | string;
+  emailId?: string | null;
+  emailThreadId?: string | null;
+  emailTo?: string[] | null;
+  emailCc?: string[] | null;
+  emailBcc?: string[] | null;
+  attachments?: Record<string, unknown>[] | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+// CRM Stage History type (replacing @prisma/client CRMStageHistory)
+export interface CRMStageHistory {
+  id: string;
+  contactId: string;
+  fromStage?: PipelineStage | null;
+  toStage: PipelineStage;
+  changedBy?: string | null;
+  changedByClerk?: string | null;
+  reason?: string | null;
+  createdAt: Date | string;
+}
 
 // ============ Contact Management Types ============
 

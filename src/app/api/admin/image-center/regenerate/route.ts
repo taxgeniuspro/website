@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  role: string;
+  supabaseUserId?: string | null;
+  userId?: string | null;
+  email?: string | null;
+}
+
+interface GeneratedImage {
+  id: string;
+  prompt: string;
+  negativePrompt?: string | null;
+  provider: string;
+  width?: number | null;
+  height?: number | null;
+  tags?: string[];
+  category?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
 
 /**
  * POST /api/admin/image-center/regenerate
@@ -19,17 +40,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -54,13 +78,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Get original image to link generation history
-    const originalImage = await prisma.generatedImage.findUnique({
-      where: { id: originalImageId },
-    });
+    const { data: originalImageData, error: fetchError } = await db
+      .from('generated_images')
+      .select('*')
+      .eq('id', originalImageId)
+      .single();
 
-    if (!originalImage) {
+    if (fetchError || !originalImageData) {
       return NextResponse.json({ error: 'Original image not found' }, { status: 404 });
     }
+
+    const originalImage = originalImageData as GeneratedImage;
 
     // Build request body for generation endpoint
     const generateBody = {
@@ -100,16 +128,16 @@ export async function POST(req: NextRequest) {
     if (generateResult.success && generateResult.images && generateResult.images.length > 0) {
       const newImage = generateResult.images[0];
 
-      await prisma.generatedImage.update({
-        where: { id: newImage.id },
-        data: {
+      await db
+        .from('generated_images')
+        .update({
           metadata: {
             ...(newImage.metadata || {}),
             regeneratedFrom: originalImageId,
             originalPrompt: originalImage.prompt,
           },
-        },
-      });
+        })
+        .eq('id', newImage.id);
 
       logger.info('Image regenerated', {
         originalImageId,

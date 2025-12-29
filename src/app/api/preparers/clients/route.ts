@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -19,59 +19,93 @@ export async function GET(req: NextRequest) {
     }
 
     // Get preparer profile using session user ID
-    const preparerProfile = await prisma.profile.findFirst({
-      where: {
-        userId: user.id,
-        role: 'tax_preparer',
-      },
-    });
+    const { data: preparerProfileData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .eq('role', 'tax_preparer')
+      .limit(1);
+
+    const preparerProfile = firstOrNull(preparerProfileData);
 
     if (!preparerProfile) {
       return NextResponse.json({ error: 'Preparer profile not found' }, { status: 404 });
     }
 
     // Get all clients assigned to this preparer
-    const clientAssignments = await prisma.clientPreparer.findMany({
-      where: {
-        preparerId: preparerProfile.id,
-        isActive: true,
-      },
-      include: {
-        client: {
-          include: {
-            user: true,
-            taxReturns: {
-              orderBy: {
-                taxYear: 'desc',
-              },
-              take: 1, // Get most recent tax return
-              include: {
-                documents: true,
-              },
-            },
-          },
-        },
-      },
+    const { data: clientAssignments } = await db
+      .from('client_preparers')
+      .select('clientId, assignedAt')
+      .eq('preparerId', preparerProfile.id)
+      .eq('isActive', true);
+
+    if (!clientAssignments || clientAssignments.length === 0) {
+      return NextResponse.json({
+        success: true,
+        clients: [],
+        totalClients: 0,
+      });
+    }
+
+    // Get client profiles
+    const clientIds = clientAssignments.map((a: any) => a.clientId);
+    const { data: clientProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, phone, userId')
+      .in('id', clientIds);
+
+    // Get user emails for clients
+    const userIds = (clientProfiles || []).map((p: any) => p.userId).filter(Boolean);
+    const { data: users } = userIds.length > 0
+      ? await db.from('users').select('id, email').in('id', userIds)
+      : { data: [] };
+
+    // Get most recent tax return for each client
+    const { data: taxReturns } = await db
+      .from('tax_returns')
+      .select('id, profileId, taxYear, status, createdAt, updatedAt')
+      .in('profileId', clientIds)
+      .order('taxYear', { ascending: false });
+
+    // Get document counts for tax returns
+    const taxReturnIds = (taxReturns || []).map((tr: any) => tr.id);
+    const { data: documents } = taxReturnIds.length > 0
+      ? await db.from('documents').select('id, taxReturnId').in('taxReturnId', taxReturnIds)
+      : { data: [] };
+
+    // Create lookup maps
+    const userMap = new Map((users || []).map((u: any) => [u.id, u.email]));
+    const docCountMap = new Map<string, number>();
+    (documents || []).forEach((d: any) => {
+      docCountMap.set(d.taxReturnId, (docCountMap.get(d.taxReturnId) || 0) + 1);
+    });
+    const assignmentMap = new Map(clientAssignments.map((a: any) => [a.clientId, a.assignedAt]));
+
+    // Group tax returns by profileId and get most recent
+    const latestReturnMap = new Map<string, any>();
+    (taxReturns || []).forEach((tr: any) => {
+      if (!latestReturnMap.has(tr.profileId)) {
+        latestReturnMap.set(tr.profileId, tr);
+      }
     });
 
     // Transform data for response
-    const clients = clientAssignments.map((assignment) => {
-      const client = assignment.client;
-      const mostRecentReturn = client.taxReturns[0];
+    const clients = (clientProfiles || []).map((client: any) => {
+      const mostRecentReturn = latestReturnMap.get(client.id);
 
       return {
         id: client.id,
         firstName: client.firstName,
         lastName: client.lastName,
-        email: client.user.email,
+        email: client.userId ? userMap.get(client.userId) : null,
         phone: client.phone,
-        assignedAt: assignment.assignedAt,
+        assignedAt: assignmentMap.get(client.id),
         currentReturn: mostRecentReturn
           ? {
               id: mostRecentReturn.id,
               taxYear: mostRecentReturn.taxYear,
               status: mostRecentReturn.status,
-              documentCount: mostRecentReturn.documents.length,
+              documentCount: docCountMap.get(mostRecentReturn.id) || 0,
               createdAt: mostRecentReturn.createdAt,
               updatedAt: mostRecentReturn.updatedAt,
             }
@@ -106,12 +140,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Get preparer profile using session user ID
-    const preparerProfile = await prisma.profile.findFirst({
-      where: {
-        userId: user.id,
-        role: 'tax_preparer',
-      },
-    });
+    const { data: preparerProfileData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .eq('role', 'tax_preparer')
+      .limit(1);
+
+    const preparerProfile = firstOrNull(preparerProfileData);
 
     if (!preparerProfile) {
       return NextResponse.json({ error: 'Preparer profile not found' }, { status: 404 });
@@ -124,35 +160,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing clientEmail' }, { status: 400 });
     }
 
+    // Find client user by email
+    const { data: clientUserData } = await db
+      .from('users')
+      .select('id')
+      .eq('email', clientEmail.toLowerCase())
+      .limit(1);
+
+    const clientUser = firstOrNull(clientUserData);
+    if (!clientUser) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
     // Find client profile
-    const clientProfile = await prisma.profile.findFirst({
-      where: {
-        user: { email: clientEmail },
-        role: 'client',
-      },
-    });
+    const { data: clientProfileData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', clientUser.id)
+      .eq('role', 'client')
+      .limit(1);
+
+    const clientProfile = firstOrNull(clientProfileData);
 
     if (!clientProfile) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
     // Check if assignment already exists
-    const existingAssignment = await prisma.clientPreparer.findUnique({
-      where: {
-        clientId_preparerId: {
-          clientId: clientProfile.id,
-          preparerId: preparerProfile.id,
-        },
-      },
-    });
+    const { data: existingAssignmentData } = await db
+      .from('client_preparers')
+      .select('*')
+      .eq('clientId', clientProfile.id)
+      .eq('preparerId', preparerProfile.id)
+      .limit(1);
+
+    const existingAssignment = firstOrNull(existingAssignmentData);
 
     if (existingAssignment) {
       // Reactivate if inactive
       if (!existingAssignment.isActive) {
-        await prisma.clientPreparer.update({
-          where: { id: existingAssignment.id },
-          data: { isActive: true },
-        });
+        await db
+          .from('client_preparers')
+          .update({ isActive: true })
+          .eq('id', existingAssignment.id);
       }
 
       return NextResponse.json({
@@ -163,16 +213,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Create new assignment
-    const assignment = await prisma.clientPreparer.create({
-      data: {
+    const { data: newAssignment } = await db
+      .from('client_preparers')
+      .insert({
         clientId: clientProfile.id,
         preparerId: preparerProfile.id,
-      },
-    });
+      })
+      .select()
+      .single();
 
     return NextResponse.json({
       success: true,
-      assignment,
+      assignment: newAssignment,
     });
   } catch (error) {
     logger.error('Error assigning client:', error);

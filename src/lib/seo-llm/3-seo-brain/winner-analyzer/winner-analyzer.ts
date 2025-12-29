@@ -5,8 +5,21 @@
  * for replication to underperformers
  */
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
 import { ollamaClient } from './ollama-client'
+
+// Local type definitions (replacing @prisma/client)
+interface CityLandingPage {
+  id: string
+  slug: string
+  title: string
+  aiIntro?: string | null
+  aiBenefits?: string | null
+  faqSchema?: any
+  views: number
+  revenue: number
+  landingPageSetId: string
+}
 
 export interface WinnerPattern {
   patternName: string
@@ -41,18 +54,29 @@ export async function analyzeWinners(params: { campaignId: string; topCount?: nu
     const { campaignId, topCount = 10 } = params
 
     // Get top performing city pages
-    const topPages = await prisma.cityLandingPage.findMany({
-      where: { landingPageSetId: campaignId },
-      include: {
-        _count: {
-          select: { orders: true },
-        },
-      },
-      orderBy: {
-        revenue: 'desc',
-      },
-      take: topCount,
-    })
+    const { data: topPagesData } = await db
+      .from('city_landing_pages')
+      .select('*')
+      .eq('landingPageSetId', campaignId)
+      .order('revenue', { ascending: false })
+      .limit(topCount)
+
+    const topPagesRaw = (topPagesData || []) as CityLandingPage[]
+
+    // Get order counts for each page
+    const topPages: Array<CityLandingPage & { _count: { orders: number } }> = await Promise.all(
+      topPagesRaw.map(async (page) => {
+        const { count: ordersCount } = await db
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('cityLandingPageId', page.id)
+
+        return {
+          ...page,
+          _count: { orders: ordersCount || 0 },
+        }
+      })
+    )
 
     if (topPages.length === 0) {
       return { success: false }
@@ -72,7 +96,7 @@ export async function analyzeWinners(params: { campaignId: string; topCount?: nu
       score: page.score,
       views: page.views,
       conversions: page._count.orders,
-      revenue: page.revenue.toNumber(),
+      revenue: typeof page.revenue === 'number' ? page.revenue : Number(page.revenue) || 0,
       title: page.title,
       intro: page.aiIntro?.substring(0, 500), // First 500 chars
       benefitsCount: page.aiBenefits?.split('\n').length || 0,
@@ -87,8 +111,9 @@ export async function analyzeWinners(params: { campaignId: string; topCount?: nu
     })
 
     // Save pattern to database
-    await prisma.cityWinnerPattern.create({
-      data: {
+    await db
+      .from('city_winner_patterns')
+      .insert({
         id: `pattern-${campaignId}-${Date.now()}`,
         productType: 'flyers', // TODO: Extract from campaign
         patternName: patternData.patternName,
@@ -102,8 +127,7 @@ export async function analyzeWinners(params: { campaignId: string; topCount?: nu
         successRate: 0,
         confidence: 85, // Default confidence
         sampleSize: topPages.length,
-      },
-    })
+      })
 
     return {
       success: true,
@@ -123,7 +147,7 @@ export async function analyzeWinners(params: { campaignId: string; topCount?: nu
 function calculatePerformanceScore(page: any): number {
   const conversions = page._count?.orders || 0
   const views = page.views || 0
-  const revenue = page.revenue?.toNumber() || 0
+  const revenue = typeof page.revenue === 'number' ? page.revenue : Number(page.revenue) || 0
 
   // Weighted score: conversions (50%) + views (30%) + revenue (20%)
   const conversionScore = Math.min(100, (conversions / 10) * 100)

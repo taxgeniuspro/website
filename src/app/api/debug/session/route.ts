@@ -4,7 +4,15 @@
  */
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// TypeScript interface for Profile
+interface Profile {
+  id: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+}
 
 export async function GET() {
   try {
@@ -15,25 +23,21 @@ export async function GET() {
     }
 
     // Get role directly from database
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', session.user.id)
+      .single();
 
-    // Also get raw query to bypass any enum issues
-    const rawProfile = await prisma.$queryRaw`
-      SELECT id, role::text as role, "firstName", "lastName"
-      FROM profiles
-      WHERE "userId" = ${session.user.id}
-    ` as { id: string; role: string; firstName: string; lastName: string }[];
+    if (profileError && profileError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned, which is fine
+      throw profileError;
+    }
 
-    // Deep inspection of Prisma role value
-    const prismaRoleInspection = {
+    const profile = profileData as Profile | null;
+
+    // Supabase inspection (replaces Prisma inspection)
+    const supabaseRoleInspection = {
       value: profile?.role,
       type: typeof profile?.role,
       toString: profile?.role?.toString?.(),
@@ -52,16 +56,13 @@ export async function GET() {
         roleType: typeof session.user.role,
         roleJSON: JSON.stringify(session.user.role),
       },
-      profileFromPrisma: profile,
-      prismaRoleInspection,
-      profileFromRawQuery: rawProfile[0] || null,
+      profileFromSupabase: profile,
+      supabaseRoleInspection,
       comparison: {
         sessionRole: session.user.role,
-        prismaRole: profile?.role,
-        rawRole: rawProfile[0]?.role,
-        sessionMatchesPrisma: session.user.role === profile?.role,
-        sessionMatchesRaw: session.user.role === rawProfile[0]?.role,
-        sessionRoleToStringMatchesPrisma: String(session.user.role) === String(profile?.role),
+        supabaseRole: profile?.role,
+        sessionMatchesSupabase: session.user.role === profile?.role,
+        sessionRoleToStringMatchesSupabase: String(session.user.role) === String(profile?.role),
       },
       fix: {
         message: 'The JWT token has a stale role. Sign out and sign back in to refresh it.',

@@ -11,8 +11,7 @@
  * - Role-based access control
  */
 
-import { prisma } from '@/lib/prisma';
-import { ContactType, PipelineStage, type Prisma } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import type {
   CRMContactInput,
   CRMContactUpdate,
@@ -27,6 +26,71 @@ import type {
 } from '@/types/crm';
 import { logger } from '@/lib/logger';
 
+// Local type definitions (replacing @prisma/client)
+type ContactType = 'LEAD' | 'PROSPECT' | 'CLIENT' | 'PARTNER' | 'OTHER';
+type PipelineStage =
+  | 'NEW_LEAD'
+  | 'CONTACTED'
+  | 'QUALIFIED'
+  | 'APPOINTMENT_SET'
+  | 'INTAKE_COMPLETE'
+  | 'DOCUMENTS_RECEIVED'
+  | 'IN_PROGRESS'
+  | 'REVIEW'
+  | 'FILED'
+  | 'CLOSED_WON'
+  | 'CLOSED_LOST';
+
+interface CRMContactRecord {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  contactType: ContactType;
+  stage: PipelineStage;
+  stageEnteredAt?: string | null;
+  assignedPreparerId?: string | null;
+  assignedAt?: string | null;
+  userId?: string | null;
+  lastContactedAt?: string | null;
+  notes?: string | null;
+  source?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CRMInteractionRecord {
+  id: string;
+  contactId: string;
+  userId?: string | null;
+  type: string;
+  subject?: string | null;
+  notes?: string | null;
+  occurredAt: string;
+  duration?: number | null;
+  outcome?: string | null;
+  attachments?: unknown;
+  createdAt: string;
+}
+
+interface CRMStageHistoryRecord {
+  id: string;
+  contactId: string;
+  fromStage?: string | null;
+  toStage: string;
+  changedBy?: string | null;
+  changedByClerk?: string | null;
+  reason?: string | null;
+  createdAt: string;
+}
+
+interface UserRecord {
+  id: string;
+  email: string;
+  createdAt?: string;
+}
+
 export class CRMService {
   /**
    * Create a new CRM contact
@@ -38,32 +102,51 @@ export class CRMService {
         contactType: data.contactType,
       });
 
-      const contact = await prisma.cRMContact.create({
-        data: {
+      // Insert the contact
+      const { data: insertedData, error: insertError } = await db
+        .from('crm_contacts')
+        .insert({
           ...data,
-          stageEnteredAt: new Date(),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              createdAt: true,
-            },
-          },
-          _count: {
-            select: {
-              interactions: true,
-            },
-          },
-        },
-      });
+          stageEnteredAt: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (insertError || !insertedData) {
+        throw new Error(insertError?.message || 'Failed to insert contact');
+      }
+
+      const contact = insertedData as CRMContactRecord;
+
+      // Get user if exists
+      let user: UserRecord | null = null;
+      if (contact.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email, createdAt')
+          .eq('id', contact.userId)
+          .limit(1);
+        user = firstOrNull(userData) as UserRecord | null;
+      }
+
+      // Get interaction count
+      const { count: interactionCount } = await db
+        .from('crm_interactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('contactId', contact.id);
+
+      const result = {
+        ...contact,
+        user: user ? { id: user.id, email: user.email, createdAt: user.createdAt } : null,
+        _count: { interactions: interactionCount || 0 },
+      };
 
       logger.info('[CRMService] Contact created successfully', { contactId: contact.id });
-      return contact;
-    } catch (error) {
-      logger.error('[CRMService] Error creating contact', { error: error.message, data });
-      throw new Error(`Failed to create contact: ${error.message}`);
+      return result as CRMContactWithRelations;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error creating contact', { error: errorMessage, data });
+      throw new Error(`Failed to create contact: ${errorMessage}`);
     }
   }
 
@@ -80,45 +163,74 @@ export class CRMService {
         accessContext: JSON.stringify(accessContext),
       });
 
-      // SIMPLIFIED QUERY - Removed tags, tasks, emailActivities to fix 500 error
-      // These relations aren't displayed on the contact detail page and may cause issues
-      const contact = await prisma.cRMContact.findUnique({
-        where: { id },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          interactions: {
-            orderBy: { occurredAt: 'desc' },
-            take: 10,
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          stageHistory: {
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          },
-          _count: {
-            select: {
-              interactions: true,
-            },
-          },
-        },
-      });
+      // Get the contact
+      const { data: contactData } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('id', id)
+        .limit(1);
+
+      const contact = firstOrNull(contactData) as CRMContactRecord | null;
 
       if (!contact) {
         logger.warn('[CRMService] Contact not found', { contactId: id });
         throw new Error('Contact not found');
       }
+
+      // Get user if exists
+      let user: { id: string; email: string } | null = null;
+      if (contact.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email')
+          .eq('id', contact.userId)
+          .limit(1);
+        const userRecord = firstOrNull(userData) as UserRecord | null;
+        if (userRecord) {
+          user = { id: userRecord.id, email: userRecord.email };
+        }
+      }
+
+      // Get recent interactions with user info
+      const { data: interactionsData } = await db
+        .from('crm_interactions')
+        .select('*')
+        .eq('contactId', id)
+        .order('occurredAt', { ascending: false })
+        .limit(10);
+
+      const interactions: Array<CRMInteractionRecord & { user?: { id: string; email: string } | null }> = [];
+      for (const interaction of (interactionsData || []) as CRMInteractionRecord[]) {
+        let interactionUser: { id: string; email: string } | null = null;
+        if (interaction.userId) {
+          const { data: iUserData } = await db
+            .from('users')
+            .select('id, email')
+            .eq('id', interaction.userId)
+            .limit(1);
+          const iUserRecord = firstOrNull(iUserData) as UserRecord | null;
+          if (iUserRecord) {
+            interactionUser = { id: iUserRecord.id, email: iUserRecord.email };
+          }
+        }
+        interactions.push({ ...interaction, user: interactionUser });
+      }
+
+      // Get stage history
+      const { data: stageHistoryData } = await db
+        .from('crm_stage_history')
+        .select('*')
+        .eq('contactId', id)
+        .order('createdAt', { ascending: false })
+        .limit(10);
+
+      const stageHistory = (stageHistoryData || []) as CRMStageHistoryRecord[];
+
+      // Get interaction count
+      const { count: interactionCount } = await db
+        .from('crm_interactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('contactId', id);
 
       logger.info('[CRMService] Contact found', {
         contactId: id,
@@ -149,13 +261,22 @@ export class CRMService {
         }
       }
 
+      const result = {
+        ...contact,
+        user,
+        interactions,
+        stageHistory,
+        _count: { interactions: interactionCount || 0 },
+      };
+
       logger.info('[CRMService] Contact retrieved', {
         contactId: id,
         userRole: accessContext.userRole,
       });
-      return contact as CRMContactWithRelations;
-    } catch (error) {
-      logger.error('[CRMService] Error getting contact', { error: error.message, contactId: id });
+      return result as CRMContactWithRelations;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error getting contact', { error: errorMessage, contactId: id });
       throw error;
     }
   }
@@ -174,28 +295,50 @@ export class CRMService {
 
       logger.info('[CRMService] Updating contact', { contactId: id, updates: Object.keys(data) });
 
-      const updatedContact = await prisma.cRMContact.update({
-        where: { id },
-        data,
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          _count: {
-            select: {
-              interactions: true,
-            },
-          },
-        },
-      });
+      const { data: updatedData, error: updateError } = await db
+        .from('crm_contacts')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError || !updatedData) {
+        throw new Error(updateError?.message || 'Failed to update contact');
+      }
+
+      const contact = updatedData as CRMContactRecord;
+
+      // Get user if exists
+      let user: { id: string; email: string } | null = null;
+      if (contact.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email')
+          .eq('id', contact.userId)
+          .limit(1);
+        const userRecord = firstOrNull(userData) as UserRecord | null;
+        if (userRecord) {
+          user = { id: userRecord.id, email: userRecord.email };
+        }
+      }
+
+      // Get interaction count
+      const { count: interactionCount } = await db
+        .from('crm_interactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('contactId', id);
+
+      const result = {
+        ...contact,
+        user,
+        _count: { interactions: interactionCount || 0 },
+      };
 
       logger.info('[CRMService] Contact updated successfully', { contactId: id });
-      return updatedContact as CRMContactWithRelations;
-    } catch (error) {
-      logger.error('[CRMService] Error updating contact', { error: error.message, contactId: id });
+      return result as CRMContactWithRelations;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error updating contact', { error: errorMessage, contactId: id });
       throw error;
     }
   }
@@ -219,18 +362,20 @@ export class CRMService {
 
       // For now, we'll just mark as deleted (soft delete)
       // In production, you might want to add a `deletedAt` field to the schema
-      await prisma.cRMContact.update({
-        where: { id },
-        data: {
-          updatedAt: new Date(),
-          // In future: deletedAt: new Date()
-        },
-      });
+      const { error: updateError } = await db
+        .from('crm_contacts')
+        .update({ updatedAt: new Date().toISOString() })
+        .eq('id', id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
 
       logger.info('[CRMService] Contact deleted successfully', { contactId: id });
       return { deleted: true };
-    } catch (error) {
-      logger.error('[CRMService] Error deleting contact', { error: error.message, contactId: id });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error deleting contact', { error: errorMessage, contactId: id });
       throw error;
     }
   }
@@ -245,7 +390,7 @@ export class CRMService {
   ): Promise<CRMContactListResponse> {
     try {
       const { page = 1, limit = 50 } = pagination;
-      const skip = (page - 1) * limit;
+      const offset = (page - 1) * limit;
 
       logger.info('[CRMService] Listing contacts', {
         filters,
@@ -254,24 +399,18 @@ export class CRMService {
         userRole: accessContext.userRole,
       });
 
-      // Build where clause
-      const where: Prisma.CRMContactWhereInput = {};
+      // Build the query
+      let query = db.from('crm_contacts').select('*');
+      let countQuery = db.from('crm_contacts').select('id', { count: 'exact', head: true });
 
       if (filters.stage) {
-        where.stage = filters.stage;
+        query = query.eq('stage', filters.stage);
+        countQuery = countQuery.eq('stage', filters.stage);
       }
 
       if (filters.contactType) {
-        where.contactType = filters.contactType;
-      }
-
-      if (filters.search) {
-        where.OR = [
-          { firstName: { contains: filters.search, mode: 'insensitive' } },
-          { lastName: { contains: filters.search, mode: 'insensitive' } },
-          { email: { contains: filters.search, mode: 'insensitive' } },
-          { phone: { contains: filters.search, mode: 'insensitive' } },
-        ];
+        query = query.eq('contactType', filters.contactType);
+        countQuery = countQuery.eq('contactType', filters.contactType);
       }
 
       // Row-level security: tax preparers see only their assigned contacts
@@ -282,47 +421,73 @@ export class CRMService {
         if (!accessContext.preparerId) {
           throw new Error('Preparer Profile ID not found for tax preparer user');
         }
-        where.assignedPreparerId = accessContext.preparerId;
+        query = query.eq('assignedPreparerId', accessContext.preparerId);
+        countQuery = countQuery.eq('assignedPreparerId', accessContext.preparerId);
       }
 
       if (filters.assignedPreparerId) {
-        where.assignedPreparerId = filters.assignedPreparerId;
+        query = query.eq('assignedPreparerId', filters.assignedPreparerId);
+        countQuery = countQuery.eq('assignedPreparerId', filters.assignedPreparerId);
       }
 
-      const [contacts, total] = await Promise.all([
-        prisma.cRMContact.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { updatedAt: 'desc' },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-              },
-            },
-            _count: {
-              select: {
-                interactions: true,
-              },
-            },
-          },
-        }),
-        prisma.cRMContact.count({ where }),
-      ]);
+      // Search filter - use ilike for case-insensitive search
+      if (filters.search) {
+        const searchPattern = `%${filters.search}%`;
+        query = query.or(
+          `firstName.ilike.${searchPattern},lastName.ilike.${searchPattern},email.ilike.${searchPattern},phone.ilike.${searchPattern}`
+        );
+        countQuery = countQuery.or(
+          `firstName.ilike.${searchPattern},lastName.ilike.${searchPattern},email.ilike.${searchPattern},phone.ilike.${searchPattern}`
+        );
+      }
+
+      // Apply pagination and ordering
+      query = query.order('updatedAt', { ascending: false }).range(offset, offset + limit - 1);
+
+      const [{ data: contactsData }, { count: total }] = await Promise.all([query, countQuery]);
+
+      // Enrich contacts with user and interaction count
+      const contacts: CRMContactWithRelations[] = [];
+      for (const contact of (contactsData || []) as CRMContactRecord[]) {
+        // Get user if exists
+        let user: { id: string; email: string } | null = null;
+        if (contact.userId) {
+          const { data: userData } = await db
+            .from('users')
+            .select('id, email')
+            .eq('id', contact.userId)
+            .limit(1);
+          const userRecord = firstOrNull(userData) as UserRecord | null;
+          if (userRecord) {
+            user = { id: userRecord.id, email: userRecord.email };
+          }
+        }
+
+        // Get interaction count
+        const { count: interactionCount } = await db
+          .from('crm_interactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('contactId', contact.id);
+
+        contacts.push({
+          ...contact,
+          user,
+          _count: { interactions: interactionCount || 0 },
+        } as CRMContactWithRelations);
+      }
 
       logger.info('[CRMService] Contacts listed', { total, returned: contacts.length });
 
       return {
-        contacts: contacts as CRMContactWithRelations[],
-        total,
+        contacts,
+        total: total || 0,
         page,
         limit,
       };
-    } catch (error) {
-      logger.error('[CRMService] Error listing contacts', { error: error.message, filters });
-      throw new Error(`Failed to list contacts: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error listing contacts', { error: errorMessage, filters });
+      throw new Error(`Failed to list contacts: ${errorMessage}`);
     }
   }
 
@@ -344,36 +509,58 @@ export class CRMService {
 
       logger.info('[CRMService] Assigning contact to preparer', { contactId, preparerId });
 
-      const contact = await prisma.cRMContact.update({
-        where: { id: contactId },
-        data: {
+      const { data: updatedData, error: updateError } = await db
+        .from('crm_contacts')
+        .update({
           assignedPreparerId: preparerId,
-          assignedAt: new Date(),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          _count: {
-            select: {
-              interactions: true,
-            },
-          },
-        },
-      });
+          assignedAt: new Date().toISOString(),
+        })
+        .eq('id', contactId)
+        .select()
+        .single();
+
+      if (updateError || !updatedData) {
+        throw new Error(updateError?.message || 'Failed to assign contact');
+      }
+
+      const contact = updatedData as CRMContactRecord;
+
+      // Get user if exists
+      let user: { id: string; email: string } | null = null;
+      if (contact.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email')
+          .eq('id', contact.userId)
+          .limit(1);
+        const userRecord = firstOrNull(userData) as UserRecord | null;
+        if (userRecord) {
+          user = { id: userRecord.id, email: userRecord.email };
+        }
+      }
+
+      // Get interaction count
+      const { count: interactionCount } = await db
+        .from('crm_interactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('contactId', contactId);
+
+      const result = {
+        ...contact,
+        user,
+        _count: { interactions: interactionCount || 0 },
+      };
 
       logger.info('[CRMService] Contact assigned successfully', { contactId, preparerId });
-      return contact as CRMContactWithRelations;
-    } catch (error) {
+      return result as CRMContactWithRelations;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[CRMService] Error assigning contact', {
-        error: error.message,
+        error: errorMessage,
         contactId,
         preparerId,
       });
-      throw new Error(`Failed to assign contact: ${error.message}`);
+      throw new Error(`Failed to assign contact: ${errorMessage}`);
     }
   }
 
@@ -393,97 +580,140 @@ export class CRMService {
       const contact = await this.getContactById(contactId, accessContext);
 
       // Update stage
-      const updatedContact = await prisma.cRMContact.update({
-        where: { id: contactId },
-        data: {
+      const { data: updatedData, error: updateError } = await db
+        .from('crm_contacts')
+        .update({
           stage: toStage,
-          stageEnteredAt: new Date(),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          _count: {
-            select: {
-              interactions: true,
-            },
-          },
-        },
-      });
+          stageEnteredAt: new Date().toISOString(),
+        })
+        .eq('id', contactId)
+        .select()
+        .single();
+
+      if (updateError || !updatedData) {
+        throw new Error(updateError?.message || 'Failed to update stage');
+      }
+
+      const updatedContact = updatedData as CRMContactRecord;
+
+      // Get user if exists
+      let user: { id: string; email: string } | null = null;
+      if (updatedContact.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email')
+          .eq('id', updatedContact.userId)
+          .limit(1);
+        const userRecord = firstOrNull(userData) as UserRecord | null;
+        if (userRecord) {
+          user = { id: userRecord.id, email: userRecord.email };
+        }
+      }
+
+      // Get interaction count
+      const { count: interactionCount } = await db
+        .from('crm_interactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('contactId', contactId);
 
       // Create stage history record
-      await prisma.cRMStageHistory.create({
-        data: {
-          contactId,
-          fromStage: fromStage || contact.stage,
-          toStage,
-          changedBy: accessContext.userId,
-          changedByClerk: accessContext.userId,
-          reason,
-        },
+      await db.from('crm_stage_history').insert({
+        contactId,
+        fromStage: fromStage || contact.stage,
+        toStage,
+        changedBy: accessContext.userId,
+        changedByClerk: accessContext.userId,
+        reason,
       });
 
+      const result = {
+        ...updatedContact,
+        user,
+        _count: { interactions: interactionCount || 0 },
+      };
+
       logger.info('[CRMService] Contact stage updated', { contactId, newStage: toStage });
-      return updatedContact as CRMContactWithRelations;
-    } catch (error) {
+      return result as CRMContactWithRelations;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[CRMService] Error updating contact stage', {
-        error: error.message,
+        error: errorMessage,
         stageUpdate,
       });
-      throw new Error(`Failed to update contact stage: ${error.message}`);
+      throw new Error(`Failed to update contact stage: ${errorMessage}`);
     }
   }
 
   /**
    * Log an interaction
    */
-  static async logInteraction(data: CRMInteractionInput): Promise<any> {
+  static async logInteraction(data: CRMInteractionInput): Promise<unknown> {
     try {
       logger.info('[CRMService] Logging interaction', {
         contactId: data.contactId,
         type: data.type,
       });
 
-      const interaction = await prisma.cRMInteraction.create({
-        data: {
+      // Insert the interaction
+      const { data: insertedData, error: insertError } = await db
+        .from('crm_interactions')
+        .insert({
           ...data,
-          occurredAt: data.occurredAt || new Date(),
+          occurredAt: (data.occurredAt || new Date()).toISOString(),
           attachments: data.attachments ? JSON.parse(JSON.stringify(data.attachments)) : null,
-        },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (insertError || !insertedData) {
+        throw new Error(insertError?.message || 'Failed to insert interaction');
+      }
+
+      const interaction = insertedData as CRMInteractionRecord;
+
+      // Get contact info
+      const { data: contactData } = await db
+        .from('crm_contacts')
+        .select('id, firstName, lastName, email')
+        .eq('id', data.contactId)
+        .limit(1);
+
+      const contact = firstOrNull(contactData) as { id: string; firstName?: string | null; lastName?: string | null; email: string } | null;
+
+      // Get user info
+      let user: { id: string; email: string } | null = null;
+      if (interaction.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('id, email')
+          .eq('id', interaction.userId)
+          .limit(1);
+        const userRecord = firstOrNull(userData) as UserRecord | null;
+        if (userRecord) {
+          user = { id: userRecord.id, email: userRecord.email };
+        }
+      }
 
       // Update lastContactedAt on contact
-      await prisma.cRMContact.update({
-        where: { id: data.contactId },
-        data: { lastContactedAt: new Date() },
-      });
+      await db
+        .from('crm_contacts')
+        .update({ lastContactedAt: new Date().toISOString() })
+        .eq('id', data.contactId);
+
+      const result = {
+        ...interaction,
+        contact,
+        user,
+      };
 
       logger.info('[CRMService] Interaction logged successfully', {
         interactionId: interaction.id,
       });
-      return interaction;
-    } catch (error) {
-      logger.error('[CRMService] Error logging interaction', { error: error.message, data });
-      throw new Error(`Failed to log interaction: ${error.message}`);
+      return result;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error logging interaction', { error: errorMessage, data });
+      throw new Error(`Failed to log interaction: ${errorMessage}`);
     }
   }
 
@@ -494,31 +724,43 @@ export class CRMService {
     contactId: string,
     accessContext: CRMAccessContext,
     limit: number = 50
-  ): Promise<any[]> {
+  ): Promise<unknown[]> {
     try {
       // Verify access to contact first
       await this.getContactById(contactId, accessContext);
 
       logger.info('[CRMService] Getting contact interactions', { contactId, limit });
 
-      const interactions = await prisma.cRMInteraction.findMany({
-        where: { contactId },
-        orderBy: { occurredAt: 'desc' },
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-        },
-      });
+      const { data: interactionsData } = await db
+        .from('crm_interactions')
+        .select('*')
+        .eq('contactId', contactId)
+        .order('occurredAt', { ascending: false })
+        .limit(limit);
+
+      // Enrich with user info
+      const interactions: Array<CRMInteractionRecord & { user?: { id: string; email: string } | null }> = [];
+      for (const interaction of (interactionsData || []) as CRMInteractionRecord[]) {
+        let user: { id: string; email: string } | null = null;
+        if (interaction.userId) {
+          const { data: userData } = await db
+            .from('users')
+            .select('id, email')
+            .eq('id', interaction.userId)
+            .limit(1);
+          const userRecord = firstOrNull(userData) as UserRecord | null;
+          if (userRecord) {
+            user = { id: userRecord.id, email: userRecord.email };
+          }
+        }
+        interactions.push({ ...interaction, user });
+      }
 
       logger.info('[CRMService] Interactions retrieved', { contactId, count: interactions.length });
       return interactions;
-    } catch (error) {
-      logger.error('[CRMService] Error getting interactions', { error: error.message, contactId });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error getting interactions', { error: errorMessage, contactId });
       throw error;
     }
   }
@@ -529,22 +771,26 @@ export class CRMService {
   static async getContactStageHistory(
     contactId: string,
     accessContext: CRMAccessContext
-  ): Promise<any[]> {
+  ): Promise<CRMStageHistoryRecord[]> {
     try {
       // Verify access to contact first
       await this.getContactById(contactId, accessContext);
 
       logger.info('[CRMService] Getting contact stage history', { contactId });
 
-      const history = await prisma.cRMStageHistory.findMany({
-        where: { contactId },
-        orderBy: { createdAt: 'desc' },
-      });
+      const { data: historyData } = await db
+        .from('crm_stage_history')
+        .select('*')
+        .eq('contactId', contactId)
+        .order('createdAt', { ascending: false });
+
+      const history = (historyData || []) as CRMStageHistoryRecord[];
 
       logger.info('[CRMService] Stage history retrieved', { contactId, count: history.length });
       return history;
-    } catch (error) {
-      logger.error('[CRMService] Error getting stage history', { error: error.message, contactId });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMService] Error getting stage history', { error: errorMessage, contactId });
       throw error;
     }
   }

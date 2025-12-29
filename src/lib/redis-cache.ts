@@ -1,8 +1,8 @@
 /**
- * Redis Cache Utility
+ * Cache Utility
  *
- * Provides a simple interface for caching API responses in Redis.
- * Falls back gracefully if Redis is not available.
+ * Provides a simple interface for caching API responses.
+ * Uses in-memory storage for single-instance deployments.
  *
  * Usage:
  * ```typescript
@@ -20,94 +20,62 @@
  * ```
  */
 
-import Redis from 'ioredis';
 import { logger } from './logger';
 
-let redis: Redis | null = null;
-let redisAvailable = false;
+// In-memory cache store
+interface CacheEntry {
+  value: unknown;
+  expiresAt: number;
+}
 
-// Initialize Redis client
-function getRedisClient(): Redis | null {
-  if (redis) return redis;
+const cacheStore = new Map<string, CacheEntry>();
 
-  const redisUrl = process.env.REDIS_URL;
-
-  if (!redisUrl) {
-    logger.warn('REDIS_URL not configured, caching disabled');
-    return null;
-  }
-
-  try {
-    redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      reconnectOnError(err) {
-        const targetErrors = ['READONLY', 'ECONNRESET'];
-        return targetErrors.some((targetError) =>
-          err.message.includes(targetError)
-        );
-      },
-    });
-
-    redis.on('error', (err) => {
-      logger.error('Redis connection error', { error: err.message });
-      redisAvailable = false;
-    });
-
-    redis.on('connect', () => {
-      logger.info('Redis connected successfully');
-      redisAvailable = true;
-    });
-
-    return redis;
-  } catch (error) {
-    logger.error('Failed to initialize Redis client', { error });
-    return null;
-  }
+// Cleanup expired entries periodically
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of cacheStore.entries()) {
+      if (entry.expiresAt < now) {
+        cacheStore.delete(key);
+      }
+    }
+  }, 60000); // Every minute
 }
 
 /**
  * Get a value from cache
  * @param key Cache key
- * @returns Parsed JSON value or null if not found/error
+ * @returns Parsed JSON value or null if not found/expired
  */
-export async function cacheGet<T = any>(key: string): Promise<T | null> {
-  const client = getRedisClient();
-  if (!client || !redisAvailable) return null;
+export async function cacheGet<T = unknown>(key: string): Promise<T | null> {
+  const entry = cacheStore.get(key);
+  if (!entry) return null;
 
-  try {
-    const value = await client.get(key);
-    if (!value) return null;
-
-    const parsed = JSON.parse(value);
-    logger.debug('Cache hit', { key });
-    return parsed as T;
-  } catch (error) {
-    logger.error('Cache get error', { key, error });
+  if (entry.expiresAt < Date.now()) {
+    cacheStore.delete(key);
     return null;
   }
+
+  logger.debug('Cache hit', { key });
+  return entry.value as T;
 }
 
 /**
  * Set a value in cache
  * @param key Cache key
- * @param value Value to cache (will be JSON.stringify'd)
+ * @param value Value to cache
  * @param ttlSeconds Time to live in seconds (default: 300 = 5 minutes)
  */
-export async function cacheSet<T = any>(
+export async function cacheSet<T = unknown>(
   key: string,
   value: T,
   ttlSeconds: number = 300
 ): Promise<boolean> {
-  const client = getRedisClient();
-  if (!client || !redisAvailable) return false;
-
   try {
-    const serialized = JSON.stringify(value);
-    await client.setex(key, ttlSeconds, serialized);
+    cacheStore.set(key, {
+      value,
+      expiresAt: Date.now() + ttlSeconds * 1000,
+    });
     logger.debug('Cache set', { key, ttl: ttlSeconds });
     return true;
   } catch (error) {
@@ -121,11 +89,8 @@ export async function cacheSet<T = any>(
  * @param key Cache key
  */
 export async function cacheDel(key: string): Promise<boolean> {
-  const client = getRedisClient();
-  if (!client || !redisAvailable) return false;
-
   try {
-    await client.del(key);
+    cacheStore.delete(key);
     logger.debug('Cache deleted', { key });
     return true;
   } catch (error) {
@@ -139,16 +104,17 @@ export async function cacheDel(key: string): Promise<boolean> {
  * @param pattern Pattern to match (e.g., "preparer:*")
  */
 export async function cacheDelPattern(pattern: string): Promise<number> {
-  const client = getRedisClient();
-  if (!client || !redisAvailable) return 0;
-
   try {
-    const keys = await client.keys(pattern);
-    if (keys.length === 0) return 0;
-
-    await client.del(...keys);
-    logger.debug('Cache pattern deleted', { pattern, count: keys.length });
-    return keys.length;
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    let count = 0;
+    for (const key of cacheStore.keys()) {
+      if (regex.test(key)) {
+        cacheStore.delete(key);
+        count++;
+      }
+    }
+    logger.debug('Cache pattern deleted', { pattern, count });
+    return count;
   } catch (error) {
     logger.error('Cache delete pattern error', { pattern, error });
     return 0;
@@ -160,16 +126,15 @@ export async function cacheDelPattern(pattern: string): Promise<number> {
  * @param key Cache key
  */
 export async function cacheExists(key: string): Promise<boolean> {
-  const client = getRedisClient();
-  if (!client || !redisAvailable) return false;
+  const entry = cacheStore.get(key);
+  if (!entry) return false;
 
-  try {
-    const exists = await client.exists(key);
-    return exists === 1;
-  } catch (error) {
-    logger.error('Cache exists error', { key, error });
+  if (entry.expiresAt < Date.now()) {
+    cacheStore.delete(key);
     return false;
   }
+
+  return true;
 }
 
 /**

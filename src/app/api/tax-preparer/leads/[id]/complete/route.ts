@@ -9,15 +9,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { calculateReferrerCommission } from '@/lib/services/tiered-commission.service';
-import { PaymentStatus } from '@prisma/client';
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// Define PaymentStatus locally (matches database enum)
+type PaymentStatus = 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED' | 'FAILED';
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     const user = session?.user;
@@ -40,31 +39,35 @@ export async function POST(
     const { id: leadId } = await params;
 
     // Get preparer's profile
-    const preparerProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const preparerProfile = firstOrNull(profiles);
 
     if (!preparerProfile) {
-      return NextResponse.json(
-        { error: 'Tax preparer profile not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
     }
 
     // Fetch the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select(
+        `
+        *,
+        profile:profiles!profileId (
+          id,
+          firstName,
+          lastName
+        )
+      `
+      )
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -79,12 +82,14 @@ export async function POST(
     }
 
     // Check if lead is already completed (check for existing commission with this lead)
-    const existingCommission = await prisma.commission.findFirst({
-      where: {
-        sourceType: 'RETURN_FILED',
-        sourceId: leadId,
-      },
-    });
+    const { data: existingCommissions } = await db
+      .from('commissions')
+      .select('id')
+      .eq('sourceType', 'RETURN_FILED')
+      .eq('sourceId', leadId)
+      .limit(1);
+
+    const existingCommission = firstOrNull(existingCommissions);
 
     if (existingCommission) {
       return NextResponse.json(
@@ -102,89 +107,85 @@ export async function POST(
 
     if (lead.referrerUsername) {
       // Find profile with this tracking code
-      referrerProfile = await prisma.profile.findFirst({
-        where: {
-          customTrackingCode: lead.referrerUsername,
-        },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          role: true,
-        },
-      });
+      const { data: referrerProfiles } = await db
+        .from('profiles')
+        .select('id, firstName, lastName, role')
+        .eq('customTrackingCode', lead.referrerUsername)
+        .limit(1);
+
+      referrerProfile = firstOrNull(referrerProfiles);
 
       if (referrerProfile) {
         // Count completed referrals for this referrer (to determine tier)
-        const completedReferralsCount = await prisma.commission.count({
-          where: {
-            referrerId: referrerProfile.id,
-            sourceType: 'RETURN_FILED',
-            status: { in: [PaymentStatus.APPROVED, PaymentStatus.PAID] },
-          },
-        });
+        const { count: completedReferralsCount } = await db
+          .from('commissions')
+          .select('id', { count: 'exact', head: true })
+          .eq('referrerId', referrerProfile.id)
+          .eq('sourceType', 'RETURN_FILED')
+          .in('status', ['APPROVED', 'PAID'] as PaymentStatus[]);
 
         // Calculate commission based on preparer's settings
         commissionResult = await calculateReferrerCommission(
           preparerProfile.id,
           referrerProfile.id,
-          completedReferralsCount + 1 // This is the next referral
+          (completedReferralsCount || 0) + 1 // This is the next referral
         );
 
         // Create commission record - APPROVED status means ready for payout
-        // Tax preparer will mark as PAID once they pay the affiliate
-        await prisma.commission.create({
-          data: {
-            referrerId: referrerProfile.id,
-            amount: commissionResult.amount,
-            sourceType: 'RETURN_FILED',
-            sourceId: leadId,
-            clientName: `${lead.first_name} ${lead.last_name}`,
-            clientEmail: lead.email,
-            commissionType: 'FLAT',
-            commissionRate: commissionResult.rate,
-            rateSource: commissionResult.source,
-            status: PaymentStatus.APPROVED,
-            approvedAt: new Date(),
-          },
+        const { error: commissionError } = await db.from('commissions').insert({
+          referrerId: referrerProfile.id,
+          amount: commissionResult.amount,
+          sourceType: 'RETURN_FILED',
+          sourceId: leadId,
+          clientName: `${lead.first_name} ${lead.last_name}`,
+          clientEmail: lead.email,
+          commissionType: 'FLAT',
+          commissionRate: commissionResult.rate,
+          rateSource: commissionResult.source,
+          status: 'APPROVED' as PaymentStatus,
+          approvedAt: new Date().toISOString(),
         });
 
-        logger.info('Commission created for referrer', {
-          referrerId: referrerProfile.id,
-          referrerName: `${referrerProfile.firstName} ${referrerProfile.lastName}`,
-          amount: commissionResult.amount,
-          tier: commissionResult.tier,
-          source: commissionResult.source,
-          leadId,
-        });
+        if (commissionError) {
+          logger.error('Failed to create commission:', commissionError);
+        } else {
+          logger.info('Commission created for referrer', {
+            referrerId: referrerProfile.id,
+            referrerName: `${referrerProfile.firstName} ${referrerProfile.lastName}`,
+            amount: commissionResult.amount,
+            tier: commissionResult.tier,
+            source: commissionResult.source,
+            leadId,
+          });
+        }
       }
     }
 
     // Update lead status
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    const updatedNotes = lead.contactNotes
+      ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Return filed - marked as COMPLETE`
+      : `[${new Date().toISOString()}] Return filed - marked as COMPLETE`;
+
+    await db
+      .from('tax_intake_leads')
+      .update({
         convertedToClient: true,
-        convertedAt: new Date(),
-        contactNotes: lead.contactNotes
-          ? `${lead.contactNotes}\n\n[${new Date().toISOString()}] Return filed - marked as COMPLETE`
-          : `[${new Date().toISOString()}] Return filed - marked as COMPLETE`,
-        updated_at: new Date(),
-      },
-    });
+        convertedAt: new Date().toISOString(),
+        contactNotes: updatedNotes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId);
 
     // Create lead activity
-    await prisma.leadActivity.create({
-      data: {
-        leadId,
-        type: 'STATUS_CHANGED',
-        description: 'Lead marked as COMPLETE - tax return filed',
-        metadata: {
-          previousStatus: 'IN_PROGRESS',
-          newStatus: 'COMPLETE',
-          commissionCredited: !!commissionResult,
-          commissionAmount: commissionResult?.amount || 0,
-        },
+    await db.from('lead_activities').insert({
+      leadId,
+      type: 'STATUS_CHANGED',
+      description: 'Lead marked as COMPLETE - tax return filed',
+      metadata: {
+        previousStatus: 'IN_PROGRESS',
+        newStatus: 'COMPLETE',
+        commissionCredited: !!commissionResult,
+        commissionAmount: commissionResult?.amount || 0,
       },
     });
 
@@ -211,9 +212,6 @@ export async function POST(
     });
   } catch (error) {
     logger.error('Error completing lead:', error);
-    return NextResponse.json(
-      { error: 'Failed to complete lead' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to complete lead' }, { status: 500 });
   }
 }

@@ -1,8 +1,40 @@
 import { headers } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for database entities
+interface Profile {
+  id: string;
+  fullName: string | null;
+  email: string;
+  [key: string]: unknown;
+}
+
+interface ProfessionalEmailAlias {
+  id: string;
+  emailAddress: string;
+  forwardToEmail: string;
+  displayName: string | null;
+  status: string;
+  cloudflareRuleId: string | null;
+  stripeSubscriptionId: string | null;
+  profileId: string;
+  profile?: Profile;
+  [key: string]: unknown;
+}
+
+interface Order {
+  id: string;
+  userId: string;
+  stripeSessionId: string;
+  items: unknown;
+  total: number;
+  status: string;
+  email: string;
+  [key: string]: unknown;
+}
 import { cloudflareEmailService } from '@/lib/services/cloudflare-email.service';
 import { gmailSendAsService } from '@/lib/services/gmail-sendas.service';
 import { professionalEmailSMTPService } from '@/lib/services/professional-email-smtp.service';
@@ -29,17 +61,19 @@ const getStripe = () => {
 async function provisionProfessionalEmail(aliasId: string): Promise<void> {
   logger.info('Starting professional email provisioning', { aliasId });
 
-  // Get alias details
-  const alias = await prisma.professionalEmailAlias.findUnique({
-    where: { id: aliasId },
-    include: {
-      profile: true,
-    },
-  });
+  // Get alias details with profile
+  const { data: aliasData, error: aliasError } = await db
+    .from('professional_email_aliases')
+    .select('*, profiles(*)')
+    .eq('id', aliasId)
+    .single();
 
-  if (!alias) {
+  if (aliasError || !aliasData) {
     throw new Error(`Professional email alias not found: ${aliasId}`);
   }
+
+  const alias = aliasData as ProfessionalEmailAlias & { profiles: Profile };
+  alias.profile = alias.profiles;
 
   if (alias.status === 'ACTIVE') {
     logger.info('Professional email already active', { aliasId });
@@ -47,10 +81,14 @@ async function provisionProfessionalEmail(aliasId: string): Promise<void> {
   }
 
   // Step 1: Update status to PROVISIONING
-  await prisma.professionalEmailAlias.update({
-    where: { id: aliasId },
-    data: { status: 'PROVISIONING' },
-  });
+  const { error: updateError } = await db
+    .from('professional_email_aliases')
+    .update({ status: 'PROVISIONING' })
+    .eq('id', aliasId);
+
+  if (updateError) {
+    throw new Error(`Failed to update status: ${updateError.message}`);
+  }
 
   logger.info('Status updated to PROVISIONING', { aliasId });
 
@@ -90,17 +128,21 @@ async function provisionProfessionalEmail(aliasId: string): Promise<void> {
     );
 
     // Step 4: Update status to ACTIVE
-    await prisma.professionalEmailAlias.update({
-      where: { id: aliasId },
-      data: {
+    const { error: activeError } = await db
+      .from('professional_email_aliases')
+      .update({
         status: 'ACTIVE',
-        cloudflareRuleId: forwardingResult.ruleId,
-        dnsConfigured: true,
-        forwardingActive: true,
-        provisionedAt: new Date(),
-        subscriptionStartDate: new Date(),
-      },
-    });
+        cloudflare_rule_id: forwardingResult.ruleId,
+        dns_configured: true,
+        forwarding_active: true,
+        provisioned_at: new Date().toISOString(),
+        subscription_start_date: new Date().toISOString(),
+      })
+      .eq('id', aliasId);
+
+    if (activeError) {
+      throw new Error(`Failed to activate alias: ${activeError.message}`);
+    }
 
     logger.info('Professional email provisioned successfully', {
       aliasId,
@@ -113,10 +155,10 @@ async function provisionProfessionalEmail(aliasId: string): Promise<void> {
       error,
     });
 
-    await prisma.professionalEmailAlias.update({
-      where: { id: aliasId },
-      data: { status: 'PROVISIONING_FAILED' },
-    });
+    await db
+      .from('professional_email_aliases')
+      .update({ status: 'PROVISIONING_FAILED' })
+      .eq('id', aliasId);
 
     throw error;
   }
@@ -171,28 +213,40 @@ export async function POST(request: NextRequest) {
       const total = (session.amount_total ?? 0) / 100; // Convert cents to dollars
 
       // Idempotency check - prevent duplicate order creation
-      const existingOrder = await prisma.order.findUnique({
-        where: { stripeSessionId: session.id },
-      });
+      const { data: existingOrders } = await db
+        .from('orders')
+        .select('*')
+        .eq('stripe_session_id', session.id)
+        .limit(1);
+
+      const existingOrder = firstOrNull(existingOrders) as Order | null;
 
       if (existingOrder) {
-        logger.info(`⚠️  Order already exists for session ${session.id}`);
+        logger.info(`Warning: Order already exists for session ${session.id}`);
         return NextResponse.json({ received: true, orderId: existingOrder.id });
       }
 
       // Create order in database
-      const order = await prisma.order.create({
-        data: {
-          userId,
-          stripeSessionId: session.id,
+      const { data: newOrder, error: createError } = await db
+        .from('orders')
+        .insert({
+          user_id: userId,
+          stripe_session_id: session.id,
           items: cartItems,
           total,
           status: 'COMPLETED',
           email: session.customer_email ?? session.customer_details?.email ?? '',
-        },
-      });
+        })
+        .select()
+        .single();
 
-      logger.info(`✅ Order created: ${order.id} for user ${userId}`);
+      if (createError || !newOrder) {
+        logger.error('Failed to create order:', createError);
+        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
+      }
+
+      const order = newOrder as Order;
+      logger.info(`Order created: ${order.id} for user ${userId}`);
 
       // TODO: Send order confirmation email via Resend
       // await sendOrderConfirmationEmail(order);
@@ -204,21 +258,25 @@ export async function POST(request: NextRequest) {
     if (event.type === 'checkout.session.expired') {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      logger.info('⏱️  Checkout session expired:', session.id);
+      logger.info('Checkout session expired:', session.id);
 
       // Check if order exists
-      const existingOrder = await prisma.order.findUnique({
-        where: { stripeSessionId: session.id },
-      });
+      const { data: expiredOrders } = await db
+        .from('orders')
+        .select('*')
+        .eq('stripe_session_id', session.id)
+        .limit(1);
+
+      const existingOrder = firstOrNull(expiredOrders) as Order | null;
 
       if (existingOrder && existingOrder.status === 'PENDING') {
         // Update order status to FAILED
-        await prisma.order.update({
-          where: { id: existingOrder.id },
-          data: { status: 'FAILED' },
-        });
+        await db
+          .from('orders')
+          .update({ status: 'FAILED' })
+          .eq('id', existingOrder.id);
 
-        logger.info(`❌ Order marked as FAILED: ${existingOrder.id}`);
+        logger.info(`Order marked as FAILED: ${existingOrder.id}`);
       }
 
       return NextResponse.json({ received: true });
@@ -252,23 +310,23 @@ export async function POST(request: NextRequest) {
     if (event.type === 'invoice.payment_failed') {
       const invoice = event.data.object as Stripe.Invoice;
 
-      logger.info('❌ Invoice payment failed:', invoice.id);
+      logger.info('Invoice payment failed:', invoice.id);
 
       // Check if this invoice is for a professional email subscription
       const aliasId = invoice.metadata?.professionalEmailAliasId;
 
       if (aliasId) {
-        logger.info('⚠️  Suspending professional email alias:', aliasId);
+        logger.info('Suspending professional email alias:', aliasId);
 
         try {
-          await prisma.professionalEmailAlias.update({
-            where: { id: aliasId },
-            data: { status: 'SUSPENDED' },
-          });
+          await db
+            .from('professional_email_aliases')
+            .update({ status: 'SUSPENDED' })
+            .eq('id', aliasId);
 
-          logger.info('✅ Professional email suspended:', aliasId);
+          logger.info('Professional email suspended:', aliasId);
         } catch (error) {
-          logger.error('❌ Failed to suspend professional email:', { aliasId, error });
+          logger.error('Failed to suspend professional email:', { aliasId, error });
         }
       }
 
@@ -279,15 +337,19 @@ export async function POST(request: NextRequest) {
     if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as Stripe.Subscription;
 
-      logger.info('🗑️  Subscription deleted:', subscription.id);
+      logger.info('Subscription deleted:', subscription.id);
 
       // Find professional email alias by subscription ID
-      const alias = await prisma.professionalEmailAlias.findFirst({
-        where: { stripeSubscriptionId: subscription.id },
-      });
+      const { data: aliases } = await db
+        .from('professional_email_aliases')
+        .select('*')
+        .eq('stripe_subscription_id', subscription.id)
+        .limit(1);
+
+      const alias = firstOrNull(aliases) as ProfessionalEmailAlias | null;
 
       if (alias) {
-        logger.info('⚠️  Cancelling professional email alias:', alias.id);
+        logger.info('Cancelling professional email alias:', alias.id);
 
         try {
           // Delete Cloudflare forwarding rule
@@ -296,17 +358,17 @@ export async function POST(request: NextRequest) {
           }
 
           // Update alias status
-          await prisma.professionalEmailAlias.update({
-            where: { id: alias.id },
-            data: {
+          await db
+            .from('professional_email_aliases')
+            .update({
               status: 'CANCELLED',
-              forwardingActive: false,
-            },
-          });
+              forwarding_active: false,
+            })
+            .eq('id', alias.id);
 
-          logger.info('✅ Professional email cancelled:', alias.id);
+          logger.info('Professional email cancelled:', alias.id);
         } catch (error) {
-          logger.error('❌ Failed to cancel professional email:', { aliasId: alias.id, error });
+          logger.error('Failed to cancel professional email:', { aliasId: alias.id, error });
         }
       }
 

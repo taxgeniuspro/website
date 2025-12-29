@@ -7,8 +7,32 @@
  * Example: Cobb-LaShasta/2025/
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface FolderRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  ownerId: string;
+  parentId?: string | null;
+  path: string;
+  level: number;
+  permissions?: Record<string, string[]> | null;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  clientFolderId?: string | null;
+  assignedPreparerId?: string | null;
+}
 
 /**
  * Sanitize a string for use in folder names
@@ -68,19 +92,22 @@ export class ClientFolderService {
     });
 
     // Try to find existing client root folder
-    let clientFolder = await prisma.folder.findFirst({
-      where: {
-        name: clientFolderName,
-        ownerId,
-        parentId: null, // Root level
-        isDeleted: false,
-      },
-    });
+    const { data: clientFolderData } = await db
+      .from('folders')
+      .select('*')
+      .eq('name', clientFolderName)
+      .eq('ownerId', ownerId)
+      .is('parentId', null)
+      .eq('isDeleted', false)
+      .limit(1);
+
+    let clientFolder = firstOrNull(clientFolderData) as FolderRecord | null;
 
     // Create client root folder if it doesn't exist
     if (!clientFolder) {
-      clientFolder = await prisma.folder.create({
-        data: {
+      const { data: newFolderData, error: createError } = await db
+        .from('folders')
+        .insert({
           name: clientFolderName,
           description: `Documents for ${firstName} ${lastName}`,
           ownerId,
@@ -90,8 +117,12 @@ export class ClientFolderService {
             tax_preparer: ['read', 'write', 'delete'],
             client: ['read', 'upload'],
           },
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      clientFolder = newFolderData as FolderRecord;
 
       logger.info('ClientFolderService: Created client root folder', {
         folderId: clientFolder.id,
@@ -101,18 +132,21 @@ export class ClientFolderService {
     }
 
     // Try to find existing year folder
-    let yearFolder = await prisma.folder.findFirst({
-      where: {
-        name: String(taxYear),
-        parentId: clientFolder.id,
-        isDeleted: false,
-      },
-    });
+    const { data: yearFolderData } = await db
+      .from('folders')
+      .select('*')
+      .eq('name', String(taxYear))
+      .eq('parentId', clientFolder.id)
+      .eq('isDeleted', false)
+      .limit(1);
+
+    let yearFolder = firstOrNull(yearFolderData) as FolderRecord | null;
 
     // Create year folder if it doesn't exist
     if (!yearFolder) {
-      yearFolder = await prisma.folder.create({
-        data: {
+      const { data: newYearData, error: yearError } = await db
+        .from('folders')
+        .insert({
           name: String(taxYear),
           description: `Tax year ${taxYear} documents`,
           ownerId,
@@ -123,8 +157,12 @@ export class ClientFolderService {
             tax_preparer: ['read', 'write', 'delete'],
             client: ['read', 'upload'],
           },
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (yearError) throw yearError;
+      yearFolder = newYearData as FolderRecord;
 
       logger.info('ClientFolderService: Created tax year folder', {
         folderId: yearFolder.id,
@@ -151,19 +189,19 @@ export class ClientFolderService {
   ): Promise<{ id: string; name: string; path: string } | null> {
     const clientFolderName = generateClientFolderName(firstName, lastName);
 
-    const folder = await prisma.folder.findFirst({
-      where: {
-        name: clientFolderName,
-        ...(ownerId && { ownerId }),
-        parentId: null,
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        path: true,
-      },
-    });
+    let query = db
+      .from('folders')
+      .select('id, name, path')
+      .eq('name', clientFolderName)
+      .is('parentId', null)
+      .eq('isDeleted', false);
+
+    if (ownerId) {
+      query = query.eq('ownerId', ownerId);
+    }
+
+    const { data: folderData } = await query.limit(1);
+    const folder = firstOrNull(folderData) as { id: string; name: string; path: string } | null;
 
     return folder;
   }
@@ -176,15 +214,13 @@ export class ClientFolderService {
     ownerId: string
   ): Promise<ClientFolderResult> {
     // Get the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        clientFolderId: true,
-      },
-    });
+    const { data: leadData } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, clientFolderId')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData) as TaxIntakeLeadRecord | null;
 
     if (!lead) {
       throw new Error('Lead not found');
@@ -192,19 +228,26 @@ export class ClientFolderService {
 
     if (lead.clientFolderId) {
       // Already has a folder, return existing structure
-      const existingFolder = await prisma.folder.findUnique({
-        where: { id: lead.clientFolderId },
-        include: {
-          children: {
-            where: { isDeleted: false },
-            orderBy: { name: 'desc' },
-            take: 1,
-          },
-        },
-      });
+      const { data: existingFolderData } = await db
+        .from('folders')
+        .select('*')
+        .eq('id', lead.clientFolderId)
+        .limit(1);
+
+      const existingFolder = firstOrNull(existingFolderData) as FolderRecord | null;
 
       if (existingFolder) {
-        const yearFolder = existingFolder.children[0];
+        // Get latest child folder (year folder)
+        const { data: childrenData } = await db
+          .from('folders')
+          .select('id, path')
+          .eq('parentId', existingFolder.id)
+          .eq('isDeleted', false)
+          .order('name', { ascending: false })
+          .limit(1);
+
+        const yearFolder = firstOrNull(childrenData) as { id: string; path: string } | null;
+
         return {
           folderId: existingFolder.id,
           path: existingFolder.path,
@@ -224,10 +267,10 @@ export class ClientFolderService {
     );
 
     // Link folder to lead
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: { clientFolderId: result.folderId },
-    });
+    await db
+      .from('tax_intake_leads')
+      .update({ clientFolderId: result.folderId })
+      .eq('id', leadId);
 
     logger.info('ClientFolderService: Linked folder to lead', {
       leadId,
@@ -258,37 +301,45 @@ export class ClientFolderService {
       };
     }>
   > {
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        assignedPreparerId: preparerId,
-        clientFolderId: { not: null },
-      },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        clientFolder: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-            _count: {
-              select: { documents: true },
-            },
-          },
-        },
-      },
-    });
+    // Get leads with folder IDs
+    const { data: leadsData } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, clientFolderId')
+      .eq('assignedPreparerId', preparerId)
+      .not('clientFolderId', 'is', null);
 
-    return leads
-      .filter((lead) => lead.clientFolder)
-      .map((lead) => ({
+    const leads = (leadsData || []) as TaxIntakeLeadRecord[];
+
+    const result: Array<{
+      folder: { id: string; name: string; path: string; documentCount: number };
+      lead: { id: string; firstName: string; lastName: string; email: string };
+    }> = [];
+
+    for (const lead of leads) {
+      if (!lead.clientFolderId) continue;
+
+      // Get folder details
+      const { data: folderData } = await db
+        .from('folders')
+        .select('id, name, path')
+        .eq('id', lead.clientFolderId)
+        .limit(1);
+
+      const folder = firstOrNull(folderData) as { id: string; name: string; path: string } | null;
+      if (!folder) continue;
+
+      // Get document count
+      const { count: documentCount } = await db
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('folderId', folder.id);
+
+      result.push({
         folder: {
-          id: lead.clientFolder!.id,
-          name: lead.clientFolder!.name,
-          path: lead.clientFolder!.path,
-          documentCount: lead.clientFolder!._count.documents,
+          id: folder.id,
+          name: folder.name,
+          path: folder.path,
+          documentCount: documentCount || 0,
         },
         lead: {
           id: lead.id,
@@ -296,7 +347,10 @@ export class ClientFolderService {
           lastName: lead.last_name,
           email: lead.email,
         },
-      }));
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -313,29 +367,38 @@ export class ClientFolderService {
       documentCount: number;
     }>
   > {
-    const folders = await prisma.folder.findMany({
-      where: {
-        name: { contains: searchTerm, mode: 'insensitive' },
-        parentId: null, // Root folders only (client folders)
-        isDeleted: false,
-        ...(preparerId && { ownerId: preparerId }),
-      },
-      select: {
-        id: true,
-        name: true,
-        path: true,
-        _count: {
-          select: { documents: true },
-        },
-      },
-      take: 20,
-    });
+    let query = db
+      .from('folders')
+      .select('id, name, path')
+      .ilike('name', `%${searchTerm}%`)
+      .is('parentId', null) // Root folders only (client folders)
+      .eq('isDeleted', false);
 
-    return folders.map((f) => ({
-      id: f.id,
-      name: f.name,
-      path: f.path,
-      documentCount: f._count.documents,
-    }));
+    if (preparerId) {
+      query = query.eq('ownerId', preparerId);
+    }
+
+    const { data: foldersData } = await query.limit(20);
+
+    const folders = (foldersData || []) as { id: string; name: string; path: string }[];
+
+    // Get document counts for each folder
+    const result: Array<{ id: string; name: string; path: string; documentCount: number }> = [];
+
+    for (const folder of folders) {
+      const { count: documentCount } = await db
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('folderId', folder.id);
+
+      result.push({
+        id: folder.id,
+        name: folder.name,
+        path: folder.path,
+        documentCount: documentCount || 0,
+      });
+    }
+
+    return result;
   }
 }

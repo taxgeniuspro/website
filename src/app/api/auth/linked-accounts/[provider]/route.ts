@@ -8,8 +8,22 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface User {
+  id: string;
+  email: string | null;
+  hashedPassword: string | null;
+}
+
+interface Account {
+  id: string;
+  userId: string;
+  provider: string;
+  providerAccountId: string;
+}
 
 export async function DELETE(
   request: NextRequest,
@@ -32,19 +46,28 @@ export async function DELETE(
 
   try {
     // Check if user has a password or other auth methods
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        accounts: true,
-      },
-    });
+    const { data: usersData } = await db
+      .from('users')
+      .select('id, email, hashedPassword')
+      .eq('id', userId)
+      .limit(1);
+
+    const user = firstOrNull<User>(usersData);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Get user's linked accounts
+    const { data: accountsData } = await db
+      .from('accounts')
+      .select('*')
+      .eq('userId', userId);
+
+    const accounts = (accountsData || []) as Account[];
+
     // Check if the account to unlink exists
-    const accountToUnlink = user.accounts.find((a) => a.provider === provider);
+    const accountToUnlink = accounts.find((a) => a.provider === provider);
     if (!accountToUnlink) {
       return NextResponse.json(
         { error: `No ${provider} account linked` },
@@ -54,7 +77,7 @@ export async function DELETE(
 
     // Prevent unlinking if it's the only auth method
     const hasPassword = !!user.hashedPassword;
-    const otherProviders = user.accounts.filter((a) => a.provider !== provider);
+    const otherProviders = accounts.filter((a) => a.provider !== provider);
 
     if (!hasPassword && otherProviders.length === 0) {
       return NextResponse.json(
@@ -67,12 +90,19 @@ export async function DELETE(
     }
 
     // Delete the account link
-    await prisma.account.deleteMany({
-      where: {
-        userId,
-        provider,
-      },
-    });
+    const { error: deleteError } = await db
+      .from('accounts')
+      .delete()
+      .eq('userId', userId)
+      .eq('provider', provider);
+
+    if (deleteError) {
+      logger.error('Error unlinking account', { error: deleteError.message, userId, provider });
+      return NextResponse.json(
+        { error: 'Failed to unlink account' },
+        { status: 500 }
+      );
+    }
 
     logger.info('Account unlinked successfully', { userId, provider });
 

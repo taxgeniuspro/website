@@ -1,7 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+}
+
+interface Document {
+  id: string;
+  profileId: string;
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  taxYear: number;
+  status: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ClientPreparer {
+  clientId: string;
+}
 
 /**
  * GET /api/tax-preparer/documents
@@ -17,22 +48,21 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -40,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     // Check if user is a tax preparer or admin
     const role = profile.role;
-    if (role !== 'tax_preparer' && role !== 'admin' ) {
+    if (role !== 'tax_preparer' && role !== 'admin') {
       return NextResponse.json(
         { error: 'Access denied. This endpoint is for tax preparers only.' },
         { status: 403 }
@@ -55,23 +85,21 @@ export async function GET(req: NextRequest) {
     // Get assigned clients for this preparer (or all clients if admin)
     let assignedClientIds: string[] = [];
 
-    if (role === 'admin' ) {
+    if (role === 'admin') {
       // Admin can see all clients
-      const allClients = await prisma.profile.findMany({
-        where: { role: 'client' },
-        select: { id: true },
-      });
-      assignedClientIds = allClients.map((c) => c.id);
+      const { data: allClients } = await db
+        .from('profiles')
+        .select('id')
+        .eq('role', 'client');
+      assignedClientIds = (allClients || []).map((c: { id: string }) => c.id);
     } else {
       // Get clients assigned to this preparer
-      const clientPreparers = await prisma.clientPreparer.findMany({
-        where: {
-          preparerId: profile.id,
-          isActive: true,
-        },
-        select: { clientId: true },
-      });
-      assignedClientIds = clientPreparers.map((cp) => cp.clientId);
+      const { data: clientPreparers } = await db
+        .from('client_preparers')
+        .select('clientId')
+        .eq('preparerId', profile.id)
+        .eq('isActive', true);
+      assignedClientIds = (clientPreparers || []).map((cp: ClientPreparer) => cp.clientId);
     }
 
     // If no assigned clients, return empty result
@@ -85,13 +113,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Build where clause for documents
-    const where: any = {
-      profileId: {
-        in: clientIdFilter ? [clientIdFilter] : assignedClientIds,
-      },
-    };
-
     // Check if clientId filter is for an assigned client
     if (clientIdFilter && !assignedClientIds.includes(clientIdFilter)) {
       return NextResponse.json(
@@ -100,30 +121,45 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Build documents query
+    const targetClientIds = clientIdFilter ? [clientIdFilter] : assignedClientIds;
+
+    let query = db
+      .from('documents')
+      .select('*')
+      .in('profileId', targetClientIds)
+      .order('createdAt', { ascending: false });
+
     if (taxYear) {
-      where.taxYear = parseInt(taxYear);
+      query = query.eq('taxYear', parseInt(taxYear));
     }
 
     if (status) {
-      where.status = status;
+      query = query.eq('status', status);
     }
 
-    // Fetch documents with client profile info
-    const documents = await prisma.document.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }],
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
+    const { data: documents, error: docsError } = await query;
+
+    if (docsError) {
+      throw new Error(docsError.message);
+    }
+
+    // Get client profiles for these documents
+    const docProfileIds = [...new Set((documents || []).map((d: Document) => d.profileId))];
+    let clientProfiles: Profile[] = [];
+    if (docProfileIds.length > 0) {
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id, firstName, lastName, email, phone')
+        .in('id', docProfileIds);
+      clientProfiles = profiles || [];
+    }
+
+    // Create profile map
+    const profileMap = new Map<string, Profile>();
+    for (const p of clientProfiles) {
+      profileMap.set(p.id, p);
+    }
 
     // Group documents by client, then by year
     const clientsMap = new Map<
@@ -145,21 +181,24 @@ export async function GET(req: NextRequest) {
             taxYear: number;
             status: string;
             reviewedBy: string | null;
-            reviewedAt: Date | null;
+            reviewedAt: string | null;
             reviewNotes: string | null;
-            createdAt: Date;
-            updatedAt: Date;
+            createdAt: string;
+            updatedAt: string;
           }>
         >;
         totalDocuments: number;
       }
     >();
 
-    documents.forEach((doc) => {
+    (documents || []).forEach((doc: Document) => {
       const clientId = doc.profileId;
-      const clientName = `${doc.profile.firstName || ''} ${doc.profile.lastName || ''}`.trim();
-      const clientEmail = doc.profile.email || '';
-      const clientPhone = doc.profile.phone;
+      const clientProfile = profileMap.get(clientId);
+      const clientName = clientProfile
+        ? `${clientProfile.firstName || ''} ${clientProfile.lastName || ''}`.trim()
+        : '';
+      const clientEmail = clientProfile?.email || '';
+      const clientPhone = clientProfile?.phone || null;
 
       if (!clientsMap.has(clientId)) {
         clientsMap.set(clientId, {
@@ -201,16 +240,15 @@ export async function GET(req: NextRequest) {
     const clients = Array.from(clientsMap.values());
 
     // Calculate stats
+    const byStatus: Record<string, number> = {};
+    (documents || []).forEach((doc: Document) => {
+      byStatus[doc.status] = (byStatus[doc.status] || 0) + 1;
+    });
+
     const stats = {
       totalClients: clients.length,
-      totalDocuments: documents.length,
-      byStatus: documents.reduce(
-        (acc, doc) => {
-          acc[doc.status] = (acc[doc.status] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
+      totalDocuments: (documents || []).length,
+      byStatus,
     };
 
     return NextResponse.json({

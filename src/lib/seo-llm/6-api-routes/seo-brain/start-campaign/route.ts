@@ -8,9 +8,23 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
 import { generate200CityPages } from '@/lib/seo-brain/city-page-generator'
 import { sendCampaignCompleteAlert } from '@/lib/seo-brain/telegram-notifier'
+
+// Local type definitions (replacing @prisma/client)
+interface ProductCampaignQueue {
+  id: string
+  productName: string
+  productSpec: any
+  status: string
+  priority: number
+  citiesGenerated: number
+  citiesIndexed: number
+  generationStartedAt?: string | null
+  generationCompletedAt?: string | null
+  createdAt: string
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,8 +43,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create campaign
-    const campaign = await prisma.productCampaignQueue.create({
-      data: {
+    const { data: campaignData, error: insertError } = await db
+      .from('product_campaign_queues')
+      .insert({
         id: `campaign-${Date.now()}`,
         productName,
         productSpec: {
@@ -47,8 +62,12 @@ export async function POST(request: NextRequest) {
         priority: 5,
         citiesGenerated: 0,
         citiesIndexed: 0,
-      },
-    })
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+    const campaign = campaignData as ProductCampaignQueue
 
     // Start generation in background (don't await - it takes 6-7 hours)
     startCampaignGeneration(campaign.id, {
@@ -82,13 +101,13 @@ export async function POST(request: NextRequest) {
 async function startCampaignGeneration(campaignId: string, productSpec: any) {
   try {
     // Update status
-    await prisma.productCampaignQueue.update({
-      where: { id: campaignId },
-      data: {
+    await db
+      .from('product_campaign_queues')
+      .update({
         status: 'GENERATING',
-        generationStartedAt: new Date(),
-      },
-    })
+        generationStartedAt: new Date().toISOString(),
+      })
+      .eq('id', campaignId)
 
     // Initialize Ollama client
     const ollamaClient = {
@@ -131,12 +150,10 @@ async function startCampaignGeneration(campaignId: string, productSpec: any) {
     console.error('[SEO Brain] Campaign generation failed:', error)
 
     // Update campaign status to FAILED
-    await prisma.productCampaignQueue.update({
-      where: { id: campaignId },
-      data: {
-        status: 'FAILED',
-      },
-    })
+    await db
+      .from('product_campaign_queues')
+      .update({ status: 'FAILED' })
+      .eq('id', campaignId)
   }
 }
 
@@ -148,12 +165,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all campaigns
-    const campaigns = await prisma.productCampaignQueue.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    })
+    const { data: campaigns } = await db
+      .from('product_campaign_queues')
+      .select('*')
+      .order('createdAt', { ascending: false })
+      .limit(20)
 
-    return NextResponse.json({ campaigns })
+    return NextResponse.json({ campaigns: campaigns || [] })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 })
   }

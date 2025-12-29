@@ -7,7 +7,73 @@
  * Part of Epic 6: Lead Tracking Dashboard Enhancement - Story 6.3
  */
 
-import { prisma } from '../prisma';
+import { db, firstOrNull } from '../db';
+
+// Local type definitions (replacing @prisma/client)
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  title?: string | null;
+  linkType: string;
+  location?: string | null;
+  creatorId: string;
+  creatorType: string;
+  isActive: boolean;
+  clicks: number;
+  intakeStarts?: number | null;
+  intakeCompletes?: number | null;
+  returnsFiled?: number | null;
+  filedConversionRate?: number | null;
+  createdAt: string;
+}
+
+interface ProfileRecord {
+  id: string;
+  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  role?: string | null;
+}
+
+interface CommissionRecord {
+  id: string;
+  amount: number;
+  referrerId: string;
+  status: string;
+  paidAt?: string | null;
+  createdAt: string;
+}
+
+interface LinkClickRecord {
+  id: string;
+  city?: string | null;
+  state?: string | null;
+  converted?: number | null;
+  signedUp?: number | null;
+  clickedAt: string;
+}
+
+interface PaymentRecord {
+  id: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+interface PayoutRequestRecord {
+  id: string;
+  profileId: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+interface ReferralRecord {
+  id: string;
+  referrerId: string;
+  status: string;
+}
 
 export interface DateRange {
   start: Date;
@@ -79,70 +145,58 @@ export interface PlatformOverview {
  * Get platform-wide overview metrics
  */
 export async function getPlatformOverview(dateRange?: DateRange): Promise<PlatformOverview> {
-  const whereClause = dateRange
-    ? {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }
-    : {};
+  // Build query for marketing links
+  let linksQuery = db.from('marketing_links').select('clicks, intakeStarts, intakeCompletes, returnsFiled').eq('isActive', true);
 
-  // Aggregate all marketing link stats
-  const linkStats = await prisma.marketingLink.aggregate({
-    where: {
-      isActive: true,
-      ...whereClause,
-    },
-    _sum: {
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-    },
-  });
+  if (dateRange) {
+    linksQuery = linksQuery
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
+
+  const { data: linksData } = await linksQuery;
+  const links = (linksData || []) as MarketingLinkRecord[];
+
+  // Aggregate link stats manually
+  let totalClicks = 0;
+  let intakeStarts = 0;
+  let intakeCompletes = 0;
+  let returnsFiled = 0;
+
+  for (const link of links) {
+    totalClicks += link.clicks || 0;
+    intakeStarts += link.intakeStarts || 0;
+    intakeCompletes += link.intakeCompletes || 0;
+    returnsFiled += link.returnsFiled || 0;
+  }
 
   // Count active users by role
-  const activeUsers = await prisma.$transaction([
-    prisma.profile.count({ where: { role: 'TAX_PREPARER' } }),
-    prisma.profile.count({ where: { role: 'AFFILIATE' } }),
-    prisma.profile.count({ where: { role: 'REFERRER' } }),
+  const [{ count: preparersCount }, { count: affiliatesCount }, { count: referrersCount }] = await Promise.all([
+    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'TAX_PREPARER'),
+    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'AFFILIATE'),
+    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'REFERRER'),
   ]);
 
-  // Calculate commission totals
-  const commissionStats = await prisma.commission.aggregate({
-    _sum: {
-      amount: true,
-    },
-    where: {
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-  });
+  // Get commission totals
+  let commissionsQuery = db.from('commissions').select('amount, status, paidAt');
+  if (dateRange) {
+    commissionsQuery = commissionsQuery
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
 
-  const commissionsPaid = await prisma.commission.aggregate({
-    _sum: {
-      amount: true,
-    },
-    where: {
-      status: 'COMPLETED',
-      ...(dateRange && {
-        paidAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-  });
+  const { data: commissionsData } = await commissionsQuery;
+  const commissions = (commissionsData || []) as CommissionRecord[];
 
-  const totalClicks = linkStats._sum.clicks || 0;
-  const intakeStarts = linkStats._sum.intakeStarts || 0;
-  const intakeCompletes = linkStats._sum.intakeCompletes || 0;
-  const returnsFiled = linkStats._sum.returnsFiled || 0;
+  let totalCommissionsOwed = 0;
+  let totalCommissionsPaid = 0;
+
+  for (const c of commissions) {
+    totalCommissionsOwed += Number(c.amount) || 0;
+    if (c.status === 'COMPLETED') {
+      totalCommissionsPaid += Number(c.amount) || 0;
+    }
+  }
 
   // Calculate previous period for comparison
   let totalClicksChange = 0;
@@ -151,20 +205,15 @@ export async function getPlatformOverview(dateRange?: DateRange): Promise<Platfo
     const previousPeriodEnd = new Date(dateRange.start.getTime());
     const previousPeriodStart = new Date(dateRange.start.getTime() - periodLength);
 
-    const previousStats = await prisma.marketingLink.aggregate({
-      where: {
-        isActive: true,
-        createdAt: {
-          gte: previousPeriodStart,
-          lte: previousPeriodEnd,
-        },
-      },
-      _sum: {
-        clicks: true,
-      },
-    });
+    const { data: previousData } = await db
+      .from('marketing_links')
+      .select('clicks')
+      .eq('isActive', true)
+      .gte('createdAt', previousPeriodStart.toISOString())
+      .lte('createdAt', previousPeriodEnd.toISOString());
 
-    const previousClicks = previousStats._sum.clicks || 0;
+    const previousClicks = ((previousData || []) as MarketingLinkRecord[]).reduce((sum, l) => sum + (l.clicks || 0), 0);
+
     if (previousClicks > 0) {
       totalClicksChange = ((totalClicks - previousClicks) / previousClicks) * 100;
     }
@@ -177,12 +226,12 @@ export async function getPlatformOverview(dateRange?: DateRange): Promise<Platfo
     intakeFormsCompleted: intakeCompletes,
     taxReturnsCompleted: returnsFiled,
     overallConversionRate: totalClicks > 0 ? (returnsFiled / totalClicks) * 100 : 0,
-    totalCommissionsOwed: Number(commissionStats._sum.amount || 0),
-    totalCommissionsPaid: Number(commissionsPaid._sum.amount || 0),
+    totalCommissionsOwed,
+    totalCommissionsPaid,
     activeUsers: {
-      preparers: activeUsers[0],
-      affiliates: activeUsers[1],
-      referrers: activeUsers[2],
+      preparers: preparersCount || 0,
+      affiliates: affiliatesCount || 0,
+      referrers: referrersCount || 0,
     },
   };
 }
@@ -191,61 +240,66 @@ export async function getPlatformOverview(dateRange?: DateRange): Promise<Platfo
  * Get Top 15 Preparers
  */
 export async function getTop15Preparers(dateRange?: DateRange): Promise<TopPerformer[]> {
-  // Query materials created by preparers and aggregate their stats
-  const preparerMaterials = await prisma.marketingLink.groupBy({
-    by: ['creatorId'],
-    where: {
-      creatorType: 'TAX_PREPARER',
-      isActive: true,
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    _sum: {
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-    },
-    orderBy: {
-      _sum: {
-        returnsFiled: 'desc',
-      },
-    },
-    take: 15,
-  });
+  // Query materials created by preparers
+  let query = db
+    .from('marketing_links')
+    .select('creatorId, clicks, intakeStarts, intakeCompletes, returnsFiled')
+    .eq('creatorType', 'TAX_PREPARER')
+    .eq('isActive', true);
+
+  if (dateRange) {
+    query = query
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
+
+  const { data: materialsData } = await query;
+  const materials = (materialsData || []) as MarketingLinkRecord[];
+
+  // Group by creatorId and aggregate
+  const preparerStats = new Map<string, { clicks: number; intakeStarts: number; intakeCompletes: number; returnsFiled: number }>();
+
+  for (const m of materials) {
+    const stats = preparerStats.get(m.creatorId) || { clicks: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0 };
+    stats.clicks += m.clicks || 0;
+    stats.intakeStarts += m.intakeStarts || 0;
+    stats.intakeCompletes += m.intakeCompletes || 0;
+    stats.returnsFiled += m.returnsFiled || 0;
+    preparerStats.set(m.creatorId, stats);
+  }
+
+  // Sort by returnsFiled and take top 15
+  const sortedPreparers = Array.from(preparerStats.entries())
+    .sort((a, b) => b[1].returnsFiled - a[1].returnsFiled)
+    .slice(0, 15);
+
+  if (sortedPreparers.length === 0) {
+    return [];
+  }
 
   // Get preparer details
-  const preparerIds = preparerMaterials.map((pm) => pm.creatorId);
-  const preparers = await prisma.profile.findMany({
-    where: { userId: { in: preparerIds } },
-    select: {
-      id: true,
-      userId: true,
-      firstName: true,
-      lastName: true,
-      avatarUrl: true,
-    },
-  });
+  const preparerIds = sortedPreparers.map(([id]) => id);
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id, userId, firstName, lastName, avatarUrl')
+    .in('userId', preparerIds);
 
-  // Combine and return
-  return preparerMaterials.map((pm, idx) => {
-    const preparer = preparers.find((p) => p.userId === pm.creatorId);
-    const clicks = pm._sum.clicks || 0;
-    const returnsFiled = pm._sum.returnsFiled || 0;
+  const profiles = (profilesData || []) as ProfileRecord[];
+
+  return sortedPreparers.map(([creatorId, stats], idx) => {
+    const preparer = profiles.find((p) => p.userId === creatorId);
+    const clicks = stats.clicks || 0;
+    const returnsFiled = stats.returnsFiled || 0;
 
     return {
       rank: idx + 1,
-      id: pm.creatorId,
+      id: creatorId,
       name: preparer ? `${preparer.firstName} ${preparer.lastName}` : 'Unknown',
       avatarUrl: preparer?.avatarUrl || undefined,
       metrics: {
         clicks,
-        intakeStarts: pm._sum.intakeStarts || 0,
-        intakeCompletes: pm._sum.intakeCompletes || 0,
+        intakeStarts: stats.intakeStarts || 0,
+        intakeCompletes: stats.intakeCompletes || 0,
         returnsFiled,
         conversionRate: clicks > 0 ? (returnsFiled / clicks) * 100 : 0,
       },
@@ -258,58 +312,63 @@ export async function getTop15Preparers(dateRange?: DateRange): Promise<TopPerfo
  * Get Top 15 Affiliates
  */
 export async function getTop15Affiliates(dateRange?: DateRange): Promise<TopPerformer[]> {
-  const affiliateMaterials = await prisma.marketingLink.groupBy({
-    by: ['creatorId'],
-    where: {
-      creatorType: 'AFFILIATE',
-      isActive: true,
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    _sum: {
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-    },
-    orderBy: {
-      _sum: {
-        returnsFiled: 'desc',
-      },
-    },
-    take: 15,
-  });
+  let query = db
+    .from('marketing_links')
+    .select('creatorId, clicks, intakeStarts, intakeCompletes, returnsFiled')
+    .eq('creatorType', 'AFFILIATE')
+    .eq('isActive', true);
 
-  const affiliateIds = affiliateMaterials.map((am) => am.creatorId);
-  const affiliates = await prisma.profile.findMany({
-    where: { userId: { in: affiliateIds } },
-    select: {
-      id: true,
-      userId: true,
-      firstName: true,
-      lastName: true,
-      avatarUrl: true,
-    },
-  });
+  if (dateRange) {
+    query = query
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
 
-  return affiliateMaterials.map((am, idx) => {
-    const affiliate = affiliates.find((a) => a.userId === am.creatorId);
-    const clicks = am._sum.clicks || 0;
-    const returnsFiled = am._sum.returnsFiled || 0;
+  const { data: materialsData } = await query;
+  const materials = (materialsData || []) as MarketingLinkRecord[];
+
+  // Group by creatorId
+  const affiliateStats = new Map<string, { clicks: number; intakeStarts: number; intakeCompletes: number; returnsFiled: number }>();
+
+  for (const m of materials) {
+    const stats = affiliateStats.get(m.creatorId) || { clicks: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0 };
+    stats.clicks += m.clicks || 0;
+    stats.intakeStarts += m.intakeStarts || 0;
+    stats.intakeCompletes += m.intakeCompletes || 0;
+    stats.returnsFiled += m.returnsFiled || 0;
+    affiliateStats.set(m.creatorId, stats);
+  }
+
+  const sortedAffiliates = Array.from(affiliateStats.entries())
+    .sort((a, b) => b[1].returnsFiled - a[1].returnsFiled)
+    .slice(0, 15);
+
+  if (sortedAffiliates.length === 0) {
+    return [];
+  }
+
+  const affiliateIds = sortedAffiliates.map(([id]) => id);
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id, userId, firstName, lastName, avatarUrl')
+    .in('userId', affiliateIds);
+
+  const profiles = (profilesData || []) as ProfileRecord[];
+
+  return sortedAffiliates.map(([creatorId, stats], idx) => {
+    const affiliate = profiles.find((a) => a.userId === creatorId);
+    const clicks = stats.clicks || 0;
+    const returnsFiled = stats.returnsFiled || 0;
 
     return {
       rank: idx + 1,
-      id: am.creatorId,
+      id: creatorId,
       name: affiliate ? `${affiliate.firstName} ${affiliate.lastName}` : 'Unknown',
       avatarUrl: affiliate?.avatarUrl || undefined,
       metrics: {
         clicks,
-        intakeStarts: am._sum.intakeStarts || 0,
-        intakeCompletes: am._sum.intakeCompletes || 0,
+        intakeStarts: stats.intakeStarts || 0,
+        intakeCompletes: stats.intakeCompletes || 0,
         returnsFiled,
         conversionRate: clicks > 0 ? (returnsFiled / clicks) * 100 : 0,
       },
@@ -322,58 +381,63 @@ export async function getTop15Affiliates(dateRange?: DateRange): Promise<TopPerf
  * Get Top 15 Referrers
  */
 export async function getTop15Referrers(dateRange?: DateRange): Promise<TopPerformer[]> {
-  const referrerMaterials = await prisma.marketingLink.groupBy({
-    by: ['creatorId'],
-    where: {
-      creatorType: 'REFERRER',
-      isActive: true,
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    _sum: {
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-    },
-    orderBy: {
-      _sum: {
-        returnsFiled: 'desc',
-      },
-    },
-    take: 15,
-  });
+  let query = db
+    .from('marketing_links')
+    .select('creatorId, clicks, intakeStarts, intakeCompletes, returnsFiled')
+    .eq('creatorType', 'REFERRER')
+    .eq('isActive', true);
 
-  const referrerIds = referrerMaterials.map((rm) => rm.creatorId);
-  const referrers = await prisma.profile.findMany({
-    where: { userId: { in: referrerIds } },
-    select: {
-      id: true,
-      userId: true,
-      firstName: true,
-      lastName: true,
-      avatarUrl: true,
-    },
-  });
+  if (dateRange) {
+    query = query
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
 
-  return referrerMaterials.map((rm, idx) => {
-    const referrer = referrers.find((r) => r.userId === rm.creatorId);
-    const clicks = rm._sum.clicks || 0;
-    const returnsFiled = rm._sum.returnsFiled || 0;
+  const { data: materialsData } = await query;
+  const materials = (materialsData || []) as MarketingLinkRecord[];
+
+  // Group by creatorId
+  const referrerStats = new Map<string, { clicks: number; intakeStarts: number; intakeCompletes: number; returnsFiled: number }>();
+
+  for (const m of materials) {
+    const stats = referrerStats.get(m.creatorId) || { clicks: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0 };
+    stats.clicks += m.clicks || 0;
+    stats.intakeStarts += m.intakeStarts || 0;
+    stats.intakeCompletes += m.intakeCompletes || 0;
+    stats.returnsFiled += m.returnsFiled || 0;
+    referrerStats.set(m.creatorId, stats);
+  }
+
+  const sortedReferrers = Array.from(referrerStats.entries())
+    .sort((a, b) => b[1].returnsFiled - a[1].returnsFiled)
+    .slice(0, 15);
+
+  if (sortedReferrers.length === 0) {
+    return [];
+  }
+
+  const referrerIds = sortedReferrers.map(([id]) => id);
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id, userId, firstName, lastName, avatarUrl')
+    .in('userId', referrerIds);
+
+  const profiles = (profilesData || []) as ProfileRecord[];
+
+  return sortedReferrers.map(([creatorId, stats], idx) => {
+    const referrer = profiles.find((r) => r.userId === creatorId);
+    const clicks = stats.clicks || 0;
+    const returnsFiled = stats.returnsFiled || 0;
 
     return {
       rank: idx + 1,
-      id: rm.creatorId,
+      id: creatorId,
       name: referrer ? `${referrer.firstName} ${referrer.lastName}` : 'Unknown',
       avatarUrl: referrer?.avatarUrl || undefined,
       metrics: {
         clicks,
-        intakeStarts: rm._sum.intakeStarts || 0,
-        intakeCompletes: rm._sum.intakeCompletes || 0,
+        intakeStarts: stats.intakeStarts || 0,
+        intakeCompletes: stats.intakeCompletes || 0,
         returnsFiled,
         conversionRate: clicks > 0 ? (returnsFiled / clicks) * 100 : 0,
       },
@@ -386,45 +450,34 @@ export async function getTop15Referrers(dateRange?: DateRange): Promise<TopPerfo
  * Get Top 15 Materials (all creators combined)
  */
 export async function getTop15Materials(dateRange?: DateRange): Promise<TopMaterial[]> {
-  const materials = await prisma.marketingLink.findMany({
-    where: {
-      isActive: true,
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    orderBy: {
-      returnsFiled: 'desc',
-    },
-    take: 15,
-    select: {
-      id: true,
-      title: true,
-      code: true,
-      linkType: true,
-      location: true,
-      creatorId: true,
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-      filedConversionRate: true,
-    },
-  });
+  let query = db
+    .from('marketing_links')
+    .select('id, title, code, linkType, location, creatorId, clicks, intakeStarts, intakeCompletes, returnsFiled, filedConversionRate')
+    .eq('isActive', true)
+    .order('returnsFiled', { ascending: false })
+    .limit(15);
+
+  if (dateRange) {
+    query = query
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
+
+  const { data: materialsData } = await query;
+  const materials = (materialsData || []) as MarketingLinkRecord[];
+
+  if (materials.length === 0) {
+    return [];
+  }
 
   // Get creator names
   const creatorIds = materials.map((m) => m.creatorId);
-  const creators = await prisma.profile.findMany({
-    where: { userId: { in: creatorIds } },
-    select: {
-      userId: true,
-      firstName: true,
-      lastName: true,
-    },
-  });
+  const { data: creatorsData } = await db
+    .from('profiles')
+    .select('userId, firstName, lastName')
+    .in('userId', creatorIds);
+
+  const creators = (creatorsData || []) as ProfileRecord[];
 
   return materials.map((material, idx) => {
     const creator = creators.find((c) => c.userId === material.creatorId);
@@ -453,100 +506,111 @@ export async function getTop15Materials(dateRange?: DateRange): Promise<TopMater
  * Get Top 15 Locations by performance
  */
 export async function getTop15Locations(dateRange?: DateRange): Promise<TopLocation[]> {
-  const locationStats = await prisma.linkClick.groupBy({
-    by: ['city', 'state'],
-    where: {
-      city: { not: null },
-      state: { not: null },
-      ...(dateRange && {
-        clickedAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    _count: {
-      id: true,
-    },
-    _sum: {
-      converted: true,
-      signedUp: true,
-    },
-    orderBy: {
-      _count: {
-        id: 'desc',
-      },
-    },
-    take: 15,
-  });
+  let query = db
+    .from('link_clicks')
+    .select('city, state, converted, signedUp')
+    .not('city', 'is', null)
+    .not('state', 'is', null);
 
-  return locationStats.map((loc, idx) => {
-    const totalClicks = loc._count.id;
-    const conversions = loc._sum.converted || 0;
+  if (dateRange) {
+    query = query
+      .gte('clickedAt', dateRange.start.toISOString())
+      .lte('clickedAt', dateRange.end.toISOString());
+  }
 
-    return {
-      rank: idx + 1,
-      city: loc.city || 'Unknown',
-      state: loc.state || '',
-      totalClicks,
-      conversions,
-      signups: loc._sum.signedUp || 0,
-      conversionRate: totalClicks > 0 ? (conversions / totalClicks) * 100 : 0,
-      badge: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : undefined,
-    };
-  });
+  const { data: clicksData } = await query;
+  const clicks = (clicksData || []) as LinkClickRecord[];
+
+  // Group by city+state
+  const locationStats = new Map<string, { city: string; state: string; totalClicks: number; conversions: number; signups: number }>();
+
+  for (const click of clicks) {
+    const key = `${click.city}|${click.state}`;
+    const stats = locationStats.get(key) || { city: click.city || 'Unknown', state: click.state || '', totalClicks: 0, conversions: 0, signups: 0 };
+    stats.totalClicks += 1;
+    stats.conversions += click.converted || 0;
+    stats.signups += click.signedUp || 0;
+    locationStats.set(key, stats);
+  }
+
+  // Sort by totalClicks and take top 15
+  const sorted = Array.from(locationStats.values())
+    .sort((a, b) => b.totalClicks - a.totalClicks)
+    .slice(0, 15);
+
+  return sorted.map((loc, idx) => ({
+    rank: idx + 1,
+    city: loc.city,
+    state: loc.state,
+    totalClicks: loc.totalClicks,
+    conversions: loc.conversions,
+    signups: loc.signups,
+    conversionRate: loc.totalClicks > 0 ? (loc.conversions / loc.totalClicks) * 100 : 0,
+    badge: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : undefined,
+  }));
 }
 
 /**
  * Get Top 15 Material Types by performance
  */
-export async function getTop15MaterialTypes(dateRange?: DateRange): Promise<any[]> {
-  const typeStats = await prisma.marketingLink.groupBy({
-    by: ['linkType'],
-    where: {
-      isActive: true,
-      ...(dateRange && {
-        createdAt: {
-          gte: dateRange.start,
-          lte: dateRange.end,
-        },
-      }),
-    },
-    _sum: {
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-    },
-    _count: {
-      id: true,
-    },
-    orderBy: {
-      _sum: {
-        returnsFiled: 'desc',
-      },
-    },
-    take: 15,
-  });
+export async function getTop15MaterialTypes(dateRange?: DateRange): Promise<Array<{
+  rank: number;
+  type: string;
+  materialCount: number;
+  metrics: {
+    clicks: number;
+    intakeStarts: number;
+    intakeCompletes: number;
+    returnsFiled: number;
+    conversionRate: number;
+  };
+  badge?: string;
+}>> {
+  let query = db
+    .from('marketing_links')
+    .select('linkType, clicks, intakeStarts, intakeCompletes, returnsFiled')
+    .eq('isActive', true);
 
-  return typeStats.map((type, idx) => {
-    const clicks = type._sum.clicks || 0;
-    const returnsFiled = type._sum.returnsFiled || 0;
+  if (dateRange) {
+    query = query
+      .gte('createdAt', dateRange.start.toISOString())
+      .lte('createdAt', dateRange.end.toISOString());
+  }
 
-    return {
-      rank: idx + 1,
-      type: type.linkType,
-      materialCount: type._count.id,
-      metrics: {
-        clicks,
-        intakeStarts: type._sum.intakeStarts || 0,
-        intakeCompletes: type._sum.intakeCompletes || 0,
-        returnsFiled,
-        conversionRate: clicks > 0 ? (returnsFiled / clicks) * 100 : 0,
-      },
-      badge: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : undefined,
-    };
-  });
+  const { data: linksData } = await query;
+  const links = (linksData || []) as MarketingLinkRecord[];
+
+  // Group by linkType
+  const typeStats = new Map<string, { count: number; clicks: number; intakeStarts: number; intakeCompletes: number; returnsFiled: number }>();
+
+  for (const link of links) {
+    const stats = typeStats.get(link.linkType) || { count: 0, clicks: 0, intakeStarts: 0, intakeCompletes: 0, returnsFiled: 0 };
+    stats.count += 1;
+    stats.clicks += link.clicks || 0;
+    stats.intakeStarts += link.intakeStarts || 0;
+    stats.intakeCompletes += link.intakeCompletes || 0;
+    stats.returnsFiled += link.returnsFiled || 0;
+    typeStats.set(link.linkType, stats);
+  }
+
+  // Sort by returnsFiled
+  const sorted = Array.from(typeStats.entries())
+    .sort((a, b) => b[1].returnsFiled - a[1].returnsFiled)
+    .slice(0, 15);
+
+  return sorted.map(([type, stats], idx) => ({
+    rank: idx + 1,
+    type,
+    materialCount: stats.count,
+    metrics: {
+      clicks: stats.clicks,
+      intakeStarts: stats.intakeStarts,
+      intakeCompletes: stats.intakeCompletes,
+      returnsFiled: stats.returnsFiled,
+      conversionRate: stats.clicks > 0 ? (stats.returnsFiled / stats.clicks) * 100 : 0,
+    },
+    badge: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : undefined,
+  }));
 }
 
 /**
@@ -597,50 +661,63 @@ export async function getAdminEarningsStats(): Promise<AdminEarningsStats> {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   // Total revenue from completed payments
-  const totalRevenueResult = await prisma.payment.aggregate({
-    where: { status: 'COMPLETED' },
-    _sum: { amount: true },
-  });
+  const { data: totalPaymentsData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED');
+
+  const totalRevenue = ((totalPaymentsData || []) as PaymentRecord[]).reduce((sum, p) => sum + Number(p.amount), 0);
 
   // Revenue this month
-  const monthlyRevenueResult = await prisma.payment.aggregate({
-    where: {
-      status: 'COMPLETED',
-      createdAt: { gte: startOfMonth },
-    },
-    _sum: { amount: true },
-  });
+  const { data: monthlyPaymentsData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', startOfMonth.toISOString());
 
-  // Commission stats
-  const commissionStats = await prisma.commission.aggregate({
-    _sum: { amount: true },
-    _avg: { amount: true },
-  });
+  const monthlyRevenue = ((monthlyPaymentsData || []) as PaymentRecord[]).reduce((sum, p) => sum + Number(p.amount), 0);
 
-  const monthlyCommissions = await prisma.commission.aggregate({
-    where: { createdAt: { gte: startOfMonth } },
-    _sum: { amount: true },
-  });
+  // All commissions
+  const { data: allCommissionsData } = await db
+    .from('commissions')
+    .select('amount');
 
-  // Payout stats
-  const totalPayoutsResult = await prisma.payoutRequest.aggregate({
-    where: { status: 'COMPLETED' },
-    _sum: { amount: true },
-  });
+  const allCommissions = (allCommissionsData || []) as CommissionRecord[];
+  const totalCommissions = allCommissions.reduce((sum, c) => sum + Number(c.amount), 0);
+  const averageCommission = allCommissions.length > 0 ? totalCommissions / allCommissions.length : 0;
 
-  const pendingPayoutsResult = await prisma.payoutRequest.aggregate({
-    where: { status: 'PENDING' },
-    _sum: { amount: true },
-  });
+  // Monthly commissions
+  const { data: monthlyCommissionsData } = await db
+    .from('commissions')
+    .select('amount')
+    .gte('createdAt', startOfMonth.toISOString());
+
+  const monthlyCommissions = ((monthlyCommissionsData || []) as CommissionRecord[]).reduce((sum, c) => sum + Number(c.amount), 0);
+
+  // Total payouts completed
+  const { data: totalPayoutsData } = await db
+    .from('payout_requests')
+    .select('amount')
+    .eq('status', 'COMPLETED');
+
+  const totalPayouts = ((totalPayoutsData || []) as PayoutRequestRecord[]).reduce((sum, p) => sum + Number(p.amount), 0);
+
+  // Pending payouts
+  const { data: pendingPayoutsData } = await db
+    .from('payout_requests')
+    .select('amount')
+    .eq('status', 'PENDING');
+
+  const pendingPayouts = ((pendingPayoutsData || []) as PayoutRequestRecord[]).reduce((sum, p) => sum + Number(p.amount), 0);
 
   return {
-    totalRevenue: Number(totalRevenueResult._sum.amount || 0),
-    monthlyRevenue: Number(monthlyRevenueResult._sum.amount || 0),
-    totalCommissions: Number(commissionStats._sum.amount || 0),
-    monthlyCommissions: Number(monthlyCommissions._sum.amount || 0),
-    averageCommission: Number(commissionStats._avg.amount || 0),
-    totalPayouts: Number(totalPayoutsResult._sum.amount || 0),
-    pendingPayouts: Number(pendingPayoutsResult._sum.amount || 0),
+    totalRevenue,
+    monthlyRevenue,
+    totalCommissions,
+    monthlyCommissions,
+    averageCommission,
+    totalPayouts,
+    pendingPayouts,
   };
 }
 
@@ -659,49 +736,62 @@ export interface TopEarner {
 }
 
 export async function getTopEarners(limit: number = 5): Promise<TopEarner[]> {
-  // Get commission earners grouped by user
-  const earners = await prisma.commission.groupBy({
-    by: ['referrerId'],
-    _sum: { amount: true },
-    _count: { id: true },
-    orderBy: { _sum: { amount: 'desc' } },
-    take: limit,
-  });
+  // Get all commissions
+  const { data: commissionsData } = await db
+    .from('commissions')
+    .select('referrerId, amount');
+
+  const commissions = (commissionsData || []) as CommissionRecord[];
+
+  // Group by referrerId
+  const earnerStats = new Map<string, { totalAmount: number; count: number }>();
+
+  for (const c of commissions) {
+    const stats = earnerStats.get(c.referrerId) || { totalAmount: 0, count: 0 };
+    stats.totalAmount += Number(c.amount) || 0;
+    stats.count += 1;
+    earnerStats.set(c.referrerId, stats);
+  }
+
+  // Sort by earnings and take top limit
+  const sortedEarners = Array.from(earnerStats.entries())
+    .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+    .slice(0, limit);
+
+  if (sortedEarners.length === 0) {
+    return [];
+  }
 
   // Get user details
-  const userIds = earners.map((e) => e.referrerId);
-  const users = await prisma.profile.findMany({
-    where: { userId: { in: userIds } },
-    select: {
-      userId: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-    },
-  });
+  const userIds = sortedEarners.map(([id]) => id);
+  const { data: usersData } = await db
+    .from('profiles')
+    .select('userId, firstName, lastName, role')
+    .in('userId', userIds);
 
-  // Calculate returns/referrals for each earner
+  const users = (usersData || []) as ProfileRecord[];
+
+  // Build result
   const result: TopEarner[] = [];
 
-  for (const earner of earners) {
-    const user = users.find((u) => u.userId === earner.referrerId);
+  for (const [referrerId, stats] of sortedEarners) {
+    const user = users.find((u) => u.userId === referrerId);
     if (!user) continue;
 
-    // Count conversions for this user
-    const conversions = await prisma.referral.count({
-      where: {
-        referrerId: earner.referrerId,
-        status: 'COMPLETED',
-      },
-    });
+    // Count completed referrals
+    const { count: conversions } = await db
+      .from('referrals')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrerId', referrerId)
+      .eq('status', 'COMPLETED');
 
     result.push({
-      id: earner.referrerId,
+      id: referrerId,
       name: `${user.firstName} ${user.lastName}`,
-      role: user.role.toLowerCase().replace('_', ' '),
-      earnings: Number(earner._sum.amount || 0),
-      returns: conversions,
-      referrals: earner._count.id,
+      role: (user.role || '').toLowerCase().replace('_', ' '),
+      earnings: stats.totalAmount,
+      returns: conversions || 0,
+      referrals: stats.count,
       trend: 0, // TODO: Calculate trend from previous period
     });
   }
@@ -722,26 +812,37 @@ export interface RecentPayout {
 }
 
 export async function getRecentPayouts(limit: number = 5): Promise<RecentPayout[]> {
-  const payouts = await prisma.payoutRequest.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    include: {
-      profile: {
-        select: {
-          firstName: true,
-          lastName: true,
-          role: true,
-        },
-      },
-    },
-  });
+  const { data: payoutsData } = await db
+    .from('payout_requests')
+    .select('id, profileId, amount, status, createdAt')
+    .order('createdAt', { ascending: false })
+    .limit(limit);
 
-  return payouts.map((payout) => ({
-    id: payout.id,
-    name: `${payout.profile.firstName} ${payout.profile.lastName}`,
-    role: payout.profile.role.toLowerCase().replace('_', ' '),
-    amount: Number(payout.amount),
-    date: payout.createdAt.toISOString(),
-    status: payout.status.toLowerCase(),
-  }));
+  const payouts = (payoutsData || []) as PayoutRequestRecord[];
+
+  if (payouts.length === 0) {
+    return [];
+  }
+
+  // Get profile details
+  const profileIds = payouts.map((p) => p.profileId);
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, role')
+    .in('id', profileIds);
+
+  const profiles = (profilesData || []) as ProfileRecord[];
+
+  return payouts.map((payout) => {
+    const profile = profiles.find((p) => p.id === payout.profileId);
+
+    return {
+      id: payout.id,
+      name: profile ? `${profile.firstName} ${profile.lastName}` : 'Unknown',
+      role: (profile?.role || '').toLowerCase().replace('_', ' '),
+      amount: Number(payout.amount),
+      date: payout.createdAt,
+      status: payout.status.toLowerCase(),
+    };
+  });
 }

@@ -8,8 +8,46 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
+
+// TypeScript interfaces (replacing Prisma types)
+interface Lead {
+  id: string;
+  type: string;
+  status: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  marketingExperience?: string | null;
+  audience?: string | null;
+  message?: string | null;
+  source?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  commissionRate?: number | null;
+  commissionRateLockedAt?: Date | null;
+  attributionMethod?: string | null;
+  attributionConfidence?: number | null;
+  createdAt: Date;
+}
+
+interface Profile {
+  id: string;
+  role: string;
+  shortLinkUsername?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  user?: { email: string } | null;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+}
 import { getAttribution } from '@/lib/services/attribution.service';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
@@ -72,11 +110,14 @@ export async function POST(request: NextRequest) {
       validatedData.email.endsWith('@example.com'); // Allow test emails
 
     if (!allowDuplicates) {
-      const existingLead = await prisma.lead.findFirst({
-        where: { email: validatedData.email, type: 'AFFILIATE' },
-      });
+      const { data: existingLeads } = await db
+        .from('leads')
+        .select('id')
+        .eq('email', validatedData.email)
+        .eq('type', 'AFFILIATE')
+        .limit(1);
 
-      if (existingLead) {
+      if (existingLeads && existingLeads.length > 0) {
         return NextResponse.json(
           { error: 'An application with this email already exists' },
           { status: 400 }
@@ -87,10 +128,13 @@ export async function POST(request: NextRequest) {
     // Validate preparer bonding if provided
     let bondedPreparerId: string | null = null;
     if (validatedData.bondToPreparerUsername) {
-      const preparer = await prisma.profile.findUnique({
-        where: { shortLinkUsername: validatedData.bondToPreparerUsername },
-        select: { id: true, role: true },
-      });
+      const { data: preparers } = await db
+        .from('profiles')
+        .select('id, role')
+        .eq('shortLinkUsername', validatedData.bondToPreparerUsername)
+        .limit(1);
+
+      const preparer = firstOrNull(preparers);
 
       if (!preparer) {
         return NextResponse.json({ error: 'Invalid tax preparer username' }, { status: 400 });
@@ -135,8 +179,9 @@ export async function POST(request: NextRequest) {
       ...additionalInfo
     ].filter(Boolean).join('\n\n');
 
-    const lead = await prisma.lead.create({
-      data: {
+    const { data: newLead, error: leadError } = await db
+      .from('leads')
+      .insert({
         type: 'AFFILIATE',
         status: 'NEW',
         firstName: validatedData.firstName,
@@ -154,11 +199,18 @@ export async function POST(request: NextRequest) {
         referrerUsername: attributionResult.attribution.referrerUsername,
         referrerType: attributionResult.attribution.referrerType,
         commissionRate: attributionResult.attribution.commissionRate,
-        commissionRateLockedAt: attributionResult.attribution.commissionRate ? new Date() : null,
+        commissionRateLockedAt: attributionResult.attribution.commissionRate ? new Date().toISOString() : null,
         attributionMethod: attributionResult.attribution.attributionMethod,
         attributionConfidence: attributionResult.attribution.attributionConfidence,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (leadError || !newLead) {
+      throw new Error(`Failed to create lead: ${leadError?.message}`);
+    }
+
+    const lead = newLead as Lead;
 
     logger.info('Affiliate application created', {
       leadId: lead.id,
@@ -171,31 +223,61 @@ export async function POST(request: NextRequest) {
     // CRM INTEGRATION: Create CRM contact and interaction
     // ========================================
     try {
-      const crmContact = await prisma.cRMContact.upsert({
-        where: { email: validatedData.email.toLowerCase() },
-        create: {
-          contactType: 'AFFILIATE',
-          firstName: validatedData.firstName,
-          lastName: validatedData.lastName,
-          email: validatedData.email.toLowerCase(),
-          phone: validatedData.phone,
-          stage: 'NEW',
-          source: 'affiliate_application',
-          referrerUsername: attributionResult.attribution.referrerUsername,
-          referrerType: attributionResult.attribution.referrerType,
-          attributionMethod: attributionResult.attribution.attributionMethod,
-          lastContactedAt: new Date(),
-        },
-        update: {
-          firstName: validatedData.firstName,
-          lastName: validatedData.lastName,
-          phone: validatedData.phone,
-          referrerUsername: attributionResult.attribution.referrerUsername,
-          referrerType: attributionResult.attribution.referrerType,
-          attributionMethod: attributionResult.attribution.attributionMethod,
-          lastContactedAt: new Date(),
-        },
-      });
+      // Check if contact exists
+      const { data: existingContacts } = await db
+        .from('crm_contacts')
+        .select('id')
+        .eq('email', validatedData.email.toLowerCase())
+        .limit(1);
+
+      let crmContact: CRMContact;
+
+      if (existingContacts && existingContacts.length > 0) {
+        // Update existing contact
+        const { data: updatedContact, error: updateError } = await db
+          .from('crm_contacts')
+          .update({
+            firstName: validatedData.firstName,
+            lastName: validatedData.lastName,
+            phone: validatedData.phone,
+            referrerUsername: attributionResult.attribution.referrerUsername,
+            referrerType: attributionResult.attribution.referrerType,
+            attributionMethod: attributionResult.attribution.attributionMethod,
+            lastContactedAt: new Date().toISOString(),
+          })
+          .eq('email', validatedData.email.toLowerCase())
+          .select()
+          .single();
+
+        if (updateError || !updatedContact) {
+          throw new Error(`Failed to update CRM contact: ${updateError?.message}`);
+        }
+        crmContact = updatedContact as CRMContact;
+      } else {
+        // Create new contact
+        const { data: newContact, error: createError } = await db
+          .from('crm_contacts')
+          .insert({
+            contactType: 'AFFILIATE',
+            firstName: validatedData.firstName,
+            lastName: validatedData.lastName,
+            email: validatedData.email.toLowerCase(),
+            phone: validatedData.phone,
+            stage: 'NEW',
+            source: 'affiliate_application',
+            referrerUsername: attributionResult.attribution.referrerUsername,
+            referrerType: attributionResult.attribution.referrerType,
+            attributionMethod: attributionResult.attribution.attributionMethod,
+            lastContactedAt: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (createError || !newContact) {
+          throw new Error(`Failed to create CRM contact: ${createError?.message}`);
+        }
+        crmContact = newContact as CRMContact;
+      }
 
       logger.info('CRM contact created/updated from affiliate application', {
         contactId: crmContact.id,
@@ -231,18 +313,22 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
 
 **Lead ID:** ${lead.id}`;
 
-      await prisma.cRMInteraction.create({
-        data: {
+      const { error: interactionError } = await db
+        .from('crm_interactions')
+        .insert({
           contactId: crmContact.id,
           type: 'NOTE',
           direction: 'INBOUND',
           subject: bondedPreparerId
-            ? '🤝 Affiliate Application (Bonding Request)'
-            : '🤝 Affiliate Application Submitted',
+            ? 'Affiliate Application (Bonding Request)'
+            : 'Affiliate Application Submitted',
           body: interactionBody,
-          occurredAt: new Date(),
-        },
-      });
+          occurredAt: new Date().toISOString(),
+        });
+
+      if (interactionError) {
+        throw new Error(`Failed to create CRM interaction: ${interactionError.message}`);
+      }
 
       logger.info('CRM interaction created for affiliate application', {
         contactId: crmContact.id,
@@ -499,16 +585,29 @@ async function queuePreparerNotification(preparerId: string, lead: any) {
     }
 
     // Get preparer's email from User model (email is on User, not Profile)
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        firstName: true,
-        lastName: true,
-        user: {
-          select: { email: true }
-        }
-      },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('firstName, lastName, userId')
+      .eq('id', preparerId)
+      .single();
+
+    if (!preparerData) {
+      logger.warn('Preparer not found', { preparerId });
+      return;
+    }
+
+    // Get user email
+    const { data: userData } = await db
+      .from('users')
+      .select('email')
+      .eq('id', preparerData.userId)
+      .single();
+
+    const preparer = {
+      firstName: preparerData.firstName,
+      lastName: preparerData.lastName,
+      user: { email: userData?.email }
+    };
 
     const preparerEmail = preparer?.user?.email;
     if (!preparerEmail) {

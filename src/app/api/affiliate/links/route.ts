@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.service';
+
+// TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+}
 
 /**
  * GET /api/affiliate/links
@@ -22,22 +30,19 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get user's profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: {
-        id: true,
-        role: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    // Get user's profile - use Supabase OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, trackingCode, customTrackingCode')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

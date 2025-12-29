@@ -11,9 +11,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { ATTRIBUTION_COOKIE_NAME, ATTRIBUTION_COOKIE_MAX_AGE } from '@/lib/utils/cookie-manager';
+
+// Local type definition
+interface ProfileRecord {
+  id: string;
+  role: string;
+  shortLinkUsername?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+}
 
 /**
  * Ref tracking middleware
@@ -41,22 +50,13 @@ export async function refTrackingMiddleware(request: NextRequest, response: Next
     }
 
     // Validate ref parameter exists in database (check tracking codes and usernames)
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { shortLinkUsername: refParam },
-          { trackingCode: refParam },
-          { customTrackingCode: refParam },
-        ],
-      },
-      select: {
-        id: true,
-        role: true,
-        shortLinkUsername: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, shortLinkUsername, trackingCode, customTrackingCode')
+      .or(`shortLinkUsername.eq.${refParam},trackingCode.eq.${refParam},customTrackingCode.eq.${refParam}`)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       logger.warn('Ref parameter has invalid tracking code', { ref: refParam });

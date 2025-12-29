@@ -21,12 +21,23 @@ vi.mock('stripe', () => {
   };
 });
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => ({
-    product: {
-      findMany: vi.fn(),
-    },
-  })),
+// Mock Supabase client (replaces @prisma/client mock)
+vi.mock('@/lib/db', () => ({
+  db: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        in: vi.fn(() => ({
+          eq: vi.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      })),
+      insert: vi.fn(() => ({
+        select: vi.fn(() => ({
+          single: vi.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
+    })),
+  },
+  firstOrNull: vi.fn((data) => (data && data.length > 0 ? data[0] : null)),
 }));
 
 describe('Checkout API - Price Validation (AC24)', () => {

@@ -22,7 +22,7 @@ import {
   TrendingUp,
   UserCheck,
 } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { ClientsManagement } from '@/components/admin/ClientsManagement';
 import { logger } from '@/lib/logger';
 
@@ -69,71 +69,80 @@ export default async function ClientsStatusPage({
 
   try {
     // Fetch all tax preparers for the filter dropdown
-    preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        firstName: 'asc',
-      },
-    });
+    const { data: preparersData, error: preparersError } = await db
+      .from('profiles')
+      .select('id, first_name, last_name, user_id')
+      .eq('role', 'tax_preparer')
+      .order('first_name', { ascending: true });
 
-    // Build where clause for clients
-    const clientsWhere: any = {
-      role: 'client',
-    };
-
-    // Apply search filter
-    if (search) {
-      clientsWhere.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { user: { email: { contains: search, mode: 'insensitive' } } },
-        { phone: { contains: search, mode: 'insensitive' } },
-      ];
-    }
+    if (preparersError) throw preparersError;
+    preparers = (preparersData || []).map((p: any) => ({
+      id: p.id,
+      firstName: p.first_name,
+      lastName: p.last_name,
+      user: { email: null }, // Will fetch separately if needed
+    }));
 
     // Fetch all clients with their tax return status
-    clients = await prisma.profile.findMany({
-      where: clientsWhere,
-      include: {
-        user: {
-          select: {
-            email: true,
-          },
-        },
-        taxReturns: {
-          where: statusFilter ? { status: statusFilter.toUpperCase() as any } : undefined,
-          orderBy: {
-            taxYear: 'desc',
-          },
-          take: 1, // Get the most recent tax return
-        },
-        clientPreparers: {
-          where: {
-            isActive: true,
-            ...(preparerFilter && preparerFilter !== 'all' && preparerFilter !== 'unassigned'
-              ? { preparerId: preparerFilter }
-              : {}),
-          },
-          include: {
-            preparer: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    let clientsQuery = db
+      .from('profiles')
+      .select(`
+        *,
+        tax_returns(*),
+        client_preparers!client_preparers_client_id_fkey(
+          *,
+          preparer:profiles!client_preparers_preparer_id_fkey(*)
+        )
+      `)
+      .eq('role', 'client')
+      .order('created_at', { ascending: false });
+
+    // Apply search filter using ilike
+    if (search) {
+      clientsQuery = clientsQuery.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+
+    const { data: clientsData, error: clientsError } = await clientsQuery;
+
+    if (clientsError) throw clientsError;
+
+    // Transform and filter the data
+    clients = (clientsData || []).map((c: any) => {
+      // Filter tax returns by status if needed
+      let taxReturns = c.tax_returns || [];
+      if (statusFilter) {
+        taxReturns = taxReturns.filter((tr: any) => tr.status === statusFilter.toUpperCase());
+      }
+      // Sort and take first
+      taxReturns = taxReturns.sort((a: any, b: any) => b.tax_year - a.tax_year).slice(0, 1);
+
+      // Filter client preparers
+      let clientPreparers = (c.client_preparers || []).filter((cp: any) => cp.is_active);
+      if (preparerFilter && preparerFilter !== 'all' && preparerFilter !== 'unassigned') {
+        clientPreparers = clientPreparers.filter((cp: any) => cp.preparer_id === preparerFilter);
+      }
+
+      // Transform preparer data
+      clientPreparers = clientPreparers.map((cp: any) => ({
+        ...cp,
+        preparerId: cp.preparer_id,
+        preparer: cp.preparer ? {
+          ...cp.preparer,
+          firstName: cp.preparer.first_name,
+          lastName: cp.preparer.last_name,
+          companyName: cp.preparer.company_name,
+        } : null,
+      }));
+
+      return {
+        ...c,
+        firstName: c.first_name,
+        lastName: c.last_name,
+        userId: c.user_id,
+        updatedAt: c.updated_at,
+        taxReturns,
+        clientPreparers,
+      };
     });
   } catch (error) {
     logger.error('Error fetching clients data:', error);

@@ -6,11 +6,40 @@
  * 2. Intake Form Link - Full tax intake form
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { generateQRCode } from './qr-code.service';
 import { logger } from '@/lib/logger';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
+
+// Local types (replacing @prisma/client)
+interface Profile {
+  id: string;
+  userId?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  trackingCodeFinalized?: boolean;
+  qrCodeLogoUrl?: string | null;
+  role: string;
+}
+
+interface MarketingLink {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  code: string;
+  url: string;
+  shortUrl?: string | null;
+  targetPage?: string | null;
+  title?: string | null;
+  description?: string | null;
+  qrCodeImageUrl?: string | null;
+  qrCodeFormat?: string | null;
+  dateActivated?: string | null;
+  isActive: boolean;
+  updatedAt?: string | null;
+}
 
 export interface AffiliateLinks {
   leadLink: {
@@ -36,21 +65,16 @@ export interface AffiliateLinks {
  */
 export async function generateAffiliateStandardLinks(profileId: string): Promise<AffiliateLinks> {
   try {
-    logger.info('🔗 Generating affiliate standard links', { profileId });
+    logger.info('Generating affiliate standard links', { profileId });
 
     // Get profile with tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        id: true,
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeFinalized: true,
-        qrCodeLogoUrl: true,
-        role: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, userId, trackingCode, customTrackingCode, trackingCodeFinalized, qrCodeLogoUrl, role')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
@@ -66,23 +90,20 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
       throw new Error('Profile has no tracking code');
     }
 
-    logger.info('📝 Using tracking code', { trackingCode, profileId });
+    logger.info('Using tracking code', { trackingCode, profileId });
 
     // Check if links already exist
-    const existing = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    const { data: existing } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`]);
 
-    if (existing.length === 2) {
-      logger.info('✅ Links already exist, returning existing links', { profileId });
+    if (existing && existing.length === 2) {
+      logger.info('Links already exist, returning existing links', { profileId });
 
-      const leadLink = existing.find((l) => l.code.endsWith('-lead'))!;
-      const intakeLink = existing.find((l) => l.code.endsWith('-intake'))!;
+      const leadLink = existing.find((l: MarketingLink) => l.code.endsWith('-lead'))!;
+      const intakeLink = existing.find((l: MarketingLink) => l.code.endsWith('-intake'))!;
 
       return {
         leadLink: {
@@ -105,14 +126,14 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
     }
 
     // Create the two links
-    const links = [];
+    const links: MarketingLink[] = [];
 
     // 1. Lead Form Link
     const leadCode = `${trackingCode}-lead`;
     const leadUrl = `${APP_URL}/contact?ref=${trackingCode}`;
     const leadShortUrl = `${APP_URL}/go/${leadCode}`;
 
-    logger.info('🎯 Creating lead form link', { leadCode, leadUrl });
+    logger.info('Creating lead form link', { leadCode, leadUrl });
 
     const leadQR = await generateQRCode({
       url: leadShortUrl,
@@ -123,8 +144,9 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
       withLogo: true,
     });
 
-    const leadLink = await prisma.marketingLink.create({
-      data: {
+    const { data: leadLinkData } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'AFFILIATE',
         linkType: 'QR_CODE',
@@ -132,24 +154,26 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
         url: leadUrl,
         shortUrl: leadShortUrl,
         targetPage: '/contact',
-        title: '📝 Lead Capture Form',
+        title: 'Lead Capture Form',
         description: 'Quick contact form for potential clients to submit their information',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
 
+    const leadLink = leadLinkData as MarketingLink;
     links.push(leadLink);
-    logger.info('✅ Created lead form link', { id: leadLink.id, code: leadLink.code });
+    logger.info('Created lead form link', { id: leadLink.id, code: leadLink.code });
 
     // 2. Intake Form Link
     const intakeCode = `${trackingCode}-intake`;
     const intakeUrl = `${APP_URL}/start-filing/form?ref=${trackingCode}`;
     const intakeShortUrl = `${APP_URL}/go/${intakeCode}`;
 
-    logger.info('🎯 Creating intake form link', { intakeCode, intakeUrl });
+    logger.info('Creating intake form link', { intakeCode, intakeUrl });
 
     const intakeQR = await generateQRCode({
       url: intakeShortUrl,
@@ -160,8 +184,9 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
       withLogo: true,
     });
 
-    const intakeLink = await prisma.marketingLink.create({
-      data: {
+    const { data: intakeLinkData } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'AFFILIATE',
         linkType: 'QR_CODE',
@@ -169,19 +194,21 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
         url: intakeUrl,
         shortUrl: intakeShortUrl,
         targetPage: '/start-filing/form',
-        title: '📋 Tax Intake Form',
+        title: 'Tax Intake Form',
         description: 'Complete tax intake form for clients ready to start their tax preparation',
         qrCodeImageUrl: intakeQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
 
+    const intakeLink = intakeLinkData as MarketingLink;
     links.push(intakeLink);
-    logger.info('✅ Created intake form link', { id: intakeLink.id, code: intakeLink.code });
+    logger.info('Created intake form link', { id: intakeLink.id, code: intakeLink.code });
 
-    logger.info('🎉 Successfully generated affiliate standard links', {
+    logger.info('Successfully generated affiliate standard links', {
       profileId,
       trackingCode,
       linkCount: links.length,
@@ -206,7 +233,7 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
       },
     };
   } catch (error) {
-    logger.error('❌ Error generating affiliate standard links', { error, profileId });
+    logger.error('Error generating affiliate standard links', { error, profileId });
     throw error;
   }
 }
@@ -216,13 +243,13 @@ export async function generateAffiliateStandardLinks(profileId: string): Promise
  */
 export async function getAffiliateLinks(profileId: string): Promise<AffiliateLinks | null> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return null;
@@ -234,21 +261,18 @@ export async function getAffiliateLinks(profileId: string): Promise<AffiliateLin
       return null;
     }
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    const { data: links } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`]);
 
-    if (links.length !== 2) {
+    if (!links || links.length !== 2) {
       return null;
     }
 
-    const leadLink = links.find((l) => l.code.endsWith('-lead'));
-    const intakeLink = links.find((l) => l.code.endsWith('-intake'));
+    const leadLink = links.find((l: MarketingLink) => l.code.endsWith('-lead'));
+    const intakeLink = links.find((l: MarketingLink) => l.code.endsWith('-intake'));
 
     if (!leadLink || !intakeLink) {
       return null;
@@ -284,16 +308,15 @@ export async function getAffiliateLinks(profileId: string): Promise<AffiliateLin
  */
 export async function regenerateQRCodes(profileId: string): Promise<boolean> {
   try {
-    logger.info('🔄 Regenerating QR codes', { profileId });
+    logger.info('Regenerating QR codes', { profileId });
 
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('userId, trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       throw new Error('Profile not found');
@@ -305,16 +328,17 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
       throw new Error('No tracking code found');
     }
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    const { data: links } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`]);
 
-    for (const link of links) {
+    if (!links) {
+      return false;
+    }
+
+    for (const link of links as MarketingLink[]) {
       const qr = await generateQRCode({
         url: link.shortUrl || link.url,
         materialId: link.code,
@@ -324,18 +348,18 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
         withLogo: true,
       });
 
-      await prisma.marketingLink.update({
-        where: { id: link.id },
-        data: {
+      await db
+        .from('marketing_links')
+        .update({
           qrCodeImageUrl: qr.dataUrl,
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', link.id);
 
-      logger.info('✅ Regenerated QR code', { linkId: link.id, code: link.code });
+      logger.info('Regenerated QR code', { linkId: link.id, code: link.code });
     }
 
-    logger.info('🎉 Successfully regenerated all QR codes', { profileId, count: links.length });
+    logger.info('Successfully regenerated all QR codes', { profileId, count: links.length });
 
     return true;
   } catch (error) {
@@ -349,13 +373,13 @@ export async function regenerateQRCodes(profileId: string): Promise<boolean> {
  */
 export async function deleteAffiliateLinks(profileId: string): Promise<boolean> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return false;
@@ -367,16 +391,13 @@ export async function deleteAffiliateLinks(profileId: string): Promise<boolean> 
       return false;
     }
 
-    await prisma.marketingLink.deleteMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    await db
+      .from('marketing_links')
+      .delete()
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`]);
 
-    logger.info('🗑️ Deleted affiliate links', { profileId });
+    logger.info('Deleted affiliate links', { profileId });
 
     return true;
   } catch (error) {

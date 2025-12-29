@@ -9,15 +9,47 @@
  * - Form submissions
  */
 
-import { prisma } from '@/lib/prisma';
-import {
-  PipelineStage,
-  EmailActivityStatus,
-  type Prisma,
-  type CRMEmailActivity,
-  type CRMInteraction,
-} from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+type PipelineStage = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'DOCUMENTS' | 'FILED' | 'CLOSED' | 'LOST';
+type EmailActivityStatus = 'SENT' | 'DELIVERED' | 'OPENED' | 'CLICKED' | 'BOUNCED' | 'FAILED' | 'UNSUBSCRIBED';
+
+interface ContactRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email: string;
+  stage: PipelineStage;
+  leadScore?: number | null;
+  lastContactedAt?: string | null;
+  lastScoredAt?: string | null;
+}
+
+interface EmailActivityRecord {
+  id: string;
+  contactId: string;
+  status: EmailActivityStatus;
+  sentAt: string;
+}
+
+interface InteractionRecord {
+  id: string;
+  contactId: string;
+  type: string;
+  occurredAt: string;
+}
+
+interface LeadScoreRecord {
+  id: string;
+  contactId: string;
+  score: number;
+  breakdown?: Record<string, number> | null;
+  reason?: string | null;
+  changedBy: string;
+  createdAt: string;
+}
 
 export interface ScoreBreakdown {
   emailEngagement: number; // 0-25 points
@@ -33,35 +65,50 @@ export class CRMLeadScoringService {
    */
   static async calculateLeadScore(contactId: string): Promise<ScoreBreakdown> {
     try {
-      const contact = await prisma.cRMContact.findUnique({
-        where: { id: contactId },
-        include: {
-          emailActivities: {
-            orderBy: { sentAt: 'desc' },
-            take: 50, // Last 50 emails
-          },
-          interactions: {
-            orderBy: { occurredAt: 'desc' },
-            take: 20, // Last 20 interactions
-          },
-        },
-      });
+      // Get contact
+      const { data: contactData } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('id', contactId)
+        .limit(1);
+
+      const contact = firstOrNull(contactData) as ContactRecord | null;
 
       if (!contact) {
         throw new Error('Contact not found');
       }
 
+      // Get email activities
+      const { data: emailActivitiesData } = await db
+        .from('crm_email_activities')
+        .select('*')
+        .eq('contactId', contactId)
+        .order('sentAt', { ascending: false })
+        .limit(50);
+
+      const emailActivities = (emailActivitiesData || []) as EmailActivityRecord[];
+
+      // Get interactions
+      const { data: interactionsData } = await db
+        .from('crm_interactions')
+        .select('*')
+        .eq('contactId', contactId)
+        .order('occurredAt', { ascending: false })
+        .limit(20);
+
+      const interactions = (interactionsData || []) as InteractionRecord[];
+
       // Calculate each component
-      const emailEngagement = this.calculateEmailEngagementScore(contact.emailActivities);
-      const interactions = this.calculateInteractionScore(contact.interactions);
+      const emailEngagement = this.calculateEmailEngagementScore(emailActivities);
+      const interactionScore = this.calculateInteractionScore(interactions);
       const stage = this.calculateStageScore(contact.stage);
       const recency = this.calculateRecencyScore(contact.lastContactedAt);
 
-      const total = Math.min(100, emailEngagement + interactions + stage + recency);
+      const total = Math.min(100, emailEngagement + interactionScore + stage + recency);
 
       const breakdown: ScoreBreakdown = {
         emailEngagement,
-        interactions,
+        interactions: interactionScore,
         stage,
         recency,
         total: Math.round(total),
@@ -74,24 +121,23 @@ export class CRMLeadScoringService {
 
       return breakdown;
     } catch (error: unknown) {
-      logger.error('[CRMLeadScoringService] Error calculating score', { error: error.message });
-      throw new Error(`Failed to calculate lead score: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMLeadScoringService] Error calculating score', { error: errorMessage });
+      throw new Error(`Failed to calculate lead score: ${errorMessage}`);
     }
   }
 
   /**
    * Calculate email engagement score (0-25 points)
    */
-  private static calculateEmailEngagementScore(emailActivities: CRMEmailActivity[]): number {
+  private static calculateEmailEngagementScore(emailActivities: EmailActivityRecord[]): number {
     if (!emailActivities || emailActivities.length === 0) return 0;
 
     const totalEmails = emailActivities.length;
     const openedEmails = emailActivities.filter(
-      (e) => e.status === EmailActivityStatus.OPENED || e.status === EmailActivityStatus.CLICKED
+      (e) => e.status === 'OPENED' || e.status === 'CLICKED'
     ).length;
-    const clickedEmails = emailActivities.filter(
-      (e) => e.status === EmailActivityStatus.CLICKED
-    ).length;
+    const clickedEmails = emailActivities.filter((e) => e.status === 'CLICKED').length;
 
     // Calculate rates
     const openRate = openedEmails / totalEmails;
@@ -109,7 +155,7 @@ export class CRMLeadScoringService {
   /**
    * Calculate interaction score (0-25 points)
    */
-  private static calculateInteractionScore(interactions: CRMInteraction[]): number {
+  private static calculateInteractionScore(interactions: InteractionRecord[]): number {
     if (!interactions || interactions.length === 0) return 0;
 
     const interactionCount = interactions.length;
@@ -145,13 +191,13 @@ export class CRMLeadScoringService {
    */
   private static calculateStageScore(stage: PipelineStage): number {
     const stageScores: Record<PipelineStage, number> = {
-      [PipelineStage.NEW]: 5,
-      [PipelineStage.CONTACTED]: 10,
-      [PipelineStage.QUALIFIED]: 20,
-      [PipelineStage.DOCUMENTS]: 25,
-      [PipelineStage.FILED]: 30,
-      [PipelineStage.CLOSED]: 15, // Lower because they're already converted
-      [PipelineStage.LOST]: 0,
+      NEW: 5,
+      CONTACTED: 10,
+      QUALIFIED: 20,
+      DOCUMENTS: 25,
+      FILED: 30,
+      CLOSED: 15, // Lower because they're already converted
+      LOST: 0,
     };
 
     return stageScores[stage] || 0;
@@ -160,7 +206,7 @@ export class CRMLeadScoringService {
   /**
    * Calculate recency score (0-20 points)
    */
-  private static calculateRecencyScore(lastContactedAt?: Date | null): number {
+  private static calculateRecencyScore(lastContactedAt?: string | null): number {
     if (!lastContactedAt) return 0;
 
     const now = new Date();
@@ -191,23 +237,21 @@ export class CRMLeadScoringService {
       const breakdown = await this.calculateLeadScore(contactId);
 
       // Update contact
-      await prisma.cRMContact.update({
-        where: { id: contactId },
-        data: {
+      await db
+        .from('crm_contacts')
+        .update({
           leadScore: breakdown.total,
-          lastScoredAt: new Date(),
-        },
-      });
+          lastScoredAt: new Date().toISOString(),
+        })
+        .eq('id', contactId);
 
       // Create score history record
-      await prisma.cRMLeadScore.create({
-        data: {
-          contactId,
-          score: breakdown.total,
-          breakdown,
-          changedBy,
-          reason: 'Automatic score calculation',
-        },
+      await db.from('crm_lead_scores').insert({
+        contactId,
+        score: breakdown.total,
+        breakdown,
+        changedBy,
+        reason: 'Automatic score calculation',
       });
 
       logger.info('[CRMLeadScoringService] Contact score updated', {
@@ -217,8 +261,9 @@ export class CRMLeadScoringService {
 
       return breakdown;
     } catch (error: unknown) {
-      logger.error('[CRMLeadScoringService] Error updating score', { error: error.message });
-      throw new Error(`Failed to update contact score: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMLeadScoringService] Error updating score', { error: errorMessage });
+      throw new Error(`Failed to update contact score: ${errorMessage}`);
     }
   }
 
@@ -238,22 +283,20 @@ export class CRMLeadScoringService {
       }
 
       // Update contact
-      await prisma.cRMContact.update({
-        where: { id: contactId },
-        data: {
+      await db
+        .from('crm_contacts')
+        .update({
           leadScore: newScore,
-          lastScoredAt: new Date(),
-        },
-      });
+          lastScoredAt: new Date().toISOString(),
+        })
+        .eq('id', contactId);
 
       // Create score history record
-      await prisma.cRMLeadScore.create({
-        data: {
-          contactId,
-          score: newScore,
-          reason,
-          changedBy,
-        },
+      await db.from('crm_lead_scores').insert({
+        contactId,
+        score: newScore,
+        reason,
+        changedBy,
       });
 
       logger.info('[CRMLeadScoringService] Manual score adjustment', {
@@ -264,8 +307,9 @@ export class CRMLeadScoringService {
 
       return { success: true, newScore };
     } catch (error: unknown) {
-      logger.error('[CRMLeadScoringService] Error adjusting score', { error: error.message });
-      throw new Error(`Failed to adjust score: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMLeadScoringService] Error adjusting score', { error: errorMessage });
+      throw new Error(`Failed to adjust score: ${errorMessage}`);
     }
   }
 
@@ -280,18 +324,16 @@ export class CRMLeadScoringService {
       const oneHourAgo = new Date();
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
-      const contacts = await prisma.cRMContact.findMany({
-        where: {
-          OR: [{ lastScoredAt: null }, { lastScoredAt: { lt: oneHourAgo } }],
-          stage: {
-            notIn: [PipelineStage.CLOSED, PipelineStage.LOST],
-          },
-        },
-        take: limit,
-        select: {
-          id: true,
-        },
-      });
+      // Query for contacts not scored or scored more than 1 hour ago
+      // and not in CLOSED or LOST stage
+      const { data: contactsWithOldScores } = await db
+        .from('crm_contacts')
+        .select('id')
+        .or(`lastScoredAt.is.null,lastScoredAt.lt.${oneHourAgo.toISOString()}`)
+        .not('stage', 'in', '(CLOSED,LOST)')
+        .limit(limit);
+
+      const contacts = (contactsWithOldScores || []) as { id: string }[];
 
       logger.info('[CRMLeadScoringService] Found contacts to score', {
         count: contacts.length,
@@ -327,8 +369,9 @@ export class CRMLeadScoringService {
         errors: errorCount,
       };
     } catch (error: unknown) {
-      logger.error('[CRMLeadScoringService] Error in batch update', { error: error.message });
-      throw new Error(`Failed to batch update scores: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMLeadScoringService] Error in batch update', { error: errorMessage });
+      throw new Error(`Failed to batch update scores: ${errorMessage}`);
     }
   }
 
@@ -337,18 +380,22 @@ export class CRMLeadScoringService {
    */
   static async getScoreHistory(contactId: string, limit: number = 20) {
     try {
-      const history = await prisma.cRMLeadScore.findMany({
-        where: { contactId },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      });
+      const { data: history, error } = await db
+        .from('crm_lead_scores')
+        .select('*')
+        .eq('contactId', contactId)
+        .order('createdAt', { ascending: false })
+        .limit(limit);
 
-      return history;
+      if (error) throw error;
+
+      return (history || []) as LeadScoreRecord[];
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[CRMLeadScoringService] Error getting score history', {
-        error: error.message,
+        error: errorMessage,
       });
-      throw new Error(`Failed to get score history: ${error.message}`);
+      throw new Error(`Failed to get score history: ${errorMessage}`);
     }
   }
 
@@ -357,31 +404,22 @@ export class CRMLeadScoringService {
    */
   static async getContactsByScoreRange(minScore: number, maxScore: number) {
     try {
-      const contacts = await prisma.cRMContact.findMany({
-        where: {
-          leadScore: {
-            gte: minScore,
-            lte: maxScore,
-          },
-        },
-        orderBy: { leadScore: 'desc' },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          leadScore: true,
-          stage: true,
-          lastContactedAt: true,
-        },
-      });
+      const { data: contacts, error } = await db
+        .from('crm_contacts')
+        .select('id, firstName, lastName, email, leadScore, stage, lastContactedAt')
+        .gte('leadScore', minScore)
+        .lte('leadScore', maxScore)
+        .order('leadScore', { ascending: false });
 
-      return contacts;
+      if (error) throw error;
+
+      return (contacts || []) as ContactRecord[];
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[CRMLeadScoringService] Error getting contacts by score', {
-        error: error.message,
+        error: errorMessage,
       });
-      throw new Error(`Failed to get contacts by score: ${error.message}`);
+      throw new Error(`Failed to get contacts by score: ${errorMessage}`);
     }
   }
 
@@ -390,40 +428,34 @@ export class CRMLeadScoringService {
    */
   static async getScoreInsights() {
     try {
-      const [avgScore, hotLeads, warmLeads, coldLeads, total] = await Promise.all([
-        prisma.cRMContact.aggregate({
-          _avg: { leadScore: true },
-          where: {
-            stage: { notIn: [PipelineStage.CLOSED, PipelineStage.LOST] },
-          },
-        }),
-        prisma.cRMContact.count({
-          where: {
-            leadScore: { gte: 70 },
-            stage: { notIn: [PipelineStage.CLOSED, PipelineStage.LOST] },
-          },
-        }),
-        prisma.cRMContact.count({
-          where: {
-            leadScore: { gte: 40, lt: 70 },
-            stage: { notIn: [PipelineStage.CLOSED, PipelineStage.LOST] },
-          },
-        }),
-        prisma.cRMContact.count({
-          where: {
-            leadScore: { lt: 40 },
-            stage: { notIn: [PipelineStage.CLOSED, PipelineStage.LOST] },
-          },
-        }),
-        prisma.cRMContact.count({
-          where: {
-            stage: { notIn: [PipelineStage.CLOSED, PipelineStage.LOST] },
-          },
-        }),
-      ]);
+      // Get all active contacts and calculate stats in JavaScript
+      const { data: contactsData } = await db
+        .from('crm_contacts')
+        .select('id, leadScore, stage')
+        .not('stage', 'in', '(CLOSED,LOST)');
+
+      const contacts = (contactsData || []) as { id: string; leadScore: number | null; stage: string }[];
+
+      // Calculate average score
+      const scoresArray = contacts
+        .map((c) => c.leadScore)
+        .filter((s): s is number => s !== null);
+      const avgScore =
+        scoresArray.length > 0
+          ? scoresArray.reduce((a, b) => a + b, 0) / scoresArray.length
+          : 0;
+
+      // Count by score range
+      const total = contacts.length;
+      const hotLeads = contacts.filter((c) => (c.leadScore || 0) >= 70).length;
+      const warmLeads = contacts.filter((c) => {
+        const score = c.leadScore || 0;
+        return score >= 40 && score < 70;
+      }).length;
+      const coldLeads = contacts.filter((c) => (c.leadScore || 0) < 40).length;
 
       return {
-        averageScore: Math.round(avgScore._avg.leadScore || 0),
+        averageScore: Math.round(avgScore),
         total,
         hotLeads, // 70-100 score
         warmLeads, // 40-69 score
@@ -435,8 +467,9 @@ export class CRMLeadScoringService {
         },
       };
     } catch (error: unknown) {
-      logger.error('[CRMLeadScoringService] Error getting insights', { error: error.message });
-      throw new Error(`Failed to get score insights: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMLeadScoringService] Error getting insights', { error: errorMessage });
+      throw new Error(`Failed to get score insights: ${errorMessage}`);
     }
   }
 }

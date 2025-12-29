@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -26,10 +26,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current user's profile
-    const currentUserProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: currentUserProfile } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .single();
 
     if (!currentUserProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -40,101 +41,92 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const clientId = searchParams.get('clientId');
 
-    // Build where clause based on role
-    const where: any = {};
+    // Build query based on role
+    let query = db.from('client_tax_forms').select('*');
 
     // Filter by tax year if provided
     if (taxYear) {
-      where.taxYear = parseInt(taxYear);
+      query = query.eq('taxYear', parseInt(taxYear));
     }
 
     // Filter by status if provided
     if (status) {
-      where.status = status;
+      query = query.eq('status', status);
     }
 
     // Role-based filtering
     if (currentUserProfile.role === 'client') {
       // Clients see only their own forms
-      where.clientId = currentUserProfile.id;
+      query = query.eq('clientId', currentUserProfile.id);
     } else if (currentUserProfile.role === 'tax_preparer') {
       // Tax preparers see forms they assigned
-      // Unless they specify a clientId
+      query = query.eq('assignedBy', currentUserProfile.id);
       if (clientId) {
-        where.clientId = clientId;
-        where.assignedBy = currentUserProfile.id;
-      } else {
-        where.assignedBy = currentUserProfile.id;
+        query = query.eq('clientId', clientId);
       }
     } else if (currentUserProfile.role === 'admin') {
       // Admins see all forms, optionally filtered by clientId
       if (clientId) {
-        where.clientId = clientId;
+        query = query.eq('clientId', clientId);
       }
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Fetch forms with related data
-    const clientTaxForms = await prisma.clientTaxForm.findMany({
-      where,
-      include: {
-        taxForm: {
-          select: {
-            id: true,
-            formNumber: true,
-            title: true,
-            description: true,
-            category: true,
-            fileUrl: true,
-          },
-        },
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        assignedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            companyName: true,
-          },
-        },
-        shares: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            shareToken: true,
-            expiresAt: true,
-            accessCount: true,
-            lastAccessAt: true,
-          },
-        },
-        signatures: {
-          select: {
-            id: true,
-            signedBy: true,
-            signedByRole: true,
-            signedAt: true,
-          },
-        },
-      },
-      orderBy: [
-        { taxYear: 'desc' },
-        { createdAt: 'desc' },
-      ],
-    });
+    // Fetch forms
+    const { data: clientTaxForms, error: formsError } = await query
+      .order('taxYear', { ascending: false })
+      .order('createdAt', { ascending: false });
+
+    if (formsError) {
+      throw formsError;
+    }
+
+    // Get all unique IDs for related data
+    const taxFormIds = [...new Set((clientTaxForms || []).map((f: any) => f.taxFormId))];
+    const clientIds = [...new Set((clientTaxForms || []).map((f: any) => f.clientId))];
+    const assignedByIds = [...new Set((clientTaxForms || []).map((f: any) => f.assignedBy))];
+    const formIds = (clientTaxForms || []).map((f: any) => f.id);
+
+    // Fetch related data in parallel
+    const [taxFormsResult, clientsResult, assignersResult, sharesResult, signaturesResult] = await Promise.all([
+      taxFormIds.length > 0 ? db.from('tax_forms').select('id, formNumber, title, description, category, fileUrl').in('id', taxFormIds) : { data: [] },
+      clientIds.length > 0 ? db.from('profiles').select('id, firstName, lastName').in('id', clientIds) : { data: [] },
+      assignedByIds.length > 0 ? db.from('profiles').select('id, firstName, lastName, companyName').in('id', assignedByIds) : { data: [] },
+      formIds.length > 0 ? db.from('tax_form_shares').select('id, shareToken, expiresAt, accessCount, lastAccessAt, clientTaxFormId').in('clientTaxFormId', formIds).order('createdAt', { ascending: false }) : { data: [] },
+      formIds.length > 0 ? db.from('form_signatures').select('id, signedBy, signedByRole, signedAt, clientTaxFormId').in('clientTaxFormId', formIds) : { data: [] },
+    ]);
+
+    // Create lookup maps
+    const taxFormMap = new Map((taxFormsResult.data || []).map((tf: any) => [tf.id, tf]));
+    const clientMap = new Map((clientsResult.data || []).map((c: any) => [c.id, c]));
+    const assignerMap = new Map((assignersResult.data || []).map((a: any) => [a.id, a]));
+
+    // Group shares and signatures by clientTaxFormId (take first share per form)
+    const shareMap = new Map<string, any>();
+    for (const share of (sharesResult.data || [])) {
+      if (!shareMap.has(share.clientTaxFormId)) {
+        shareMap.set(share.clientTaxFormId, share);
+      }
+    }
+    const signatureMap = new Map<string, any[]>();
+    for (const sig of (signaturesResult.data || [])) {
+      if (!signatureMap.has(sig.clientTaxFormId)) {
+        signatureMap.set(sig.clientTaxFormId, []);
+      }
+      signatureMap.get(sig.clientTaxFormId)!.push(sig);
+    }
 
     // Transform response
-    const forms = clientTaxForms.map((ctf) => {
-      const latestShare = ctf.shares[0];
-      const hasClientSignature = ctf.signatures.some((sig) => sig.signedBy === ctf.clientId);
-      const hasPreparerSignature = ctf.signatures.some((sig) => sig.signedBy === ctf.assignedBy);
+    const forms = (clientTaxForms || []).map((ctf: any) => {
+      const taxForm = taxFormMap.get(ctf.taxFormId);
+      const client = clientMap.get(ctf.clientId);
+      const assigner = assignerMap.get(ctf.assignedBy);
+      const latestShare = shareMap.get(ctf.id);
+      const signatures = signatureMap.get(ctf.id) || [];
+
+      const hasClientSignature = signatures.some((sig: any) => sig.signedBy === ctf.clientId);
+      const hasPreparerSignature = signatures.some((sig: any) => sig.signedBy === ctf.assignedBy);
 
       return {
         id: ctf.id,
@@ -146,15 +138,15 @@ export async function GET(request: NextRequest) {
         completedAt: ctf.completedAt,
         lastEditedAt: ctf.lastEditedAt,
         createdAt: ctf.createdAt,
-        taxForm: ctf.taxForm,
+        taxForm: taxForm || null,
         client: {
-          id: ctf.client.id,
-          name: `${ctf.client.firstName} ${ctf.client.lastName}`,
+          id: client?.id,
+          name: client ? `${client.firstName || ''} ${client.lastName || ''}`.trim() : 'Unknown',
         },
         preparer: {
-          id: ctf.assignedByProfile.id,
-          name: `${ctf.assignedByProfile.firstName} ${ctf.assignedByProfile.lastName}`,
-          company: ctf.assignedByProfile.companyName,
+          id: assigner?.id,
+          name: assigner ? `${assigner.firstName || ''} ${assigner.lastName || ''}`.trim() : 'Unknown',
+          company: assigner?.companyName,
         },
         share: latestShare
           ? {
@@ -168,7 +160,7 @@ export async function GET(request: NextRequest) {
         signatures: {
           client: hasClientSignature,
           preparer: hasPreparerSignature,
-          all: ctf.signatures,
+          all: signatures,
         },
       };
     });

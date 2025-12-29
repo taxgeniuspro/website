@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { UserRole, UserPermissions } from '@/lib/permissions';
+
+// Local interfaces
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  isActive: boolean;
+  affiliateStatus: string | null;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
+  customPermissions: any;
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -29,18 +49,32 @@ export async function PATCH(
     const { email, firstName, lastName, role: newRole, permissions, isActive, affiliateStatus } = body;
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { profile: true },
-    });
+    const { data: existingUserData, error: userError } = await db.from('users')
+      .select('id, email, name')
+      .eq('id', userId)
+      .limit(1);
+
+    if (userError) {
+      throw userError;
+    }
+
+    const existingUser = firstOrNull<User>(existingUserData);
 
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Get user's profile
+    const { data: profileData } = await db.from('profiles')
+      .select('*')
+      .eq('userId', userId)
+      .limit(1);
+
+    const existingProfile = firstOrNull<Profile>(profileData);
+
     // Prevent non-super-admins from editing super admins or creating super admins
     if (!isSuperAdmin) {
-      if (existingUser.profile?.role === 'admin') {
+      if (existingProfile?.role === 'admin') {
         return NextResponse.json(
           { error: 'Only super admins can edit super admin accounts' },
           { status: 403 }
@@ -55,7 +89,7 @@ export async function PATCH(
     }
 
     // Prevent admin from demoting themselves (would lock them out)
-    if (currentUser.id === userId && existingUser.profile?.role === 'admin' && newRole && newRole !== 'admin') {
+    if (currentUser.id === userId && existingProfile?.role === 'admin' && newRole && newRole !== 'admin') {
       return NextResponse.json(
         { error: 'You cannot demote yourself from admin. Ask another admin to do this.' },
         { status: 400 }
@@ -65,49 +99,49 @@ export async function PATCH(
     // Update user email if provided
     if (email && email !== existingUser.email) {
       // Check if email is already taken
-      const emailExists = await prisma.user.findUnique({
-        where: { email },
-      });
+      const { data: emailExists } = await db.from('users')
+        .select('id')
+        .eq('email', email)
+        .limit(1);
 
-      if (emailExists && emailExists.id !== userId) {
+      if (emailExists && emailExists.length > 0 && emailExists[0].id !== userId) {
         return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
       }
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: { email },
-      });
+      await db.from('users')
+        .update({ email })
+        .eq('id', userId);
     }
 
     // Update profile information
     // Note: permissions are role-based (from RolePermissionTemplate), not stored per-user
-    const profileData: any = {};
+    const updateProfileData: Record<string, any> = {};
 
-    if (firstName !== undefined) profileData.firstName = firstName;
-    if (lastName !== undefined) profileData.lastName = lastName;
-    if (newRole !== undefined) profileData.role = newRole;
-    if (affiliateStatus !== undefined) profileData.affiliateStatus = affiliateStatus;
+    if (firstName !== undefined) updateProfileData.firstName = firstName;
+    if (lastName !== undefined) updateProfileData.lastName = lastName;
+    if (newRole !== undefined) updateProfileData.role = newRole;
+    if (affiliateStatus !== undefined) updateProfileData.affiliateStatus = affiliateStatus;
     // Permissions are not stored in Profile - they come from the role's default permissions
 
     // Handle user activation/deactivation
     if (isActive !== undefined) {
-      const wasActive = existingUser.profile?.isActive ?? true;
+      const wasActive = existingProfile?.isActive ?? true;
 
       if (isActive !== wasActive) {
-        profileData.isActive = isActive;
+        updateProfileData.isActive = isActive;
 
         if (!isActive) {
           // Deactivating user
-          profileData.deactivatedAt = new Date();
-          profileData.deactivatedBy = currentUser.id;
+          updateProfileData.deactivatedAt = new Date().toISOString();
+          updateProfileData.deactivatedBy = currentUser.id;
           logger.info('User deactivated', {
             userId,
             deactivatedBy: currentUser.id,
           });
         } else {
           // Reactivating user
-          profileData.deactivatedAt = null;
-          profileData.deactivatedBy = null;
+          updateProfileData.deactivatedAt = null;
+          updateProfileData.deactivatedBy = null;
           logger.info('User reactivated', {
             userId,
             reactivatedBy: currentUser.id,
@@ -117,23 +151,46 @@ export async function PATCH(
     }
 
     // Use upsert to handle cases where profile might not exist
-    const updatedProfile = await prisma.profile.upsert({
-      where: { userId },
-      update: profileData,
-      create: {
-        userId,
-        role: newRole || 'client',
-        firstName: firstName || '',
-        lastName: lastName || '',
-        isActive: isActive ?? true,
-      },
-    });
+    let updatedProfile: Profile | null = null;
 
-    // Fetch updated user with profile
-    const updatedUser = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { profile: true },
-    });
+    if (existingProfile) {
+      // Update existing profile
+      const { data: updated, error: updateError } = await db.from('profiles')
+        .update(updateProfileData)
+        .eq('userId', userId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+      updatedProfile = updated;
+    } else {
+      // Create new profile
+      const { data: created, error: createError } = await db.from('profiles')
+        .insert({
+          userId,
+          role: newRole || 'client',
+          firstName: firstName || '',
+          lastName: lastName || '',
+          isActive: isActive ?? true,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+      updatedProfile = created;
+    }
+
+    // Fetch updated user
+    const { data: updatedUserData } = await db.from('users')
+      .select('id, email, name')
+      .eq('id', userId)
+      .limit(1);
+
+    const updatedUser = firstOrNull<User>(updatedUserData);
 
     logger.info('User updated', {
       userId,
@@ -146,14 +203,14 @@ export async function PATCH(
       user: {
         id: updatedUser!.id,
         email: updatedUser!.email,
-        firstName: updatedUser!.profile?.firstName,
-        lastName: updatedUser!.profile?.lastName,
-        role: updatedUser!.profile?.role,
+        firstName: updatedProfile?.firstName,
+        lastName: updatedProfile?.lastName,
+        role: updatedProfile?.role,
         // Permissions are derived from role, not stored per-user
-        isActive: updatedUser!.profile?.isActive ?? true,
-        deactivatedAt: updatedUser!.profile?.deactivatedAt,
-        deactivatedBy: updatedUser!.profile?.deactivatedBy,
-        affiliateStatus: updatedUser!.profile?.affiliateStatus,
+        isActive: updatedProfile?.isActive ?? true,
+        deactivatedAt: updatedProfile?.deactivatedAt,
+        deactivatedBy: updatedProfile?.deactivatedBy,
+        affiliateStatus: updatedProfile?.affiliateStatus,
       },
     });
   } catch (error: any) {

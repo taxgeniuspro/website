@@ -1,12 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   addAffiliateToGroup,
   removeAffiliateFromGroup,
   getAffiliateGroupById,
 } from '@/lib/services/affiliate-group.service';
+
+// Local interface for Profile
+interface Profile {
+  id: string;
+  userId: string;
+  supabaseUserId: string | null;
+  email: string | null;
+  role: string;
+}
+
+// Interface for affiliate profile data
+interface AffiliateProfile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  affiliateStatus: string | null;
+  totalConversions: number | null;
+  lifetimeEarnings: number | null;
+  currentTier: string | null;
+  customCommissionType: string | null;
+  customCommissionRate: number | null;
+  customFlatAmount: number | null;
+  createdAt: string;
+  affiliateGroupId: string | null;
+}
 
 /**
  * GET /api/admin/affiliate-groups/[id]/affiliates
@@ -22,15 +49,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -49,42 +77,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const searchParams = req.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const skip = (page - 1) * limit;
 
-    // Get affiliates in the group
-    const [affiliates, total] = await Promise.all([
-      prisma.profile.findMany({
-        where: { affiliateGroupId: id },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          avatarUrl: true,
-          affiliateStatus: true,
-          totalConversions: true,
-          lifetimeEarnings: true,
-          currentTier: true,
-          customCommissionType: true,
-          customCommissionRate: true,
-          customFlatAmount: true,
-          createdAt: true,
-        },
-        orderBy: { totalConversions: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.profile.count({
-        where: { affiliateGroupId: id },
-      }),
-    ]);
+    // Get affiliates in the group with count
+    const { data: affiliates, error: affiliatesError, count } = await db.from('profiles')
+      .select('id, firstName, lastName, email, avatarUrl, affiliateStatus, totalConversions, lifetimeEarnings, currentTier, customCommissionType, customCommissionRate, customFlatAmount, createdAt', { count: 'exact' })
+      .eq('affiliateGroupId', id)
+      .order('totalConversions', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
 
-    // Serialize affiliates (convert Decimal to number)
-    const serializedAffiliates = affiliates.map((affiliate) => ({
+    if (affiliatesError) {
+      throw affiliatesError;
+    }
+
+    const total = count || 0;
+
+    // Serialize affiliates (values already numeric in Supabase)
+    const serializedAffiliates = (affiliates || []).map((affiliate: AffiliateProfile) => ({
       ...affiliate,
-      lifetimeEarnings: affiliate.lifetimeEarnings?.toNumber() ?? 0,
-      customCommissionRate: affiliate.customCommissionRate?.toNumber() ?? null,
-      customFlatAmount: affiliate.customFlatAmount?.toNumber() ?? null,
+      lifetimeEarnings: affiliate.lifetimeEarnings ?? 0,
+      customCommissionRate: affiliate.customCommissionRate ?? null,
+      customFlatAmount: affiliate.customFlatAmount ?? null,
     }));
 
     return NextResponse.json({
@@ -116,15 +128,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -193,15 +206,16 @@ export async function DELETE(
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

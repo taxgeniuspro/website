@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -16,6 +16,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const session = await auth();
     const userId = session?.user?.id;
 
@@ -24,43 +25,41 @@ export async function POST(
     }
 
     // Get current user's profile
-    const currentUserProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true, firstName: true, lastName: true },
-    });
+    const { data: currentUserProfile } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', userId)
+      .single();
 
     if (!currentUserProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get share record
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: params.token },
-      select: { id: true, taxFormId: true, sharedWith: true, expiresAt: true },
-    });
+    const { data: share } = await db
+      .from('tax_form_shares')
+      .select('id, taxFormId, sharedWith, expiresAt')
+      .eq('shareToken', resolvedParams.token)
+      .single();
 
     if (!share) {
       return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
     }
 
     // Check if expired
-    if (share.expiresAt && new Date() > share.expiresAt) {
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
       return NextResponse.json({ error: 'Share link has expired' }, { status: 410 });
     }
 
     // Get client tax form
-    const clientTaxForm = await prisma.clientTaxForm.findFirst({
-      where: {
-        taxFormId: share.taxFormId,
-        clientId: share.sharedWith,
-      },
-      select: {
-        id: true,
-        clientId: true,
-        assignedBy: true,
-        status: true,
-      },
-    });
+    const { data: clientTaxForms } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, assignedBy, status')
+      .eq('taxFormId', share.taxFormId)
+      .eq('clientId', share.sharedWith)
+      .limit(1);
+
+    const clientTaxForm = firstOrNull(clientTaxForms);
 
     if (!clientTaxForm) {
       return NextResponse.json({ error: 'Form assignment not found' }, { status: 404 });
@@ -70,7 +69,6 @@ export async function POST(
     const canSign =
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
-      currentUserProfile.role === 'admin' ||
       currentUserProfile.role === 'admin';
 
     if (!canSign) {
@@ -105,14 +103,14 @@ export async function POST(
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
     // Check if this user already signed this form
-    const existingSignature = await prisma.formSignature.findFirst({
-      where: {
-        clientTaxFormId: clientTaxForm.id,
-        signedBy: currentUserProfile.id,
-      },
-    });
+    const { data: existingSignatures } = await db
+      .from('form_signatures')
+      .select('id')
+      .eq('clientTaxFormId', clientTaxForm.id)
+      .eq('signedBy', currentUserProfile.id)
+      .limit(1);
 
-    if (existingSignature) {
+    if (existingSignatures && existingSignatures.length > 0) {
       return NextResponse.json(
         { error: 'You have already signed this form' },
         { status: 409 }
@@ -120,8 +118,9 @@ export async function POST(
     }
 
     // Create signature
-    const signature = await prisma.formSignature.create({
-      data: {
+    const { data: signature, error: signatureError } = await db
+      .from('form_signatures')
+      .insert({
         clientTaxFormId: clientTaxForm.id,
         signedBy: currentUserProfile.id,
         signedByRole: currentUserProfile.role,
@@ -130,27 +129,32 @@ export async function POST(
         ipAddress,
         userAgent,
         consentText,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (signatureError || !signature) {
+      throw new Error(`Failed to create signature: ${signatureError?.message}`);
+    }
 
     // Check if both parties have signed
-    const allSignatures = await prisma.formSignature.findMany({
-      where: { clientTaxFormId: clientTaxForm.id },
-      select: { signedBy: true, signedByRole: true },
-    });
+    const { data: allSignatures } = await db
+      .from('form_signatures')
+      .select('signedBy, signedByRole')
+      .eq('clientTaxFormId', clientTaxForm.id);
 
-    const hasClientSignature = allSignatures.some((sig) => sig.signedBy === clientTaxForm.clientId);
-    const hasPreparerSignature = allSignatures.some((sig) => sig.signedBy === clientTaxForm.assignedBy);
+    const hasClientSignature = (allSignatures || []).some((sig: any) => sig.signedBy === clientTaxForm.clientId);
+    const hasPreparerSignature = (allSignatures || []).some((sig: any) => sig.signedBy === clientTaxForm.assignedBy);
 
     // If both signed, mark as completed
     if (hasClientSignature && hasPreparerSignature && clientTaxForm.status !== 'COMPLETED') {
-      await prisma.clientTaxForm.update({
-        where: { id: clientTaxForm.id },
-        data: {
+      await db
+        .from('client_tax_forms')
+        .update({
           status: 'COMPLETED',
-          completedAt: new Date(),
-        },
-      });
+          completedAt: new Date().toISOString(),
+        })
+        .eq('id', clientTaxForm.id);
     }
 
     logger.info(`Form signed: ${clientTaxForm.id} by ${currentUserProfile.firstName} ${currentUserProfile.lastName} (${currentUserProfile.role})`);

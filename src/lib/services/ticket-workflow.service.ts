@@ -5,15 +5,99 @@
  * Actions: assign, notify, status change, auto-close, etc.
  */
 
-import { prisma } from '@/lib/prisma';
-import {
-  WorkflowTrigger,
-  WorkflowActionType,
-  TicketStatus,
-  TicketPriority,
-  Prisma,
-} from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+type WorkflowTrigger =
+  | 'TICKET_CREATED'
+  | 'TICKET_UPDATED'
+  | 'TICKET_IDLE'
+  | 'CLIENT_RESPONSE'
+  | 'PREPARER_RESPONSE'
+  | 'STATUS_CHANGED'
+  | 'PRIORITY_CHANGED';
+
+type WorkflowActionType =
+  | 'ASSIGN_PREPARER'
+  | 'SEND_NOTIFICATION'
+  | 'ADD_TAG'
+  | 'CHANGE_STATUS'
+  | 'CHANGE_PRIORITY'
+  | 'SEND_SAVED_REPLY'
+  | 'AUTO_CLOSE'
+  | 'CREATE_TASK';
+
+type TicketStatus =
+  | 'OPEN'
+  | 'IN_PROGRESS'
+  | 'WAITING_CLIENT'
+  | 'WAITING_PREPARER'
+  | 'RESOLVED'
+  | 'CLOSED'
+  | 'ARCHIVED';
+
+type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+interface TicketWorkflowRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  trigger: WorkflowTrigger;
+  isActive: boolean;
+  priority: number;
+  conditions?: Record<string, unknown> | null;
+  actions: unknown;
+  createdById: string;
+  lastTriggeredAt?: Date | string | null;
+  triggerCount: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface TicketWorkflowLogRecord {
+  id: string;
+  workflowId: string;
+  ticketId: string;
+  action: string;
+  result: string;
+  details?: Record<string, unknown> | null;
+  executedAt: Date | string;
+}
+
+interface SupportTicketRecord {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  creatorId: string;
+  assignedToId?: string | null;
+  tags: string[];
+  customFields?: Record<string, unknown> | null;
+  lastActivityAt: Date | string;
+  resolvedAt?: Date | string | null;
+  closedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface ProfileRecord {
+  id: string;
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+interface TicketMessageRecord {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  content: string;
+  isInternal: boolean;
+  createdAt: Date | string;
+}
 
 // ==================== Types ====================
 
@@ -64,28 +148,20 @@ export interface UpdateWorkflowInput {
   actions?: WorkflowAction[];
 }
 
-export type TicketWithRelations = Prisma.SupportTicketGetPayload<{
-  include: {
-    creator: true;
-    assignedTo: true;
-    messages: {
-      orderBy: { createdAt: 'desc' };
-      take: 1;
-    };
-  };
-}>;
+export interface TicketWithRelations extends SupportTicketRecord {
+  creator?: ProfileRecord | null;
+  assignedTo?: ProfileRecord | null;
+  messages?: TicketMessageRecord[];
+}
 
-export type WorkflowWithCreator = Prisma.TicketWorkflowGetPayload<{
-  include: {
-    createdBy: {
-      select: {
-        id: true;
-        firstName: true;
-        lastName: true;
-      };
-    };
-  };
-}>;
+export interface WorkflowWithCreator extends TicketWorkflowRecord {
+  createdBy?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  logs?: TicketWorkflowLogRecord[];
+}
 
 // ==================== Workflow Management ====================
 
@@ -94,27 +170,51 @@ export type WorkflowWithCreator = Prisma.TicketWorkflowGetPayload<{
  */
 export async function createWorkflow(input: CreateWorkflowInput) {
   try {
-    const workflow = await prisma.ticketWorkflow.create({
-      data: {
+    const now = new Date().toISOString();
+
+    const { data: workflowData, error } = await db
+      .from('ticket_workflows')
+      .insert({
         name: input.name,
-        description: input.description,
+        description: input.description || null,
         trigger: input.trigger,
         isActive: input.isActive !== false,
         priority: input.priority || 0,
         conditions: input.conditions || {},
         actions: input.actions,
         createdById: input.createdById,
-      },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+        triggerCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single();
+
+    if (error || !workflowData) {
+      throw new Error('Failed to insert workflow');
+    }
+
+    const workflow = workflowData as TicketWorkflowRecord;
+
+    // Get creator info
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', input.createdById)
+      .limit(1);
+
+    const creator = firstOrNull(creatorData) as ProfileRecord | null;
+
+    const workflowWithCreator: WorkflowWithCreator = {
+      ...workflow,
+      createdBy: creator
+        ? {
+            id: creator.id,
+            firstName: creator.firstName,
+            lastName: creator.lastName,
+          }
+        : null,
+    };
 
     logger.info('Workflow created', {
       workflowId: workflow.id,
@@ -122,7 +222,7 @@ export async function createWorkflow(input: CreateWorkflowInput) {
       trigger: workflow.trigger,
     });
 
-    return workflow;
+    return workflowWithCreator;
   } catch (error) {
     logger.error('Failed to create workflow', {
       error,
@@ -137,30 +237,53 @@ export async function createWorkflow(input: CreateWorkflowInput) {
  */
 export async function getWorkflows(filters?: { trigger?: WorkflowTrigger; isActive?: boolean }) {
   try {
-    const where: Prisma.TicketWorkflowWhereInput = {};
+    let query = db
+      .from('ticket_workflows')
+      .select('*')
+      .order('priority', { ascending: false })
+      .order('createdAt', { ascending: false });
 
     if (filters?.trigger) {
-      where.trigger = filters.trigger;
+      query = query.eq('trigger', filters.trigger);
     }
     if (filters?.isActive !== undefined) {
-      where.isActive = filters.isActive;
+      query = query.eq('isActive', filters.isActive);
     }
 
-    const workflows = await prisma.ticketWorkflow.findMany({
-      where,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+    const { data: workflowsData } = await query;
+
+    const workflows = (workflowsData || []) as TicketWorkflowRecord[];
+
+    if (workflows.length === 0) {
+      return [];
+    }
+
+    // Get creators for all workflows
+    const creatorIds = [...new Set(workflows.map((w) => w.createdById))];
+    const { data: creatorsData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', creatorIds);
+
+    const creators = (creatorsData || []) as ProfileRecord[];
+    const creatorMap = new Map(creators.map((c) => [c.id, c]));
+
+    // Attach creators to workflows
+    const workflowsWithCreators: WorkflowWithCreator[] = workflows.map((w) => {
+      const creator = creatorMap.get(w.createdById);
+      return {
+        ...w,
+        createdBy: creator
+          ? {
+              id: creator.id,
+              firstName: creator.firstName,
+              lastName: creator.lastName,
+            }
+          : null,
+      };
     });
 
-    return workflows;
+    return workflowsWithCreators;
   } catch (error) {
     logger.error('Failed to get workflows', { error });
     throw new Error('Failed to get workflows');
@@ -172,26 +295,50 @@ export async function getWorkflows(filters?: { trigger?: WorkflowTrigger; isActi
  */
 export async function getWorkflowById(workflowId: string) {
   try {
-    const workflow = await prisma.ticketWorkflow.findUnique({
-      where: { id: workflowId },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        logs: {
-          take: 10,
-          orderBy: {
-            executedAt: 'desc',
-          },
-        },
-      },
-    });
+    const { data: workflowData } = await db
+      .from('ticket_workflows')
+      .select('*')
+      .eq('id', workflowId)
+      .limit(1);
 
-    return workflow;
+    const workflow = firstOrNull(workflowData) as TicketWorkflowRecord | null;
+
+    if (!workflow) {
+      return null;
+    }
+
+    // Get creator
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', workflow.createdById)
+      .limit(1);
+
+    const creator = firstOrNull(creatorData) as ProfileRecord | null;
+
+    // Get logs
+    const { data: logsData } = await db
+      .from('ticket_workflow_logs')
+      .select('*')
+      .eq('workflowId', workflowId)
+      .order('executedAt', { ascending: false })
+      .limit(10);
+
+    const logs = (logsData || []) as TicketWorkflowLogRecord[];
+
+    const workflowWithRelations: WorkflowWithCreator = {
+      ...workflow,
+      createdBy: creator
+        ? {
+            id: creator.id,
+            firstName: creator.firstName,
+            lastName: creator.lastName,
+          }
+        : null,
+      logs,
+    };
+
+    return workflowWithRelations;
   } catch (error) {
     logger.error('Failed to get workflow by ID', {
       error,
@@ -206,26 +353,48 @@ export async function getWorkflowById(workflowId: string) {
  */
 export async function updateWorkflow(workflowId: string, input: UpdateWorkflowInput) {
   try {
-    const workflow = await prisma.ticketWorkflow.update({
-      where: { id: workflowId },
-      data: input,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: workflowData, error } = await db
+      .from('ticket_workflows')
+      .update({
+        ...input,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', workflowId)
+      .select()
+      .single();
+
+    if (error || !workflowData) {
+      throw new Error('Workflow not found');
+    }
+
+    const workflow = workflowData as TicketWorkflowRecord;
+
+    // Get creator
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', workflow.createdById)
+      .limit(1);
+
+    const creator = firstOrNull(creatorData) as ProfileRecord | null;
+
+    const workflowWithCreator: WorkflowWithCreator = {
+      ...workflow,
+      createdBy: creator
+        ? {
+            id: creator.id,
+            firstName: creator.firstName,
+            lastName: creator.lastName,
+          }
+        : null,
+    };
 
     logger.info('Workflow updated', {
       workflowId,
       updates: input,
     });
 
-    return workflow;
+    return workflowWithCreator;
   } catch (error) {
     logger.error('Failed to update workflow', {
       error,
@@ -241,9 +410,11 @@ export async function updateWorkflow(workflowId: string, input: UpdateWorkflowIn
  */
 export async function deleteWorkflow(workflowId: string) {
   try {
-    await prisma.ticketWorkflow.delete({
-      where: { id: workflowId },
-    });
+    // Delete logs first (foreign key constraint)
+    await db.from('ticket_workflow_logs').delete().eq('workflowId', workflowId);
+
+    // Delete workflow
+    await db.from('ticket_workflows').delete().eq('id', workflowId);
 
     logger.info('Workflow deleted', { workflowId });
 
@@ -276,44 +447,65 @@ export async function executeWorkflows(
 ) {
   try {
     // Get active workflows for this trigger
-    const workflows = await prisma.ticketWorkflow.findMany({
-      where: {
-        trigger,
-        isActive: true,
-      },
-      orderBy: {
-        priority: 'desc',
-      },
-    });
+    const { data: workflowsData } = await db
+      .from('ticket_workflows')
+      .select('*')
+      .eq('trigger', trigger)
+      .eq('isActive', true)
+      .order('priority', { ascending: false });
+
+    const workflows = (workflowsData || []) as TicketWorkflowRecord[];
 
     if (workflows.length === 0) {
       return;
     }
 
     // Get ticket details
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      include: {
-        creator: true,
-        assignedTo: true,
-        messages: {
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 1,
-        },
-      },
-    });
+    const { data: ticketData } = await db
+      .from('support_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .limit(1);
 
-    if (!ticket) {
+    const ticketBase = firstOrNull(ticketData) as SupportTicketRecord | null;
+
+    if (!ticketBase) {
       return;
     }
+
+    // Get creator and assignedTo profiles
+    const profileIds = [ticketBase.creatorId, ticketBase.assignedToId].filter(Boolean) as string[];
+    const { data: profilesData } = await db
+      .from('profiles')
+      .select('id, userId, firstName, lastName')
+      .in('id', profileIds);
+
+    const profiles = (profilesData || []) as ProfileRecord[];
+    const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+    // Get last message
+    const { data: messagesData } = await db
+      .from('ticket_messages')
+      .select('*')
+      .eq('ticketId', ticketId)
+      .order('createdAt', { ascending: false })
+      .limit(1);
+
+    const messages = (messagesData || []) as TicketMessageRecord[];
+
+    const ticket: TicketWithRelations = {
+      ...ticketBase,
+      creator: profileMap.get(ticketBase.creatorId) || null,
+      assignedTo: ticketBase.assignedToId ? profileMap.get(ticketBase.assignedToId) || null : null,
+      messages,
+    };
 
     // Execute each workflow
     for (const workflow of workflows) {
       try {
         // Check if conditions are met
-        const conditionsMet = checkWorkflowConditions(workflow, ticket, context);
+        const workflowWithCreator: WorkflowWithCreator = { ...workflow, createdBy: null };
+        const conditionsMet = checkWorkflowConditions(workflowWithCreator, ticket, context);
 
         if (!conditionsMet) {
           await logWorkflowExecution(workflow.id, ticketId, 'skipped', {
@@ -323,16 +515,18 @@ export async function executeWorkflows(
         }
 
         // Execute workflow actions
-        await executeWorkflowActions(workflow, ticket);
+        await executeWorkflowActions(workflowWithCreator, ticket);
 
         // Update workflow statistics
-        await prisma.ticketWorkflow.update({
-          where: { id: workflow.id },
-          data: {
-            lastTriggeredAt: new Date(),
-            triggerCount: { increment: 1 },
-          },
-        });
+        const currentCount = workflow.triggerCount || 0;
+        await db
+          .from('ticket_workflows')
+          .update({
+            lastTriggeredAt: new Date().toISOString(),
+            triggerCount: currentCount + 1,
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', workflow.id);
 
         await logWorkflowExecution(workflow.id, ticketId, 'success', {
           actionsExecuted: Array.isArray(workflow.actions) ? workflow.actions.length : 0,
@@ -401,7 +595,7 @@ function checkWorkflowConditions(
 
   // Check custom field condition
   if (conditions.customField) {
-    const customFields = ticket.customFields as Prisma.JsonObject;
+    const customFields = ticket.customFields as Record<string, unknown>;
     if (
       !customFields ||
       customFields[conditions.customField.key] !== conditions.customField.value
@@ -438,35 +632,35 @@ async function executeWorkflowActions(workflow: WorkflowWithCreator, ticket: Tic
  */
 async function executeAction(action: WorkflowAction, ticket: TicketWithRelations) {
   switch (action.type) {
-    case WorkflowActionType.ASSIGN_PREPARER:
+    case 'ASSIGN_PREPARER':
       await handleAssignPreparer(action.config, ticket);
       break;
 
-    case WorkflowActionType.SEND_NOTIFICATION:
+    case 'SEND_NOTIFICATION':
       await handleSendNotification(action.config, ticket);
       break;
 
-    case WorkflowActionType.ADD_TAG:
+    case 'ADD_TAG':
       await handleAddTag(action.config, ticket);
       break;
 
-    case WorkflowActionType.CHANGE_STATUS:
+    case 'CHANGE_STATUS':
       await handleChangeStatus(action.config, ticket);
       break;
 
-    case WorkflowActionType.CHANGE_PRIORITY:
+    case 'CHANGE_PRIORITY':
       await handleChangePriority(action.config, ticket);
       break;
 
-    case WorkflowActionType.SEND_SAVED_REPLY:
+    case 'SEND_SAVED_REPLY':
       await handleSendSavedReply(action.config, ticket);
       break;
 
-    case WorkflowActionType.AUTO_CLOSE:
+    case 'AUTO_CLOSE':
       await handleAutoClose(action.config, ticket);
       break;
 
-    case WorkflowActionType.CREATE_TASK:
+    case 'CREATE_TASK':
       await handleCreateTask(action.config, ticket);
       break;
 
@@ -482,10 +676,13 @@ async function executeAction(action: WorkflowAction, ticket: TicketWithRelations
 async function handleAssignPreparer(config: WorkflowActionConfig, ticket: TicketWithRelations) {
   if (!config.preparerId) return;
 
-  await prisma.supportTicket.update({
-    where: { id: ticket.id },
-    data: { assignedToId: config.preparerId },
-  });
+  await db
+    .from('support_tickets')
+    .update({
+      assignedToId: config.preparerId,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', ticket.id);
 
   logger.info('Workflow: Assigned preparer', {
     ticketId: ticket.id,
@@ -508,12 +705,13 @@ async function handleAddTag(config: WorkflowActionConfig, ticket: TicketWithRela
   const currentTags = ticket.tags || [];
   if (currentTags.includes(config.tag)) return;
 
-  await prisma.supportTicket.update({
-    where: { id: ticket.id },
-    data: {
+  await db
+    .from('support_tickets')
+    .update({
       tags: [...currentTags, config.tag],
-    },
-  });
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', ticket.id);
 
   logger.info('Workflow: Added tag', {
     ticketId: ticket.id,
@@ -524,19 +722,19 @@ async function handleAddTag(config: WorkflowActionConfig, ticket: TicketWithRela
 async function handleChangeStatus(config: WorkflowActionConfig, ticket: TicketWithRelations) {
   if (!config.status) return;
 
-  const updateData: Prisma.SupportTicketUpdateInput = { status: config.status };
+  const updateData: Record<string, unknown> = {
+    status: config.status,
+    updatedAt: new Date().toISOString(),
+  };
 
-  if (config.status === TicketStatus.RESOLVED) {
-    updateData.resolvedAt = new Date();
+  if (config.status === 'RESOLVED') {
+    updateData.resolvedAt = new Date().toISOString();
   }
-  if (config.status === TicketStatus.CLOSED) {
-    updateData.closedAt = new Date();
+  if (config.status === 'CLOSED') {
+    updateData.closedAt = new Date().toISOString();
   }
 
-  await prisma.supportTicket.update({
-    where: { id: ticket.id },
-    data: updateData,
-  });
+  await db.from('support_tickets').update(updateData).eq('id', ticket.id);
 
   logger.info('Workflow: Changed status', {
     ticketId: ticket.id,
@@ -547,10 +745,13 @@ async function handleChangeStatus(config: WorkflowActionConfig, ticket: TicketWi
 async function handleChangePriority(config: WorkflowActionConfig, ticket: TicketWithRelations) {
   if (!config.priority) return;
 
-  await prisma.supportTicket.update({
-    where: { id: ticket.id },
-    data: { priority: config.priority },
-  });
+  await db
+    .from('support_tickets')
+    .update({
+      priority: config.priority,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', ticket.id);
 
   logger.info('Workflow: Changed priority', {
     ticketId: ticket.id,
@@ -569,13 +770,14 @@ async function handleSendSavedReply(config: WorkflowActionConfig, ticket: Ticket
 }
 
 async function handleAutoClose(config: WorkflowActionConfig, ticket: TicketWithRelations) {
-  await prisma.supportTicket.update({
-    where: { id: ticket.id },
-    data: {
-      status: TicketStatus.CLOSED,
-      closedAt: new Date(),
-    },
-  });
+  await db
+    .from('support_tickets')
+    .update({
+      status: 'CLOSED' as TicketStatus,
+      closedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', ticket.id);
 
   logger.info('Workflow: Auto-closed ticket', {
     ticketId: ticket.id,
@@ -600,14 +802,13 @@ async function logWorkflowExecution(
   details?: Record<string, string | number | boolean>
 ) {
   try {
-    await prisma.ticketWorkflowLog.create({
-      data: {
-        workflowId,
-        ticketId,
-        action: 'execute',
-        result,
-        details: details || {},
-      },
+    await db.from('ticket_workflow_logs').insert({
+      workflowId,
+      ticketId,
+      action: 'execute',
+      result,
+      details: details || {},
+      executedAt: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('Failed to log workflow execution', {
@@ -633,50 +834,50 @@ export async function autoCloseIdleTickets(settings: {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - settings.inactiveDays);
 
-    const where: Prisma.SupportTicketWhereInput = {
-      lastActivityAt: { lt: cutoffDate },
-      status: {
-        notIn: [TicketStatus.CLOSED, TicketStatus.ARCHIVED],
-      },
-    };
+    // Build query for idle tickets
+    let query = db
+      .from('support_tickets')
+      .select('*')
+      .lt('lastActivityAt', cutoffDate.toISOString())
+      .not('status', 'in', '("CLOSED","ARCHIVED")')
+      .limit(100);
 
     // Exclude tickets waiting for client response
     if (settings.excludeIfClientWaiting) {
-      where.status = { not: TicketStatus.WAITING_CLIENT };
+      query = query.neq('status', 'WAITING_CLIENT');
     }
 
-    // Exclude tickets with specific tags
+    const { data: ticketsData } = await query;
+    let idleTickets = (ticketsData || []) as SupportTicketRecord[];
+
+    // Filter out tickets with excluded tags (done in JS since Supabase doesn't have hasSome equivalent)
     if (settings.excludeTags && settings.excludeTags.length > 0) {
-      where.NOT = {
-        tags: { hasSome: settings.excludeTags },
-      };
+      idleTickets = idleTickets.filter((ticket) => {
+        const ticketTags = ticket.tags || [];
+        return !settings.excludeTags!.some((tag) => ticketTags.includes(tag));
+      });
     }
-
-    const idleTickets = await prisma.supportTicket.findMany({
-      where,
-      take: 100, // Process in batches
-    });
 
     let closedCount = 0;
 
     for (const ticket of idleTickets) {
       try {
-        await prisma.supportTicket.update({
-          where: { id: ticket.id },
-          data: {
-            status: TicketStatus.CLOSED,
-            closedAt: new Date(),
-          },
-        });
+        await db
+          .from('support_tickets')
+          .update({
+            status: 'CLOSED' as TicketStatus,
+            closedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', ticket.id);
 
         // Add internal note
-        await prisma.ticketMessage.create({
-          data: {
-            ticketId: ticket.id,
-            senderId: ticket.assignedToId || ticket.creatorId,
-            content: `Ticket automatically closed due to ${settings.inactiveDays} days of inactivity.`,
-            isInternal: true,
-          },
+        await db.from('ticket_messages').insert({
+          ticketId: ticket.id,
+          senderId: ticket.assignedToId || ticket.creatorId,
+          content: `Ticket automatically closed due to ${settings.inactiveDays} days of inactivity.`,
+          isInternal: true,
+          createdAt: new Date().toISOString(),
         });
 
         closedCount++;
@@ -708,20 +909,30 @@ export async function autoCloseIdleTickets(settings: {
  */
 export async function getWorkflowStats(workflowId?: string) {
   try {
-    const where: Prisma.TicketWorkflowLogWhereInput = {};
-    if (workflowId) {
-      where.workflowId = workflowId;
-    }
+    // Build queries for counts
+    const buildQuery = (resultFilter?: string) => {
+      let query = db
+        .from('ticket_workflow_logs')
+        .select('id', { count: 'exact', head: true });
 
-    const [totalExecutions, successCount, failedCount] = await Promise.all([
-      prisma.ticketWorkflowLog.count({ where }),
-      prisma.ticketWorkflowLog.count({
-        where: { ...where, result: 'success' },
-      }),
-      prisma.ticketWorkflowLog.count({
-        where: { ...where, result: 'failed' },
-      }),
+      if (workflowId) {
+        query = query.eq('workflowId', workflowId);
+      }
+      if (resultFilter) {
+        query = query.eq('result', resultFilter);
+      }
+      return query;
+    };
+
+    const [totalResult, successResult, failedResult] = await Promise.all([
+      buildQuery(),
+      buildQuery('success'),
+      buildQuery('failed'),
     ]);
+
+    const totalExecutions = totalResult.count || 0;
+    const successCount = successResult.count || 0;
+    const failedCount = failedResult.count || 0;
 
     return {
       totalExecutions,

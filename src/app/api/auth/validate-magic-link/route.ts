@@ -6,8 +6,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface MagicLink {
+  id: string;
+  userId: string;
+  token: string;
+  expiresAt: Date;
+  used: boolean;
+  createdAt: Date;
+}
+
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  emailVerified: Date | null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,19 +35,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Find token in magic_links table (used for password setup tokens)
-    const passwordToken = await prisma.magicLink.findUnique({
-      where: { token },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            emailVerified: true,
-          },
-        },
-      },
-    });
+    const { data: magicLinksData, error: magicLinkError } = await db
+      .from('magic_links')
+      .select('*')
+      .eq('token', token)
+      .limit(1);
+
+    if (magicLinkError) {
+      logger.error('Error finding magic link', { error: magicLinkError.message });
+      return NextResponse.json({ valid: false, error: 'Failed to validate link' }, { status: 500 });
+    }
+
+    const passwordToken = firstOrNull<MagicLink>(magicLinksData);
 
     if (!passwordToken) {
       return NextResponse.json({ valid: false, error: 'Invalid link' }, { status: 404 });
@@ -42,16 +58,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if expired
-    if (new Date() > passwordToken.expiresAt) {
+    if (new Date() > new Date(passwordToken.expiresAt)) {
       return NextResponse.json({ valid: false, error: 'This link has expired' }, { status: 400 });
+    }
+
+    // Get user info
+    const { data: usersData } = await db
+      .from('users')
+      .select('id, email, name, emailVerified')
+      .eq('id', passwordToken.userId)
+      .limit(1);
+
+    const user = firstOrNull<User>(usersData);
+
+    if (!user) {
+      return NextResponse.json({ valid: false, error: 'User not found' }, { status: 404 });
     }
 
     // Valid!
     return NextResponse.json({
       valid: true,
-      email: passwordToken.user.email,
-      name: passwordToken.user.name,
-      userId: passwordToken.user.id,
+      email: user.email,
+      name: user.name,
+      userId: user.id,
     });
   } catch (error) {
     logger.error('Error validating token:', error);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -15,45 +15,48 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Find preparer by tracking code, custom tracking code, or short link username
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: ref },
-          { customTrackingCode: ref },
-          { shortLinkUsername: ref },
-        ],
-        role: 'tax_preparer',
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        publicAddress: true,
-        companyName: true,
-        professionalTitle: true,
-        avatarUrl: true,
-        // Social media links
-        facebookUrl: true,
-        instagramUrl: true,
-        linkedinUrl: true,
-        twitterUrl: true,
-        youtubeUrl: true,
-        tiktokUrl: true,
-        // Include user email
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, phone, publicAddress, companyName, professionalTitle, avatarUrl, facebookUrl, instagramUrl, linkedinUrl, twitterUrl, youtubeUrl, tiktokUrl, userId')
+      .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
+      .eq('role', 'tax_preparer')
+      .limit(1);
+
+    const profile = firstOrNull(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
     }
 
-    return NextResponse.json(profile);
+    // Get user email
+    let email: string | undefined;
+    if (profile.userId) {
+      const { data: userData } = await db
+        .from('users')
+        .select('email')
+        .eq('id', profile.userId)
+        .limit(1);
+      email = userData?.[0]?.email;
+    }
+
+    // Return profile with user email
+    return NextResponse.json({
+      id: profile.id,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      phone: profile.phone,
+      publicAddress: profile.publicAddress,
+      companyName: profile.companyName,
+      professionalTitle: profile.professionalTitle,
+      avatarUrl: profile.avatarUrl,
+      facebookUrl: profile.facebookUrl,
+      instagramUrl: profile.instagramUrl,
+      linkedinUrl: profile.linkedinUrl,
+      twitterUrl: profile.twitterUrl,
+      youtubeUrl: profile.youtubeUrl,
+      tiktokUrl: profile.tiktokUrl,
+      user: email ? { email } : null,
+    });
   } catch (error) {
     logger.error('Error fetching preparer by ref', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ error: 'Failed to fetch preparer' }, { status: 500 });

@@ -7,7 +7,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from '../contacts/route';
 import { GET as getContactById, PATCH, DELETE } from '../contacts/[id]/route';
-import { ContactType, PipelineStage, UserRole } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client imports)
+const ContactType = {
+  LEAD: 'LEAD',
+  CLIENT: 'CLIENT',
+  AFFILIATE: 'AFFILIATE',
+  PREPARER: 'PREPARER',
+} as const;
+
+const PipelineStage = {
+  NEW: 'NEW',
+  CONTACTED: 'CONTACTED',
+  QUALIFIED: 'QUALIFIED',
+  PROPOSAL: 'PROPOSAL',
+  NEGOTIATION: 'NEGOTIATION',
+  WON: 'WON',
+  LOST: 'LOST',
+} as const;
+
+const UserRole = {
+  CLIENT: 'client',
+  AFFILIATE: 'affiliate',
+  TAX_PREPARER: 'tax_preparer',
+  ADMIN: 'admin',
+} as const;
 
 // Mock dependencies
 vi.mock('@/lib/auth', () => ({
@@ -24,12 +48,18 @@ vi.mock('@/lib/services/crm.service', () => ({
   },
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    profile: {
-      findUnique: vi.fn(),
-    },
+vi.mock('@/lib/db', () => ({
+  db: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve({ data: [] })),
+        })),
+        in: vi.fn(() => Promise.resolve({ data: [] })),
+      })),
+    })),
   },
+  firstOrNull: vi.fn((data: any[]) => data?.[0] || null),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -43,7 +73,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { requireOneOfRoles } from '@/lib/auth';
 import { CRMService } from '@/lib/services/crm.service';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 
 describe('CRM Contacts API - Integration Tests', () => {
   beforeEach(() => {
@@ -99,9 +129,16 @@ describe('CRM Contacts API - Integration Tests', () => {
         profile: { id: 'preparer-1' },
       } as any);
 
-      vi.mocked(prisma.profile.findUnique).mockResolvedValue({
-        id: 'preparer-1',
-        userId: 'clerk-preparer-1',
+      // Mock db.from('profiles').select().eq().limit() for tax preparer profile lookup
+      vi.mocked(db.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({
+              data: [{ id: 'preparer-1', userId: 'clerk-preparer-1' }],
+            }),
+          }),
+          in: vi.fn().mockResolvedValue({ data: [] }),
+        }),
       } as any);
 
       vi.mocked(CRMService.listContacts).mockResolvedValue({
@@ -346,9 +383,16 @@ describe('CRM Contacts API - Integration Tests', () => {
         profile: { id: 'preparer-1' },
       } as any);
 
-      vi.mocked(prisma.profile.findUnique).mockResolvedValue({
-        id: 'preparer-1',
-        userId: 'clerk-preparer-1',
+      // Mock db.from('profiles').select().eq().limit() for tax preparer profile lookup
+      vi.mocked(db.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({
+              data: [{ id: 'preparer-1', userId: 'clerk-preparer-1' }],
+            }),
+          }),
+          in: vi.fn().mockResolvedValue({ data: [] }),
+        }),
       } as any);
 
       vi.mocked(CRMService.getContactById).mockRejectedValue(

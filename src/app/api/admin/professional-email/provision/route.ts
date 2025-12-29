@@ -10,8 +10,21 @@
 
 import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
 
 /**
  * POST: Provision professional email for tax preparer
@@ -27,10 +40,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Get admin's profile
-    const adminProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { role: true },
-    });
+    const { data: adminProfileData, error: adminProfileError } = await db.from('profiles')
+      .select('role')
+      .eq('userId', userId)
+      .limit(1);
+
+    if (adminProfileError) {
+      throw adminProfileError;
+    }
+
+    const adminProfile = firstOrNull<{ role: string }>(adminProfileData);
 
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
@@ -63,31 +82,38 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Check if preparer exists
-    const preparer = await prisma.user.findUnique({
-      where: { id: preparerId },
-      select: {
-        id: true,
-        email: true,
-        profile: {
-          select: {
-            id: true,
-            role: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: preparerData, error: preparerError } = await db.from('users')
+      .select('id, email')
+      .eq('id', preparerId)
+      .limit(1);
+
+    if (preparerError) {
+      throw preparerError;
+    }
+
+    const preparer = firstOrNull<User>(preparerData);
 
     if (!preparer) {
       return NextResponse.json({ error: 'Tax preparer not found' }, { status: 404 });
     }
 
-    if (!preparer.profile) {
+    // Get preparer's profile
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', preparer.id)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
+
+    if (!profile) {
       return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
     }
 
-    if (preparer.profile.role !== 'tax_preparer') {
+    if (profile.role !== 'tax_preparer') {
       return NextResponse.json(
         { error: 'User is not a tax preparer' },
         { status: 400 }
@@ -95,13 +121,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Check if email already exists
-    const existingEmail = await prisma.professionalEmailAlias.findFirst({
-      where: {
-        emailAddress: emailAddress.toLowerCase(),
-      },
-    });
+    const { data: existingEmail } = await db.from('professional_email_aliases')
+      .select('id')
+      .eq('emailAddress', emailAddress.toLowerCase())
+      .limit(1);
 
-    if (existingEmail) {
+    if (existingEmail && existingEmail.length > 0) {
       return NextResponse.json(
         { error: 'This email address is already in use' },
         { status: 409 }
@@ -110,32 +135,32 @@ export async function POST(request: NextRequest) {
 
     // 6. If isPrimary, remove primary flag from other emails for this profile
     if (isPrimary) {
-      await prisma.professionalEmailAlias.updateMany({
-        where: {
-          profileId: preparer.profile.id,
-          isPrimary: true,
-        },
-        data: {
-          isPrimary: false,
-        },
-      });
+      await db.from('professional_email_aliases')
+        .update({ isPrimary: false })
+        .eq('profileId', profile.id)
+        .eq('isPrimary', true);
 
       logger.info('Removed primary flag from existing professional emails', {
-        profileId: preparer.profile.id,
+        profileId: profile.id,
         preparerId,
       });
     }
 
     // 7. Create professional email alias
-    const professionalEmail = await prisma.professionalEmailAlias.create({
-      data: {
-        profileId: preparer.profile.id,
+    const { data: professionalEmail, error: createError } = await db.from('professional_email_aliases')
+      .insert({
+        profileId: profile.id,
         emailAddress: emailAddress.toLowerCase(),
         forwardToEmail: preparer.email, // Forward to their signup email by default
         status: 'ACTIVE',
         isPrimary,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
 
     logger.info('Professional email provisioned', {
       emailId: professionalEmail.id,
@@ -157,7 +182,7 @@ export async function POST(request: NextRequest) {
           status: professionalEmail.status,
           preparer: {
             id: preparer.id,
-            name: `${preparer.profile.firstName} ${preparer.profile.lastName}`,
+            name: `${profile.firstName} ${profile.lastName}`,
             signupEmail: preparer.email,
           },
         },

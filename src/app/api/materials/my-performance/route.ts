@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 interface MaterialPerformance {
@@ -96,59 +96,89 @@ export async function GET(request: NextRequest) {
     // Fetch materials with pagination
     const skip = (page - 1) * pageSize;
     const take = Math.min(pageSize, 50); // Cap at 50 per page
+    const effectiveLimit = limit > 0 ? Math.min(limit, take) : take;
 
-    const [materials, total] = await prisma.$transaction([
-      prisma.marketingLink.findMany({
-        where: {
-          creatorId: userId,
-          isActive: true,
-          ...dateFilter,
-        },
-        orderBy,
-        skip,
-        take: limit > 0 ? Math.min(limit, take) : take,
-        select: {
-          id: true,
-          title: true,
-          linkType: true,
-          location: true,
-          campaign: true,
-          clicks: true,
-          intakeStarts: true,
-          intakeCompletes: true,
-          returnsFiled: true,
-          filedConversionRate: true,
-          updatedAt: true,
-          isActive: true,
-        },
-      }),
-      prisma.marketingLink.count({
-        where: {
-          creatorId: userId,
-          isActive: true,
-          ...dateFilter,
-        },
-      }),
-    ]);
+    // Build the query for materials
+    let materialsQuery = db
+      .from('marketing_links')
+      .select('id, title, link_type, location, campaign, clicks, intake_starts, intake_completes, returns_filed, filed_conversion_rate, updated_at, is_active')
+      .eq('creator_id', userId)
+      .eq('is_active', true);
+
+    // Apply date filter if set
+    if (dateFilter.createdAt) {
+      materialsQuery = materialsQuery
+        .gte('created_at', (dateFilter.createdAt as any).gte.toISOString())
+        .lte('created_at', (dateFilter.createdAt as any).lte.toISOString());
+    }
+
+    // Apply sorting
+    const sortColumn = sortBy === 'clicks' ? 'clicks' :
+                       (sortBy === 'conversion_rate' || sortBy === 'conversionRate') ? 'filed_conversion_rate' : 'returns_filed';
+    materialsQuery = materialsQuery.order(sortColumn, { ascending: sortOrder === 'asc' });
+
+    // Apply pagination
+    materialsQuery = materialsQuery.range(skip, skip + effectiveLimit - 1);
+
+    const { data: rawMaterials, error: materialsError } = await materialsQuery;
+
+    if (materialsError) {
+      logger.error('Error fetching materials:', materialsError);
+      return NextResponse.json({ error: 'Failed to fetch material performance' }, { status: 500 });
+    }
+
+    // Get total count
+    let countQuery = db
+      .from('marketing_links')
+      .select('id', { count: 'exact', head: true })
+      .eq('creator_id', userId)
+      .eq('is_active', true);
+
+    if (dateFilter.createdAt) {
+      countQuery = countQuery
+        .gte('created_at', (dateFilter.createdAt as any).gte.toISOString())
+        .lte('created_at', (dateFilter.createdAt as any).lte.toISOString());
+    }
+
+    const { count: total } = await countQuery;
+
+    // Transform snake_case to camelCase
+    const materials = (rawMaterials || []).map((m: any) => ({
+      id: m.id,
+      title: m.title,
+      linkType: m.link_type,
+      location: m.location,
+      campaign: m.campaign,
+      clicks: m.clicks || 0,
+      intakeStarts: m.intake_starts || 0,
+      intakeCompletes: m.intake_completes || 0,
+      returnsFiled: m.returns_filed || 0,
+      filedConversionRate: m.filed_conversion_rate || 0,
+      updatedAt: m.updated_at,
+      isActive: m.is_active,
+    }));
 
     // Get earnings for each material (if referrer/affiliate)
-    const materialIds = materials.map((m) => m.id);
-    const commissions = await prisma.commission.groupBy({
-      by: ['referralId'],
-      where: {
-        referrerId: userId,
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+    const materialIds = materials.map((m: any) => m.id);
 
-    const commissionMap = new Map(
-      commissions.map((c) => [c.referralId, Number(c._sum.amount || 0)])
-    );
+    // Supabase doesn't have a direct groupBy, so we use RPC or manual aggregation
+    // For now, we'll fetch commissions and aggregate in JS
+    const { data: commissionData } = await db
+      .from('commissions')
+      .select('referral_id, amount')
+      .eq('referrer_id', userId);
+
+    // Aggregate commissions by referralId
+    const commissionMap = new Map<string, number>();
+    if (commissionData) {
+      for (const c of commissionData) {
+        const existing = commissionMap.get(c.referral_id) || 0;
+        commissionMap.set(c.referral_id, existing + Number(c.amount || 0));
+      }
+    }
 
     // Format response
-    const formattedMaterials: MaterialPerformance[] = materials.map((material) => {
+    const formattedMaterials: MaterialPerformance[] = materials.map((material: any) => {
       const conversionRate =
         material.filedConversionRate ||
         (material.clicks > 0 ? (material.returnsFiled / material.clicks) * 100 : 0);
@@ -175,10 +205,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       materials: formattedMaterials,
       pagination: {
-        total,
+        total: total || 0,
         page,
         pageSize: take,
-        totalPages: Math.ceil(total / take),
+        totalPages: Math.ceil((total || 0) / take),
       },
     });
   } catch (error) {

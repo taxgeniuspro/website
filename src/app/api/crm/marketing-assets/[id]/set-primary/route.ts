@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -12,34 +12,36 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const assetId = params.id;
+    const { id: assetId } = await params;
 
     // Get asset
-    const asset = await prisma.marketingAsset.findUnique({
-      where: { id: assetId },
-    });
+    const { data: assets } = await db
+      .from('marketing_assets')
+      .select('*')
+      .eq('id', assetId)
+      .limit(1);
+
+    const asset = firstOrNull(assets);
 
     if (!asset) {
       return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
@@ -59,20 +61,20 @@ export async function PATCH(
     }
 
     // Unset other primary photos in the same category
-    await prisma.marketingAsset.updateMany({
-      where: {
-        profileId: profile.id,
-        category: asset.category,
-        isPrimary: true,
-      },
-      data: { isPrimary: false },
-    });
+    await db
+      .from('marketing_assets')
+      .update({ isPrimary: false })
+      .eq('profileId', profile.id)
+      .eq('category', asset.category)
+      .eq('isPrimary', true);
 
     // Set this asset as primary
-    const updatedAsset = await prisma.marketingAsset.update({
-      where: { id: assetId },
-      data: { isPrimary: true },
-    });
+    const { data: updatedAsset } = await db
+      .from('marketing_assets')
+      .update({ isPrimary: true })
+      .eq('id', assetId)
+      .select()
+      .single();
 
     logger.info('Primary marketing asset updated:', {
       assetId: asset.id,

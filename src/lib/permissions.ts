@@ -1,11 +1,14 @@
 import { logger } from '@/lib/logger';
-import type { AffiliateStatus } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definition (replacing @prisma/client)
+export type AffiliateStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE';
 
 /**
  * Permission System
  *
  * Manages granular access control for different user roles.
- * Permissions are stored in the database via Prisma.
+ * Permissions are stored in the database via Supabase.
  */
 
 export type Permission =
@@ -960,15 +963,13 @@ export const PERMISSION_TO_ROUTE: Record<Permission, string> = {
  */
 export async function getRolePermissionTemplate(role: UserRole): Promise<Partial<UserPermissions>> {
   try {
-    // Dynamic import to avoid circular dependency
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+    const { data: templateData } = await db
+      .from('role_permission_templates')
+      .select('permissions')
+      .eq('role', role)
+      .limit(1);
 
-    const template = await prisma.rolePermissionTemplate.findUnique({
-      where: { role },
-    });
-
-    await prisma.$disconnect();
+    const template = firstOrNull(templateData) as { permissions?: unknown } | null;
 
     if (template && template.permissions) {
       return template.permissions as Partial<UserPermissions>;

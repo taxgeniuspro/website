@@ -6,10 +6,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
+// TypeScript interface (replacing Prisma types)
+interface AccessAttemptLog {
+  id: string;
+  timestamp: Date;
+  wasBlocked: boolean;
+  routePath?: string | null;
+  userId?: string | null;
+  ipAddress?: string | null;
+  reason?: string | null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,13 +31,23 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const blockedOnly = searchParams.get('blockedOnly') === 'true';
 
-    const logs = await prisma.accessAttemptLog.findMany({
-      where: blockedOnly ? { wasBlocked: true } : undefined,
-      orderBy: { timestamp: 'desc' },
-      take: Math.min(limit, 500), // Max 500
-    });
+    let query = db
+      .from('access_attempt_logs')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(Math.min(limit, 500)); // Max 500
 
-    return NextResponse.json(logs);
+    if (blockedOnly) {
+      query = query.eq('wasBlocked', true);
+    }
+
+    const { data: logs, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(logs || []);
   } catch (error) {
     logger.error('Error fetching logs:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

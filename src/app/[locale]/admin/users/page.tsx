@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,35 +46,47 @@ export default async function AdminUsersPage() {
   const isSuperAdmin = currentUserData?.user?.role === 'admin';
 
   // Fetch all users with profiles from database
-  const usersWithProfiles = await prisma.user.findMany({
-    take: 100,
-    include: {
-      profile: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const { data: usersWithProfiles, error } = await db
+    .from('users')
+    .select(`
+      id,
+      email,
+      created_at,
+      profiles!inner(
+        first_name,
+        last_name,
+        role,
+        custom_permissions,
+        is_active,
+        deactivated_at,
+        deactivated_by,
+        affiliate_status
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) console.error('Error fetching users:', error);
 
   // Format users data for client component
-  const formattedUsers = usersWithProfiles.map((user) => ({
+  const formattedUsers = (usersWithProfiles || []).map((user: any) => ({
     id: user.id,
     email: user.email,
-    firstName: user.profile?.firstName || '',
-    lastName: user.profile?.lastName || '',
-    role: user.profile?.role ? String(user.profile.role) : 'CLIENT',
-    permissions: user.profile?.customPermissions as Record<string, boolean> | undefined,
-    createdAt: user.createdAt.toISOString(),
-    isActive: user.profile?.isActive ?? true,
-    deactivatedAt: user.profile?.deactivatedAt?.toISOString() || null,
-    deactivatedBy: user.profile?.deactivatedBy || null,
-    affiliateStatus: user.profile?.affiliateStatus as 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE' | undefined,
+    firstName: user.profiles?.first_name || '',
+    lastName: user.profiles?.last_name || '',
+    role: user.profiles?.role ? String(user.profiles.role) : 'CLIENT',
+    permissions: user.profiles?.custom_permissions as Record<string, boolean> | undefined,
+    createdAt: user.created_at,
+    isActive: user.profiles?.is_active ?? true,
+    deactivatedAt: user.profiles?.deactivated_at || null,
+    deactivatedBy: user.profiles?.deactivated_by || null,
+    affiliateStatus: user.profiles?.affiliate_status as 'NONE' | 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'INACTIVE' | undefined,
   }));
 
   // Count users by role
-  const usersByRole = usersWithProfiles.reduce(
-    (acc, user) => {
-      const role = user.profile?.role ? String(user.profile.role) : 'no_role';
+  const usersByRole = formattedUsers.reduce(
+    (acc: Record<string, number>, user: any) => {
+      const role = user.role || 'no_role';
       acc[role] = (acc[role] || 0) + 1;
       return acc;
     },

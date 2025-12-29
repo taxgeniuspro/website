@@ -9,9 +9,35 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface PayoutRequest {
+  id: string;
+  referrerId: string;
+  amount: number;
+  commissionIds: string[];
+  status: string;
+  paymentMethod: string | null;
+  notes: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+  paymentRef: string | null;
+}
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  userId: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -36,23 +62,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { notes } = body;
 
     // Fetch payout request
-    const payout = await prisma.payoutRequest.findUnique({
-      where: { id },
-      include: {
-        referrer: {
-          include: {
-            user: {
-              select: {
-                email: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const { data: payoutData, error: payoutError } = await db.from('payout_requests')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (payoutError) {
+      throw payoutError;
+    }
+
+    const payout = firstOrNull<PayoutRequest>(payoutData);
 
     if (!payout) {
       return NextResponse.json({ error: 'Payout request not found' }, { status: 404 });
+    }
+
+    // Fetch referrer profile
+    const { data: profileData } = await db.from('profiles')
+      .select('id, firstName, lastName, userId')
+      .eq('id', payout.referrerId)
+      .limit(1);
+
+    const referrer = firstOrNull<Profile>(profileData);
+
+    // Fetch referrer user for email
+    let referrerEmail = '';
+    if (referrer) {
+      const { data: userData } = await db.from('users')
+        .select('id, email')
+        .eq('id', referrer.userId)
+        .limit(1);
+
+      const referrerUser = firstOrNull<User>(userData);
+      referrerEmail = referrerUser?.email || '';
     }
 
     // Validate payout is pending
@@ -64,47 +106,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Update payout request status to REJECTED
-    const updatedPayout = await prisma.payoutRequest.update({
-      where: { id },
-      data: {
+    const { data: updatedPayoutData, error: updateError } = await db.from('payout_requests')
+      .update({
         status: 'REJECTED',
-        processedAt: new Date(),
+        processedAt: new Date().toISOString(),
         notes: notes || 'Payout request rejected by administrator',
-      },
-    });
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     // Return commissions back to PENDING status (so referrer can request again later)
-    await prisma.commission.updateMany({
-      where: {
-        id: { in: payout.commissionIds },
-      },
-      data: {
-        status: 'PENDING',
-      },
-    });
+    await db.from('commissions')
+      .update({ status: 'PENDING' })
+      .in('id', payout.commissionIds);
 
     // Send rejection email to referrer
-    const referrerName = payout.referrer.firstName
-      ? `${payout.referrer.firstName} ${payout.referrer.lastName || ''}`.trim()
+    const referrerName = referrer?.firstName
+      ? `${referrer.firstName} ${referrer.lastName || ''}`.trim()
       : 'Referrer';
 
     await EmailService.sendPayoutRejectedEmail(
-      payout.referrer.user.email,
+      referrerEmail,
       referrerName,
       Number(payout.amount),
       notes || 'Your payout request has been rejected. Please contact support for more information.'
     );
 
-    logger.info(`❌ Payout ${id} rejected by admin ${profile.id}`);
-    logger.info(`💵 $${payout.amount} returned to PENDING for referrer ${payout.referrerId}`);
+    logger.info(`Payout ${id} rejected by admin`);
+    logger.info(`$${payout.amount} returned to PENDING for referrer ${payout.referrerId}`);
 
     return NextResponse.json({
       success: true,
       message: 'Payout request rejected',
       payout: {
-        id: updatedPayout.id,
-        status: updatedPayout.status,
-        processedAt: updatedPayout.processedAt?.toISOString(),
+        id: updatedPayoutData.id,
+        status: updatedPayoutData.status,
+        processedAt: updatedPayoutData.processedAt,
       },
     });
   } catch (error) {

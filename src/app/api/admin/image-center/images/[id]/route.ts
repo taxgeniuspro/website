@@ -1,10 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  role: string;
+  supabaseUserId?: string | null;
+  userId?: string | null;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+}
+
+interface GeneratedImage {
+  id: string;
+  prompt: string;
+  negativePrompt?: string | null;
+  provider: string;
+  modelUsed?: string | null;
+  status: string;
+  imageUrl: string;
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  fileSize?: number | null;
+  tags?: string[];
+  category?: string | null;
+  generationId?: string | null;
+  createdBy?: string | null;
+  acceptedBy?: string | null;
+  acceptedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * GET /api/admin/image-center/images/[id]
@@ -18,53 +53,73 @@ export async function GET(
   try {
     const session = await auth();
     const userId = session?.user?.id;
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const image = await prisma.generatedImage.findUnique({
-      where: { id: params.id },
-      include: {
-        createdByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-        acceptedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-    });
+    // Fetch the image
+    const { data: imageData, error: imageError } = await db
+      .from('generated_images')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!image) {
+    if (imageError || !imageData) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, image });
+    const image = imageData as GeneratedImage;
+
+    // Fetch related profiles
+    const profileIds = [image.createdBy, image.acceptedBy].filter(Boolean);
+    let profilesMap: Record<string, { id: string; firstName: string | null; lastName: string | null; avatarUrl: string | null }> = {};
+
+    if (profileIds.length > 0) {
+      const { data: relatedProfiles } = await db
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', profileIds);
+
+      if (relatedProfiles) {
+        profilesMap = relatedProfiles.reduce((acc, p) => {
+          acc[p.id] = {
+            id: p.id,
+            firstName: p.first_name,
+            lastName: p.last_name,
+            avatarUrl: p.avatar_url,
+          };
+          return acc;
+        }, {} as typeof profilesMap);
+      }
+    }
+
+    const imageWithProfiles = {
+      ...image,
+      createdByProfile: image.createdBy ? profilesMap[image.createdBy] || null : null,
+      acceptedByProfile: image.acceptedBy ? profilesMap[image.acceptedBy] || null : null,
+    };
+
+    return NextResponse.json({ success: true, image: imageWithProfiles });
   } catch (error) {
     logger.error('Failed to fetch image', error);
     return NextResponse.json({ error: 'Failed to fetch image' }, { status: 500 });
@@ -83,31 +138,35 @@ export async function PUT(
   try {
     const session = await auth();
     const userId = session?.user?.id;
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await req.json();
     const { tags, category, status, metadata } = body;
 
-    // Build update data
-    const updateData: any = {};
+    // Build update data (using snake_case for Supabase)
+    const updateData: Record<string, unknown> = {};
 
     if (tags !== undefined) {
       updateData.tags = tags;
@@ -125,8 +184,8 @@ export async function PUT(
 
       // If status is being set to accepted, track who accepted it
       if (status === 'accepted') {
-        updateData.acceptedBy = profile.id;
-        updateData.acceptedAt = new Date();
+        updateData.accepted_by = profile.id;
+        updateData.accepted_at = new Date().toISOString();
       }
     }
 
@@ -134,28 +193,48 @@ export async function PUT(
       updateData.metadata = metadata;
     }
 
-    const image = await prisma.generatedImage.update({
-      where: { id: params.id },
-      data: updateData,
-      include: {
-        createdByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-        acceptedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-    });
+    const { data: imageData, error: updateError } = await db
+      .from('generated_images')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError || !imageData) {
+      logger.error('Failed to update image', { error: updateError?.message });
+      return NextResponse.json({ error: 'Failed to update image' }, { status: 500 });
+    }
+
+    const image = imageData as GeneratedImage;
+
+    // Fetch related profiles
+    const profileIds = [image.createdBy, image.acceptedBy].filter(Boolean);
+    let profilesMap: Record<string, { id: string; firstName: string | null; lastName: string | null; avatarUrl: string | null }> = {};
+
+    if (profileIds.length > 0) {
+      const { data: relatedProfiles } = await db
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', profileIds);
+
+      if (relatedProfiles) {
+        profilesMap = relatedProfiles.reduce((acc, p) => {
+          acc[p.id] = {
+            id: p.id,
+            firstName: p.first_name,
+            lastName: p.last_name,
+            avatarUrl: p.avatar_url,
+          };
+          return acc;
+        }, {} as typeof profilesMap);
+      }
+    }
+
+    const imageWithProfiles = {
+      ...image,
+      createdByProfile: image.createdBy ? profilesMap[image.createdBy] || null : null,
+      acceptedByProfile: image.acceptedBy ? profilesMap[image.acceptedBy] || null : null,
+    };
 
     logger.info('Generated image updated', {
       imageId: image.id,
@@ -163,7 +242,7 @@ export async function PUT(
       updates: Object.keys(updateData),
     });
 
-    return NextResponse.json({ success: true, image });
+    return NextResponse.json({ success: true, image: imageWithProfiles });
   } catch (error) {
     logger.error('Failed to update image', error);
     return NextResponse.json({ error: 'Failed to update image' }, { status: 500 });
@@ -182,34 +261,42 @@ export async function DELETE(
   try {
     const session = await auth();
     const userId = session?.user?.id;
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get image to find file paths
-    const image = await prisma.generatedImage.findUnique({
-      where: { id: params.id },
-    });
+    const { data: imageData, error: fetchError } = await db
+      .from('generated_images')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!image) {
+    if (fetchError || !imageData) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
+
+    const image = imageData as GeneratedImage;
 
     // Delete files from filesystem
     try {
@@ -232,12 +319,18 @@ export async function DELETE(
     }
 
     // Delete from database
-    await prisma.generatedImage.delete({
-      where: { id: params.id },
-    });
+    const { error: deleteError } = await db
+      .from('generated_images')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      logger.error('Failed to delete image from database', { error: deleteError.message });
+      return NextResponse.json({ error: 'Failed to delete image' }, { status: 500 });
+    }
 
     logger.info('Generated image deleted', {
-      imageId: params.id,
+      imageId: id,
       userId: profile.id,
     });
 

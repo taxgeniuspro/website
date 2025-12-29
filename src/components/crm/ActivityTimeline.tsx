@@ -54,7 +54,23 @@ import {
   Filter,
   Loader2,
 } from 'lucide-react';
-import { ActivityType } from '@prisma/client';
+// Activity type (migrated from Prisma to local interface)
+export type ActivityType =
+  | 'CONTACT_ATTEMPTED'
+  | 'CONTACT_MADE'
+  | 'EMAIL_SENT'
+  | 'EMAIL_OPENED'
+  | 'EMAIL_CLICKED'
+  | 'NOTE_ADDED'
+  | 'STATUS_CHANGED'
+  | 'TASK_CREATED'
+  | 'TASK_COMPLETED'
+  | 'FORM_VIEWED'
+  | 'DOCUMENT_UPLOADED'
+  | 'MEETING_SCHEDULED'
+  | 'MEETING_COMPLETED'
+  | 'CONVERTED'
+  | 'ASSIGNED';
 import { logger } from '@/lib/logger';
 import { formatDistanceToNow } from 'date-fns';
 

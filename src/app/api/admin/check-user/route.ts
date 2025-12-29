@@ -4,9 +4,33 @@
  * Admin only endpoint
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  emailVerified: string | null;
+  hashedPassword: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Profile {
+  id: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+}
+
+interface Account {
+  provider: string;
+  providerAccountId: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,38 +58,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Find user (case-insensitive)
-    const user = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
-        },
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        emailVerified: true,
-        hashedPassword: true,
-        createdAt: true,
-        updatedAt: true,
-        profile: {
-          select: {
-            id: true,
-            role: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-          },
-        },
-        accounts: {
-          select: {
-            provider: true,
-            providerAccountId: true,
-          },
-        },
-      },
-    });
+    const { data: userData, error: userError } = await db.from('users')
+      .select('id, email, name, emailVerified, hashedPassword, createdAt, updatedAt')
+      .ilike('email', email)
+      .limit(1);
+
+    if (userError) {
+      throw userError;
+    }
+
+    const user = firstOrNull<User>(userData);
 
     if (!user) {
       return NextResponse.json({
@@ -73,6 +75,21 @@ export async function GET(req: NextRequest) {
         message: 'User not found with this email',
       });
     }
+
+    // Get profile for this user
+    const { data: profileData } = await db.from('profiles')
+      .select('id, role, firstName, lastName, phone')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
+
+    // Get accounts for this user
+    const { data: accountsData } = await db.from('accounts')
+      .select('provider, providerAccountId')
+      .eq('userId', user.id);
+
+    const accounts = (accountsData || []) as Account[];
 
     return NextResponse.json({
       found: true,
@@ -84,8 +101,8 @@ export async function GET(req: NextRequest) {
         hasPassword: !!user.hashedPassword,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
-        profile: user.profile,
-        oauthProviders: user.accounts.map(a => a.provider),
+        profile: profile,
+        oauthProviders: accounts.map(a => a.provider),
       },
     });
   } catch (error) {

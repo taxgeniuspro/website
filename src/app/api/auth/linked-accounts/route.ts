@@ -8,7 +8,18 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface Account {
+  provider: string;
+  providerAccountId: string;
+  createdAt: Date;
+}
+
+interface User {
+  hashedPassword: string | null;
+}
 
 export async function GET() {
   const session = await auth();
@@ -17,20 +28,21 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  const accounts = await prisma.account.findMany({
-    where: { userId: session.user.id },
-    select: {
-      provider: true,
-      providerAccountId: true,
-      createdAt: true,
-    },
-  });
+  const { data: accountsData } = await db
+    .from('accounts')
+    .select('provider, providerAccountId, createdAt')
+    .eq('userId', session.user.id);
+
+  const accounts = (accountsData || []) as Account[];
 
   // Check if user has a password set (for determining if unlinking is safe)
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { hashedPassword: true },
-  });
+  const { data: usersData } = await db
+    .from('users')
+    .select('hashedPassword')
+    .eq('id', session.user.id)
+    .limit(1);
+
+  const user = firstOrNull<User>(usersData);
 
   return NextResponse.json({
     accounts,

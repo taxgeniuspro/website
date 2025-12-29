@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import sharp from 'sharp';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+
+// Local type definitions (replacing @prisma/client)
+interface Profile {
+  id: string;
+  role: string;
+  supabaseUserId?: string | null;
+  userId?: string | null;
+  email?: string | null;
+}
 
 /**
  * POST /api/admin/image-center/generate
@@ -23,17 +32,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profilesData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
+    if (profileError) {
+      logger.error('Failed to fetch profile', { error: profileError.message });
+      return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profilesData);
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -144,31 +156,34 @@ export async function POST(req: NextRequest) {
           const savedThumbUrl = `/images/generated/thumbnails/${thumbFilename}`;
 
           // Save to database
-          const dbImage = await prisma.generatedImage.create({
-            data: {
+          const { data: dbImage, error: insertError } = await db
+            .from('generated_images')
+            .insert({
               prompt: revisedPrompt || prompt,
-              negativePrompt: negativePrompt || null,
+              negative_prompt: negativePrompt || null,
               provider: 'openai',
-              modelUsed: 'dall-e-3',
+              model_used: 'dall-e-3',
               status: 'ready',
-              imageUrl: savedImageUrl,
-              thumbnailUrl: savedThumbUrl,
+              image_url: savedImageUrl,
+              thumbnail_url: savedThumbUrl,
               width: metadata.width || null,
               height: metadata.height || null,
-              fileSize: imageBuffer.length,
+              file_size: imageBuffer.length,
               tags: tags,
               category: category || null,
-              generationId: generationId,
-              createdBy: profile.id,
+              generation_id: generationId,
+              created_by: profile.id,
               metadata: {
                 size,
                 quality: 'standard',
                 originalPrompt: prompt,
                 revisedPrompt: revisedPrompt,
               },
-            },
-          });
+            })
+            .select()
+            .single();
 
+          if (insertError) throw insertError;
           generatedImages.push(dbImage);
 
           logger.info('AI image generated (OpenAI)', {
@@ -220,30 +235,33 @@ export async function POST(req: NextRequest) {
 
         // Create pending database entries (will be updated when images are ready)
         for (let i = 0; i < count; i++) {
-          const dbImage = await prisma.generatedImage.create({
-            data: {
+          const { data: dbImage, error: insertError } = await db
+            .from('generated_images')
+            .insert({
               prompt: prompt,
-              negativePrompt: negativePrompt || null,
+              negative_prompt: negativePrompt || null,
               provider: 'replicate',
-              modelUsed: 'stable-diffusion-xl',
+              model_used: 'stable-diffusion-xl',
               status: 'generating',
-              imageUrl: '', // Will be updated later
-              thumbnailUrl: null,
+              image_url: '', // Will be updated later
+              thumbnail_url: null,
               width: width || null,
               height: height || null,
-              fileSize: null,
+              file_size: null,
               tags: tags,
               category: category || null,
-              generationId: generationId,
-              createdBy: profile.id,
+              generation_id: generationId,
+              created_by: profile.id,
               metadata: {
                 predictionId: prediction.id,
                 size,
                 negativePrompt: negativePrompt,
               },
-            },
-          });
+            })
+            .select()
+            .single();
 
+          if (insertError) throw insertError;
           generatedImages.push(dbImage);
         }
 

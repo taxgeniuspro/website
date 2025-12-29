@@ -15,9 +15,54 @@
  * - client_referral: Year-round (clients share to earn referral bonuses)
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { FolderType } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client)
+type FolderType = 'preseason_loans' | 'tax_season_lead' | 'tax_season_intake' | 'client_referral';
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+}
+
+interface ReferralImageSetRecord {
+  id: string;
+  name: string;
+  category: string;
+  folderType: FolderType;
+  preparerId?: string | null;
+  isActive: boolean;
+}
+
+interface ReferralImageRecord {
+  id: string;
+  imageUrl: string;
+  thumbnailUrl?: string | null;
+  altText: string;
+  platform?: string | null;
+  sortOrder: number;
+  downloadCount: number;
+}
+
+interface ClientReferralInvitationRecord {
+  id: string;
+  clientId: string;
+  preparerId: string;
+  taxYear: number;
+  referralCode: string;
+  referralLink: string;
+  imageSetId?: string | null;
+  sentAt?: string | null;
+  emailId?: string | null;
+  opened: boolean;
+  openedAt?: string | null;
+  clicked: boolean;
+  clickedAt?: string | null;
+}
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
 
@@ -149,71 +194,87 @@ export async function getCurrentImageSet(
 
     // First, try to get preparer-specific images (if preparerId provided)
     if (preparerId) {
-      const preparerSet = await prisma.referralImageSet.findFirst({
-        where: {
-          preparerId,
-          folderType: targetFolderType,
-          category: 'preparer',
-          isActive: true,
-        },
-        include: {
-          images: {
-            orderBy: { sortOrder: 'asc' },
-            take: 4,
-          },
-        },
-      });
+      const { data: preparerSetData } = await db
+        .from('referral_image_sets')
+        .select('*')
+        .eq('preparerId', preparerId)
+        .eq('folderType', targetFolderType)
+        .eq('category', 'preparer')
+        .eq('isActive', true)
+        .limit(1);
 
-      // Only use preparer folder if it has images
-      if (preparerSet && preparerSet.images.length > 0) {
+      const preparerSet = firstOrNull(preparerSetData) as ReferralImageSetRecord | null;
+
+      if (preparerSet) {
+        // Get images for this set
+        const { data: imagesData } = await db
+          .from('referral_images')
+          .select('*')
+          .eq('imageSetId', preparerSet.id)
+          .order('sortOrder', { ascending: true })
+          .limit(4);
+
+        const images = (imagesData || []) as ReferralImageRecord[];
+
+        // Only use preparer folder if it has images
+        if (images.length > 0) {
+          return {
+            id: preparerSet.id,
+            name: preparerSet.name,
+            category: preparerSet.category,
+            folderType: preparerSet.folderType,
+            images: images.map((img) => ({
+              id: img.id,
+              url: img.imageUrl,
+              thumbnailUrl: img.thumbnailUrl,
+              alt: img.altText,
+              platform: img.platform,
+            })),
+            isDefault: false,
+          };
+        }
+      }
+    }
+
+    // Fallback to default Tax Genius folder for the same type
+    const { data: defaultSetData } = await db
+      .from('referral_image_sets')
+      .select('*')
+      .eq('category', 'default')
+      .is('preparerId', null)
+      .eq('folderType', targetFolderType)
+      .eq('isActive', true)
+      .limit(1);
+
+    const defaultSet = firstOrNull(defaultSetData) as ReferralImageSetRecord | null;
+
+    if (defaultSet) {
+      // Get images for default set
+      const { data: defaultImagesData } = await db
+        .from('referral_images')
+        .select('*')
+        .eq('imageSetId', defaultSet.id)
+        .order('sortOrder', { ascending: true })
+        .limit(4);
+
+      const defaultImages = (defaultImagesData || []) as ReferralImageRecord[];
+
+      if (defaultImages.length > 0) {
         return {
-          id: preparerSet.id,
-          name: preparerSet.name,
-          category: preparerSet.category,
-          folderType: preparerSet.folderType,
-          images: preparerSet.images.map((img) => ({
+          id: defaultSet.id,
+          name: defaultSet.name,
+          category: defaultSet.category,
+          folderType: defaultSet.folderType,
+          images: defaultImages.map((img) => ({
             id: img.id,
             url: img.imageUrl,
             thumbnailUrl: img.thumbnailUrl,
             alt: img.altText,
             platform: img.platform,
           })),
-          isDefault: false,
+          isDefault: true,
         };
       }
-    }
-
-    // Fallback to default Tax Genius folder for the same type
-    const defaultSet = await prisma.referralImageSet.findFirst({
-      where: {
-        category: 'default',
-        preparerId: null,
-        folderType: targetFolderType,
-        isActive: true,
-      },
-      include: {
-        images: {
-          orderBy: { sortOrder: 'asc' },
-          take: 4,
-        },
-      },
-    });
-
-    if (defaultSet && defaultSet.images.length > 0) {
-      return {
-        id: defaultSet.id,
-        name: defaultSet.name,
-        category: defaultSet.category,
-        folderType: defaultSet.folderType,
-        images: defaultSet.images.map((img) => ({
-          id: img.id,
-          url: img.imageUrl,
-          thumbnailUrl: img.thumbnailUrl,
-          alt: img.altText,
-          platform: img.platform,
-        })),
-        isDefault: true,
-      };
     }
 
     return null;
@@ -249,15 +310,15 @@ export async function getOrCreateClientReferralInvitation(
   taxYear: number
 ): Promise<ClientReferralInvitationResult | null> {
   try {
-    // Check if invitation already exists
-    const existing = await prisma.clientReferralInvitation.findUnique({
-      where: {
-        clientId_taxYear: {
-          clientId,
-          taxYear,
-        },
-      },
-    });
+    // Check if invitation already exists (composite key lookup)
+    const { data: existingData } = await db
+      .from('client_referral_invitations')
+      .select('*')
+      .eq('clientId', clientId)
+      .eq('taxYear', taxYear)
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as ClientReferralInvitationRecord | null;
 
     if (existing) {
       return {
@@ -265,21 +326,25 @@ export async function getOrCreateClientReferralInvitation(
         referralCode: existing.referralCode,
         referralLink: existing.referralLink,
         shortLink: buildShortReferralLink(existing.referralCode),
-        imageSetId: existing.imageSetId,
+        imageSetId: existing.imageSetId || null,
       };
     }
 
     // Get client and preparer info
-    const [client, preparer] = await Promise.all([
-      prisma.profile.findUnique({
-        where: { id: clientId },
-        select: { firstName: true },
-      }),
-      prisma.profile.findUnique({
-        where: { id: preparerId },
-        select: { customTrackingCode: true, trackingCode: true },
-      }),
-    ]);
+    const { data: clientData } = await db
+      .from('profiles')
+      .select('firstName')
+      .eq('id', clientId)
+      .limit(1);
+
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('customTrackingCode, trackingCode')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const client = firstOrNull(clientData) as ProfileRecord | null;
+    const preparer = firstOrNull(preparerData) as ProfileRecord | null;
 
     if (!client || !preparer) {
       logger.error('Client or preparer not found', { clientId, preparerId });
@@ -287,16 +352,18 @@ export async function getOrCreateClientReferralInvitation(
     }
 
     // Generate unique referral code
-    let referralCode: string;
+    let referralCode: string = '';
     let isUnique = false;
     let attempts = 0;
 
     do {
       referralCode = generateReferralCode();
-      const existingCode = await prisma.clientReferralInvitation.findUnique({
-        where: { referralCode },
-      });
-      isUnique = !existingCode;
+      const { data: existingCodeData } = await db
+        .from('client_referral_invitations')
+        .select('id')
+        .eq('referralCode', referralCode)
+        .limit(1);
+      isUnique = !firstOrNull(existingCodeData);
       attempts++;
     } while (!isUnique && attempts < 10);
 
@@ -314,16 +381,21 @@ export async function getOrCreateClientReferralInvitation(
     const imageSet = await getClientReferralImages(preparerId);
 
     // Create the invitation
-    const invitation = await prisma.clientReferralInvitation.create({
-      data: {
+    const { data: invitationData, error: createError } = await db
+      .from('client_referral_invitations')
+      .insert({
         clientId,
         preparerId,
         taxYear,
         referralCode,
         referralLink,
         imageSetId: imageSet?.id || null,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    const invitation = invitationData as ClientReferralInvitationRecord;
 
     logger.info('Created client referral invitation', {
       invitationId: invitation.id,
@@ -338,7 +410,7 @@ export async function getOrCreateClientReferralInvitation(
       referralCode: invitation.referralCode,
       referralLink: invitation.referralLink,
       shortLink: buildShortReferralLink(invitation.referralCode),
-      imageSetId: invitation.imageSetId,
+      imageSetId: invitation.imageSetId || null,
     };
   } catch (error) {
     logger.error('Error creating client referral invitation', { error, clientId, preparerId, taxYear });
@@ -354,13 +426,13 @@ export async function markInvitationSent(
   emailId?: string
 ): Promise<boolean> {
   try {
-    await prisma.clientReferralInvitation.update({
-      where: { id: invitationId },
-      data: {
-        sentAt: new Date(),
+    await db
+      .from('client_referral_invitations')
+      .update({
+        sentAt: new Date().toISOString(),
         emailId: emailId || null,
-      },
-    });
+      })
+      .eq('id', invitationId);
     return true;
   } catch (error) {
     logger.error('Error marking invitation as sent', { error, invitationId });
@@ -373,13 +445,13 @@ export async function markInvitationSent(
  */
 export async function trackEmailOpen(referralCode: string): Promise<boolean> {
   try {
-    await prisma.clientReferralInvitation.update({
-      where: { referralCode },
-      data: {
+    await db
+      .from('client_referral_invitations')
+      .update({
         opened: true,
-        openedAt: new Date(),
-      },
-    });
+        openedAt: new Date().toISOString(),
+      })
+      .eq('referralCode', referralCode);
     return true;
   } catch (error) {
     logger.error('Error tracking email open', { error, referralCode });
@@ -392,13 +464,13 @@ export async function trackEmailOpen(referralCode: string): Promise<boolean> {
  */
 export async function trackLinkClick(referralCode: string): Promise<boolean> {
   try {
-    await prisma.clientReferralInvitation.update({
-      where: { referralCode },
-      data: {
+    await db
+      .from('client_referral_invitations')
+      .update({
         clicked: true,
-        clickedAt: new Date(),
-      },
-    });
+        clickedAt: new Date().toISOString(),
+      })
+      .eq('referralCode', referralCode);
     return true;
   } catch (error) {
     logger.error('Error tracking link click', { error, referralCode });
@@ -411,17 +483,30 @@ export async function trackLinkClick(referralCode: string): Promise<boolean> {
  */
 export async function getPreparerInvitationStats(preparerId: string, taxYear?: number) {
   try {
-    const where: { preparerId: string; taxYear?: number } = { preparerId };
+    // Base query builder
+    let totalQuery = db.from('client_referral_invitations').select('id', { count: 'exact', head: true }).eq('preparerId', preparerId);
+    let sentQuery = db.from('client_referral_invitations').select('id', { count: 'exact', head: true }).eq('preparerId', preparerId).not('sentAt', 'is', null);
+    let openedQuery = db.from('client_referral_invitations').select('id', { count: 'exact', head: true }).eq('preparerId', preparerId).eq('opened', true);
+    let clickedQuery = db.from('client_referral_invitations').select('id', { count: 'exact', head: true }).eq('preparerId', preparerId).eq('clicked', true);
+
     if (taxYear) {
-      where.taxYear = taxYear;
+      totalQuery = totalQuery.eq('taxYear', taxYear);
+      sentQuery = sentQuery.eq('taxYear', taxYear);
+      openedQuery = openedQuery.eq('taxYear', taxYear);
+      clickedQuery = clickedQuery.eq('taxYear', taxYear);
     }
 
-    const [total, sent, opened, clicked] = await Promise.all([
-      prisma.clientReferralInvitation.count({ where }),
-      prisma.clientReferralInvitation.count({ where: { ...where, sentAt: { not: null } } }),
-      prisma.clientReferralInvitation.count({ where: { ...where, opened: true } }),
-      prisma.clientReferralInvitation.count({ where: { ...where, clicked: true } }),
+    const [totalResult, sentResult, openedResult, clickedResult] = await Promise.all([
+      totalQuery,
+      sentQuery,
+      openedQuery,
+      clickedQuery,
     ]);
+
+    const total = totalResult.count || 0;
+    const sent = sentResult.count || 0;
+    const opened = openedResult.count || 0;
+    const clicked = clickedResult.count || 0;
 
     return {
       total,
@@ -442,12 +527,22 @@ export async function getPreparerInvitationStats(preparerId: string, taxYear?: n
  */
 export async function incrementImageDownload(imageId: string): Promise<boolean> {
   try {
-    await prisma.referralImage.update({
-      where: { id: imageId },
-      data: {
-        downloadCount: { increment: 1 },
-      },
-    });
+    // Get current download count
+    const { data: imageData } = await db
+      .from('referral_images')
+      .select('downloadCount')
+      .eq('id', imageId)
+      .limit(1);
+
+    const image = firstOrNull(imageData) as ReferralImageRecord | null;
+    const currentCount = image?.downloadCount || 0;
+
+    // Increment the count
+    await db
+      .from('referral_images')
+      .update({ downloadCount: currentCount + 1 })
+      .eq('id', imageId);
+
     return true;
   } catch (error) {
     logger.error('Error incrementing image download', { error, imageId });
@@ -461,35 +556,42 @@ export async function incrementImageDownload(imageId: string): Promise<boolean> 
  */
 export async function resolveReferralCode(code: string) {
   try {
-    const invitation = await prisma.clientReferralInvitation.findUnique({
-      where: { referralCode: code },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            customTrackingCode: true,
-          },
-        },
-        client: {
-          select: {
-            firstName: true,
-          },
-        },
-      },
-    });
+    const { data: invitationData } = await db
+      .from('client_referral_invitations')
+      .select('*')
+      .eq('referralCode', code)
+      .limit(1);
+
+    const invitation = firstOrNull(invitationData) as ClientReferralInvitationRecord | null;
 
     if (!invitation) {
       return null;
     }
 
+    // Get preparer info
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, customTrackingCode')
+      .eq('id', invitation.preparerId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparerData) as ProfileRecord | null;
+
+    // Get client info
+    const { data: clientData } = await db
+      .from('profiles')
+      .select('firstName')
+      .eq('id', invitation.clientId)
+      .limit(1);
+
+    const client = firstOrNull(clientData) as ProfileRecord | null;
+
     return {
       referralCode: invitation.referralCode,
       referralLink: invitation.referralLink,
-      preparerCode: invitation.preparer.customTrackingCode || 'tg',
-      preparerName: `${invitation.preparer.firstName} ${invitation.preparer.lastName}`,
-      clientName: invitation.client.firstName || 'Friend',
+      preparerCode: preparer?.customTrackingCode || 'tg',
+      preparerName: preparer ? `${preparer.firstName} ${preparer.lastName}` : 'Tax Preparer',
+      clientName: client?.firstName || 'Friend',
     };
   } catch (error) {
     logger.error('Error resolving referral code', { error, code });

@@ -11,12 +11,25 @@
 
 import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { generateUniqueTrackingCode, assignTrackingCodeToUser } from '@/lib/services/tracking-code.service';
 import { EmailService } from '@/lib/services/email.service';
 import crypto from 'crypto';
 import sharp from 'sharp';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  trackingCodeQRUrl: string | null;
+  qrCodeLogoUrl: string | null;
+  avatarUrl: string | null;
+  role: string;
+}
 
 /**
  * POST: Create tax preparer account
@@ -32,10 +45,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Get admin's profile
-    const adminProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { role: true },
-    });
+    const { data: adminProfileData, error: adminProfileError } = await db.from('profiles')
+      .select('role')
+      .eq('userId', userId)
+      .limit(1);
+
+    if (adminProfileError) {
+      throw adminProfileError;
+    }
+
+    const adminProfile = firstOrNull<{ role: string }>(adminProfileData);
 
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
@@ -62,11 +81,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    const { data: existingUserData } = await db.from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .limit(1);
 
-    if (existingUser) {
+    if (existingUserData && existingUserData.length > 0) {
       return NextResponse.json(
         { error: 'A user with this email already exists' },
         { status: 400 }
@@ -74,13 +94,18 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Create User record (no password yet - will be set via magic link)
-    const newUser = await prisma.user.create({
-      data: {
+    const { data: newUser, error: createUserError } = await db.from('users')
+      .insert({
         email: email.toLowerCase(),
         name: `${firstName} ${lastName}`,
-        emailVerified: new Date(), // Admin-created accounts are pre-verified
-      },
-    });
+        emailVerified: new Date().toISOString(), // Admin-created accounts are pre-verified
+      })
+      .select()
+      .single();
+
+    if (createUserError) {
+      throw createUserError;
+    }
 
     logger.info(`Admin created user: ${newUser.id} (${email})`);
 
@@ -94,18 +119,14 @@ export async function POST(request: NextRequest) {
       isCustomCode = true;
 
       // Check if tracking code is available
-      const existingCode = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { trackingCode },
-            { customTrackingCode: trackingCode },
-          ],
-        },
-      });
+      const { data: existingCode } = await db.from('profiles')
+        .select('id')
+        .or(`trackingCode.eq.${trackingCode},customTrackingCode.eq.${trackingCode}`)
+        .limit(1);
 
-      if (existingCode) {
+      if (existingCode && existingCode.length > 0) {
         // Rollback user creation
-        await prisma.user.delete({ where: { id: newUser.id } });
+        await db.from('users').delete().eq('id', newUser.id);
         return NextResponse.json(
           { error: `Tracking code "${trackingCode}" is already taken` },
           { status: 400 }
@@ -153,21 +174,31 @@ export async function POST(request: NextRequest) {
 
     // 8. Create Profile record
     // Note: Tax preparers don't need affiliateStatus - they HAVE affiliates, they are not affiliates themselves
-    const newProfile = await prisma.profile.create({
-      data: {
-        userId: newUser.id,
-        role: 'tax_preparer',
-        firstName,
-        lastName,
-        middleName,
-        phone,
-        avatarUrl,
-        qrCodeLogoUrl,
-        ...(isCustomCode
-          ? { customTrackingCode: trackingCode }
-          : { trackingCode }),
-      },
-    });
+    const profileData: Record<string, any> = {
+      userId: newUser.id,
+      role: 'tax_preparer',
+      firstName,
+      lastName,
+      middleName,
+      phone,
+      avatarUrl,
+      qrCodeLogoUrl,
+    };
+
+    if (isCustomCode) {
+      profileData.customTrackingCode = trackingCode;
+    } else {
+      profileData.trackingCode = trackingCode;
+    }
+
+    const { data: newProfile, error: createProfileError } = await db.from('profiles')
+      .insert(profileData)
+      .select()
+      .single();
+
+    if (createProfileError) {
+      throw createProfileError;
+    }
 
     logger.info(`Created profile for user ${newUser.id} with tracking code: ${trackingCode}`);
 
@@ -175,32 +206,24 @@ export async function POST(request: NextRequest) {
     await assignTrackingCodeToUser(newProfile.id);
 
     // 10. Fetch updated profile with QR code
-    const updatedProfile = await prisma.profile.findUnique({
-      where: { id: newProfile.id },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeQRUrl: true,
-        qrCodeLogoUrl: true,
-        avatarUrl: true,
-      },
-    });
+    const { data: updatedProfileData } = await db.from('profiles')
+      .select('id, firstName, lastName, trackingCode, customTrackingCode, trackingCodeQRUrl, qrCodeLogoUrl, avatarUrl')
+      .eq('id', newProfile.id)
+      .limit(1);
+
+    const updatedProfile = firstOrNull<Profile>(updatedProfileData);
 
     // 11. Generate magic link token
     const magicToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    await prisma.magicLink.create({
-      data: {
+    await db.from('magic_links')
+      .insert({
         token: magicToken,
         userId: newUser.id,
-        expiresAt,
+        expiresAt: expiresAt.toISOString(),
         used: false,
-      },
-    });
+      });
 
     // 12. Generate magic link URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://taxgeniuspro.tax';

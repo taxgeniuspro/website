@@ -7,15 +7,93 @@
  * @module lib/services/workflow-automation
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { CRMWorkflowTrigger, CRMWorkflowActionType } from '@prisma/client';
 import { sendEmail } from './email-automation.service';
 import {
   createActivity,
   logLeadAssigned,
   logStatusChange,
 } from './activity.service';
+
+// Local type definitions (replacing @prisma/client)
+type CRMWorkflowTrigger =
+  | 'LEAD_CREATED'
+  | 'LEAD_UPDATED'
+  | 'LEAD_STATUS_CHANGED'
+  | 'LEAD_ASSIGNED'
+  | 'INTAKE_SUBMITTED'
+  | 'INTAKE_COMPLETED'
+  | 'PAYMENT_RECEIVED'
+  | 'RETURN_FILED'
+  | 'TICKET_CREATED'
+  | 'TICKET_RESOLVED';
+
+type CRMWorkflowActionType =
+  | 'SEND_EMAIL'
+  | 'CREATE_TASK'
+  | 'ASSIGN_TO_PREPARER'
+  | 'UPDATE_STATUS'
+  | 'SEND_NOTIFICATION'
+  | 'UPDATE_FIELD';
+
+interface CRMWorkflowRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  trigger: CRMWorkflowTrigger;
+  triggerConditions?: Record<string, unknown> | null;
+  isActive: boolean;
+  priority: number;
+  createdBy: string;
+  executionCount: number;
+  successCount: number;
+  failureCount: number;
+  lastExecutedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface CRMWorkflowActionRecord {
+  id: string;
+  workflowId: string;
+  actionType: CRMWorkflowActionType;
+  actionConfig: Record<string, unknown>;
+  order: number;
+  conditions?: Record<string, unknown> | null;
+  delayMinutes: number;
+  createdAt: Date | string;
+}
+
+interface CRMWorkflowExecutionRecord {
+  id: string;
+  workflowId: string;
+  leadId: string;
+  status: string;
+  completedAt?: Date | string | null;
+  actionsExecuted?: number | null;
+  actionsSucceeded?: number | null;
+  actionsFailed?: number | null;
+  executionLog?: unknown[] | null;
+  createdAt: Date | string;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  status?: string;
+  assignedTo?: string | null;
+  [key: string]: unknown;
+}
+
+interface ProfileRecord {
+  id: string;
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
 
 export interface WorkflowTriggerContext {
   trigger: CRMWorkflowTrigger;
@@ -48,7 +126,7 @@ export interface WorkflowActionConfig {
  * @example
  * ```typescript
  * await executeWorkflows({
- *   trigger: CRMWorkflowTrigger.LEAD_CREATED,
+ *   trigger: 'LEAD_CREATED',
  *   leadId: 'lead_123',
  *   userId: 'user_456',
  * });
@@ -57,29 +135,49 @@ export interface WorkflowActionConfig {
 export async function executeWorkflows(context: WorkflowTriggerContext) {
   try {
     // Find all active workflows for this trigger
-    const workflows = await prisma.cRMWorkflow.findMany({
-      where: {
-        trigger: context.trigger,
-        isActive: true,
-      },
-      include: {
-        actions: {
-          orderBy: { order: 'asc' },
-        },
-      },
-      orderBy: { priority: 'desc' }, // Higher priority first
-    });
+    const { data: workflowsData } = await db
+      .from('crm_workflows')
+      .select('*')
+      .eq('trigger', context.trigger)
+      .eq('isActive', true)
+      .order('priority', { ascending: false });
+
+    const workflows = (workflowsData || []) as CRMWorkflowRecord[];
 
     if (workflows.length === 0) {
       logger.info(`No active workflows found for trigger: ${context.trigger}`);
       return { success: true, executedCount: 0 };
     }
 
+    // Get actions for all workflows
+    const workflowIds = workflows.map((w) => w.id);
+    const { data: actionsData } = await db
+      .from('crm_workflow_actions')
+      .select('*')
+      .in('workflowId', workflowIds)
+      .order('order', { ascending: true });
+
+    const actions = (actionsData || []) as CRMWorkflowActionRecord[];
+
+    // Map actions to workflows
+    const actionsMap = new Map<string, CRMWorkflowActionRecord[]>();
+    for (const action of actions) {
+      const existing = actionsMap.get(action.workflowId) || [];
+      existing.push(action);
+      actionsMap.set(action.workflowId, existing);
+    }
+
+    // Attach actions to workflows
+    const workflowsWithActions = workflows.map((w) => ({
+      ...w,
+      actions: actionsMap.get(w.id) || [],
+    }));
+
     logger.info(`Found ${workflows.length} workflows for trigger: ${context.trigger}`);
 
     let executedCount = 0;
 
-    for (const workflow of workflows) {
+    for (const workflow of workflowsWithActions) {
       // Check if workflow conditions are met
       if (workflow.triggerConditions) {
         const conditionsMet = await evaluateConditions(
@@ -126,39 +224,60 @@ export async function executeWorkflow(
 
   try {
     // Create execution record
-    const execution = await prisma.cRMWorkflowExecution.create({
-      data: {
+    const { data: executionData, error: executionError } = await db
+      .from('crm_workflow_executions')
+      .insert({
         workflowId,
         leadId,
         status: 'running',
-      },
-    });
+        createdAt: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    // Get workflow with actions
-    const workflow = await prisma.cRMWorkflow.findUnique({
-      where: { id: workflowId },
-      include: {
-        actions: {
-          orderBy: { order: 'asc' },
-        },
-      },
-    });
+    if (executionError || !executionData) {
+      throw new Error('Failed to create execution record');
+    }
+
+    const execution = executionData as CRMWorkflowExecutionRecord;
+
+    // Get workflow
+    const { data: workflowData } = await db
+      .from('crm_workflows')
+      .select('*')
+      .eq('id', workflowId)
+      .limit(1);
+
+    const workflow = firstOrNull(workflowData) as CRMWorkflowRecord | null;
 
     if (!workflow) {
       throw new Error('Workflow not found');
     }
 
+    // Get actions for workflow
+    const { data: actionsData } = await db
+      .from('crm_workflow_actions')
+      .select('*')
+      .eq('workflowId', workflowId)
+      .order('order', { ascending: true });
+
+    const actions = (actionsData || []) as CRMWorkflowActionRecord[];
+
     // Get lead data
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leadData } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData) as TaxIntakeLeadRecord | null;
 
     if (!lead) {
       throw new Error('Lead not found');
     }
 
     // Execute actions in order
-    for (const action of workflow.actions) {
+    for (const action of actions) {
       // Wait if delay is specified
       if (action.delayMinutes > 0) {
         // In production, this would be handled by a job queue
@@ -214,28 +333,33 @@ export async function executeWorkflow(
     }
 
     // Update execution record
-    await prisma.cRMWorkflowExecution.update({
-      where: { id: execution.id },
-      data: {
+    await db
+      .from('crm_workflow_executions')
+      .update({
         status: 'completed',
-        completedAt: new Date(),
+        completedAt: new Date().toISOString(),
         actionsExecuted,
         actionsSucceeded,
         actionsFailed,
         executionLog,
-      },
-    });
+      })
+      .eq('id', execution.id);
 
-    // Update workflow stats
-    await prisma.cRMWorkflow.update({
-      where: { id: workflowId },
-      data: {
-        executionCount: { increment: 1 },
-        successCount: actionsFailed === 0 ? { increment: 1 } : undefined,
-        failureCount: actionsFailed > 0 ? { increment: 1 } : undefined,
-        lastExecutedAt: new Date(),
-      },
-    });
+    // Update workflow stats - fetch current values first
+    const currentExecCount = workflow.executionCount || 0;
+    const currentSuccessCount = workflow.successCount || 0;
+    const currentFailureCount = workflow.failureCount || 0;
+
+    await db
+      .from('crm_workflows')
+      .update({
+        executionCount: currentExecCount + 1,
+        successCount: actionsFailed === 0 ? currentSuccessCount + 1 : currentSuccessCount,
+        failureCount: actionsFailed > 0 ? currentFailureCount + 1 : currentFailureCount,
+        lastExecutedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', workflowId);
 
     logger.info(`Workflow ${workflowId} executed successfully`, {
       actionsExecuted,
@@ -271,22 +395,22 @@ async function executeAction(
 ) {
   try {
     switch (actionType) {
-      case CRMWorkflowActionType.SEND_EMAIL:
+      case 'SEND_EMAIL':
         return await executeSendEmail(config, lead);
 
-      case CRMWorkflowActionType.CREATE_TASK:
+      case 'CREATE_TASK':
         return await executeCreateTask(config, lead, userId);
 
-      case CRMWorkflowActionType.ASSIGN_TO_PREPARER:
+      case 'ASSIGN_TO_PREPARER':
         return await executeAssignToPreparer(config, lead);
 
-      case CRMWorkflowActionType.UPDATE_STATUS:
+      case 'UPDATE_STATUS':
         return await executeUpdateStatus(config, lead);
 
-      case CRMWorkflowActionType.SEND_NOTIFICATION:
+      case 'SEND_NOTIFICATION':
         return await executeSendNotification(config, lead);
 
-      case CRMWorkflowActionType.UPDATE_FIELD:
+      case 'UPDATE_FIELD':
         return await executeUpdateField(config, lead);
 
       default:
@@ -335,29 +459,40 @@ async function executeCreateTask(config: Record<string, any>, lead: any, userId?
   // Get creator name
   let createdByName = 'Workflow Automation';
   if (userId) {
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { firstName: true, lastName: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('firstName, lastName')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
     if (profile) {
       createdByName = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
     }
   }
 
-  const task = await prisma.leadTask.create({
-    data: {
+  const { data: taskData, error } = await db
+    .from('lead_tasks')
+    .insert({
       leadId: lead.id,
       title,
       description,
       priority: priority || 'MEDIUM',
-      dueDate: dueDate ? new Date(dueDate) : null,
+      dueDate: dueDate ? new Date(dueDate).toISOString() : null,
       assignedTo: assignedTo || lead.assignedTo,
       createdBy: userId,
       createdByName,
-    },
-  });
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .select()
+    .single();
 
-  return { success: true, result: task.id };
+  if (error || !taskData) {
+    return { success: false, error: 'Failed to create task' };
+  }
+
+  return { success: true, result: taskData.id };
 }
 
 /**
@@ -371,10 +506,13 @@ async function executeAssignToPreparer(config: Record<string, any>, lead: any) {
   }
 
   // Get preparer name
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: { firstName: true, lastName: true },
-  });
+  const { data: preparerData } = await db
+    .from('profiles')
+    .select('firstName, lastName')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(preparerData) as ProfileRecord | null;
 
   if (!preparer) {
     return { success: false, error: 'Preparer not found' };
@@ -383,12 +521,13 @@ async function executeAssignToPreparer(config: Record<string, any>, lead: any) {
   const preparerName = [preparer.firstName, preparer.lastName].filter(Boolean).join(' ');
 
   // Update lead
-  await prisma.taxIntakeLead.update({
-    where: { id: lead.id },
-    data: {
+  await db
+    .from('tax_intake_leads')
+    .update({
       assignedTo: preparerId,
-    },
-  });
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', lead.id);
 
   // Log activity
   await logLeadAssigned(lead.id, preparerName);
@@ -408,10 +547,13 @@ async function executeUpdateStatus(config: Record<string, any>, lead: any) {
 
   const oldStatus = lead.status || 'NEW';
 
-  await prisma.taxIntakeLead.update({
-    where: { id: lead.id },
-    data: { status },
-  });
+  await db
+    .from('tax_intake_leads')
+    .update({
+      status,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', lead.id);
 
   // Log activity
   await logStatusChange(lead.id, oldStatus, status, 'Automated workflow');
@@ -441,10 +583,13 @@ async function executeUpdateField(config: Record<string, any>, lead: any) {
     return { success: false, error: 'No field specified' };
   }
 
-  await prisma.taxIntakeLead.update({
-    where: { id: lead.id },
-    data: { [field]: value },
-  });
+  await db
+    .from('tax_intake_leads')
+    .update({
+      [field]: value,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq('id', lead.id);
 
   return { success: true, result: `${field} updated to ${value}` };
 }
@@ -458,9 +603,13 @@ async function evaluateConditions(
 ): Promise<boolean> {
   // Simple condition evaluation
   // In production, this would be more sophisticated
-  const lead = await prisma.taxIntakeLead.findUnique({
-    where: { id: context.leadId },
-  });
+  const { data: leadData } = await db
+    .from('tax_intake_leads')
+    .select('*')
+    .eq('id', context.leadId)
+    .limit(1);
+
+  const lead = firstOrNull(leadData) as TaxIntakeLeadRecord | null;
 
   if (!lead) return false;
 
@@ -494,32 +643,61 @@ async function evaluateActionConditions(
  */
 export async function createWorkflow(params: CreateWorkflowParams) {
   try {
-    const workflow = await prisma.cRMWorkflow.create({
-      data: {
+    const now = new Date().toISOString();
+
+    // Create workflow first
+    const { data: workflowData, error: workflowError } = await db
+      .from('crm_workflows')
+      .insert({
         name: params.name,
-        description: params.description,
+        description: params.description || null,
         trigger: params.trigger,
         triggerConditions: params.triggerConditions || null,
         priority: params.priority || 0,
         createdBy: params.createdBy,
-        actions: {
-          create: params.actions.map((action) => ({
-            actionType: action.actionType,
-            actionConfig: action.actionConfig,
-            order: action.order,
-            conditions: action.conditions || null,
-            delayMinutes: action.delayMinutes || 0,
-          })),
-        },
-      },
-      include: {
-        actions: true,
-      },
-    });
+        isActive: true,
+        executionCount: 0,
+        successCount: 0,
+        failureCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single();
+
+    if (workflowError || !workflowData) {
+      throw new Error('Failed to create workflow');
+    }
+
+    const workflow = workflowData as CRMWorkflowRecord;
+
+    // Create actions for workflow
+    if (params.actions.length > 0) {
+      const actionsToInsert = params.actions.map((action) => ({
+        workflowId: workflow.id,
+        actionType: action.actionType,
+        actionConfig: action.actionConfig,
+        order: action.order,
+        conditions: action.conditions || null,
+        delayMinutes: action.delayMinutes || 0,
+        createdAt: now,
+      }));
+
+      const { data: actionsData } = await db
+        .from('crm_workflow_actions')
+        .insert(actionsToInsert)
+        .select();
+
+      const actions = (actionsData || []) as CRMWorkflowActionRecord[];
+
+      logger.info(`Workflow created: ${workflow.id}`, { name: workflow.name });
+
+      return { success: true, workflow: { ...workflow, actions } };
+    }
 
     logger.info(`Workflow created: ${workflow.id}`, { name: workflow.name });
 
-    return { success: true, workflow };
+    return { success: true, workflow: { ...workflow, actions: [] } };
   } catch (error) {
     logger.error('Error creating workflow:', error);
     return { success: false, error: 'Failed to create workflow' };
@@ -531,10 +709,21 @@ export async function createWorkflow(params: CreateWorkflowParams) {
  */
 export async function activateWorkflow(workflowId: string) {
   try {
-    const workflow = await prisma.cRMWorkflow.update({
-      where: { id: workflowId },
-      data: { isActive: true },
-    });
+    const { data: workflowData, error } = await db
+      .from('crm_workflows')
+      .update({
+        isActive: true,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', workflowId)
+      .select()
+      .single();
+
+    if (error || !workflowData) {
+      throw new Error('Workflow not found');
+    }
+
+    const workflow = workflowData as CRMWorkflowRecord;
 
     logger.info(`Workflow activated: ${workflowId}`);
 
@@ -550,10 +739,21 @@ export async function activateWorkflow(workflowId: string) {
  */
 export async function deactivateWorkflow(workflowId: string) {
   try {
-    const workflow = await prisma.cRMWorkflow.update({
-      where: { id: workflowId },
-      data: { isActive: false },
-    });
+    const { data: workflowData, error } = await db
+      .from('crm_workflows')
+      .update({
+        isActive: false,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', workflowId)
+      .select()
+      .single();
+
+    if (error || !workflowData) {
+      throw new Error('Workflow not found');
+    }
+
+    const workflow = workflowData as CRMWorkflowRecord;
 
     logger.info(`Workflow deactivated: ${workflowId}`);
 
@@ -569,22 +769,48 @@ export async function deactivateWorkflow(workflowId: string) {
  */
 export async function getAllWorkflows(createdBy?: string) {
   try {
-    const where: any = {};
+    let query = db
+      .from('crm_workflows')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
     if (createdBy) {
-      where.createdBy = createdBy;
+      query = query.eq('createdBy', createdBy);
     }
 
-    const workflows = await prisma.cRMWorkflow.findMany({
-      where,
-      include: {
-        actions: {
-          orderBy: { order: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: workflowsData } = await query;
 
-    return { success: true, workflows };
+    const workflows = (workflowsData || []) as CRMWorkflowRecord[];
+
+    if (workflows.length === 0) {
+      return { success: true, workflows: [] };
+    }
+
+    // Get actions for all workflows
+    const workflowIds = workflows.map((w) => w.id);
+    const { data: actionsData } = await db
+      .from('crm_workflow_actions')
+      .select('*')
+      .in('workflowId', workflowIds)
+      .order('order', { ascending: true });
+
+    const actions = (actionsData || []) as CRMWorkflowActionRecord[];
+
+    // Map actions to workflows
+    const actionsMap = new Map<string, CRMWorkflowActionRecord[]>();
+    for (const action of actions) {
+      const existing = actionsMap.get(action.workflowId) || [];
+      existing.push(action);
+      actionsMap.set(action.workflowId, existing);
+    }
+
+    // Attach actions to workflows
+    const workflowsWithActions = workflows.map((w) => ({
+      ...w,
+      actions: actionsMap.get(w.id) || [],
+    }));
+
+    return { success: true, workflows: workflowsWithActions };
   } catch (error) {
     logger.error('Error getting workflows:', error);
     return { success: false, error: 'Failed to get workflows' };
@@ -596,9 +822,23 @@ export async function getAllWorkflows(createdBy?: string) {
  */
 export async function deleteWorkflow(workflowId: string) {
   try {
-    await prisma.cRMWorkflow.delete({
-      where: { id: workflowId },
-    });
+    // Delete actions first (foreign key constraint)
+    await db
+      .from('crm_workflow_actions')
+      .delete()
+      .eq('workflowId', workflowId);
+
+    // Delete executions
+    await db
+      .from('crm_workflow_executions')
+      .delete()
+      .eq('workflowId', workflowId);
+
+    // Delete workflow
+    await db
+      .from('crm_workflows')
+      .delete()
+      .eq('id', workflowId);
 
     logger.info(`Workflow deleted: ${workflowId}`);
 

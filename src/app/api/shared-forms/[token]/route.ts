@@ -1,7 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces (replacing Prisma types)
+interface TaxFormShare {
+  id: string;
+  shareToken: string;
+  taxFormId: string;
+  sharedWith: string;
+  expiresAt?: Date | null;
+  accessCount: number;
+  lastAccessAt?: Date | null;
+}
+
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  taxYear?: number | null;
+}
+
+interface FieldDefinition {
+  id: string;
+  taxFormId: string;
+  section: string;
+  order: number;
+  fieldName: string;
+  fieldType: string;
+}
+
+interface ClientTaxForm {
+  id: string;
+  taxFormId: string;
+  clientId: string;
+  assignedBy: string;
+  status: string;
+  formData?: any;
+  notes?: string | null;
+  progress?: number | null;
+  taxYear?: number | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  lastEditedAt?: Date | null;
+  lastEditedBy?: string | null;
+}
+
+interface Profile {
+  id: string;
+  role: string;
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+}
+
+interface FormSignature {
+  id: string;
+  clientTaxFormId: string;
+  signedBy: string;
+  signedByRole: string;
+  signatureType: string;
+  signedAt: Date;
+}
 
 /**
  * GET /api/shared-forms/[token]
@@ -14,116 +77,123 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const session = await auth();
     const userId = session?.user?.id;
 
     // Get share record
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: params.token },
-      include: {
-        taxForm: {
-          include: {
-            fieldDefinitions: {
-              orderBy: [{ section: 'asc' }, { order: 'asc' }],
-            },
-          },
-        },
-      },
-    });
+    const { data: shareData } = await db
+      .from('tax_form_shares')
+      .select('*')
+      .eq('shareToken', resolvedParams.token)
+      .single();
 
-    if (!share) {
+    if (!shareData) {
       return NextResponse.json({ error: 'Share link not found or expired' }, { status: 404 });
     }
 
+    const share = shareData as TaxFormShare;
+
     // Check if expired
-    if (share.expiresAt && new Date() > share.expiresAt) {
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
       return NextResponse.json({ error: 'Share link has expired' }, { status: 410 });
     }
 
+    // Get tax form with field definitions
+    const { data: taxFormData } = await db
+      .from('tax_forms')
+      .select('*')
+      .eq('id', share.taxFormId)
+      .single();
+
+    const { data: fieldDefinitions } = await db
+      .from('field_definitions')
+      .select('*')
+      .eq('taxFormId', share.taxFormId)
+      .order('section', { ascending: true })
+      .order('order', { ascending: true });
+
     // Get client tax form data
-    const clientTaxForm = await prisma.clientTaxForm.findFirst({
-      where: {
-        taxFormId: share.taxFormId,
-        clientId: share.sharedWith,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            userId: true,
-          },
-        },
-        assignedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            companyName: true,
-          },
-        },
-        signatures: {
-          orderBy: { signedAt: 'desc' },
-          select: {
-            id: true,
-            signedBy: true,
-            signedByRole: true,
-            signatureType: true,
-            signedAt: true,
-          },
-        },
-      },
-    });
+    const { data: clientTaxForms } = await db
+      .from('client_tax_forms')
+      .select('*')
+      .eq('taxFormId', share.taxFormId)
+      .eq('clientId', share.sharedWith)
+      .limit(1);
+
+    const clientTaxForm = firstOrNull(clientTaxForms) as ClientTaxForm | null;
 
     if (!clientTaxForm) {
       return NextResponse.json({ error: 'Form assignment not found' }, { status: 404 });
     }
 
+    // Get client profile
+    const { data: clientData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, userId')
+      .eq('id', clientTaxForm.clientId)
+      .single();
+
+    // Get assigned by profile
+    const { data: assignedByData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, companyName')
+      .eq('id', clientTaxForm.assignedBy)
+      .single();
+
+    // Get signatures
+    const { data: signatures } = await db
+      .from('form_signatures')
+      .select('id, signedBy, signedByRole, signatureType, signedAt')
+      .eq('clientTaxFormId', clientTaxForm.id)
+      .order('signedAt', { ascending: false });
+
     // Get current user's profile if authenticated
-    let currentUserProfile = null;
+    let currentUserProfile: { id: string; role: string } | null = null;
     if (userId) {
-      currentUserProfile = await prisma.profile.findUnique({
-        where: { userId },
-        select: { id: true, role: true },
-      });
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id, role')
+        .eq('userId', userId)
+        .single();
+      currentUserProfile = profileData as { id: string; role: string } | null;
     }
 
     // Check permissions
     const canEdit =
       currentUserProfile?.id === clientTaxForm.clientId || // Client who was assigned
       currentUserProfile?.id === clientTaxForm.assignedBy || // Preparer who assigned
-      currentUserProfile?.role === 'admin' || // Admin
-      currentUserProfile?.role === 'admin'; // Super admin
+      currentUserProfile?.role === 'admin'; // Admin
 
     // Update access tracking on first access
     if (share.accessCount === 0) {
-      await prisma.taxFormShare.update({
-        where: { id: share.id },
-        data: {
-          accessCount: { increment: 1 },
-          lastAccessAt: new Date(),
-        },
-      });
+      // Increment access count
+      await db
+        .from('tax_form_shares')
+        .update({
+          accessCount: share.accessCount + 1,
+          lastAccessAt: new Date().toISOString(),
+        })
+        .eq('id', share.id);
 
       // Update startedAt on client tax form if first access
       if (!clientTaxForm.startedAt) {
-        await prisma.clientTaxForm.update({
-          where: { id: clientTaxForm.id },
-          data: { startedAt: new Date() },
-        });
+        await db
+          .from('client_tax_forms')
+          .update({ startedAt: new Date().toISOString() })
+          .eq('id', clientTaxForm.id);
       }
 
-      logger.info(`Form share first accessed: ${params.token}`);
+      logger.info(`Form share first accessed: ${resolvedParams.token}`);
     } else {
       // Just increment counter
-      await prisma.taxFormShare.update({
-        where: { id: share.id },
-        data: {
-          accessCount: { increment: 1 },
-          lastAccessAt: new Date(),
-        },
-      });
+      await db
+        .from('tax_form_shares')
+        .update({
+          accessCount: share.accessCount + 1,
+          lastAccessAt: new Date().toISOString(),
+        })
+        .eq('id', share.id);
     }
 
     return NextResponse.json({
@@ -140,24 +210,24 @@ export async function GET(
         isLocked: clientTaxForm.status === 'REVIEWED', // Locked after review
       },
       taxForm: {
-        id: share.taxForm.id,
-        formNumber: share.taxForm.formNumber,
-        title: share.taxForm.title,
-        description: share.taxForm.description,
-        category: share.taxForm.category,
-        taxYear: share.taxForm.taxYear,
-        fieldDefinitions: share.taxForm.fieldDefinitions,
+        id: taxFormData?.id,
+        formNumber: taxFormData?.formNumber,
+        title: taxFormData?.title,
+        description: taxFormData?.description,
+        category: taxFormData?.category,
+        taxYear: taxFormData?.taxYear,
+        fieldDefinitions: fieldDefinitions || [],
       },
       client: {
-        id: clientTaxForm.client.id,
-        name: `${clientTaxForm.client.firstName} ${clientTaxForm.client.lastName}`,
+        id: clientData?.id,
+        name: `${clientData?.firstName || ''} ${clientData?.lastName || ''}`.trim(),
       },
       preparer: {
-        id: clientTaxForm.assignedByProfile.id,
-        name: `${clientTaxForm.assignedByProfile.firstName} ${clientTaxForm.assignedByProfile.lastName}`,
-        company: clientTaxForm.assignedByProfile.companyName,
+        id: assignedByData?.id,
+        name: `${assignedByData?.firstName || ''} ${assignedByData?.lastName || ''}`.trim(),
+        company: assignedByData?.companyName,
       },
-      signatures: clientTaxForm.signatures,
+      signatures: signatures || [],
       permissions: {
         canEdit,
         canSign: canEdit && clientTaxForm.status !== 'REVIEWED',
@@ -181,6 +251,7 @@ export async function PATCH(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const session = await auth();
     const userId = session?.user?.id;
 
@@ -189,44 +260,41 @@ export async function PATCH(
     }
 
     // Get current user's profile
-    const currentUserProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: currentUserProfile } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .single();
 
     if (!currentUserProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get share record
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: params.token },
-      select: { id: true, taxFormId: true, sharedWith: true, expiresAt: true },
-    });
+    const { data: share } = await db
+      .from('tax_form_shares')
+      .select('id, taxFormId, sharedWith, expiresAt')
+      .eq('shareToken', resolvedParams.token)
+      .single();
 
     if (!share) {
       return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
     }
 
     // Check if expired
-    if (share.expiresAt && new Date() > share.expiresAt) {
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
       return NextResponse.json({ error: 'Share link has expired' }, { status: 410 });
     }
 
     // Get client tax form
-    const clientTaxForm = await prisma.clientTaxForm.findFirst({
-      where: {
-        taxFormId: share.taxFormId,
-        clientId: share.sharedWith,
-      },
-      select: {
-        id: true,
-        clientId: true,
-        assignedBy: true,
-        status: true,
-        formData: true,
-      },
-    });
+    const { data: clientTaxForms } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, assignedBy, status, formData')
+      .eq('taxFormId', share.taxFormId)
+      .eq('clientId', share.sharedWith)
+      .limit(1);
+
+    const clientTaxForm = firstOrNull(clientTaxForms);
 
     if (!clientTaxForm) {
       return NextResponse.json({ error: 'Form assignment not found' }, { status: 404 });
@@ -236,7 +304,6 @@ export async function PATCH(
     const canEdit =
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
-      currentUserProfile.role === 'admin' ||
       currentUserProfile.role === 'admin';
 
     if (!canEdit) {
@@ -267,37 +334,47 @@ export async function PATCH(
     }
 
     // Update client tax form
-    const updated = await prisma.clientTaxForm.update({
-      where: { id: clientTaxForm.id },
-      data: {
-        formData,
-        progress: progress !== undefined ? progress : undefined,
-        lastEditedBy: currentUserProfile.id,
-        lastEditedAt: new Date(),
-        status: clientTaxForm.status === 'ASSIGNED' ? 'IN_PROGRESS' : clientTaxForm.status,
-      },
-    });
+    const updateData: any = {
+      formData,
+      lastEditedBy: currentUserProfile.id,
+      lastEditedAt: new Date().toISOString(),
+      status: clientTaxForm.status === 'ASSIGNED' ? 'IN_PROGRESS' : clientTaxForm.status,
+    };
+    if (progress !== undefined) {
+      updateData.progress = progress;
+    }
+
+    const { data: updated, error: updateError } = await db
+      .from('client_tax_forms')
+      .update(updateData)
+      .eq('id', clientTaxForm.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     // Create audit trail entry if there are changes
     if (Object.keys(fieldChanges).length > 0) {
-      await prisma.taxFormEdit.create({
-        data: {
+      await db
+        .from('tax_form_edits')
+        .insert({
           clientTaxFormId: clientTaxForm.id,
           editedBy: currentUserProfile.id,
           editedByRole: currentUserProfile.role,
           fieldChanges,
           formDataSnapshot: formData,
-        },
-      });
+        });
     }
 
     logger.info(`Form updated: ${clientTaxForm.id} by ${currentUserProfile.id}`);
 
     return NextResponse.json({
       success: true,
-      lastEditedAt: updated.lastEditedAt,
-      progress: updated.progress,
-      status: updated.status,
+      lastEditedAt: updated?.lastEditedAt,
+      progress: updated?.progress,
+      status: updated?.status,
     });
   } catch (error) {
     logger.error('Error saving form:', error);

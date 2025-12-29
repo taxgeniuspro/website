@@ -10,12 +10,42 @@
  * - client_referral_invitation: Sent 30 min after lead form completion
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { Resend } from '@/lib/resend';
 import { render } from '@react-email/render';
 import ReferralInvitationEmail from '../../../emails/referral-invitation';
 import { getClientReferralImages, generateSocialMediaCopy } from './client-referral.service';
+
+// Local type definitions (replacing @prisma/client)
+interface ScheduledEmailRecord {
+  id: string;
+  type: string;
+  recipientId: string;
+  data: Record<string, unknown>;
+  sendAt: Date | string;
+  status: string;
+  sentAt?: Date | string | null;
+  error?: string | null;
+  attempts: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name?: string | null;
+  email: string;
+  assignedPreparerId?: string | null;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  customTrackingCode?: string | null;
+  trackingCode?: string | null;
+}
 
 // Lazy initialization to avoid build-time errors when env vars aren't set
 const getResend = () => {
@@ -41,15 +71,24 @@ export interface ScheduleEmailParams {
 export async function scheduleEmail(params: ScheduleEmailParams): Promise<string> {
   const { type, recipientId, data, sendAt } = params;
 
-  const scheduled = await prisma.scheduledEmail.create({
-    data: {
+  const { data: scheduledData, error } = await db
+    .from('scheduled_emails')
+    .insert({
       type,
       recipientId,
       data: data as object,
-      sendAt,
+      sendAt: sendAt.toISOString(),
       status: 'pending',
-    },
-  });
+      attempts: 0,
+    })
+    .select()
+    .single();
+
+  if (error || !scheduledData) {
+    throw new Error(`Failed to schedule email: ${error?.message}`);
+  }
+
+  const scheduled = scheduledData as ScheduledEmailRecord;
 
   logger.info('Scheduled email', {
     id: scheduled.id,
@@ -66,10 +105,15 @@ export async function scheduleEmail(params: ScheduleEmailParams): Promise<string
  */
 export async function cancelScheduledEmail(emailId: string): Promise<boolean> {
   try {
-    await prisma.scheduledEmail.update({
-      where: { id: emailId },
-      data: { status: 'cancelled' },
-    });
+    const { error } = await db
+      .from('scheduled_emails')
+      .update({ status: 'cancelled' })
+      .eq('id', emailId);
+
+    if (error) {
+      throw error;
+    }
+
     return true;
   } catch (error) {
     logger.error('Error cancelling scheduled email', { error, emailId });
@@ -89,15 +133,16 @@ export async function processScheduledEmails(): Promise<{
   const now = new Date();
 
   // Get all pending emails that are due
-  const pendingEmails = await prisma.scheduledEmail.findMany({
-    where: {
-      status: 'pending',
-      sendAt: { lte: now },
-      attempts: { lt: 3 }, // Max 3 attempts
-    },
-    orderBy: { sendAt: 'asc' },
-    take: 50, // Process 50 at a time
-  });
+  const { data: pendingEmailsData } = await db
+    .from('scheduled_emails')
+    .select('*')
+    .eq('status', 'pending')
+    .lte('sendAt', now.toISOString())
+    .lt('attempts', 3) // Max 3 attempts
+    .order('sendAt', { ascending: true })
+    .limit(50); // Process 50 at a time
+
+  const pendingEmails = (pendingEmailsData || []) as ScheduledEmailRecord[];
 
   logger.info(`Processing ${pendingEmails.length} scheduled emails`);
 
@@ -107,10 +152,11 @@ export async function processScheduledEmails(): Promise<{
   for (const email of pendingEmails) {
     try {
       // Increment attempt count first
-      await prisma.scheduledEmail.update({
-        where: { id: email.id },
-        data: { attempts: { increment: 1 } },
-      });
+      const newAttempts = email.attempts + 1;
+      await db
+        .from('scheduled_emails')
+        .update({ attempts: newAttempts })
+        .eq('id', email.id);
 
       // Send based on email type
       let success = false;
@@ -124,41 +170,34 @@ export async function processScheduledEmails(): Promise<{
       }
 
       if (success) {
-        await prisma.scheduledEmail.update({
-          where: { id: email.id },
-          data: {
+        await db
+          .from('scheduled_emails')
+          .update({
             status: 'sent',
-            sentAt: new Date(),
-          },
-        });
+            sentAt: new Date().toISOString(),
+          })
+          .eq('id', email.id);
         sent++;
       } else {
-        // Check if we've exhausted retries
-        const updatedEmail = await prisma.scheduledEmail.findUnique({
-          where: { id: email.id },
-          select: { attempts: true },
-        });
-
-        if (updatedEmail && updatedEmail.attempts >= 3) {
-          await prisma.scheduledEmail.update({
-            where: { id: email.id },
-            data: {
+        // Check if we've exhausted retries (we already incremented, so check newAttempts)
+        if (newAttempts >= 3) {
+          await db
+            .from('scheduled_emails')
+            .update({
               status: 'failed',
               error: 'Max retries exceeded',
-            },
-          });
+            })
+            .eq('id', email.id);
         }
         failed++;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      await prisma.scheduledEmail.update({
-        where: { id: email.id },
-        data: {
-          error: errorMessage,
-        },
-      });
+      await db
+        .from('scheduled_emails')
+        .update({ error: errorMessage })
+        .eq('id', email.id);
 
       logger.error('Error processing scheduled email', {
         emailId: email.id,
@@ -182,9 +221,13 @@ async function sendReferralInvitationEmail(
 ): Promise<boolean> {
   try {
     // Get the lead info with assigned preparer
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: recipientId },
-    });
+    const { data: leadData } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, email, assignedPreparerId')
+      .eq('id', recipientId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData) as TaxIntakeLeadRecord | null;
 
     if (!lead) {
       logger.error('Lead not found for referral invitation', { recipientId });
@@ -197,10 +240,13 @@ async function sendReferralInvitationEmail(
 
     if (lead.assignedPreparerId) {
       // NOTE: assignedPreparerId IS the Profile.id (not User.id)
-      const preparer = await prisma.profile.findUnique({
-        where: { id: lead.assignedPreparerId },
-        select: { id: true, firstName: true, lastName: true, customTrackingCode: true, trackingCode: true },
-      });
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id, firstName, lastName, customTrackingCode, trackingCode')
+        .eq('id', lead.assignedPreparerId)
+        .limit(1);
+
+      const preparer = firstOrNull(preparerData) as ProfileRecord | null;
       if (preparer) {
         preparerId = preparer.id;
         preparerName = `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() || 'Tax Genius';
@@ -274,13 +320,13 @@ export async function scheduleReferralInvitationEmail(
 ): Promise<string | null> {
   try {
     // Get lead info
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        first_name: true,
-        email: true,
-      },
-    });
+    const { data: leadData } = await db
+      .from('tax_intake_leads')
+      .select('first_name, email')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leadData) as { first_name?: string | null; email: string } | null;
 
     if (!lead) {
       logger.error('Lead not found for scheduling referral email', { leadId });

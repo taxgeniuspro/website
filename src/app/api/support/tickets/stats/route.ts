@@ -5,10 +5,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getTicketStats } from '@/lib/services/support-ticket.service';
-import { UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface to replace @prisma/client type
+type UserRole = 'CLIENT' | 'LEAD' | 'TAX_PREPARER' | 'ADMIN' | 'SUPER_ADMIN';
 
 /**
  * GET /api/support/tickets/stats
@@ -23,22 +25,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile with role
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Determine role for filtering
+    const profileRole = (profile.role || '').toUpperCase();
     let role: 'client' | 'preparer' | 'admin' = 'client';
-    if (profile.role === UserRole.TAX_PREPARER) {
+    if (profileRole === 'TAX_PREPARER') {
       role = 'preparer';
-    } else if (profile.role === UserRole.SUPER_ADMIN || profile.role === UserRole.ADMIN) {
+    } else if (profileRole === 'SUPER_ADMIN' || profileRole === 'ADMIN') {
       role = 'admin';
-    } else if (profile.role === UserRole.CLIENT || profile.role === UserRole.LEAD) {
+    } else if (profileRole === 'CLIENT' || profileRole === 'LEAD') {
       role = 'client';
     }
 

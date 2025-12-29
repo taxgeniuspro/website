@@ -9,8 +9,34 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface PayoutRequest {
+  id: string;
+  referrerId: string;
+  amount: number;
+  commissionIds: string[];
+  status: string;
+  paymentMethod: string | null;
+  notes: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+  paymentRef: string | null;
+}
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  userId: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,7 +61,7 @@ export async function GET(req: NextRequest) {
     const statusFilter = searchParams.get('status') || 'pending';
 
     // Map tab names to database status values
-    const statusMap: Record<string, string | string[]> = {
+    const statusMap: Record<string, string> = {
       pending: 'PENDING',
       approved: 'APPROVED',
       paid: 'PAID',
@@ -44,76 +70,91 @@ export async function GET(req: NextRequest) {
 
     const status = statusMap[statusFilter.toLowerCase()] || 'PENDING';
 
-    // Fetch payout requests with referrer details
-    const payouts = await prisma.payoutRequest.findMany({
-      where: {
-        status: typeof status === 'string' ? status : { in: status },
-      },
-      include: {
-        referrer: {
-          include: {
-            user: {
-              select: {
-                email: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        requestedAt: 'desc',
-      },
+    // Fetch payout requests
+    const { data: payouts, error: payoutsError } = await db.from('payout_requests')
+      .select('*')
+      .eq('status', status)
+      .order('requestedAt', { ascending: false });
+
+    if (payoutsError) {
+      throw payoutsError;
+    }
+
+    // Get referrer IDs and fetch profiles
+    const referrerIds = [...new Set((payouts || []).map((p: PayoutRequest) => p.referrerId))];
+
+    const { data: profiles } = await db.from('profiles')
+      .select('id, firstName, lastName, userId')
+      .in('id', referrerIds);
+
+    // Get user IDs for emails
+    const userIds = [...new Set((profiles || []).map((p: Profile) => p.userId))];
+
+    const { data: users } = await db.from('users')
+      .select('id, email')
+      .in('id', userIds);
+
+    // Create lookup maps
+    const profilesById = new Map<string, Profile>();
+    (profiles || []).forEach((p: Profile) => {
+      profilesById.set(p.id, p);
+    });
+
+    const usersById = new Map<string, User>();
+    (users || []).forEach((u: User) => {
+      usersById.set(u.id, u);
     });
 
     // Get stats for dashboard cards
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const pendingRequests = await prisma.payoutRequest.findMany({
-      where: { status: 'PENDING' },
-    });
+    const { data: pendingRequests } = await db.from('payout_requests')
+      .select('amount')
+      .eq('status', 'PENDING');
 
-    const approvedThisMonth = await prisma.payoutRequest.count({
-      where: {
-        status: { in: ['APPROVED', 'PAID'] },
-        processedAt: { gte: startOfMonth },
-      },
-    });
+    const { count: approvedThisMonth } = await db.from('payout_requests')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['APPROVED', 'PAID'])
+      .gte('processedAt', startOfMonth.toISOString());
 
-    const approvedPayoutsThisMonth = await prisma.payoutRequest.findMany({
-      where: {
-        status: { in: ['APPROVED', 'PAID'] },
-        processedAt: { gte: startOfMonth },
-      },
-    });
+    const { data: approvedPayoutsThisMonth } = await db.from('payout_requests')
+      .select('amount')
+      .in('status', ['APPROVED', 'PAID'])
+      .gte('processedAt', startOfMonth.toISOString());
 
     const stats = {
-      pendingCount: pendingRequests.length,
-      pendingAmount: pendingRequests.reduce((sum, p) => sum + Number(p.amount), 0),
-      approvedThisMonth,
-      approvedAmountThisMonth: approvedPayoutsThisMonth.reduce(
-        (sum, p) => sum + Number(p.amount),
+      pendingCount: (pendingRequests || []).length,
+      pendingAmount: (pendingRequests || []).reduce((sum, p: { amount: number }) => sum + Number(p.amount), 0),
+      approvedThisMonth: approvedThisMonth || 0,
+      approvedAmountThisMonth: (approvedPayoutsThisMonth || []).reduce(
+        (sum, p: { amount: number }) => sum + Number(p.amount),
         0
       ),
     };
 
     // Format response
-    const formattedPayouts = payouts.map((payout) => ({
-      id: payout.id,
-      referrer: {
-        firstName: payout.referrer.firstName || 'N/A',
-        lastName: payout.referrer.lastName || '',
-        email: payout.referrer.user.email,
-      },
-      amount: Number(payout.amount),
-      commissionIds: payout.commissionIds,
-      status: payout.status,
-      paymentMethod: payout.paymentMethod,
-      notes: payout.notes,
-      requestedAt: payout.requestedAt.toISOString(),
-      processedAt: payout.processedAt?.toISOString() || null,
-      paymentRef: payout.paymentRef,
-    }));
+    const formattedPayouts = (payouts || []).map((payout: PayoutRequest) => {
+      const referrer = profilesById.get(payout.referrerId);
+      const referrerUser = referrer ? usersById.get(referrer.userId) : null;
+
+      return {
+        id: payout.id,
+        referrer: {
+          firstName: referrer?.firstName || 'N/A',
+          lastName: referrer?.lastName || '',
+          email: referrerUser?.email || '',
+        },
+        amount: Number(payout.amount),
+        commissionIds: payout.commissionIds,
+        status: payout.status,
+        paymentMethod: payout.paymentMethod,
+        notes: payout.notes,
+        requestedAt: payout.requestedAt,
+        processedAt: payout.processedAt,
+        paymentRef: payout.paymentRef,
+      };
+    });
 
     return NextResponse.json({
       payouts: formattedPayouts,

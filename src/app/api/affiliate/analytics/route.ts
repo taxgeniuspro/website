@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getMyAffiliateAnalytics } from '@/lib/services/lead-analytics.service';
 import { logger } from '@/lib/logger';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces (replacing Prisma types)
+interface ProfileRole {
+  role: string | null;
+  affiliateStatus: string | null;
+}
 
 /**
  * GET /api/affiliate/analytics
@@ -20,17 +26,19 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user profile to check affiliate access
-    // Use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: user.id },
-          { userId: user.id },
-          { email: user.email }
-        ]
-      },
-      select: { role: true, affiliateStatus: true },
-    });
+    // Use Supabase OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('role, affiliateStatus')
+      .or(`supabaseUserId.eq.${user.id},userId.eq.${user.id},email.eq.${user.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<ProfileRole>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

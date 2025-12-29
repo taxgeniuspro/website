@@ -6,9 +6,16 @@
 
 import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import sharp from 'sharp';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+}
 
 export async function POST(
   request: NextRequest,
@@ -24,20 +31,34 @@ export async function POST(
     }
 
     // Get admin's profile
-    const adminProfile = await prisma.profile.findUnique({
-      where: { userId: adminUserId },
-      select: { role: true },
-    });
+    const { data: adminProfileData, error: adminProfileError } = await db.from('profiles')
+      .select('role')
+      .eq('userId', adminUserId)
+      .limit(1);
+
+    if (adminProfileError) {
+      throw adminProfileError;
+    }
+
+    const adminProfile = firstOrNull<{ role: string }>(adminProfileData);
 
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
 
     // 2. Get target user's profile
-    const targetProfile = await prisma.profile.findUnique({
-      where: { userId: params.userId },
-      select: { id: true, userId: true, role: true },
-    });
+    const { userId } = await params;
+
+    const { data: targetProfileData, error: targetProfileError } = await db.from('profiles')
+      .select('id, userId, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    if (targetProfileError) {
+      throw targetProfileError;
+    }
+
+    const targetProfile = firstOrNull<Profile>(targetProfileData);
 
     if (!targetProfile) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
@@ -78,15 +99,18 @@ export async function POST(
     const dataUrl = `data:image/png;base64,${processedImage.toString('base64')}`;
 
     // 9. Update profile with photo
-    await prisma.profile.update({
-      where: { id: targetProfile.id },
-      data: {
+    const { error: updateError } = await db.from('profiles')
+      .update({
         avatarUrl: dataUrl,
         qrCodeLogoUrl: dataUrl, // Use same photo for QR branding
-      },
-    });
+      })
+      .eq('id', targetProfile.id);
 
-    logger.info(`Admin ${adminUserId} uploaded photo for user ${params.userId}`);
+    if (updateError) {
+      throw updateError;
+    }
+
+    logger.info(`Admin ${adminUserId} uploaded photo for user ${userId}`);
 
     return NextResponse.json({
       success: true,

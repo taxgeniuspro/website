@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -62,15 +62,10 @@ export async function POST(req: NextRequest) {
     // }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -115,52 +110,54 @@ export async function POST(req: NextRequest) {
     await writeFile(filePath, buffer);
 
     // Save document record to database with new fields
-    const document = await prisma.document.create({
-      data: {
-        profileId: profile.id,
-        taxReturnId: taxReturnId || undefined,
-        type: CATEGORY_TO_TYPE[category] || 'OTHER',
-        fileName: file.name,
-        fileUrl: `/uploads/documents/${profile.id}/${taxYear}/${fileName}`,
-        fileSize: file.size,
-        mimeType: file.type,
-        isEncrypted: false, // TODO: Implement encryption
-        taxYear: taxYear,
-        status: 'REVIEWED', // Default to REVIEWED for client uploads (no pending review needed until assigned to preparer)
-        folderId: folderId || undefined, // NEW: Assign to folder if specified
-        metadata: {
-          category,
-          uploadedAt: new Date().toISOString(),
-        },
+    const { data: newDocuments, error: createError } = await db.from('documents').insert({
+      profile_id: profile.id,
+      tax_return_id: taxReturnId || null,
+      type: CATEGORY_TO_TYPE[category] || 'OTHER',
+      file_name: file.name,
+      file_url: `/uploads/documents/${profile.id}/${taxYear}/${fileName}`,
+      file_size: file.size,
+      mime_type: file.type,
+      is_encrypted: false, // TODO: Implement encryption
+      tax_year: taxYear,
+      status: 'REVIEWED', // Default to REVIEWED for client uploads (no pending review needed until assigned to preparer)
+      folder_id: folderId || null, // NEW: Assign to folder if specified
+      metadata: {
+        category,
+        uploadedAt: new Date().toISOString(),
       },
-    });
+    }).select();
+
+    if (createError) {
+      throw createError;
+    }
+
+    const document = firstOrNull(newDocuments);
 
     // Log upload operation
-    await prisma.fileOperation.create({
-      data: {
-        operation: 'UPLOAD',
-        performedBy: profile.id,
-        documentId: document.id,
-        details: {
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
-          folderId: folderId || null,
-        },
-        ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-        userAgent: req.headers.get('user-agent') || undefined,
+    await db.from('file_operations').insert({
+      operation: 'UPLOAD',
+      performed_by: profile.id,
+      document_id: document?.id,
+      details: {
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        folderId: folderId || null,
       },
+      ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+      user_agent: req.headers.get('user-agent') || null,
     });
 
     return NextResponse.json({
       success: true,
       document: {
-        id: document.id,
-        fileName: document.fileName,
-        fileUrl: document.fileUrl,
-        fileSize: document.fileSize,
-        taxYear: document.taxYear,
-        status: document.status,
+        id: document?.id,
+        fileName: document?.file_name,
+        fileUrl: document?.file_url,
+        fileSize: document?.file_size,
+        taxYear: document?.tax_year,
+        status: document?.status,
         category,
       },
     });
@@ -180,25 +177,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get all documents for this profile
-    const documents = await prisma.document.findMany({
-      where: { profileId: profile.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: documents } = await db.from('documents')
+      .select('*')
+      .eq('profile_id', profile.id)
+      .order('created_at', { ascending: false });
 
     return NextResponse.json({ documents });
   } catch (error) {

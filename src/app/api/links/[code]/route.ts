@@ -8,7 +8,7 @@
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   getShortLinkByCode,
@@ -16,6 +16,11 @@ import {
   deleteShortLink,
   getShortLinkAnalytics,
 } from '@/lib/services/short-link.service';
+
+// TypeScript interface for Profile
+interface Profile {
+  id: string;
+}
 
 /**
  * GET - Get short link details
@@ -29,22 +34,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     }
 
     // Get profile with flexible lookup
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    const { data: profileData, error: findError } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const code = params.code;
+    const { code } = await params;
 
     // Get link with analytics
     const analytics = await getShortLinkAnalytics(code, profile.id);
@@ -71,22 +77,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ code: 
     }
 
     // Get profile with flexible lookup
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    const { data: profileData, error: findError } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const code = params.code;
+    const { code } = await params;
     const body = await req.json();
 
     // Update link
@@ -119,22 +126,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ code:
     }
 
     // Get profile with flexible lookup
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    const { data: profileData, error: findError } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const code = params.code;
+    const { code } = await params;
 
     // Delete link
     await deleteShortLink(code, profile.id);

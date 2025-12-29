@@ -4,10 +4,44 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { EmailService } from '@/lib/services/email.service';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interfaces
+interface PreparerUser {
+  email: string;
+}
+
+interface Preparer {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  user: PreparerUser | null;
+}
+
+interface Appointment {
+  id: string;
+  preparerId: string;
+  clientId: string | null;
+  clientName: string;
+  clientEmail: string;
+  type: string;
+  status: string;
+  scheduledFor: string | null;
+  duration: number | null;
+  location: string | null;
+  meetingLink: string | null;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancellationReason: string | null;
+}
+
+interface Profile {
+  id: string;
+  role: string | null;
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -24,19 +58,38 @@ export async function PATCH(
     const { reason, cancelledBy } = body;
 
     // Get existing appointment with preparer info for emails
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, preparerId:preparer_id, clientId:client_id, clientName:client_name, clientEmail:client_email, type, status, scheduledFor:scheduled_for, duration, location, meetingLink:meeting_link')
+      .eq('id', id)
+      .limit(1);
+    const appointment = firstOrNull<Appointment>(appointmentData);
+
+    // Get preparer info separately if appointment exists
+    let preparer: Preparer | null = null;
+    if (appointment?.preparerId) {
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id, firstName:first_name, lastName:last_name, userId:user_id')
+        .eq('id', appointment.preparerId)
+        .limit(1);
+      const preparerProfile = firstOrNull(preparerData);
+
+      if (preparerProfile) {
+        const { data: userData } = await db
+          .from('users')
+          .select('email')
+          .eq('id', preparerProfile.userId)
+          .limit(1);
+        const user = firstOrNull(userData);
+        preparer = {
+          id: preparerProfile.id,
+          firstName: preparerProfile.firstName,
+          lastName: preparerProfile.lastName,
+          user: user ? { email: user.email } : null,
+        };
+      }
+    }
 
     if (!appointment) {
       return NextResponse.json(
@@ -54,9 +107,12 @@ export async function PATCH(
     }
 
     // Check permissions: only preparer, client, or admin can cancel
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<Profile>(userProfileData);
 
     const isAuthorized =
       userProfile?.id === appointment.preparerId ||
@@ -84,22 +140,29 @@ export async function PATCH(
     }
 
     // Cancel appointment
-    const updatedAppointment = await prisma.appointment.update({
-      where: { id },
-      data: {
+    const { data: updatedData, error: updateError } = await db
+      .from('appointments')
+      .update({
         status: 'CANCELLED',
-        cancelledAt: new Date(),
-        cancelledBy: canceller,
-        cancellationReason: reason,
-        updatedAt: new Date(),
-      },
-    });
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: canceller,
+        cancellation_reason: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select('id, status, cancelledAt:cancelled_at, cancelledBy:cancelled_by, cancellationReason:cancellation_reason')
+      .single();
+
+    if (updateError) {
+      throw new Error(`Failed to cancel appointment: ${updateError.message}`);
+    }
+    const updatedAppointment = updatedData;
 
     // Send cancellation notification emails to both client and preparer
-    const preparerName = appointment.preparer
-      ? `${appointment.preparer.firstName || ''} ${appointment.preparer.lastName || ''}`.trim() || 'Tax Preparer'
+    const preparerName = preparer
+      ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() || 'Tax Preparer'
       : 'Tax Preparer';
-    const preparerEmail = appointment.preparer?.user?.email;
+    const preparerEmail = preparer?.user?.email;
     const appointmentType = formatAppointmentType(appointment.type);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
     const rebookUrl = appointment.preparerId

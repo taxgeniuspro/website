@@ -9,13 +9,34 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   CreatePageRestrictionRequest,
   PageRestrictionResponse,
 } from '@/types/route-access-control';
 import { clearRestrictionCache } from '@/lib/content-restriction';
+
+// Local interfaces
+interface PageRestriction {
+  id: string;
+  routePath: string;
+  allowedRoles: string[];
+  blockedRoles: string[];
+  allowedUsernames: string[];
+  blockedUsernames: string[];
+  allowNonLoggedIn: boolean;
+  redirectUrl: string | null;
+  hideFromNav: boolean;
+  showInNavOverride: boolean;
+  customHtmlOnBlock: string | null;
+  priority: number;
+  isActive: boolean;
+  description: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * GET - List all route restrictions with optional filters
@@ -42,30 +63,27 @@ export async function GET(req: NextRequest) {
       | 'updatedAt';
     const sortDirection = (searchParams.get('sortDirection') || 'desc') as 'asc' | 'desc';
 
-    // Build where clause
-    const where: any = {};
+    // Build query
+    let query = db.from('page_restrictions').select('*');
 
     if (searchTerm) {
-      where.OR = [
-        { routePath: { contains: searchTerm, mode: 'insensitive' } },
-        { description: { contains: searchTerm, mode: 'insensitive' } },
-      ];
+      query = query.or(`routePath.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
     }
 
     if (isActiveFilter !== null && isActiveFilter !== undefined) {
-      where.isActive = isActiveFilter === 'true';
+      query = query.eq('isActive', isActiveFilter === 'true');
     }
 
-    // Fetch restrictions
-    const restrictions = await prisma.pageRestriction.findMany({
-      where,
-      orderBy: {
-        [sortField]: sortDirection,
-      },
-    });
+    query = query.order(sortField, { ascending: sortDirection === 'asc' });
+
+    const { data: restrictions, error: fetchError } = await query;
+
+    if (fetchError) {
+      throw fetchError;
+    }
 
     // Map to response type
-    const response: PageRestrictionResponse[] = restrictions.map((r) => ({
+    const response: PageRestrictionResponse[] = (restrictions || []).map((r: PageRestriction) => ({
       id: r.id,
       routePath: r.routePath,
       allowedRoles: r.allowedRoles,
@@ -81,8 +99,8 @@ export async function GET(req: NextRequest) {
       isActive: r.isActive,
       description: r.description,
       createdBy: r.createdBy,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     }));
 
     return NextResponse.json({
@@ -120,11 +138,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Check for duplicate route pattern
-    const existing = await prisma.pageRestriction.findUnique({
-      where: { routePath: body.routePath },
-    });
+    const { data: existing } = await db.from('page_restrictions')
+      .select('id')
+      .eq('routePath', body.routePath)
+      .limit(1);
 
-    if (existing) {
+    if (existing && existing.length > 0) {
       return NextResponse.json(
         { error: 'A restriction already exists for this route pattern' },
         { status: 409 }
@@ -132,8 +151,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Create restriction
-    const restriction = await prisma.pageRestriction.create({
-      data: {
+    const { data: restriction, error: createError } = await db.from('page_restrictions')
+      .insert({
         routePath: body.routePath,
         allowedRoles: body.allowedRoles || [],
         blockedRoles: body.blockedRoles || [],
@@ -148,8 +167,13 @@ export async function POST(req: NextRequest) {
         isActive: body.isActive !== undefined ? body.isActive : true,
         description: body.description || null,
         createdBy: userId,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
 
     // Clear cache since we added a new restriction
     clearRestrictionCache();
@@ -172,8 +196,8 @@ export async function POST(req: NextRequest) {
       isActive: restriction.isActive,
       description: restriction.description,
       createdBy: restriction.createdBy,
-      createdAt: restriction.createdAt.toISOString(),
-      updatedAt: restriction.updatedAt.toISOString(),
+      createdAt: restriction.createdAt,
+      updatedAt: restriction.updatedAt,
     };
 
     return NextResponse.json({

@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { TicketCard } from './ticket-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Inbox } from 'lucide-react';
-import { TicketPriority, TicketStatus } from '@prisma/client';
+// Ticket types (migrated from Prisma to local interfaces)
+export type TicketStatus = 'OPEN' | 'PENDING' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+export type TicketPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 import { logger } from '@/lib/logger';
 
 interface Ticket {

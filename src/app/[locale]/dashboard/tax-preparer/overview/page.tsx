@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,11 +48,13 @@ export default async function PreparerOverviewDashboard() {
 
   // Fetch the profile to get the correct Profile.id (not User.id)
   // Analytics queries filter by Profile.id, not User.id
-  const profile = await prisma.profile.findFirst({
-    where: { userId: user?.id },
-    select: { id: true, firstName: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id, firstName')
+    .eq('userId', user?.id)
+    .limit(1);
 
+  const profile = firstOrNull(profiles);
   const preparerId = profile?.id || '';
   const firstName = profile?.firstName || user?.name?.split(' ')[0] || 'Preparer';
 

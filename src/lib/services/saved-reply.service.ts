@@ -4,8 +4,39 @@
  * Supports common tax-related question templates
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface SavedReplyRecord {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  isGlobal: boolean;
+  createdById: string;
+  usageCount: number;
+  lastUsedAt?: Date | string | null;
+  createdAt: Date | string;
+  createdBy?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+interface SupportTicketRecord {
+  id: string;
+  ticketNumber: string;
+  creatorId: string;
+  assignedToId?: string | null;
+}
 
 // ==================== Types ====================
 
@@ -37,24 +68,33 @@ export interface ApplySavedReplyInput {
  */
 export async function createSavedReply(input: CreateSavedReplyInput) {
   try {
-    const savedReply = await prisma.savedReply.create({
-      data: {
+    const { data: savedReplyData, error } = await db
+      .from('saved_replies')
+      .insert({
         title: input.title,
         content: input.content,
         category: input.category || 'general',
         isGlobal: input.isGlobal || false,
         createdById: input.createdById,
-      },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (error || !savedReplyData) {
+      throw new Error(`Failed to create saved reply: ${error?.message}`);
+    }
+
+    // Get creator info
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', input.createdById)
+      .limit(1);
+
+    const savedReply = {
+      ...savedReplyData,
+      createdBy: firstOrNull(creatorData) as ProfileRecord | null,
+    } as SavedReplyRecord;
 
     logger.info('Saved reply created', {
       savedReplyId: savedReply.id,
@@ -83,44 +123,77 @@ export async function getSavedReplies(
   }
 ) {
   try {
-    const where: any = {
-      OR: [
-        { createdById: userId }, // User's own replies
-        { isGlobal: true }, // Global replies available to all
-      ],
-    };
+    // Supabase doesn't support OR in where clause directly, so we fetch user's replies and global ones separately
+    // Then combine and filter in JS
+
+    // Get user's own replies
+    let userQuery = db
+      .from('saved_replies')
+      .select('*')
+      .eq('createdById', userId);
 
     if (filters?.category) {
-      where.category = filters.category;
+      userQuery = userQuery.eq('category', filters.category);
     }
 
+    const { data: userRepliesData } = await userQuery;
+
+    // Get global replies
+    let globalQuery = db
+      .from('saved_replies')
+      .select('*')
+      .eq('isGlobal', true)
+      .neq('createdById', userId); // Exclude user's own to avoid duplicates
+
+    if (filters?.category) {
+      globalQuery = globalQuery.eq('category', filters.category);
+    }
+
+    const { data: globalRepliesData } = await globalQuery;
+
+    // Combine results
+    let allReplies = [...(userRepliesData || []), ...(globalRepliesData || [])] as SavedReplyRecord[];
+
+    // Apply search filter in JS (case-insensitive)
     if (filters?.search) {
-      where.AND = [
-        where,
-        {
-          OR: [
-            { title: { contains: filters.search, mode: 'insensitive' } },
-            { content: { contains: filters.search, mode: 'insensitive' } },
-          ],
-        },
-      ];
+      const searchLower = filters.search.toLowerCase();
+      allReplies = allReplies.filter(
+        (r) =>
+          r.title.toLowerCase().includes(searchLower) ||
+          r.content.toLowerCase().includes(searchLower)
+      );
     }
 
-    const savedReplies = await prisma.savedReply.findMany({
-      where,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: [{ usageCount: 'desc' }, { lastUsedAt: 'desc' }, { createdAt: 'desc' }],
+    // Get creator info for all replies
+    const creatorIds = [...new Set(allReplies.map((r) => r.createdById))];
+    const { data: creatorsData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', creatorIds);
+
+    const creatorsMap = new Map<string, ProfileRecord>();
+    for (const creator of (creatorsData || []) as ProfileRecord[]) {
+      creatorsMap.set(creator.id, creator);
+    }
+
+    // Attach creator info
+    const repliesWithCreators = allReplies.map((r) => ({
+      ...r,
+      createdBy: creatorsMap.get(r.createdById) || null,
+    }));
+
+    // Sort: usageCount desc, lastUsedAt desc, createdAt desc
+    repliesWithCreators.sort((a, b) => {
+      if (b.usageCount !== a.usageCount) return b.usageCount - a.usageCount;
+      const aLastUsed = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+      const bLastUsed = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+      if (bLastUsed !== aLastUsed) return bLastUsed - aLastUsed;
+      const aCreated = new Date(a.createdAt).getTime();
+      const bCreated = new Date(b.createdAt).getTime();
+      return bCreated - aCreated;
     });
 
-    return savedReplies;
+    return repliesWithCreators;
   } catch (error) {
     logger.error('Failed to get saved replies', {
       error,
@@ -135,17 +208,20 @@ export async function getSavedReplies(
  */
 export async function getSavedReplyCategories() {
   try {
-    const categories = await prisma.savedReply.findMany({
-      select: {
-        category: true,
-      },
-      distinct: ['category'],
-      orderBy: {
-        category: 'asc',
-      },
-    });
+    const { data: repliesData } = await db
+      .from('saved_replies')
+      .select('category')
+      .order('category', { ascending: true });
 
-    return categories.map((c) => c.category).filter(Boolean);
+    // Get distinct categories in JS
+    const categoriesSet = new Set<string>();
+    for (const r of (repliesData || []) as Array<{ category: string }>) {
+      if (r.category) {
+        categoriesSet.add(r.category);
+      }
+    }
+
+    return Array.from(categoriesSet).sort();
   } catch (error) {
     logger.error('Failed to get saved reply categories', { error });
     return [];
@@ -157,19 +233,28 @@ export async function getSavedReplyCategories() {
  */
 export async function updateSavedReply(replyId: string, input: UpdateSavedReplyInput) {
   try {
-    const savedReply = await prisma.savedReply.update({
-      where: { id: replyId },
-      data: input,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: savedReplyData, error } = await db
+      .from('saved_replies')
+      .update(input)
+      .eq('id', replyId)
+      .select()
+      .single();
+
+    if (error || !savedReplyData) {
+      throw new Error(`Failed to update saved reply: ${error?.message}`);
+    }
+
+    // Get creator info
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', savedReplyData.createdById)
+      .limit(1);
+
+    const savedReply = {
+      ...savedReplyData,
+      createdBy: firstOrNull(creatorData) as ProfileRecord | null,
+    } as SavedReplyRecord;
 
     logger.info('Saved reply updated', {
       savedReplyId: replyId,
@@ -193,10 +278,13 @@ export async function updateSavedReply(replyId: string, input: UpdateSavedReplyI
 export async function deleteSavedReply(replyId: string, userId: string) {
   try {
     // Ensure user owns this reply or is admin
-    const reply = await prisma.savedReply.findUnique({
-      where: { id: replyId },
-      select: { createdById: true },
-    });
+    const { data: replyData } = await db
+      .from('saved_replies')
+      .select('createdById')
+      .eq('id', replyId)
+      .limit(1);
+
+    const reply = firstOrNull(replyData) as { createdById: string } | null;
 
     if (!reply) {
       throw new Error('Saved reply not found');
@@ -206,9 +294,14 @@ export async function deleteSavedReply(replyId: string, userId: string) {
       throw new Error('Unauthorized to delete this saved reply');
     }
 
-    await prisma.savedReply.delete({
-      where: { id: replyId },
-    });
+    const { error } = await db
+      .from('saved_replies')
+      .delete()
+      .eq('id', replyId);
+
+    if (error) {
+      throw new Error(`Failed to delete saved reply: ${error.message}`);
+    }
 
     logger.info('Saved reply deleted', {
       savedReplyId: replyId,
@@ -232,32 +325,57 @@ export async function deleteSavedReply(replyId: string, userId: string) {
 export async function applySavedReply(input: ApplySavedReplyInput) {
   try {
     // Get the saved reply
-    const savedReply = await prisma.savedReply.findUnique({
-      where: { id: input.replyId },
-    });
+    const { data: savedReplyData } = await db
+      .from('saved_replies')
+      .select('*')
+      .eq('id', input.replyId)
+      .limit(1);
+
+    const savedReply = firstOrNull(savedReplyData) as SavedReplyRecord | null;
 
     if (!savedReply) {
       throw new Error('Saved reply not found');
     }
 
     // Get ticket details for variable substitution
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: input.ticketId },
-      include: {
-        creator: true,
-        assignedTo: true,
-      },
-    });
+    const { data: ticketData } = await db
+      .from('support_tickets')
+      .select('id, ticketNumber, creatorId, assignedToId')
+      .eq('id', input.ticketId)
+      .limit(1);
+
+    const ticket = firstOrNull(ticketData) as SupportTicketRecord | null;
 
     if (!ticket) {
       throw new Error('Ticket not found');
     }
 
+    // Get creator info
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', ticket.creatorId)
+      .limit(1);
+
+    const creator = firstOrNull(creatorData) as ProfileRecord | null;
+
+    // Get assigned preparer info (if any)
+    let assignedTo: ProfileRecord | null = null;
+    if (ticket.assignedToId) {
+      const { data: assignedData } = await db
+        .from('profiles')
+        .select('id, firstName, lastName')
+        .eq('id', ticket.assignedToId)
+        .limit(1);
+
+      assignedTo = firstOrNull(assignedData) as ProfileRecord | null;
+    }
+
     // Perform variable substitution
     const content = substituteVariables(savedReply.content, {
-      client_name: `${ticket.creator.firstName || ''} ${ticket.creator.lastName || ''}`.trim(),
-      preparer_name: ticket.assignedTo
-        ? `${ticket.assignedTo.firstName || ''} ${ticket.assignedTo.lastName || ''}`.trim()
+      client_name: `${creator?.firstName || ''} ${creator?.lastName || ''}`.trim(),
+      preparer_name: assignedTo
+        ? `${assignedTo.firstName || ''} ${assignedTo.lastName || ''}`.trim()
         : 'Tax Preparer',
       ticket_number: ticket.ticketNumber,
       today: new Date().toLocaleDateString(),
@@ -265,13 +383,13 @@ export async function applySavedReply(input: ApplySavedReplyInput) {
     });
 
     // Update usage statistics
-    await prisma.savedReply.update({
-      where: { id: input.replyId },
-      data: {
-        usageCount: { increment: 1 },
-        lastUsedAt: new Date(),
-      },
-    });
+    await db
+      .from('saved_replies')
+      .update({
+        usageCount: savedReply.usageCount + 1,
+        lastUsedAt: new Date().toISOString(),
+      })
+      .eq('id', input.replyId);
 
     logger.info('Saved reply applied', {
       savedReplyId: input.replyId,
@@ -308,20 +426,29 @@ function substituteVariables(content: string, variables: Record<string, string>)
  */
 export async function getSavedReplyById(replyId: string) {
   try {
-    const savedReply = await prisma.savedReply.findUnique({
-      where: { id: replyId },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    const { data: savedReplyData } = await db
+      .from('saved_replies')
+      .select('*')
+      .eq('id', replyId)
+      .limit(1);
 
-    return savedReply;
+    const savedReply = firstOrNull(savedReplyData) as SavedReplyRecord | null;
+
+    if (!savedReply) {
+      return null;
+    }
+
+    // Get creator info
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', savedReply.createdById)
+      .limit(1);
+
+    return {
+      ...savedReply,
+      createdBy: firstOrNull(creatorData) as ProfileRecord | null,
+    } as SavedReplyRecord;
   } catch (error) {
     logger.error('Failed to get saved reply by ID', {
       error,
@@ -336,28 +463,57 @@ export async function getSavedReplyById(replyId: string) {
  */
 export async function getTopSavedReplies(userId?: string, limit = 10) {
   try {
-    const where: any = {};
+    let allReplies: SavedReplyRecord[] = [];
 
     if (userId) {
-      where.OR = [{ createdById: userId }, { isGlobal: true }];
+      // Supabase doesn't support OR in where clause directly, so we fetch separately
+      const { data: userRepliesData } = await db
+        .from('saved_replies')
+        .select('*')
+        .eq('createdById', userId)
+        .order('usageCount', { ascending: false })
+        .limit(limit);
+
+      const { data: globalRepliesData } = await db
+        .from('saved_replies')
+        .select('*')
+        .eq('isGlobal', true)
+        .neq('createdById', userId)
+        .order('usageCount', { ascending: false })
+        .limit(limit);
+
+      allReplies = [...(userRepliesData || []), ...(globalRepliesData || [])] as SavedReplyRecord[];
+    } else {
+      const { data: repliesData } = await db
+        .from('saved_replies')
+        .select('*')
+        .order('usageCount', { ascending: false })
+        .limit(limit);
+
+      allReplies = (repliesData || []) as SavedReplyRecord[];
     }
 
-    const topReplies = await prisma.savedReply.findMany({
-      where,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: {
-        usageCount: 'desc',
-      },
-      take: limit,
-    });
+    // Sort and limit combined results
+    allReplies.sort((a, b) => b.usageCount - a.usageCount);
+    allReplies = allReplies.slice(0, limit);
+
+    // Get creator info for all replies
+    const creatorIds = [...new Set(allReplies.map((r) => r.createdById))];
+    const { data: creatorsData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', creatorIds);
+
+    const creatorsMap = new Map<string, ProfileRecord>();
+    for (const creator of (creatorsData || []) as ProfileRecord[]) {
+      creatorsMap.set(creator.id, creator);
+    }
+
+    // Attach creator info
+    const topReplies = allReplies.map((r) => ({
+      ...r,
+      createdBy: creatorsMap.get(r.createdById) || null,
+    }));
 
     return topReplies;
   } catch (error) {

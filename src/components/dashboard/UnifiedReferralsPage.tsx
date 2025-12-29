@@ -24,7 +24,8 @@ import {
   Link as LinkIcon,
   BarChart3,
 } from 'lucide-react';
-import type { AffiliateStatus } from '@prisma/client';
+// Affiliate status type (migrated from Prisma to local interface)
+export type AffiliateStatus = 'INACTIVE' | 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 
 interface UnifiedReferralsPageProps {
   userId: string;

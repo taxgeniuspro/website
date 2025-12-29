@@ -7,9 +7,43 @@
  * - Categorize tickets automatically
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import OpenAI from 'openai';
+
+// Local type definitions (replacing @prisma/client)
+interface SystemSettingRecord {
+  id: string;
+  key: string;
+  value: string;
+}
+
+interface ProfileSummary {
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+}
+
+interface TicketMessageRecord {
+  id: string;
+  ticketId: string;
+  senderId?: string | null;
+  content: string;
+  isInternal: boolean;
+  createdAt: string;
+  senderProfile?: ProfileSummary | null;
+}
+
+interface SupportTicketRecord {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  creatorId: string;
+  assignedToId?: string | null;
+  createdAt: string;
+}
 
 // ==================== Types ====================
 
@@ -45,9 +79,13 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
 
   try {
     // Get OpenAI API key from system settings
-    const setting = await prisma.systemSettings.findUnique({
-      where: { key: 'openai_api_key' },
-    });
+    const { data: settingData } = await db
+      .from('system_settings')
+      .select('key, value')
+      .eq('key', 'openai_api_key')
+      .limit(1);
+
+    const setting = firstOrNull(settingData) as SystemSettingRecord | null;
 
     if (!setting || !setting.value) {
       logger.warn('OpenAI API key not configured');
@@ -72,9 +110,13 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
  */
 async function isAIEnabled(): Promise<boolean> {
   try {
-    const setting = await prisma.systemSettings.findUnique({
-      where: { key: 'support_ai_enabled' },
-    });
+    const { data: settingData } = await db
+      .from('system_settings')
+      .select('key, value')
+      .eq('key', 'support_ai_enabled')
+      .limit(1);
+
+    const setting = firstOrNull(settingData) as SystemSettingRecord | null;
 
     return setting ? JSON.parse(setting.value) === true : false;
   } catch (error) {
@@ -99,51 +141,71 @@ export async function suggestResponse(input: SuggestResponseInput) {
       throw new Error('OpenAI client not configured');
     }
 
-    // Get ticket details with full conversation history
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: input.ticketId },
-      include: {
-        creator: {
-          select: {
-            firstName: true,
-            lastName: true,
-          },
-        },
-        assignedTo: {
-          select: {
-            firstName: true,
-            lastName: true,
-          },
-        },
-        messages: {
-          where: {
-            isInternal: false, // Only include public messages
-          },
-          include: {
-            senderProfile: {
-              select: {
-                firstName: true,
-                lastName: true,
-                role: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
-    });
+    // Get ticket details
+    const { data: ticketData } = await db
+      .from('support_tickets')
+      .select('*')
+      .eq('id', input.ticketId)
+      .limit(1);
+
+    const ticket = firstOrNull(ticketData) as SupportTicketRecord | null;
 
     if (!ticket) {
       throw new Error('Ticket not found');
     }
 
+    // Get creator profile
+    const { data: creatorData } = await db
+      .from('profiles')
+      .select('firstName, lastName')
+      .eq('id', ticket.creatorId)
+      .limit(1);
+
+    const creator = firstOrNull(creatorData) as ProfileSummary | null;
+
+    // Get assignedTo profile if exists
+    let assignedTo: ProfileSummary | null = null;
+    if (ticket.assignedToId) {
+      const { data: assignedData } = await db
+        .from('profiles')
+        .select('firstName, lastName')
+        .eq('id', ticket.assignedToId)
+        .limit(1);
+      assignedTo = firstOrNull(assignedData) as ProfileSummary | null;
+    }
+
+    // Get messages with sender profiles (only public messages)
+    const { data: messagesData } = await db
+      .from('ticket_messages')
+      .select('id, ticketId, senderId, content, isInternal, createdAt')
+      .eq('ticketId', input.ticketId)
+      .eq('isInternal', false)
+      .order('createdAt', { ascending: true });
+
+    const messages: TicketMessageRecord[] = [];
+    for (const msg of (messagesData || [])) {
+      let senderProfile: ProfileSummary | null = null;
+      if (msg.senderId) {
+        const { data: senderData } = await db
+          .from('profiles')
+          .select('firstName, lastName, role')
+          .eq('id', msg.senderId)
+          .limit(1);
+        senderProfile = firstOrNull(senderData) as ProfileSummary | null;
+      }
+      messages.push({
+        ...msg,
+        senderProfile,
+      });
+    }
+
     // Build conversation context
-    const conversationContext = ticket.messages
+    const conversationContext = messages
       .map((msg) => {
-        const senderName = `${msg.senderProfile.firstName} ${msg.senderProfile.lastName}`;
-        const role = msg.senderProfile.role === 'client' ? 'Client' : 'Tax Preparer';
+        const senderName = msg.senderProfile
+          ? `${msg.senderProfile.firstName} ${msg.senderProfile.lastName}`
+          : 'Unknown';
+        const role = msg.senderProfile?.role === 'client' ? 'Client' : 'Tax Preparer';
         return `${role} (${senderName}): ${msg.content}`;
       })
       .join('\n\n');
@@ -153,7 +215,7 @@ export async function suggestResponse(input: SuggestResponseInput) {
 Your role is to suggest professional, accurate, and helpful responses.
 
 Context:
-- Client Name: ${ticket.creator.firstName} ${ticket.creator.lastName}
+- Client Name: ${creator?.firstName || 'Unknown'} ${creator?.lastName || ''}
 - Ticket Title: ${ticket.title}
 - Ticket Description: ${ticket.description}
 - Priority: ${ticket.priority}
@@ -224,37 +286,45 @@ export async function analyzeSentiment(input: AnalyzeSentimentInput) {
       throw new Error('OpenAI client not configured');
     }
 
-    // Get ticket with messages
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: input.ticketId },
-      include: {
-        messages: {
-          where: {
-            isInternal: false,
-          },
-          include: {
-            senderProfile: {
-              select: {
-                role: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
-    });
+    // Get ticket details
+    const { data: ticketData } = await db
+      .from('support_tickets')
+      .select('*')
+      .eq('id', input.ticketId)
+      .limit(1);
+
+    const ticket = firstOrNull(ticketData) as SupportTicketRecord | null;
 
     if (!ticket) {
       throw new Error('Ticket not found');
     }
 
+    // Get messages with sender profiles (only public messages)
+    const { data: messagesData } = await db
+      .from('ticket_messages')
+      .select('id, senderId, content, isInternal, createdAt')
+      .eq('ticketId', input.ticketId)
+      .eq('isInternal', false)
+      .order('createdAt', { ascending: true });
+
+    // Get sender profiles and filter for client messages
+    const clientMessageContents: string[] = [];
+    for (const msg of (messagesData || [])) {
+      if (msg.senderId) {
+        const { data: senderData } = await db
+          .from('profiles')
+          .select('role')
+          .eq('id', msg.senderId)
+          .limit(1);
+        const sender = firstOrNull(senderData) as ProfileSummary | null;
+        if (sender?.role === 'client') {
+          clientMessageContents.push(msg.content);
+        }
+      }
+    }
+
     // Focus on client messages for sentiment
-    const clientMessages = ticket.messages
-      .filter((msg) => msg.senderProfile.role === 'client')
-      .map((msg) => msg.content)
-      .join('\n\n');
+    const clientMessages = clientMessageContents.join('\n\n');
 
     const systemPrompt = `You are a sentiment analysis assistant for a tax preparation support system.
 Analyze the client's sentiment based on their messages and classify it as one of:
@@ -330,39 +400,47 @@ export async function summarizeTicket(input: SummarizeTicketInput) {
       throw new Error('OpenAI client not configured');
     }
 
-    // Get ticket with messages
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: input.ticketId },
-      include: {
-        messages: {
-          where: {
-            isInternal: false,
-          },
-          include: {
-            senderProfile: {
-              select: {
-                role: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
-    });
+    // Get ticket details
+    const { data: ticketData } = await db
+      .from('support_tickets')
+      .select('*')
+      .eq('id', input.ticketId)
+      .limit(1);
+
+    const ticket = firstOrNull(ticketData) as SupportTicketRecord | null;
 
     if (!ticket) {
       throw new Error('Ticket not found');
     }
 
+    // Get messages with sender profiles (only public messages)
+    const { data: messagesData } = await db
+      .from('ticket_messages')
+      .select('id, senderId, content, isInternal, createdAt')
+      .eq('ticketId', input.ticketId)
+      .eq('isInternal', false)
+      .order('createdAt', { ascending: true });
+
+    // Build conversation with sender roles
+    const conversationParts: string[] = [];
+    for (const msg of (messagesData || [])) {
+      let role = 'Preparer';
+      if (msg.senderId) {
+        const { data: senderData } = await db
+          .from('profiles')
+          .select('role')
+          .eq('id', msg.senderId)
+          .limit(1);
+        const sender = firstOrNull(senderData) as ProfileSummary | null;
+        if (sender?.role === 'client') {
+          role = 'Client';
+        }
+      }
+      conversationParts.push(`${role}: ${msg.content}`);
+    }
+
     // Build conversation context
-    const conversation = ticket.messages
-      .map((msg) => {
-        const role = msg.senderProfile.role === 'client' ? 'Client' : 'Preparer';
-        return `${role}: ${msg.content}`;
-      })
-      .join('\n\n');
+    const conversation = conversationParts.join('\n\n');
 
     const systemPrompt = `You are a summarization assistant for a tax preparation support system.
 Provide a concise summary of this support ticket in bullet points.

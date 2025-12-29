@@ -7,13 +7,34 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   UpdatePageRestrictionRequest,
   PageRestrictionResponse,
 } from '@/types/route-access-control';
 import { clearRestrictionCache } from '@/lib/content-restriction';
+
+// Local interfaces
+interface PageRestriction {
+  id: string;
+  routePath: string;
+  allowedRoles: string[];
+  blockedRoles: string[];
+  allowedUsernames: string[];
+  blockedUsernames: string[];
+  allowNonLoggedIn: boolean;
+  redirectUrl: string | null;
+  hideFromNav: boolean;
+  showInNavOverride: boolean;
+  customHtmlOnBlock: string | null;
+  priority: number;
+  isActive: boolean;
+  description: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * PUT - Update existing route restriction
@@ -32,9 +53,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body: UpdatePageRestrictionRequest = await req.json();
 
     // Check if restriction exists
-    const existing = await prisma.pageRestriction.findUnique({
-      where: { id },
-    });
+    const { data: existingData, error: findError } = await db.from('page_restrictions')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const existing = firstOrNull<PageRestriction>(existingData);
 
     if (!existing) {
       return NextResponse.json({ error: 'Route restriction not found' }, { status: 404 });
@@ -42,11 +70,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // If changing routePath, check for conflicts
     if (body.routePath && body.routePath !== existing.routePath) {
-      const conflict = await prisma.pageRestriction.findUnique({
-        where: { routePath: body.routePath },
-      });
+      const { data: conflict } = await db.from('page_restrictions')
+        .select('id')
+        .eq('routePath', body.routePath)
+        .limit(1);
 
-      if (conflict) {
+      if (conflict && conflict.length > 0) {
         return NextResponse.json(
           { error: 'A restriction already exists for this route pattern' },
           { status: 409 }
@@ -54,35 +83,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
+    // Build update data
+    const updateData: Record<string, any> = {};
+    if (body.routePath !== undefined) updateData.routePath = body.routePath;
+    if (body.allowedRoles !== undefined) updateData.allowedRoles = body.allowedRoles;
+    if (body.blockedRoles !== undefined) updateData.blockedRoles = body.blockedRoles;
+    if (body.allowedUsernames !== undefined) updateData.allowedUsernames = body.allowedUsernames;
+    if (body.blockedUsernames !== undefined) updateData.blockedUsernames = body.blockedUsernames;
+    if (body.allowNonLoggedIn !== undefined) updateData.allowNonLoggedIn = body.allowNonLoggedIn;
+    if (body.redirectUrl !== undefined) updateData.redirectUrl = body.redirectUrl;
+    if (body.hideFromNav !== undefined) updateData.hideFromNav = body.hideFromNav;
+    if (body.showInNavOverride !== undefined) updateData.showInNavOverride = body.showInNavOverride;
+    if (body.customHtmlOnBlock !== undefined) updateData.customHtmlOnBlock = body.customHtmlOnBlock;
+    if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.isActive !== undefined) updateData.isActive = body.isActive;
+    if (body.description !== undefined) updateData.description = body.description;
+
     // Update restriction
-    const restriction = await prisma.pageRestriction.update({
-      where: { id },
-      data: {
-        ...(body.routePath !== undefined && { routePath: body.routePath }),
-        ...(body.allowedRoles !== undefined && { allowedRoles: body.allowedRoles }),
-        ...(body.blockedRoles !== undefined && { blockedRoles: body.blockedRoles }),
-        ...(body.allowedUsernames !== undefined && {
-          allowedUsernames: body.allowedUsernames,
-        }),
-        ...(body.blockedUsernames !== undefined && {
-          blockedUsernames: body.blockedUsernames,
-        }),
-        ...(body.allowNonLoggedIn !== undefined && {
-          allowNonLoggedIn: body.allowNonLoggedIn,
-        }),
-        ...(body.redirectUrl !== undefined && { redirectUrl: body.redirectUrl }),
-        ...(body.hideFromNav !== undefined && { hideFromNav: body.hideFromNav }),
-        ...(body.showInNavOverride !== undefined && {
-          showInNavOverride: body.showInNavOverride,
-        }),
-        ...(body.customHtmlOnBlock !== undefined && {
-          customHtmlOnBlock: body.customHtmlOnBlock,
-        }),
-        ...(body.priority !== undefined && { priority: body.priority }),
-        ...(body.isActive !== undefined && { isActive: body.isActive }),
-        ...(body.description !== undefined && { description: body.description }),
-      },
-    });
+    const { data: restriction, error: updateError } = await db.from('page_restrictions')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     // Clear cache
     clearRestrictionCache(existing.routePath);
@@ -108,8 +134,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       isActive: restriction.isActive,
       description: restriction.description,
       createdBy: restriction.createdBy,
-      createdAt: restriction.createdAt.toISOString(),
-      updatedAt: restriction.updatedAt.toISOString(),
+      createdAt: restriction.createdAt,
+      updatedAt: restriction.updatedAt,
     };
 
     return NextResponse.json({
@@ -141,18 +167,29 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
 
     // Check if restriction exists
-    const existing = await prisma.pageRestriction.findUnique({
-      where: { id },
-    });
+    const { data: existingData, error: findError } = await db.from('page_restrictions')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const existing = firstOrNull<PageRestriction>(existingData);
 
     if (!existing) {
       return NextResponse.json({ error: 'Route restriction not found' }, { status: 404 });
     }
 
     // Delete restriction
-    await prisma.pageRestriction.delete({
-      where: { id },
-    });
+    const { error: deleteError } = await db.from('page_restrictions')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     // Clear cache
     clearRestrictionCache(existing.routePath);

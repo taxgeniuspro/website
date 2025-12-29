@@ -4,12 +4,40 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { EmailService } from '@/lib/services/email.service';
 import { logger } from '@/lib/logger';
 import { addMinutes, parseISO } from 'date-fns';
 import crypto from 'crypto';
+
+// Local TypeScript interfaces
+interface PreparerUser {
+  email: string;
+}
+
+interface Preparer {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  user: PreparerUser | null;
+}
+
+interface Appointment {
+  id: string;
+  preparerId: string;
+  clientName: string;
+  clientEmail: string;
+  type: string;
+  status: string;
+  scheduledFor: string | null;
+  scheduledEnd: string | null;
+  duration: number | null;
+  notes: string | null;
+  serviceId: string | null;
+  location: string | null;
+  meetingLink: string | null;
+}
 
 const TOKEN_SECRET = process.env.AUTH_SECRET || 'appointment-management-secret';
 const TOKEN_EXPIRY_DAYS = 7;
@@ -81,19 +109,38 @@ export async function PATCH(
     }
 
     // Get appointment with preparer info
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, preparerId:preparer_id, clientName:client_name, clientEmail:client_email, type, status, scheduledFor:scheduled_for, scheduledEnd:scheduled_end, duration, notes, serviceId:service_id, location, meetingLink:meeting_link')
+      .eq('id', id)
+      .limit(1);
+    const appointment = firstOrNull<Appointment>(appointmentData);
+
+    // Get preparer info separately if appointment exists
+    let preparer: Preparer | null = null;
+    if (appointment?.preparerId) {
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id, firstName:first_name, lastName:last_name, userId:user_id')
+        .eq('id', appointment.preparerId)
+        .limit(1);
+      const preparerProfile = firstOrNull(preparerData);
+
+      if (preparerProfile) {
+        const { data: userData } = await db
+          .from('users')
+          .select('email')
+          .eq('id', preparerProfile.userId)
+          .limit(1);
+        const user = firstOrNull(userData);
+        preparer = {
+          id: preparerProfile.id,
+          firstName: preparerProfile.firstName,
+          lastName: preparerProfile.lastName,
+          user: user ? { email: user.email } : null,
+        };
+      }
+    }
 
     if (!appointment) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 });
@@ -124,28 +171,35 @@ export async function PATCH(
       return NextResponse.json({ error: validation.error || 'Selected time slot is not available' }, { status: 400 });
     }
 
-    const oldScheduledFor = appointment.scheduledFor!;
+    const oldScheduledFor = appointment.scheduledFor ? new Date(appointment.scheduledFor) : new Date();
 
     // Update appointment
-    const updatedAppointment = await prisma.appointment.update({
-      where: { id },
-      data: {
-        scheduledFor,
-        scheduledEnd,
+    const { data: updatedData, error: updateError } = await db
+      .from('appointments')
+      .update({
+        scheduled_for: scheduledFor.toISOString(),
+        scheduled_end: scheduledEnd.toISOString(),
         notes: reason ? `${appointment.notes || ''}\n\nRescheduled by client: ${reason}`.trim() : appointment.notes,
         // Reset reminder flags since time changed
-        reminder24hSent: false,
-        reminder1hSent: false,
-        reminderSentAt: null,
-        updatedAt: new Date(),
-      },
-    });
+        reminder_24h_sent: false,
+        reminder_1h_sent: false,
+        reminder_sent_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select('id, scheduledFor:scheduled_for, scheduledEnd:scheduled_end, duration, status')
+      .single();
+
+    if (updateError) {
+      throw new Error(`Failed to reschedule appointment: ${updateError.message}`);
+    }
+    const updatedAppointment = updatedData;
 
     // Send notification emails
-    const preparerName = appointment.preparer
-      ? `${appointment.preparer.firstName || ''} ${appointment.preparer.lastName || ''}`.trim() || 'Tax Preparer'
+    const preparerName = preparer
+      ? `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim() || 'Tax Preparer'
       : 'Tax Preparer';
-    const preparerEmail = appointment.preparer?.user?.email;
+    const preparerEmail = preparer?.user?.email;
     const appointmentType = formatAppointmentType(appointment.type);
 
     // Send email to client

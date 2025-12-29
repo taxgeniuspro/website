@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { CommissionType } from '@prisma/client';
 import {
   getAffiliateGroupById,
   updateAffiliateGroup,
@@ -10,6 +9,24 @@ import {
   getGroupStatistics,
   validateTierConfig,
 } from '@/lib/services/affiliate-group.service';
+
+// Commission type enum values (replaces @prisma/client import)
+const CommissionType = {
+  PERCENTAGE: 'PERCENTAGE',
+  FLAT: 'FLAT',
+  TIERED: 'TIERED',
+} as const;
+
+type CommissionTypeValue = (typeof CommissionType)[keyof typeof CommissionType];
+
+// Local interface for Profile
+interface Profile {
+  id: string;
+  userId: string;
+  supabaseUserId: string | null;
+  email: string | null;
+  role: string;
+}
 
 /**
  * GET /api/admin/affiliate-groups/[id]
@@ -25,15 +42,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -87,15 +105,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -123,7 +142,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Validate commission type
-    if (commissionType && !Object.values(CommissionType).includes(commissionType)) {
+    const validCommissionTypes = Object.values(CommissionType);
+    if (commissionType && !validCommissionTypes.includes(commissionType as CommissionTypeValue)) {
       return NextResponse.json(
         { error: 'Invalid commission type. Must be PERCENTAGE, FLAT, or TIERED' },
         { status: 400 }
@@ -195,15 +215,16 @@ export async function DELETE(
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

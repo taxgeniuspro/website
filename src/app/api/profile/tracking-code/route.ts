@@ -7,52 +7,92 @@
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   getUserTrackingCode,
   customizeTrackingCode,
-  validateCustomTrackingCode,
-  isTrackingCodeAvailable,
   assignTrackingCodeToUser,
 } from '@/lib/services/tracking-code.service';
+
+/** Profile data interface */
+interface Profile {
+  id: string;
+  role: string;
+}
+
+/** User data interface */
+interface User {
+  id: string;
+  email: string;
+}
+
+/** Profile tracking data interface */
+interface ProfileTrackingData {
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  trackingCodeChanged: boolean;
+  trackingCodeFinalized: boolean;
+  trackingCodeQRUrl: string | null;
+  qrCodeLogoUrl: string | null;
+}
 
 /**
  * GET: Get user's current tracking code
  */
 export async function GET() {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get or create profile - use findFirst with OR conditions for Supabase Auth compatibility
-    let profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    // Get or create profile - use OR conditions for Supabase Auth compatibility
+    const { data: profiles, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    let profile = firstOrNull<Profile>(profiles);
 
     // If profile doesn't exist, create one (auth.ts should have done this, but just in case)
     if (!profile) {
-      const dbUser = await prisma.user.findUnique({ where: { email: session?.user?.email?.toLowerCase() } });
+      const { data: users, error: userError } = await db
+        .from('users')
+        .select('id, email')
+        .eq('email', session?.user?.email?.toLowerCase() || '');
+
+      if (userError) {
+        logger.error('Error fetching user:', userError);
+        return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
+      }
+
+      const dbUser = firstOrNull<User>(users);
       if (dbUser) {
-        profile = await prisma.profile.create({
-          data: {
+        const { data: newProfile, error: createError } = await db
+          .from('profiles')
+          .insert({
             userId: dbUser.id,
             supabaseUserId: userId,
             email: session?.user?.email?.toLowerCase() || '',
             role: 'client',
-          },
-          select: { id: true, role: true },
-        });
+          })
+          .select('id, role')
+          .single();
+
+        if (createError) {
+          logger.error('Error creating profile:', createError);
+          return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
+        }
+
+        profile = newProfile as Profile;
       }
     }
 
@@ -74,17 +114,18 @@ export async function GET() {
     }
 
     // Get profile data for response
-    const profileData = await prisma.profile.findUnique({
-      where: { id: profile.id },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeChanged: true,
-        trackingCodeFinalized: true,
-        trackingCodeQRUrl: true,
-        qrCodeLogoUrl: true,
-      },
-    });
+    const { data: profileDataResult, error: profileDataError } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode, trackingCodeChanged, trackingCodeFinalized, trackingCodeQRUrl, qrCodeLogoUrl')
+      .eq('id', profile.id)
+      .single();
+
+    if (profileDataError) {
+      logger.error('Error fetching profile data:', profileDataError);
+      return NextResponse.json({ error: 'Failed to fetch profile data' }, { status: 500 });
+    }
+
+    const profileData = profileDataResult as ProfileTrackingData | null;
 
     return NextResponse.json({
       success: true,
@@ -111,7 +152,8 @@ export async function GET() {
  */
 export async function PATCH(req: Request) {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -128,31 +170,50 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // Get or create profile - use findFirst with OR conditions for Supabase Auth compatibility
-    let profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    // Get or create profile - use OR conditions for Supabase Auth compatibility
+    const { data: profiles, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    let profile = firstOrNull<Profile>(profiles);
 
     // If profile doesn't exist, create one (auth.ts should have done this, but just in case)
     if (!profile) {
-      const dbUser = await prisma.user.findUnique({ where: { email: session?.user?.email?.toLowerCase() } });
+      const { data: users, error: userError } = await db
+        .from('users')
+        .select('id, email')
+        .eq('email', session?.user?.email?.toLowerCase() || '');
+
+      if (userError) {
+        logger.error('Error fetching user:', userError);
+        return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
+      }
+
+      const dbUser = firstOrNull<User>(users);
       if (dbUser) {
-        profile = await prisma.profile.create({
-          data: {
+        const { data: newProfile, error: createError } = await db
+          .from('profiles')
+          .insert({
             userId: dbUser.id,
             supabaseUserId: userId,
             email: session?.user?.email?.toLowerCase() || '',
             role: 'client',
-          },
-          select: { id: true, role: true },
-        });
+          })
+          .select('id, role')
+          .single();
+
+        if (createError) {
+          logger.error('Error creating profile:', createError);
+          return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
+        }
+
+        profile = newProfile as Profile;
       }
     }
 
@@ -172,16 +233,18 @@ export async function PATCH(req: Request) {
     }
 
     // Get updated profile data for response
-    const profileData = await prisma.profile.findUnique({
-      where: { id: profile.id },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeChanged: true,
-        trackingCodeFinalized: true,
-        trackingCodeQRUrl: true,
-      },
-    });
+    const { data: profileDataResult, error: profileDataError } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode, trackingCodeChanged, trackingCodeFinalized, trackingCodeQRUrl')
+      .eq('id', profile.id)
+      .single();
+
+    if (profileDataError) {
+      logger.error('Error fetching profile data:', profileDataError);
+      return NextResponse.json({ error: 'Failed to fetch profile data' }, { status: 500 });
+    }
+
+    const profileData = profileDataResult as Omit<ProfileTrackingData, 'qrCodeLogoUrl'> | null;
 
     return NextResponse.json({
       success: true,

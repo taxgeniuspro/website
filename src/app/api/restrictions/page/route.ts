@@ -9,11 +9,30 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { clearRestrictionCache } from '@/lib/content-restriction';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
+// TypeScript interface (replacing Prisma types)
+interface PageRestriction {
+  id: string;
+  routePath: string;
+  allowedRoles: string[];
+  blockedRoles: string[];
+  allowedUsernames: string[];
+  blockedUsernames: string[];
+  allowNonLoggedIn: boolean;
+  redirectUrl?: string | null;
+  hideFromNav: boolean;
+  showInNavOverride: boolean;
+  customHtmlOnBlock?: string | null;
+  description?: string | null;
+  priority: number;
+  isActive: boolean;
+  createdBy?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 // GET - List all restrictions
 export async function GET(request: NextRequest) {
@@ -23,11 +42,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const restrictions = await prisma.pageRestriction.findMany({
-      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
-    });
+    const { data: restrictions, error } = await db
+      .from('page_restrictions')
+      .select('*')
+      .order('priority', { ascending: false })
+      .order('createdAt', { ascending: false });
 
-    return NextResponse.json(restrictions);
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(restrictions || []);
   } catch (error) {
     logger.error('Error fetching restrictions:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -65,19 +90,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if route already exists
-    const existing = await prisma.pageRestriction.findUnique({
-      where: { routePath },
-    });
+    const { data: existingRestrictions } = await db
+      .from('page_restrictions')
+      .select('id')
+      .eq('routePath', routePath)
+      .limit(1);
 
-    if (existing) {
+    if (existingRestrictions && existingRestrictions.length > 0) {
       return NextResponse.json(
         { error: 'Restriction for this route already exists' },
         { status: 409 }
       );
     }
 
-    const restriction = await prisma.pageRestriction.create({
-      data: {
+    const { data: restriction, error } = await db
+      .from('page_restrictions')
+      .insert({
         routePath,
         allowedRoles,
         blockedRoles,
@@ -92,8 +120,13 @@ export async function POST(request: NextRequest) {
         priority,
         isActive,
         createdBy: userId,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     // Clear cache for this route
     clearRestrictionCache(routePath);
@@ -120,10 +153,20 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const restriction = await prisma.pageRestriction.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: restriction, error } = await db
+      .from('page_restrictions')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!restriction) {
+      return NextResponse.json({ error: 'Restriction not found' }, { status: 404 });
+    }
 
     // Clear cache for this route
     clearRestrictionCache(restriction.routePath);
@@ -150,9 +193,25 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const restriction = await prisma.pageRestriction.delete({
-      where: { id },
-    });
+    // First get the restriction to get the routePath for cache clearing
+    const { data: restriction, error: fetchError } = await db
+      .from('page_restrictions')
+      .select('routePath')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !restriction) {
+      return NextResponse.json({ error: 'Restriction not found' }, { status: 404 });
+    }
+
+    const { error: deleteError } = await db
+      .from('page_restrictions')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     // Clear cache
     clearRestrictionCache(restriction.routePath);

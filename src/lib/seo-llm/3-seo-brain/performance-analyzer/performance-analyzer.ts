@@ -4,7 +4,29 @@
  * Analyzes city page performance and identifies winners/losers
  */
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
+
+// TypeScript interfaces (replaces Prisma types)
+interface CityLandingPage {
+  id: string
+  slug: string
+  views: number
+  revenue: number
+  landingPageSetId: string
+  orders_count?: number
+}
+
+interface CityPerformanceSnapshot {
+  id: string
+  cityLandingPageId: string
+  timestamp: string
+  views: number
+  conversions: number
+  revenue: number
+  conversionRate: number | null
+  avgOrderValue: number | null
+  performanceScore: number | null
+}
 
 export interface PerformanceMetrics {
   pageId: string
@@ -36,24 +58,40 @@ export interface PerformanceAnalysis {
 export async function analyzePerformance(campaignId: string): Promise<PerformanceAnalysis> {
   try {
     // Get all city pages for this campaign
-    const cityPages = await prisma.cityLandingPage.findMany({
-      where: { landingPageSetId: campaignId },
-      include: {
-        _count: {
-          select: { orders: true },
-        },
-      },
-    })
+    const { data: cityPagesData, error } = await db
+      .from('city_landing_pages')
+      .select('id, slug, views, revenue, landingPageSetId')
+      .eq('landingPageSetId', campaignId)
+
+    if (error) {
+      throw new Error(`Failed to fetch city pages: ${error.message}`)
+    }
+
+    const cityPages = (cityPagesData || []) as CityLandingPage[]
 
     if (cityPages.length === 0) {
       throw new Error('No city pages found for campaign')
     }
 
+    // Get order counts for each page
+    const pageIds = cityPages.map((p) => p.id)
+    const { data: ordersData } = await db
+      .from('orders')
+      .select('cityLandingPageId')
+      .in('cityLandingPageId', pageIds)
+
+    // Count orders per page
+    const orderCounts: Record<string, number> = {}
+    ;(ordersData || []).forEach((order: any) => {
+      const pageId = order.cityLandingPageId
+      orderCounts[pageId] = (orderCounts[pageId] || 0) + 1
+    })
+
     // Calculate metrics for each page
     const pageMetrics: PerformanceMetrics[] = cityPages.map((page) => {
-      const conversions = page._count.orders
+      const conversions = orderCounts[page.id] || 0
       const views = page.views || 0
-      const revenue = page.revenue.toNumber()
+      const revenue = typeof page.revenue === 'number' ? page.revenue : Number(page.revenue) || 0
       const conversionRate = views > 0 ? conversions / views : 0
       const avgOrderValue = conversions > 0 ? revenue / conversions : 0
 
@@ -144,7 +182,7 @@ export async function createPerformanceSnapshot(analysis: PerformanceAnalysis): 
     const snapshots = [...analysis.winners, ...analysis.losers].map((metrics) => ({
       id: `snapshot-${metrics.pageId}-${Date.now()}`,
       cityLandingPageId: metrics.pageId,
-      timestamp: analysis.timestamp,
+      timestamp: analysis.timestamp.toISOString(),
       views: metrics.views,
       conversions: metrics.conversions,
       revenue: metrics.revenue,
@@ -153,9 +191,13 @@ export async function createPerformanceSnapshot(analysis: PerformanceAnalysis): 
       performanceScore: metrics.performanceScore,
     }))
 
-    await prisma.cityPerformanceSnapshot.createMany({
-      data: snapshots,
-    })
+    const { error } = await db
+      .from('city_performance_snapshots')
+      .insert(snapshots)
+
+    if (error) {
+      console.error('[Performance Analyzer] Snapshot insert error:', error)
+    }
   } catch (error) {
     console.error('[Performance Analyzer] Snapshot error:', error)
     // Don't throw - snapshots are optional
@@ -170,22 +212,28 @@ export async function getPerformanceTrend(cityPageId: string): Promise<Performan
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const snapshots = await prisma.cityPerformanceSnapshot.findMany({
-      where: {
-        cityLandingPageId: cityPageId,
-        timestamp: { gte: thirtyDaysAgo },
-      },
-      orderBy: { timestamp: 'asc' },
-    })
+    const { data: snapshotsData, error } = await db
+      .from('city_performance_snapshots')
+      .select('*')
+      .eq('cityLandingPageId', cityPageId)
+      .gte('timestamp', thirtyDaysAgo.toISOString())
+      .order('timestamp', { ascending: true })
+
+    if (error) {
+      console.error('[Performance Analyzer] Trend query error:', error)
+      return []
+    }
+
+    const snapshots = (snapshotsData || []) as CityPerformanceSnapshot[]
 
     return snapshots.map((snapshot) => ({
       pageId: snapshot.cityLandingPageId,
       city: '', // Not included in snapshot
       views: snapshot.views,
       conversions: snapshot.conversions,
-      revenue: snapshot.revenue.toNumber(),
-      conversionRate: snapshot.conversionRate?.toNumber() || 0,
-      avgOrderValue: snapshot.avgOrderValue?.toNumber() || 0,
+      revenue: typeof snapshot.revenue === 'number' ? snapshot.revenue : Number(snapshot.revenue) || 0,
+      conversionRate: snapshot.conversionRate || 0,
+      avgOrderValue: snapshot.avgOrderValue || 0,
       performanceScore: snapshot.performanceScore || 0,
     }))
   } catch (error) {

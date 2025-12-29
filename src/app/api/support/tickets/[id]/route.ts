@@ -7,11 +7,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getTicketById, updateTicket } from '@/lib/services/support-ticket.service';
 import { executeWorkflows } from '@/lib/services/ticket-workflow.service';
-import { WorkflowTrigger, UserRole } from '@prisma/client';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces to replace @prisma/client types
+type WorkflowTrigger = 'TICKET_CREATED' | 'TICKET_UPDATED' | 'PREPARER_RESPONSE' | 'CLIENT_RESPONSE';
+type UserRole = 'CLIENT' | 'LEAD' | 'TAX_PREPARER' | 'ADMIN' | 'SUPER_ADMIN';
 
 /**
  * GET /api/support/tickets/[id]
@@ -26,16 +29,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
 
     // Get ticket
     const ticket = await getTicketById(ticketId);
@@ -45,7 +51,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Check authorization
-    const isAdmin = profile.role === UserRole.SUPER_ADMIN || profile.role === UserRole.ADMIN;
+    const profileRole = (profile.role || '').toUpperCase();
+    const isAdmin = profileRole === 'SUPER_ADMIN' || profileRole === 'ADMIN';
     const isCreator = ticket.creatorId === profile.id;
     const isAssigned = ticket.assignedToId === profile.id;
 
@@ -83,34 +90,37 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
 
     // Get existing ticket
-    const existingTicket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      select: {
-        id: true,
-        creatorId: true,
-        assignedToId: true,
-      },
-    });
+    const { data: ticketData, error: ticketError } = await db
+      .from('support_tickets')
+      .select('id, creator_id, assigned_to_id')
+      .eq('id', ticketId)
+      .limit(1);
 
-    if (!existingTicket) {
+    const existingTicket = firstOrNull(ticketData);
+
+    if (ticketError || !existingTicket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
     // Check authorization
-    const isAdmin = profile.role === UserRole.SUPER_ADMIN || profile.role === UserRole.ADMIN;
-    const isAssigned = existingTicket.assignedToId === profile.id;
+    const profileRole = (profile.role || '').toUpperCase();
+    const isAdmin = profileRole === 'SUPER_ADMIN' || profileRole === 'ADMIN';
+    const isAssigned = existingTicket.assigned_to_id === profile.id;
 
     if (!isAdmin && !isAssigned) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -132,7 +142,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
 
     // Trigger workflows asynchronously
-    executeWorkflows(WorkflowTrigger.TICKET_UPDATED, ticketId, {
+    executeWorkflows('TICKET_UPDATED' as WorkflowTrigger, ticketId, {
       previousStatus: existingTicket,
       updates: body,
     }).catch((error) => {
@@ -177,17 +187,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Only admins can delete tickets
-    const isAdmin = profile. profile.role === 'admin';
+    const profileRole = (profile.role || '').toUpperCase();
+    const isAdmin = profileRole === 'SUPER_ADMIN' || profileRole === 'ADMIN';
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -196,12 +210,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       );
     }
 
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
 
     // Delete ticket
-    await prisma.supportTicket.delete({
-      where: { id: ticketId },
-    });
+    const { error: deleteError } = await db
+      .from('support_tickets')
+      .delete()
+      .eq('id', ticketId);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     logger.info('Ticket deleted via API', {
       ticketId,

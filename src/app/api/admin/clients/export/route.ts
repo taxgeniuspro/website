@@ -1,7 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TaxReturn {
+  id: string;
+  clientId: string;
+  taxYear: number;
+  status: string;
+}
+
+interface Document {
+  id: string;
+  taxReturnId: string;
+}
+
+interface ClientPreparer {
+  id: string;
+  clientId: string;
+  preparerId: string;
+  isActive: boolean;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,51 +53,98 @@ export async function GET(request: NextRequest) {
     const preparerId = searchParams.get('preparerId');
     const status = searchParams.get('status');
 
-    // Build query
-    const where: any = {
-      role: 'client',
-    };
+    // Fetch all clients
+    const { data: clients, error: clientsError } = await db.from('profiles')
+      .select('*')
+      .eq('role', 'client')
+      .order('createdAt', { ascending: false });
 
-    // Fetch all clients with optional filtering
-    const clients = await prisma.profile.findMany({
-      where,
-      include: {
-        taxReturns: {
-          where: status ? { status: status.toUpperCase() as any } : undefined,
-          orderBy: {
-            taxYear: 'desc',
-          },
-          take: 1,
-          include: {
-            documents: true,
-          },
-        },
-        clientPreparers: {
-          where: {
-            isActive: true,
-            ...(preparerId && preparerId !== 'all' && preparerId !== 'unassigned'
-              ? { preparerId }
-              : {}),
-          },
-          include: {
-            preparer: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    if (clientsError) {
+      throw clientsError;
+    }
+
+    const clientIds = (clients || []).map((c: Profile) => c.id);
+
+    // Fetch tax returns for all clients
+    let taxReturnsQuery = db.from('tax_returns')
+      .select('*')
+      .in('clientId', clientIds)
+      .order('taxYear', { ascending: false });
+
+    if (status) {
+      taxReturnsQuery = taxReturnsQuery.eq('status', status.toUpperCase());
+    }
+
+    const { data: taxReturns } = await taxReturnsQuery;
+
+    // Get tax return IDs for document counting
+    const taxReturnIds = (taxReturns || []).map((tr: TaxReturn) => tr.id);
+
+    // Fetch documents
+    const { data: documents } = await db.from('documents')
+      .select('id, taxReturnId')
+      .in('taxReturnId', taxReturnIds);
+
+    // Fetch client-preparer assignments
+    let clientPreparersQuery = db.from('client_preparers')
+      .select('*')
+      .in('clientId', clientIds)
+      .eq('isActive', true);
+
+    if (preparerId && preparerId !== 'all' && preparerId !== 'unassigned') {
+      clientPreparersQuery = clientPreparersQuery.eq('preparerId', preparerId);
+    }
+
+    const { data: clientPreparers } = await clientPreparersQuery;
+
+    // Get preparer IDs for fetching preparer details
+    const preparerIds = [...new Set((clientPreparers || []).map((cp: ClientPreparer) => cp.preparerId))];
+
+    // Fetch preparer profiles
+    const { data: preparerProfiles } = await db.from('profiles')
+      .select('id, firstName, lastName, email')
+      .in('id', preparerIds);
+
+    // Create lookup maps
+    const taxReturnsByClient = new Map<string, TaxReturn[]>();
+    (taxReturns || []).forEach((tr: TaxReturn) => {
+      if (!taxReturnsByClient.has(tr.clientId)) {
+        taxReturnsByClient.set(tr.clientId, []);
+      }
+      taxReturnsByClient.get(tr.clientId)!.push(tr);
+    });
+
+    const documentsByTaxReturn = new Map<string, Document[]>();
+    (documents || []).forEach((doc: Document) => {
+      if (!documentsByTaxReturn.has(doc.taxReturnId)) {
+        documentsByTaxReturn.set(doc.taxReturnId, []);
+      }
+      documentsByTaxReturn.get(doc.taxReturnId)!.push(doc);
+    });
+
+    const clientPreparersByClient = new Map<string, ClientPreparer[]>();
+    (clientPreparers || []).forEach((cp: ClientPreparer) => {
+      if (!clientPreparersByClient.has(cp.clientId)) {
+        clientPreparersByClient.set(cp.clientId, []);
+      }
+      clientPreparersByClient.get(cp.clientId)!.push(cp);
+    });
+
+    const preparersById = new Map<string, Profile>();
+    (preparerProfiles || []).forEach((p: Profile) => {
+      preparersById.set(p.id, p);
     });
 
     // Filter clients based on preparer assignment
-    let filteredClients = clients;
+    let filteredClients = clients || [];
 
     if (preparerId === 'unassigned') {
-      filteredClients = clients.filter((c) => c.clientPreparers.length === 0);
+      filteredClients = filteredClients.filter((c: Profile) => !clientPreparersByClient.has(c.id) || clientPreparersByClient.get(c.id)!.length === 0);
     } else if (preparerId && preparerId !== 'all') {
-      filteredClients = clients.filter((c) =>
-        c.clientPreparers.some((cp) => cp.preparerId === preparerId)
-      );
+      filteredClients = filteredClients.filter((c: Profile) => {
+        const cps = clientPreparersByClient.get(c.id) || [];
+        return cps.some((cp: ClientPreparer) => cp.preparerId === preparerId);
+      });
     }
 
     // Transform to CSV format
@@ -88,10 +166,13 @@ export async function GET(request: NextRequest) {
       ].join(','),
     ];
 
-    filteredClients.forEach((client) => {
-      const latestReturn = client.taxReturns[0];
-      const assignedPreparer = client.clientPreparers[0]?.preparer;
+    filteredClients.forEach((client: Profile) => {
+      const clientTaxReturns = taxReturnsByClient.get(client.id) || [];
+      const latestReturn = clientTaxReturns[0];
+      const clientCps = clientPreparersByClient.get(client.id) || [];
+      const assignedPreparer = clientCps[0] ? preparersById.get(clientCps[0].preparerId) : null;
       const returnStatus = latestReturn ? latestReturn.status : 'No Return';
+      const docsForReturn = latestReturn ? (documentsByTaxReturn.get(latestReturn.id) || []) : [];
 
       csvRows.push(
         [
@@ -106,9 +187,9 @@ export async function GET(request: NextRequest) {
           assignedPreparer?.email || '',
           latestReturn?.taxYear || '',
           returnStatus,
-          latestReturn?.documents?.length || 0,
-          client.updatedAt.toISOString().split('T')[0],
-          client.createdAt.toISOString().split('T')[0],
+          docsForReturn.length,
+          client.updatedAt ? new Date(client.updatedAt).toISOString().split('T')[0] : '',
+          client.createdAt ? new Date(client.createdAt).toISOString().split('T')[0] : '',
         ].join(',')
       );
     });

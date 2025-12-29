@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,82 +46,89 @@ export default async function PreparerReferralsPage() {
   }
 
   // Get preparer's profile
-  const profile = await prisma.profile.findUnique({
-    where: { userId: preparerId },
-  });
+  const { data: profileData, error: profileError } = await db
+    .from('profiles')
+    .select('*')
+    .eq('user_id', preparerId)
+    .single();
 
-  if (!profile) {
+  if (profileError || !profileData) {
     redirect('/login');
   }
 
-  // Get referral statistics
+  const profile = profileData;
+
+  // Get referral statistics in parallel
   const [
-    totalReferrals,
-    convertedReferrals,
-    pendingReferrals,
-    recentReferrals,
-    bondedAffiliates,
-    totalCommissions,
+    totalReferralsResult,
+    convertedReferralsResult,
+    pendingReferralsResult,
+    recentReferralsResult,
+    bondedAffiliatesResult,
+    totalCommissionsResult,
   ] = await Promise.all([
     // Total referrals (leads assigned to this preparer with a referrer)
-    prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: profile.id,
-        referrerUsername: { not: null },
-      },
-    }),
+    db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_preparer_id', profile.id)
+      .not('referrer_username', 'is', null),
     // Converted referrals
-    prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: profile.id,
-        referrerUsername: { not: null },
-        convertedToClient: true,
-      },
-    }),
+    db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_preparer_id', profile.id)
+      .not('referrer_username', 'is', null)
+      .eq('converted_to_client', true),
     // Pending referrals (not yet converted)
-    prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: profile.id,
-        referrerUsername: { not: null },
-        convertedToClient: false,
-      },
-    }),
+    db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_preparer_id', profile.id)
+      .not('referrer_username', 'is', null)
+      .eq('converted_to_client', false),
     // Recent referrals
-    prisma.taxIntakeLead.findMany({
-      where: {
-        assignedPreparerId: profile.id,
-        referrerUsername: { not: null },
-      },
-      orderBy: { created_at: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        phone: true,
-        completed: true,
-        convertedToClient: true,
-        created_at: true,
-        referrerUsername: true,
-        referrerType: true,
-      },
-    }),
+    db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, phone, completed, converted_to_client, created_at, referrer_username, referrer_type')
+      .eq('assigned_preparer_id', profile.id)
+      .not('referrer_username', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10),
     // Bonded affiliates
-    prisma.affiliateBonding.count({
-      where: { preparerId: profile.id },
-    }),
+    db
+      .from('affiliate_bondings')
+      .select('id', { count: 'exact', head: true })
+      .eq('preparer_id', profile.id),
     // Total commissions from referrals
-    prisma.commission.aggregate({
-      where: {
-        referrerId: profile.id,
-        status: 'PAID',
-      },
-      _sum: {
-        amount: true,
-      },
-    }),
+    db
+      .from('commissions')
+      .select('amount')
+      .eq('referrer_id', profile.id)
+      .eq('status', 'PAID'),
   ]);
+
+  const totalReferrals = totalReferralsResult.count || 0;
+  const convertedReferrals = convertedReferralsResult.count || 0;
+  const pendingReferrals = pendingReferralsResult.count || 0;
+  const recentReferrals = (recentReferralsResult.data || []).map((r: any) => ({
+    id: r.id,
+    first_name: r.first_name,
+    last_name: r.last_name,
+    email: r.email,
+    phone: r.phone,
+    completed: r.completed,
+    convertedToClient: r.converted_to_client,
+    created_at: r.created_at,
+    referrerUsername: r.referrer_username,
+    referrerType: r.referrer_type,
+  }));
+  const bondedAffiliates = bondedAffiliatesResult.count || 0;
+  const totalCommissionsSum = (totalCommissionsResult.data || []).reduce(
+    (sum: number, c: any) => sum + (parseFloat(c.amount) || 0),
+    0
+  );
+  const totalCommissions = { _sum: { amount: { toNumber: () => totalCommissionsSum } } };
 
   const conversionRate = totalReferrals > 0
     ? Math.round((convertedReferrals / totalReferrals) * 100)

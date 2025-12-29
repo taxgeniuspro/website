@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { randomBytes } from 'crypto';
+
+// TypeScript interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  fileName: string;
+}
+
+interface TaxFormShare {
+  id: string;
+  shareToken: string;
+  expiresAt: string | null;
+}
 
 /**
  * POST /api/tax-forms/share
@@ -21,16 +40,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -56,9 +72,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify all forms exist
-    const forms = await prisma.taxForm.findMany({
-      where: { id: { in: formIds } },
-    });
+    const { data: formsData, error: formsError } = await db
+      .from('tax_forms')
+      .select('id, formNumber, title, fileName')
+      .in('id', formIds);
+
+    if (formsError) {
+      logger.error('Error fetching tax forms:', formsError);
+      return NextResponse.json({ error: 'Failed to fetch tax forms' }, { status: 500 });
+    }
+
+    const forms = (formsData || []) as TaxForm[];
 
     if (forms.length !== formIds.length) {
       return NextResponse.json({ error: 'One or more forms not found' }, { status: 404 });
@@ -69,24 +93,33 @@ export async function POST(request: NextRequest) {
       formIds.map(async (formId) => {
         const shareToken = randomBytes(32).toString('hex');
 
-        return prisma.taxFormShare.create({
-          data: {
+        const { data: shareData, error: shareError } = await db
+          .from('tax_form_shares')
+          .insert({
             taxFormId: formId,
             sharedBy: profile.id,
             sharedWith: recipientEmail || 'public',
             shareToken,
-            expiresAt: expiresAt ? new Date(expiresAt) : null,
-          },
-          include: {
-            taxForm: {
-              select: {
-                formNumber: true,
-                title: true,
-                fileName: true,
-              },
-            },
-          },
-        });
+            expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          })
+          .select('id, shareToken, expiresAt')
+          .single();
+
+        if (shareError) {
+          logger.error('Error creating share:', shareError);
+          throw new Error('Failed to create share');
+        }
+
+        const form = forms.find((f) => f.id === formId);
+
+        return {
+          id: shareData.id,
+          formNumber: form?.formNumber || '',
+          formTitle: form?.title || '',
+          shareToken: shareData.shareToken,
+          shareUrl: `${request.nextUrl.origin}/tax-forms/shared/${shareData.shareToken}`,
+          expiresAt: shareData.expiresAt,
+        };
       })
     );
 
@@ -94,14 +127,7 @@ export async function POST(request: NextRequest) {
 
     // Return share information
     return NextResponse.json({
-      shares: shares.map((share) => ({
-        id: share.id,
-        formNumber: share.taxForm.formNumber,
-        formTitle: share.taxForm.title,
-        shareToken: share.shareToken,
-        shareUrl: `${request.nextUrl.origin}/tax-forms/shared/${share.shareToken}`,
-        expiresAt: share.expiresAt,
-      })),
+      shares,
     });
   } catch (error) {
     logger.error('Error creating tax form shares:', error);

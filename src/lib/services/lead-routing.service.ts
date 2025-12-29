@@ -7,9 +7,26 @@
  * @module lib/services/lead-routing
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { logLeadAssigned } from './activity.service';
+
+// Local types (replacing @prisma/client)
+interface TaxIntakeLead {
+  id: string;
+  assignedTo?: string | null;
+  assignedPreparerId?: string | null;
+  state?: string | null;
+  convertedToClient: boolean;
+}
+
+interface Profile {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role: string;
+  state?: string | null;
+}
 
 export enum RoutingStrategy {
   ROUND_ROBIN = 'round_robin',        // Distribute leads evenly
@@ -55,9 +72,13 @@ export interface RoutingConfig {
 export async function routeLead(leadId: string, manualPreparerId?: string) {
   try {
     // Get lead details
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, assignedTo, assignedPreparerId, state, convertedToClient')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
     if (!lead) {
       return { success: false, error: 'Lead not found' };
@@ -133,15 +154,13 @@ async function assignLeadToPreparer(
 ) {
   try {
     // Get preparer details
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-      },
-    });
+    const { data: preparers } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparers) as Profile | null;
 
     if (!preparer || preparer.role !== 'tax_preparer') {
       return { success: false, error: 'Invalid preparer' };
@@ -150,12 +169,10 @@ async function assignLeadToPreparer(
     const preparerName = [preparer.firstName, preparer.lastName].filter(Boolean).join(' ');
 
     // Update lead
-    await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
-        assignedTo: preparerId,
-      },
-    });
+    await db
+      .from('tax_intake_leads')
+      .update({ assignedTo: preparerId })
+      .eq('id', leadId);
 
     // Log activity
     await logLeadAssigned(leadId, preparerName);
@@ -177,7 +194,7 @@ async function assignLeadToPreparer(
 /**
  * Round-robin routing strategy
  */
-async function roundRobinRouting(lead: any, rule: RoutingRule): Promise<string | null> {
+async function roundRobinRouting(lead: TaxIntakeLead, rule: RoutingRule): Promise<string | null> {
   try {
     // Get all eligible preparers
     const preparers = await getEligiblePreparers(rule.config);
@@ -189,14 +206,13 @@ async function roundRobinRouting(lead: any, rule: RoutingRule): Promise<string |
     // Get lead counts for each preparer
     const leadCounts = await Promise.all(
       preparers.map(async (preparer) => {
-        const count = await prisma.taxIntakeLead.count({
-          where: {
-            assignedTo: preparer.id,
-            convertedToClient: false, // Only count active leads
-          },
-        });
+        const { count } = await db
+          .from('tax_intake_leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', preparer.id)
+          .eq('convertedToClient', false);
 
-        return { preparerId: preparer.id, count };
+        return { preparerId: preparer.id, count: count || 0 };
       })
     );
 
@@ -213,7 +229,7 @@ async function roundRobinRouting(lead: any, rule: RoutingRule): Promise<string |
 /**
  * Least busy routing strategy
  */
-async function leastBusyRouting(lead: any, rule: RoutingRule): Promise<string | null> {
+async function leastBusyRouting(lead: TaxIntakeLead, rule: RoutingRule): Promise<string | null> {
   // Same as round-robin for now
   return roundRobinRouting(lead, rule);
 }
@@ -221,28 +237,32 @@ async function leastBusyRouting(lead: any, rule: RoutingRule): Promise<string | 
 /**
  * Geographic routing strategy
  */
-async function geographicRouting(lead: any, rule: RoutingRule): Promise<string | null> {
+async function geographicRouting(lead: TaxIntakeLead, rule: RoutingRule): Promise<string | null> {
   try {
     if (!lead.state) {
       logger.warn('Lead has no state, falling back to round-robin');
       return roundRobinRouting(lead, rule);
     }
 
-    // Get preparers in the same state
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-        state: lead.state,
-        id: rule.config?.preparerIds
-          ? { in: rule.config.preparerIds }
-          : rule.config?.excludePreparers
-          ? { notIn: rule.config.excludePreparers }
-          : undefined,
-      },
-      select: { id: true },
-    });
+    // Build query for preparers in the same state
+    let query = db
+      .from('profiles')
+      .select('id')
+      .eq('role', 'tax_preparer')
+      .eq('state', lead.state);
 
-    if (preparers.length === 0) {
+    // Apply include/exclude filters
+    if (rule.config?.preparerIds && rule.config.preparerIds.length > 0) {
+      query = query.in('id', rule.config.preparerIds);
+    }
+
+    if (rule.config?.excludePreparers && rule.config.excludePreparers.length > 0) {
+      query = query.not('id', 'in', `(${rule.config.excludePreparers.join(',')})`);
+    }
+
+    const { data: preparers } = await query;
+
+    if (!preparers || preparers.length === 0) {
       logger.warn(`No preparers found in state ${lead.state}, falling back to round-robin`);
       return roundRobinRouting(lead, rule);
     }
@@ -250,14 +270,13 @@ async function geographicRouting(lead: any, rule: RoutingRule): Promise<string |
     // Among matching preparers, use least busy
     const leadCounts = await Promise.all(
       preparers.map(async (preparer) => {
-        const count = await prisma.taxIntakeLead.count({
-          where: {
-            assignedTo: preparer.id,
-            convertedToClient: false,
-          },
-        });
+        const { count } = await db
+          .from('tax_intake_leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', preparer.id)
+          .eq('convertedToClient', false);
 
-        return { preparerId: preparer.id, count };
+        return { preparerId: preparer.id, count: count || 0 };
       })
     );
 
@@ -273,7 +292,7 @@ async function geographicRouting(lead: any, rule: RoutingRule): Promise<string |
 /**
  * Skill-based routing strategy
  */
-async function skillBasedRouting(lead: any, rule: RoutingRule): Promise<string | null> {
+async function skillBasedRouting(lead: TaxIntakeLead, rule: RoutingRule): Promise<string | null> {
   try {
     // For now, this will fall back to round-robin
     // In production, you would match preparer skills/expertise with lead requirements
@@ -288,37 +307,38 @@ async function skillBasedRouting(lead: any, rule: RoutingRule): Promise<string |
 /**
  * Get eligible preparers based on config
  */
-async function getEligiblePreparers(config?: RoutingConfig) {
-  const where: any = {
-    role: 'tax_preparer',
-  };
+async function getEligiblePreparers(config?: RoutingConfig): Promise<{ id: string }[]> {
+  let query = db
+    .from('profiles')
+    .select('id')
+    .eq('role', 'tax_preparer');
 
   if (config?.preparerIds && config.preparerIds.length > 0) {
-    where.id = { in: config.preparerIds };
+    query = query.in('id', config.preparerIds);
   }
 
   if (config?.excludePreparers && config.excludePreparers.length > 0) {
-    where.id = { notIn: config.excludePreparers };
+    query = query.not('id', 'in', `(${config.excludePreparers.join(',')})`);
   }
 
-  const preparers = await prisma.profile.findMany({
-    where,
-    select: { id: true },
-  });
+  const { data: preparers } = await query;
+
+  if (!preparers) {
+    return [];
+  }
 
   // Filter by max leads if specified
   if (config?.maxLeadsPerPreparer) {
     const filtered = [];
 
     for (const preparer of preparers) {
-      const leadCount = await prisma.taxIntakeLead.count({
-        where: {
-          assignedTo: preparer.id,
-          convertedToClient: false,
-        },
-      });
+      const { count } = await db
+        .from('tax_intake_leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('assignedTo', preparer.id)
+        .eq('convertedToClient', false);
 
-      if (leadCount < config.maxLeadsPerPreparer) {
+      if ((count || 0) < config.maxLeadsPerPreparer) {
         filtered.push(preparer);
       }
     }
@@ -332,7 +352,7 @@ async function getEligiblePreparers(config?: RoutingConfig) {
 /**
  * Get applicable routing rules for a lead
  */
-async function getApplicableRoutingRules(lead: any): Promise<RoutingRule[]> {
+async function getApplicableRoutingRules(lead: TaxIntakeLead): Promise<RoutingRule[]> {
   // For now, return a default round-robin rule
   // In production, this would query a routing_rules table
   return [
@@ -374,38 +394,38 @@ export async function bulkRoutLeads(leadIds: string[]) {
  */
 export async function getPreparerWorkload() {
   try {
-    const preparers = await prisma.profile.findMany({
-      where: { role: 'tax_preparer' },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    const { data: preparers } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('role', 'tax_preparer');
+
+    if (!preparers) {
+      return { success: true, workload: [] };
+    }
 
     const workload = await Promise.all(
       preparers.map(async (preparer) => {
-        const activeLeads = await prisma.taxIntakeLead.count({
-          where: {
-            assignedTo: preparer.id,
-            convertedToClient: false,
-          },
-        });
+        const { count: activeLeads } = await db
+          .from('tax_intake_leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', preparer.id)
+          .eq('convertedToClient', false);
 
-        const convertedClients = await prisma.taxIntakeLead.count({
-          where: {
-            assignedTo: preparer.id,
-            convertedToClient: true,
-          },
-        });
+        const { count: convertedClients } = await db
+          .from('tax_intake_leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', preparer.id)
+          .eq('convertedToClient', true);
 
-        const totalLeads = activeLeads + convertedClients;
+        const activeCount = activeLeads || 0;
+        const convertedCount = convertedClients || 0;
+        const totalLeads = activeCount + convertedCount;
 
         return {
           preparerId: preparer.id,
           preparerName: [preparer.firstName, preparer.lastName].filter(Boolean).join(' '),
-          activeLeads,
-          convertedClients,
+          activeLeads: activeCount,
+          convertedClients: convertedCount,
           totalLeads,
         };
       })

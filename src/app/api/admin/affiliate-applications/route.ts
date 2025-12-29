@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // GET: List all affiliate applications (admin only)
@@ -22,27 +22,25 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
 
-    // Build where clause
-    const where: any = {
-      type: 'affiliate',
-    };
+    // Build query
+    let query = db.from('leads').select('*', { count: 'exact' }).eq('type', 'affiliate');
 
     if (status) {
-      where.status = status;
+      query = query.eq('status', status);
     }
 
-    const [applications, total] = await Promise.all([
-      prisma.lead.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: pageSize,
-        skip: (page - 1) * pageSize,
-      }),
-      prisma.lead.count({ where }),
-    ]);
+    const { data: applications, error, count } = await query
+      .order('createdAt', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const total = count || 0;
 
     return NextResponse.json({
-      applications,
+      applications: applications || [],
       pagination: {
         page,
         pageSize,

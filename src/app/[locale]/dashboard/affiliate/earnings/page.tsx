@@ -1,7 +1,24 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces for Supabase data
+interface Commission {
+  id: string;
+  amount: number;
+  status: string;
+  sourceType: string | null;
+  clientName: string | null;
+  commissionRate: number | null;
+  createdAt: string;
+  referral: {
+    referredUser: {
+      name: string | null;
+      email: string | null;
+    } | null;
+  } | null;
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,10 +64,13 @@ export default async function AffiliateEarningsPage() {
     redirect('/forbidden');
   }
 
-  const profile = await prisma.profile.findUnique({
-    where: { userId: user.id },
-    select: { role: true, affiliateStatus: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id, role, affiliateStatus')
+    .eq('userId', user.id)
+    .limit(1);
+
+  const profile = firstOrNull(profiles);
 
   if (!profile) {
     redirect('/forbidden');
@@ -65,29 +85,38 @@ export default async function AffiliateEarningsPage() {
     redirect('/forbidden');
   }
 
-  // Get the user's profile ID for querying commissions
-  const fullProfile = await prisma.profile.findUnique({
-    where: { userId: user.id },
-    select: { id: true },
-  });
-
   // Fetch real commission data from the database
-  const dbCommissions = await prisma.commission.findMany({
-    where: { referrerId: fullProfile?.id },
-    orderBy: { createdAt: 'desc' },
-    take: 50, // Limit to recent 50 commissions
-    include: {
-      referral: {
-        select: {
-          referredUser: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
-    },
+  const { data: commissionsData } = await db
+    .from('commissions')
+    .select(`
+      id,
+      amount,
+      status,
+      sourceType,
+      clientName,
+      commissionRate,
+      createdAt,
+      referrals!commissions_referralId_fkey(
+        referredUser:users!referrals_referredUserId_fkey(name, email)
+      )
+    `)
+    .eq('referrerId', profile.id)
+    .order('createdAt', { ascending: false })
+    .limit(50);
+
+  // Transform data to match expected structure
+  const dbCommissions: Commission[] = (commissionsData || []).map((item: Record<string, unknown>) => {
+    const referralData = item.referrals as { referredUser: { name: string | null; email: string | null } | null } | null;
+    return {
+      id: item.id as string,
+      amount: Number(item.amount),
+      status: item.status as string,
+      sourceType: item.sourceType as string | null,
+      clientName: item.clientName as string | null,
+      commissionRate: item.commissionRate as number | null,
+      createdAt: item.createdAt as string,
+      referral: referralData ? { referredUser: referralData.referredUser } : null,
+    };
   });
 
   // Transform database commissions to display format
@@ -100,7 +129,7 @@ export default async function AffiliateEarningsPage() {
            : c.sourceType === 'CLIENT_REFERRAL' ? 'Client Referral'
            : 'Referral Commission',
     commission: Number(c.amount),
-    date: c.createdAt.toISOString().split('T')[0],
+    date: new Date(c.createdAt).toISOString().split('T')[0],
     status: c.status === 'PAID' ? 'Paid'
           : c.status === 'APPROVED' ? 'Processing'
           : c.status === 'PENDING' ? 'Pending'
@@ -113,15 +142,7 @@ export default async function AffiliateEarningsPage() {
   const now = new Date();
   const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
 
-  const monthlyCommissions = await prisma.commission.groupBy({
-    by: ['createdAt'],
-    where: {
-      referrerId: fullProfile?.id,
-      createdAt: { gte: threeMonthsAgo },
-      status: { in: ['PAID', 'APPROVED', 'PENDING'] },
-    },
-    _sum: { amount: true },
-  });
+  // Note: Supabase doesn't have groupBy like Prisma, so we'll calculate in JS from dbCommissions
 
   // Aggregate by month
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

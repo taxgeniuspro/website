@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { EmailService } from '@/lib/services/email.service';
 import { randomBytes } from 'crypto';
+
+// TypeScript interfaces
+interface Profile {
+  id: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  description: string | null;
+  fileName: string;
+}
+
+interface TaxFormShare {
+  id: string;
+  shareToken: string;
+}
 
 /**
  * POST /api/tax-forms/share/email
@@ -24,16 +45,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true, firstName: true, lastName: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -63,9 +81,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify all forms exist
-    const forms = await prisma.taxForm.findMany({
-      where: { id: { in: formIds } },
-    });
+    const { data: formsData, error: formsError } = await db
+      .from('tax_forms')
+      .select('id, formNumber, title, description, fileName')
+      .in('id', formIds);
+
+    if (formsError) {
+      logger.error('Error fetching tax forms:', formsError);
+      return NextResponse.json({ error: 'Failed to fetch tax forms' }, { status: 500 });
+    }
+
+    const forms = (formsData || []) as TaxForm[];
 
     if (forms.length !== formIds.length) {
       return NextResponse.json({ error: 'One or more forms not found' }, { status: 404 });
@@ -76,31 +102,30 @@ export async function POST(request: NextRequest) {
       formIds.map(async (formId) => {
         const shareToken = randomBytes(32).toString('hex');
 
-        const share = await prisma.taxFormShare.create({
-          data: {
+        const { data: shareData, error: shareError } = await db
+          .from('tax_form_shares')
+          .insert({
             taxFormId: formId,
             sharedBy: profile.id,
             sharedWith: recipientEmail,
             shareToken,
-            expiresAt: expiresAt ? new Date(expiresAt) : null,
-          },
-          include: {
-            taxForm: {
-              select: {
-                formNumber: true,
-                title: true,
-                description: true,
-                fileName: true,
-              },
-            },
-          },
-        });
+            expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          })
+          .select('id, shareToken')
+          .single();
+
+        if (shareError) {
+          logger.error('Error creating share:', shareError);
+          throw new Error('Failed to create share');
+        }
+
+        const form = forms.find((f) => f.id === formId);
 
         return {
-          formNumber: share.taxForm.formNumber,
-          title: share.taxForm.title,
-          description: share.taxForm.description,
-          shareUrl: `${request.nextUrl.origin}/tax-forms/shared/${share.shareToken}`,
+          formNumber: form?.formNumber || '',
+          title: form?.title || '',
+          description: form?.description || '',
+          shareUrl: `${request.nextUrl.origin}/tax-forms/shared/${shareData.shareToken}`,
         };
       })
     );

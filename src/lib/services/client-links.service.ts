@@ -9,9 +9,36 @@
  * links are auto-generated on first access.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { generateQRCode } from './qr-code.service';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  userId?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  qrCodeLogoUrl?: string | null;
+  role?: string | null;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  code: string;
+  url: string;
+  shortUrl?: string | null;
+  targetPage?: string | null;
+  title?: string | null;
+  description?: string | null;
+  qrCodeImageUrl?: string | null;
+  qrCodeFormat?: string | null;
+  dateActivated?: string | null;
+  isActive: boolean;
+}
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
 
@@ -43,17 +70,13 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
     logger.info('🔗 Generating client standard links', { profileId });
 
     // Get profile with tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        id: true,
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        qrCodeLogoUrl: true,
-        role: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, userId, trackingCode, customTrackingCode, qrCodeLogoUrl, role')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
@@ -68,15 +91,14 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
 
     logger.info('📝 Using tracking code', { trackingCode, profileId });
 
-    // Check if links already exist
-    const existing = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    // Check if links already exist (Supabase doesn't support IN directly, use or())
+    const { data: existingData } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .or(`code.eq.${trackingCode}-lead,code.eq.${trackingCode}-intake`);
+
+    const existing = (existingData || []) as MarketingLinkRecord[];
 
     if (existing.length === 2) {
       logger.info('✅ Links already exist, returning existing links', { profileId });
@@ -123,8 +145,9 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
       withLogo: true,
     });
 
-    const leadLink = await prisma.marketingLink.create({
-      data: {
+    const { data: leadLinkData, error: leadError } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'CLIENT',
         linkType: 'QR_CODE',
@@ -136,10 +159,14 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
         description: 'Share this link with friends to earn referral bonuses',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (leadError) throw leadError;
+    const leadLink = leadLinkData as MarketingLinkRecord;
 
     links.push(leadLink);
     logger.info('✅ Created lead form link', { id: leadLink.id, code: leadLink.code });
@@ -160,8 +187,9 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
       withLogo: true,
     });
 
-    const intakeLink = await prisma.marketingLink.create({
-      data: {
+    const { data: intakeLinkData, error: intakeError } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'CLIENT',
         linkType: 'QR_CODE',
@@ -173,10 +201,14 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
         description: 'Share this link with friends who are ready to start their taxes',
         qrCodeImageUrl: intakeQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (intakeError) throw intakeError;
+    const intakeLink = intakeLinkData as MarketingLinkRecord;
 
     links.push(intakeLink);
     logger.info('✅ Created intake form link', { id: intakeLink.id, code: intakeLink.code });
@@ -217,13 +249,13 @@ export async function generateClientStandardLinks(profileId: string): Promise<Cl
  */
 export async function getClientLinks(profileId: string): Promise<ClientLinks | null> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return null;
@@ -235,14 +267,13 @@ export async function getClientLinks(profileId: string): Promise<ClientLinks | n
       return null;
     }
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`],
-        },
-      },
-    });
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .or(`code.eq.${trackingCode}-lead,code.eq.${trackingCode}-intake`);
+
+    const links = (linksData || []) as MarketingLinkRecord[];
 
     if (links.length !== 2) {
       return null;

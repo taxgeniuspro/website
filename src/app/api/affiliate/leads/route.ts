@@ -1,8 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string | null;
+  affiliateStatus: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  shortLinkUsername: string | null;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string;
+  last_name: string;
+  referrerUsername: string | null;
+  attributionMethod: string | null;
+  convertedToClient: boolean;
+  created_at: string;
+  updated_at: string;
+  lastContactedAt?: string | null;
+}
 
 /**
  * GET /api/affiliate/leads
@@ -18,24 +40,19 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile to check role and tracking code
-    // Use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: user.id },
-          { userId: user.id },
-          { email: user.email }
-        ]
-      },
-      select: {
-        id: true,
-        role: true,
-        affiliateStatus: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        shortLinkUsername: true,
-      },
-    });
+    // Use Supabase OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, affiliateStatus, trackingCode, customTrackingCode, shortLinkUsername')
+      .or(`supabaseUserId.eq.${user.id},userId.eq.${user.id},email.eq.${user.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -54,55 +71,53 @@ export async function GET(req: NextRequest) {
     const statusFilter = searchParams.get('status');
     const searchTerm = searchParams.get('search');
 
-    // Build where clause to find leads referred by this affiliate
-    const where: any = {
-      OR: [
-        { referrerUsername: profile.trackingCode },
-        { referrerUsername: profile.customTrackingCode },
-        { referrerUsername: profile.shortLinkUsername },
-      ].filter((condition) => Object.values(condition)[0]), // Remove null values
-      referrerType: 'affiliate',
-    };
+    // Build referrer conditions for Supabase OR query
+    const referrerCodes = [
+      profile.trackingCode,
+      profile.customTrackingCode,
+      profile.shortLinkUsername,
+    ].filter(Boolean);
 
-    // Add search filter
-    if (searchTerm) {
-      where.AND = [
-        {
-          OR: [
-            { first_name: { contains: searchTerm, mode: 'insensitive' } },
-            { last_name: { contains: searchTerm, mode: 'insensitive' } },
-            { email: { contains: searchTerm, mode: 'insensitive' } },
-            { phone: { contains: searchTerm } },
-          ],
-        },
-      ];
+    if (referrerCodes.length === 0) {
+      return NextResponse.json({
+        success: true,
+        leads: [],
+        stats: { total: 0, new: 0, contacted: 0, converted: 0, conversionRate: 0 },
+      });
     }
 
-    // Fetch affiliate's leads - ONLY non-sensitive data (affiliates don't see private info)
-    const leads = await prisma.taxIntakeLead.findMany({
-      where,
-      orderBy: { created_at: 'desc' },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        // NO: email, phone, SSN, DOB, address - affiliates don't see private info
-        referrerUsername: true,
-        attributionMethod: true,
-        convertedToClient: true,
-        created_at: true,
-        updated_at: true,
-      },
-    });
+    // Build Supabase query
+    let query = db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, referrerUsername, attributionMethod, convertedToClient, created_at, updated_at')
+      .eq('referrerType', 'affiliate')
+      .in('referrerUsername', referrerCodes)
+      .order('created_at', { ascending: false });
+
+    // Add search filter using ilike for case-insensitive search
+    if (searchTerm) {
+      query = query.or(
+        `first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`
+      );
+    }
+
+    const { data: leads, error: leadsError } = await query;
+
+    if (leadsError) {
+      logger.error('Error fetching leads:', leadsError);
+      return NextResponse.json({ error: 'Failed to fetch leads' }, { status: 500 });
+    }
+
+    const leadsData = (leads || []) as TaxIntakeLead[];
 
     // Determine lead status
-    const getLeadStatus = (lead: any): string => {
+    const getLeadStatus = (lead: TaxIntakeLead): string => {
       if (lead.convertedToClient) return 'converted';
       if (lead.lastContactedAt) return 'contacted';
       return 'new';
     };
 
-    const leadsWithStatus = leads.map((lead) => ({
+    const leadsWithStatus = leadsData.map((lead) => ({
       ...lead,
       status: getLeadStatus(lead),
       fullName: `${lead.first_name} ${lead.last_name}`,
@@ -116,16 +131,16 @@ export async function GET(req: NextRequest) {
 
     // Calculate stats
     const stats = {
-      total: leads.length,
+      total: leadsData.length,
       new: leadsWithStatus.filter((l) => l.status === 'new').length,
       contacted: leadsWithStatus.filter((l) => l.status === 'contacted').length,
       converted: leadsWithStatus.filter((l) => l.status === 'converted').length,
-      conversionRate: leads.length > 0
-        ? Math.round((leadsWithStatus.filter((l) => l.status === 'converted').length / leads.length) * 100)
+      conversionRate: leadsData.length > 0
+        ? Math.round((leadsWithStatus.filter((l) => l.status === 'converted').length / leadsData.length) * 100)
         : 0,
     };
 
-    logger.info(`📋 Fetched ${filteredLeads.length} leads for affiliate ${user.id}`);
+    logger.info(`Fetched ${filteredLeads.length} leads for affiliate ${user.id}`);
 
     return NextResponse.json({
       success: true,

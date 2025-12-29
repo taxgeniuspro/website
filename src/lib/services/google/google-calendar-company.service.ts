@@ -11,9 +11,49 @@
  */
 
 import { calendar_v3 } from 'googleapis';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { googleAuthService } from './google-auth.service';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface GoogleCalendarEventRecord {
+  id: string;
+  googleEventId: string;
+  calendarId: string;
+  appointmentId?: string | null;
+  preparerId?: string | null;
+  title: string;
+  description?: string | null;
+  startTime: Date | string;
+  endTime: Date | string;
+  syncStatus: string;
+  lastSyncAt?: Date | string | null;
+}
+
+interface AppointmentRecord {
+  id: string;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  type?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  scheduledFor?: Date | string | null;
+  scheduledEnd?: Date | string | null;
+  preparerId?: string | null;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  userId?: string | null;
+}
+
+interface UserRecord {
+  id: string;
+  email: string;
+}
 
 // Calendar ID for the company calendar (primary = default calendar)
 const COMPANY_CALENDAR_ID = 'primary';
@@ -109,18 +149,16 @@ class GoogleCalendarCompanyService {
       const eventUrl = response.data.htmlLink || '';
 
       // Save to database
-      await prisma.googleCalendarEvent.create({
-        data: {
-          googleEventId: eventId,
-          calendarId: COMPANY_CALENDAR_ID,
-          appointmentId: params.appointmentId,
-          preparerId: params.preparerId,
-          title: params.title,
-          description: params.description,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          syncStatus: 'SYNCED',
-        },
+      await db.from('google_calendar_events').insert({
+        googleEventId: eventId,
+        calendarId: COMPANY_CALENDAR_ID,
+        appointmentId: params.appointmentId,
+        preparerId: params.preparerId,
+        title: params.title,
+        description: params.description,
+        startTime: params.startTime.toISOString(),
+        endTime: params.endTime.toISOString(),
+        syncStatus: 'SYNCED',
       });
 
       logger.info(`Created calendar event: ${params.title}`, { eventId });
@@ -172,16 +210,16 @@ class GoogleCalendarCompanyService {
       });
 
       // Update database
-      await prisma.googleCalendarEvent.update({
-        where: { googleEventId: eventId },
-        data: {
+      await db
+        .from('google_calendar_events')
+        .update({
           title: updates.title,
           description: updates.description,
-          startTime: updates.startTime,
-          endTime: updates.endTime,
-          lastSyncAt: new Date(),
-        },
-      });
+          startTime: updates.startTime?.toISOString(),
+          endTime: updates.endTime?.toISOString(),
+          lastSyncAt: new Date().toISOString(),
+        })
+        .eq('googleEventId', eventId);
 
       logger.info(`Updated calendar event: ${eventId}`);
     } catch (error) {
@@ -203,9 +241,10 @@ class GoogleCalendarCompanyService {
       });
 
       // Remove from database
-      await prisma.googleCalendarEvent.deleteMany({
-        where: { googleEventId: eventId },
-      });
+      await db
+        .from('google_calendar_events')
+        .delete()
+        .eq('googleEventId', eventId);
 
       logger.info(`Deleted calendar event: ${eventId}`);
     } catch (error) {
@@ -222,31 +261,45 @@ class GoogleCalendarCompanyService {
     eventUrl: string;
   }> {
     // Get appointment details
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        preparer: {
-          include: { user: true },
-        },
-      },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, clientName, clientEmail, clientPhone, type, notes, status, scheduledFor, scheduledEnd, preparerId')
+      .eq('id', appointmentId)
+      .limit(1);
+
+    const appointment = firstOrNull(appointmentData) as AppointmentRecord | null;
 
     if (!appointment) {
       throw new Error(`Appointment not found: ${appointmentId}`);
     }
 
+    // Get preparer details if available
+    let preparer: ProfileRecord | null = null;
+    if (appointment.preparerId) {
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id, firstName, lastName')
+        .eq('id', appointment.preparerId)
+        .limit(1);
+      preparer = firstOrNull(preparerData) as ProfileRecord | null;
+    }
+
     // Check if already synced
-    const existing = await prisma.googleCalendarEvent.findUnique({
-      where: { appointmentId },
-    });
+    const { data: existingData } = await db
+      .from('google_calendar_events')
+      .select('id, googleEventId')
+      .eq('appointmentId', appointmentId)
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as { id: string; googleEventId: string } | null;
 
     if (existing) {
       // Update existing event
       await this.updateEvent(existing.googleEventId, {
         title: `${appointment.clientName} - ${appointment.type}`,
         description: appointment.notes || '',
-        startTime: appointment.scheduledFor!,
-        endTime: appointment.scheduledEnd!,
+        startTime: new Date(appointment.scheduledFor!),
+        endTime: new Date(appointment.scheduledEnd!),
       });
       return {
         eventId: existing.googleEventId,
@@ -255,8 +308,8 @@ class GoogleCalendarCompanyService {
     }
 
     // Create new event
-    const preparerName = appointment.preparer
-      ? `${appointment.preparer.firstName} ${appointment.preparer.lastName}`.trim()
+    const preparerName = preparer
+      ? `${preparer.firstName} ${preparer.lastName}`.trim()
       : 'Unknown';
 
     return this.createEvent({
@@ -268,8 +321,8 @@ Phone: ${appointment.clientPhone || 'N/A'}
 Type: ${appointment.type}
 Notes: ${appointment.notes || 'None'}
       `.trim(),
-      startTime: appointment.scheduledFor!,
-      endTime: appointment.scheduledEnd!,
+      startTime: new Date(appointment.scheduledFor!),
+      endTime: new Date(appointment.scheduledEnd!),
       preparerId: appointment.preparerId || undefined,
       appointmentId,
       attendees: appointment.clientEmail ? [appointment.clientEmail] : [],
@@ -283,17 +336,14 @@ Notes: ${appointment.notes || 'None'}
     startDate: Date,
     endDate: Date
   ): Promise<{ synced: number; failed: number }> {
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        scheduledFor: {
-          gte: startDate,
-          lte: endDate,
-        },
-        status: {
-          in: ['CONFIRMED', 'PENDING_APPROVAL'],
-        },
-      },
-    });
+    const { data: appointmentsData } = await db
+      .from('appointments')
+      .select('id')
+      .gte('scheduledFor', startDate.toISOString())
+      .lte('scheduledFor', endDate.toISOString())
+      .in('status', ['CONFIRMED', 'PENDING_APPROVAL']);
+
+    const appointments = (appointmentsData || []) as { id: string }[];
 
     let synced = 0;
     let failed = 0;
@@ -363,20 +413,18 @@ Notes: ${appointment.notes || 'None'}
       const eventUrl = response.data.htmlLink || '';
 
       // Save to database
-      await prisma.googleCalendarEvent.create({
-        data: {
-          googleEventId: eventId,
-          calendarId: COMPANY_CALENDAR_ID,
-          title: `[Company] ${params.title}`,
-          description: params.description,
-          startTime: params.date,
-          endTime: params.isAllDay
-            ? params.date
-            : new Date(
-                params.date.getTime() + (params.durationHours || 1) * 3600000
-              ),
-          syncStatus: 'SYNCED',
-        },
+      const endTime = params.isAllDay
+        ? params.date
+        : new Date(params.date.getTime() + (params.durationHours || 1) * 3600000);
+
+      await db.from('google_calendar_events').insert({
+        googleEventId: eventId,
+        calendarId: COMPANY_CALENDAR_ID,
+        title: `[Company] ${params.title}`,
+        description: params.description,
+        startTime: params.date.toISOString(),
+        endTime: endTime.toISOString(),
+        syncStatus: 'SYNCED',
       });
 
       logger.info(`Created company event: ${params.title}`, { eventId });
@@ -419,29 +467,36 @@ Notes: ${appointment.notes || 'None'}
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const events = await prisma.googleCalendarEvent.findMany({
-      where: {
-        startTime: {
-          gte: today,
-          lt: tomorrow,
-        },
-        appointmentId: { not: null },
-      },
-      include: {
-        preparer: true,
-      },
-      orderBy: { startTime: 'asc' },
-    });
+    const { data: eventsData } = await db
+      .from('google_calendar_events')
+      .select('googleEventId, title, startTime, endTime, preparerId')
+      .gte('startTime', today.toISOString())
+      .lt('startTime', tomorrow.toISOString())
+      .not('appointmentId', 'is', null)
+      .order('startTime', { ascending: true });
 
-    return events.map((e) => ({
-      eventId: e.googleEventId,
-      title: e.title,
-      startTime: e.startTime,
-      endTime: e.endTime,
-      preparerName: e.preparer
-        ? `${e.preparer.firstName} ${e.preparer.lastName}`.trim()
-        : 'Unknown',
-    }));
+    const events = (eventsData || []) as GoogleCalendarEventRecord[];
+
+    // Fetch preparer names
+    const preparerIds = [...new Set(events.map((e) => e.preparerId).filter(Boolean))] as string[];
+    const { data: preparersData } = preparerIds.length > 0
+      ? await db.from('profiles').select('id, firstName, lastName').in('id', preparerIds)
+      : { data: [] };
+    const preparers = (preparersData || []) as ProfileRecord[];
+    const preparerMap = new Map(preparers.map((p) => [p.id, p]));
+
+    return events.map((e) => {
+      const preparer = e.preparerId ? preparerMap.get(e.preparerId) : null;
+      return {
+        eventId: e.googleEventId,
+        title: e.title,
+        startTime: new Date(e.startTime),
+        endTime: new Date(e.endTime),
+        preparerName: preparer
+          ? `${preparer.firstName} ${preparer.lastName}`.trim()
+          : 'Unknown',
+      };
+    });
   }
 
   /**
@@ -520,22 +575,32 @@ Notes: ${appointment.notes || 'None'}
     companyEvents: number;
     lastSyncAt: Date | null;
   }> {
-    const [total, appointments, lastSync] = await Promise.all([
-      prisma.googleCalendarEvent.count(),
-      prisma.googleCalendarEvent.count({
-        where: { appointmentId: { not: null } },
-      }),
-      prisma.googleCalendarEvent.findFirst({
-        orderBy: { lastSyncAt: 'desc' },
-        select: { lastSyncAt: true },
-      }),
-    ]);
+    // Count all events
+    const { count: total } = await db
+      .from('google_calendar_events')
+      .select('id', { count: 'exact', head: true });
+
+    // Count appointment events
+    const { count: appointments } = await db
+      .from('google_calendar_events')
+      .select('id', { count: 'exact', head: true })
+      .not('appointmentId', 'is', null);
+
+    // Get last sync time
+    const { data: lastSyncData } = await db
+      .from('google_calendar_events')
+      .select('lastSyncAt')
+      .not('lastSyncAt', 'is', null)
+      .order('lastSyncAt', { ascending: false })
+      .limit(1);
+
+    const lastSync = firstOrNull(lastSyncData) as { lastSyncAt: string } | null;
 
     return {
-      totalEvents: total,
-      appointmentEvents: appointments,
-      companyEvents: total - appointments,
-      lastSyncAt: lastSync?.lastSyncAt || null,
+      totalEvents: total || 0,
+      appointmentEvents: appointments || 0,
+      companyEvents: (total || 0) - (appointments || 0),
+      lastSyncAt: lastSync?.lastSyncAt ? new Date(lastSync.lastSyncAt) : null,
     };
   }
 }

@@ -12,11 +12,37 @@
  * 5. Default behavior (based on allowNonLoggedIn)
  */
 
-import { PrismaClient } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { UserRole } from './permissions';
 import { logger } from './logger';
 
-const prisma = new PrismaClient();
+// Local type definitions (replacing @prisma/client)
+interface PageRestrictionRecord {
+  id: string;
+  routePath: string;
+  allowedRoles: string[];
+  blockedRoles: string[];
+  allowedUsernames: string[];
+  blockedUsernames: string[];
+  allowNonLoggedIn: boolean;
+  redirectUrl?: string | null;
+  customHtmlOnBlock?: string | null;
+  hideFromNav: boolean;
+  showInNavOverride: boolean;
+  isActive: boolean;
+  priority: number;
+}
+
+interface ContentRestrictionRecord {
+  id: string;
+  contentType: string;
+  contentIdentifier: string;
+  allowedRoles: string[];
+  blockedRoles: string[];
+  allowedUsernames: string[];
+  blockedUsernames: string[];
+  hideFromFrontend: boolean;
+}
 
 // ============ Types ============
 
@@ -94,16 +120,19 @@ export function matchRoutePattern(route: string, pattern: string): boolean {
  * @param route - Route to check
  * @returns Array of matching restrictions, ordered by priority
  */
-async function findMatchingRestrictions(route: string) {
+async function findMatchingRestrictions(route: string): Promise<PageRestrictionRecord[]> {
   try {
     // Get all active restrictions
-    const allRestrictions = await prisma.pageRestriction.findMany({
-      where: { isActive: true },
-      orderBy: { priority: 'desc' }, // Higher priority first
-    });
+    const { data: allRestrictions } = await db
+      .from('page_restrictions')
+      .select('*')
+      .eq('isActive', true)
+      .order('priority', { ascending: false }); // Higher priority first
+
+    const restrictions = (allRestrictions || []) as PageRestrictionRecord[];
 
     // Filter to only matching restrictions
-    const matchingRestrictions = allRestrictions.filter((restriction) =>
+    const matchingRestrictions = restrictions.filter((restriction) =>
       matchRoutePattern(route, restriction.routePath)
     );
 
@@ -200,15 +229,15 @@ export async function checkContentAccess(
   userContext: UserContext
 ): Promise<AccessCheckResult> {
   try {
-    // Get restriction for this content
-    const restriction = await prisma.contentRestriction.findUnique({
-      where: {
-        contentType_contentIdentifier: {
-          contentType,
-          contentIdentifier,
-        },
-      },
-    });
+    // Get restriction for this content (composite key lookup)
+    const { data: restrictionData } = await db
+      .from('content_restrictions')
+      .select('*')
+      .eq('contentType', contentType)
+      .eq('contentIdentifier', contentIdentifier)
+      .limit(1);
+
+    const restriction = firstOrNull(restrictionData) as ContentRestrictionRecord | null;
 
     // No restriction = allow by default
     if (!restriction) {
@@ -344,10 +373,13 @@ export async function checkBatchPageAccess(
 
   try {
     // Get all active restrictions (to support pattern matching)
-    const allRestrictions = await prisma.pageRestriction.findMany({
-      where: { isActive: true },
-      orderBy: { priority: 'desc' },
-    });
+    const { data: restrictionsData } = await db
+      .from('page_restrictions')
+      .select('*')
+      .eq('isActive', true)
+      .order('priority', { ascending: false });
+
+    const allRestrictions = (restrictionsData || []) as PageRestrictionRecord[];
 
     // Check each route
     for (const routePath of routePaths) {
@@ -428,10 +460,13 @@ export async function filterAccessibleRoutes<T extends { path: string }>(
  */
 export async function shouldHideFromNav(routePath: string): Promise<boolean> {
   try {
-    const restriction = await prisma.pageRestriction.findUnique({
-      where: { routePath },
-      select: { hideFromNav: true, showInNavOverride: true },
-    });
+    const { data: restrictionData } = await db
+      .from('page_restrictions')
+      .select('hideFromNav, showInNavOverride')
+      .eq('routePath', routePath)
+      .limit(1);
+
+    const restriction = firstOrNull(restrictionData) as { hideFromNav: boolean; showInNavOverride: boolean } | null;
 
     if (!restriction) {
       return false;
@@ -466,15 +501,14 @@ export async function filterAccessibleContent<T extends { id: string }>(
 ): Promise<T[]> {
   try {
     // Get restrictions for this content type
-    const restrictions = await prisma.contentRestriction.findMany({
-      where: {
-        contentType,
-        contentIdentifier: {
-          in: contentItems.map((item) => item.id),
-        },
-      },
-    });
+    const contentIds = contentItems.map((item) => item.id);
+    const { data: restrictionsData } = await db
+      .from('content_restrictions')
+      .select('*')
+      .eq('contentType', contentType)
+      .in('contentIdentifier', contentIds);
 
+    const restrictions = (restrictionsData || []) as ContentRestrictionRecord[];
     const restrictionMap = new Map(restrictions.map((r) => [r.contentIdentifier, r]));
 
     const results: T[] = [];
@@ -537,8 +571,9 @@ export async function logAccessAttempt(
   userAgent?: string
 ): Promise<void> {
   try {
-    await prisma.accessAttemptLog.create({
-      data: {
+    const { error } = await db
+      .from('access_attempt_logs')
+      .insert({
         userId: userContext.userId,
         userRole: userContext.role,
         username: userContext.username,
@@ -549,8 +584,9 @@ export async function logAccessAttempt(
         blockReason,
         ipAddress,
         userAgent,
-      },
-    });
+      });
+
+    if (error) throw error;
   } catch (error) {
     logger.error('Error logging access attempt:', error);
     // Don't throw - logging failures shouldn't block the app
@@ -576,9 +612,13 @@ async function getCachedRestriction(routePath: string): Promise<PageRestrictionD
     return cached.data;
   }
 
-  const restriction = await prisma.pageRestriction.findUnique({
-    where: { routePath },
-  });
+  const { data: restrictionData } = await db
+    .from('page_restrictions')
+    .select('*')
+    .eq('routePath', routePath)
+    .limit(1);
+
+  const restriction = firstOrNull(restrictionData) as PageRestrictionData | null;
 
   restrictionCache.set(routePath, {
     data: restriction,

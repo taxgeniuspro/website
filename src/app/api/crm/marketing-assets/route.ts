@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -9,47 +9,44 @@ import { logger } from '@/lib/logger';
  */
 export async function GET() {
   try {
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get marketing assets
-    const assets = await prisma.marketingAsset.findMany({
-      where: { profileId: profile.id },
-      orderBy: [
-        { isPrimary: 'desc' }, // Primary first
-        { createdAt: 'desc' },
-      ],
-    });
+    const { data: assets } = await db
+      .from('marketing_assets')
+      .select('*')
+      .eq('profileId', profile.id)
+      .order('isPrimary', { ascending: false }) // Primary first
+      .order('createdAt', { ascending: false });
 
     return NextResponse.json({
       success: true,
-      assets: assets.map((asset) => ({
+      assets: (assets || []).map((asset: any) => ({
         id: asset.id,
         category: asset.category,
         fileName: asset.fileName,
         fileUrl: asset.fileUrl,
         fileSize: asset.fileSize,
         isPrimary: asset.isPrimary,
-        createdAt: asset.createdAt.toISOString(),
+        createdAt: asset.createdAt,
       })),
     });
   } catch (error) {

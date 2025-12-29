@@ -5,9 +5,89 @@
  * Used by admin dashboard and analytics pages
  */
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { UserRole } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client)
+type UserRole = 'CLIENT' | 'TAX_PREPARER' | 'REFERRER' | 'AFFILIATE' | 'ADMIN';
+
+// Database record interfaces
+interface PaymentRecord {
+  id: string;
+  amount?: number | null;
+  status: string;
+  type?: string | null;
+  createdAt: string;
+  profile: {
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+}
+
+interface TaxReturnRecord {
+  id: string;
+  status: string;
+  filedDate?: string | null;
+  profile: {
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+}
+
+interface ReferralRecord {
+  id: string;
+  createdAt: string;
+  referrer: {
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+  client: {
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+}
+
+interface ProfileRecord {
+  id: string;
+  role: string;
+  createdAt: string;
+}
+
+interface PageAnalyticsRecord {
+  path: string;
+  source?: string | null;
+  views?: number | null;
+  uniqueVisitors?: number | null;
+  conversions?: number | null;
+  bounceRate?: number | null;
+  date: string;
+}
+
+interface LandingPageRecord {
+  id: string;
+  generatedBy?: string | null;
+  isPublished: boolean;
+}
+
+interface ContentPerformanceRecord {
+  contentType: string;
+  views?: number | null;
+  clicks?: number | null;
+  conversions?: number | null;
+  ctr?: number | null;
+  conversionRate?: number | null;
+}
+
+interface PayoutRequestRecord {
+  id: string;
+  status: string;
+}
+
+interface LeadRecord {
+  id: string;
+  status: string;
+  createdAt: string;
+}
 
 export interface DashboardStats {
   totalUsers: number;
@@ -72,99 +152,104 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
     // Total users from database
-    const totalUsers = await prisma.user.count();
+    const { count: totalUsers } = await db
+      .from('users')
+      .select('id', { count: 'exact', head: true });
 
     // Users created before this month (for growth calculation)
-    const usersLastMonthCount = await prisma.user.count({
-      where: {
-        createdAt: { lt: startOfMonth },
-      },
-    });
+    const { count: usersLastMonthCount } = await db
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .lt('createdAt', startOfMonth.toISOString());
 
-    // Total revenue (completed payments)
-    const revenueResult = await prisma.payment.aggregate({
-      where: {
-        status: 'COMPLETED',
-      },
-      _sum: {
-        amount: true,
-      },
-    });
-    const totalRevenue = Number(revenueResult._sum.amount || 0);
+    // Total revenue (completed payments) - manual sum
+    const { data: completedPayments } = await db
+      .from('payments')
+      .select('amount')
+      .eq('status', 'COMPLETED');
+
+    const totalRevenue = (completedPayments || []).reduce(
+      (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+      0
+    );
 
     // Revenue this month
-    const revenueThisMonth = await prisma.payment.aggregate({
-      where: {
-        status: 'COMPLETED',
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { amount: true },
-    });
+    const { data: paymentsThisMonth } = await db
+      .from('payments')
+      .select('amount')
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfMonth.toISOString());
+
+    const revenueThisMonthAmount = (paymentsThisMonth || []).reduce(
+      (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+      0
+    );
 
     // Revenue last month
-    const revenueLastMonth = await prisma.payment.aggregate({
-      where: {
-        status: 'COMPLETED',
-        createdAt: { gte: startOfLastMonth, lte: endOfLastMonth },
-      },
-      _sum: { amount: true },
-    });
+    const { data: paymentsLastMonth } = await db
+      .from('payments')
+      .select('amount')
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfLastMonth.toISOString())
+      .lte('createdAt', endOfLastMonth.toISOString());
+
+    const revenueLastMonthAmount = (paymentsLastMonth || []).reduce(
+      (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+      0
+    );
 
     // Returns filed
-    const returnsFiled = await prisma.taxReturn.count({
-      where: {
-        status: { in: ['FILED', 'ACCEPTED'] },
-      },
-    });
+    const { count: returnsFiled } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['FILED', 'ACCEPTED']);
 
     // Returns this month
-    const returnsThisMonth = await prisma.taxReturn.count({
-      where: {
-        status: { in: ['FILED', 'ACCEPTED'] },
-        filedDate: { gte: startOfMonth },
-      },
-    });
+    const { count: returnsThisMonth } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['FILED', 'ACCEPTED'])
+      .gte('filedDate', startOfMonth.toISOString());
 
     // Returns last month
-    const returnsLastMonth = await prisma.taxReturn.count({
-      where: {
-        status: { in: ['FILED', 'ACCEPTED'] },
-        filedDate: { gte: startOfLastMonth, lte: endOfLastMonth },
-      },
-    });
+    const { count: returnsLastMonth } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['FILED', 'ACCEPTED'])
+      .gte('filedDate', startOfLastMonth.toISOString())
+      .lte('filedDate', endOfLastMonth.toISOString());
 
     // Active sessions (users created in last 30 days)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const activeSessions = await prisma.profile.count({
-      where: {
-        createdAt: { gte: thirtyDaysAgo },
-      },
-    });
+    const { count: activeSessions } = await db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .gte('createdAt', thirtyDaysAgo.toISOString());
 
     // Calculate growth percentages
     const revenueGrowth =
-      Number(revenueLastMonth._sum.amount || 0) > 0
-        ? ((Number(revenueThisMonth._sum.amount || 0) - Number(revenueLastMonth._sum.amount || 0)) /
-            Number(revenueLastMonth._sum.amount || 0)) *
-          100
+      revenueLastMonthAmount > 0
+        ? ((revenueThisMonthAmount - revenueLastMonthAmount) / revenueLastMonthAmount) * 100
         : 0;
 
     const usersGrowth =
-      usersLastMonthCount > 0
-        ? ((totalUsers - usersLastMonthCount) / usersLastMonthCount) * 100
+      (usersLastMonthCount || 0) > 0
+        ? (((totalUsers || 0) - (usersLastMonthCount || 0)) / (usersLastMonthCount || 1)) * 100
         : 0;
 
-    const returnsGrowth =
-      returnsLastMonth > 0 ? ((returnsThisMonth - returnsLastMonth) / returnsLastMonth) * 100 : 0;
+    const returnsGrowthValue =
+      (returnsLastMonth || 0) > 0
+        ? (((returnsThisMonth || 0) - (returnsLastMonth || 0)) / (returnsLastMonth || 1)) * 100
+        : 0;
 
     return {
-      totalUsers,
+      totalUsers: totalUsers || 0,
       totalRevenue,
-      returnsFiled,
-      activeSessions,
+      returnsFiled: returnsFiled || 0,
+      activeSessions: activeSessions || 0,
       revenueGrowth: Math.round(revenueGrowth * 10) / 10,
       usersGrowth: Math.round(usersGrowth * 10) / 10,
-      returnsGrowth: Math.round(returnsGrowth * 10) / 10,
+      returnsGrowth: Math.round(returnsGrowthValue * 10) / 10,
     };
   } catch (error) {
     logger.error('Error fetching dashboard stats:', error);
@@ -188,16 +273,22 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
   try {
     const activities: RecentActivity[] = [];
 
-    // Get recent payments
-    const recentPayments = await prisma.payment.findMany({
-      where: { status: 'COMPLETED' },
-      include: { profile: true },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
+    // Get recent payments with profile join
+    const { data: recentPaymentsData } = await db
+      .from('payments')
+      .select('id, createdAt, profile:profiles(firstName, lastName)')
+      .eq('status', 'COMPLETED')
+      .order('createdAt', { ascending: false })
+      .limit(5);
+
+    const recentPayments = (recentPaymentsData || []) as Array<{
+      id: string;
+      createdAt: string;
+      profile: { firstName?: string | null; lastName?: string | null };
+    }>;
 
     recentPayments.forEach((payment) => {
-      const timeDiff = Date.now() - payment.createdAt.getTime();
+      const timeDiff = Date.now() - new Date(payment.createdAt).getTime();
       const minutesAgo = Math.floor(timeDiff / 60000);
       const hoursAgo = Math.floor(minutesAgo / 60);
       const timeStr =
@@ -206,24 +297,30 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
           : `${minutesAgo} minute${minutesAgo > 1 ? 's' : ''} ago`;
 
       activities.push({
-        user: `${payment.profile.firstName || 'User'} ${payment.profile.lastName || ''}`.trim(),
+        user: `${payment.profile?.firstName || 'User'} ${payment.profile?.lastName || ''}`.trim(),
         action: 'Made a payment',
         time: timeStr,
         badge: 'success',
       });
     });
 
-    // Get recent returns filed
-    const recentReturns = await prisma.taxReturn.findMany({
-      where: { status: { in: ['FILED', 'ACCEPTED'] } },
-      include: { profile: true },
-      orderBy: { filedDate: 'desc' },
-      take: 5,
-    });
+    // Get recent returns filed with profile join
+    const { data: recentReturnsData } = await db
+      .from('tax_returns')
+      .select('id, filedDate, profile:profiles(firstName, lastName)')
+      .in('status', ['FILED', 'ACCEPTED'])
+      .order('filedDate', { ascending: false })
+      .limit(5);
+
+    const recentReturns = (recentReturnsData || []) as Array<{
+      id: string;
+      filedDate?: string | null;
+      profile: { firstName?: string | null; lastName?: string | null };
+    }>;
 
     recentReturns.forEach((taxReturn) => {
       if (taxReturn.filedDate) {
-        const timeDiff = Date.now() - taxReturn.filedDate.getTime();
+        const timeDiff = Date.now() - new Date(taxReturn.filedDate).getTime();
         const minutesAgo = Math.floor(timeDiff / 60000);
         const hoursAgo = Math.floor(minutesAgo / 60);
         const daysAgo = Math.floor(hoursAgo / 24);
@@ -235,7 +332,7 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
               : `${minutesAgo} minute${minutesAgo > 1 ? 's' : ''} ago`;
 
         activities.push({
-          user: `${taxReturn.profile.firstName || 'User'} ${taxReturn.profile.lastName || ''}`.trim(),
+          user: `${taxReturn.profile?.firstName || 'User'} ${taxReturn.profile?.lastName || ''}`.trim(),
           action: 'Filed tax return',
           time: timeStr,
           badge: 'success',
@@ -243,18 +340,22 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
       }
     });
 
-    // Get recent referrals
-    const recentReferrals = await prisma.referral.findMany({
-      include: {
-        referrer: true,
-        client: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
+    // Get recent referrals with joins
+    const { data: recentReferralsData } = await db
+      .from('referrals')
+      .select('id, createdAt, referrer:profiles!referrerId(firstName, lastName), client:profiles!clientId(firstName, lastName)')
+      .order('createdAt', { ascending: false })
+      .limit(5);
+
+    const recentReferrals = (recentReferralsData || []) as Array<{
+      id: string;
+      createdAt: string;
+      referrer: { firstName?: string | null; lastName?: string | null };
+      client: { firstName?: string | null; lastName?: string | null };
+    }>;
 
     recentReferrals.forEach((referral) => {
-      const timeDiff = Date.now() - referral.createdAt.getTime();
+      const timeDiff = Date.now() - new Date(referral.createdAt).getTime();
       const minutesAgo = Math.floor(timeDiff / 60000);
       const hoursAgo = Math.floor(minutesAgo / 60);
       const daysAgo = Math.floor(hoursAgo / 24);
@@ -266,7 +367,7 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
             : `${minutesAgo} minute${minutesAgo > 1 ? 's' : ''} ago`;
 
       activities.push({
-        user: `${referral.referrer.firstName || 'Referrer'} ${referral.referrer.lastName || ''}`.trim(),
+        user: `${referral.referrer?.firstName || 'Referrer'} ${referral.referrer?.lastName || ''}`.trim(),
         action: 'Referred a new client',
         time: timeStr,
         badge: 'info',
@@ -293,20 +394,22 @@ export async function getRevenueData(): Promise<RevenueData[]> {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
 
-      const revenue = await prisma.payment.aggregate({
-        where: {
-          status: 'COMPLETED',
-          createdAt: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-        _sum: { amount: true },
-      });
+      // Supabase: fetch and sum manually instead of aggregate
+      const { data: paymentsData } = await db
+        .from('payments')
+        .select('amount')
+        .eq('status', 'COMPLETED')
+        .gte('createdAt', date.toISOString())
+        .lt('createdAt', nextMonth.toISOString());
+
+      const revenueSum = (paymentsData || []).reduce(
+        (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+        0
+      );
 
       months.push({
         month: date.toLocaleDateString('en-US', { month: 'short' }),
-        value: Number(revenue._sum.amount || 0),
+        value: revenueSum,
       });
     }
 
@@ -334,18 +437,16 @@ export async function getUserGrowthData(): Promise<UserGrowthData[]> {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
 
-      const userCount = await prisma.profile.count({
-        where: {
-          createdAt: {
-            gte: date,
-            lt: nextMonth,
-          },
-        },
-      });
+      // Supabase count query
+      const { count: userCount } = await db
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .gte('createdAt', date.toISOString())
+        .lt('createdAt', nextMonth.toISOString());
 
       months.push({
         month: date.toLocaleDateString('en-US', { month: 'short' }),
-        value: userCount,
+        value: userCount || 0,
       });
     }
 
@@ -369,36 +470,42 @@ export async function getTopServices(): Promise<TopService[]> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Get revenue by payment type this month
-    const paymentsThisMonth = await prisma.payment.groupBy({
-      by: ['type'],
-      where: {
-        status: 'COMPLETED',
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { amount: true },
-      _count: true,
-    });
+    // Supabase: fetch all payments and group manually (no groupBy support)
+    const { data: paymentsData } = await db
+      .from('payments')
+      .select('type, amount')
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfMonth.toISOString());
 
-    const services: TopService[] = paymentsThisMonth.map((payment, index) => {
+    // Group by type manually
+    const grouped = new Map<string, { total: number; count: number }>();
+    for (const payment of (paymentsData || []) as { type?: string | null; amount?: number | null }[]) {
+      const type = payment.type || 'OTHER';
+      const existing = grouped.get(type) || { total: 0, count: 0 };
+      existing.total += payment.amount || 0;
+      existing.count += 1;
+      grouped.set(type, existing);
+    }
+
+    const colors = [
+      'bg-blue-500',
+      'bg-green-500',
+      'bg-purple-500',
+      'bg-orange-500',
+      'bg-red-500',
+    ];
+
+    const services: TopService[] = Array.from(grouped.entries()).map(([type, data], index) => {
       const serviceName =
-        payment.type === 'TAX_PREP_FEE'
+        type === 'TAX_PREP_FEE'
           ? 'Personal Tax Filing'
-          : payment.type === 'COMMISSION'
+          : type === 'COMMISSION'
             ? 'Referral Commissions'
             : 'Other Services';
 
-      const colors = [
-        'bg-blue-500',
-        'bg-green-500',
-        'bg-purple-500',
-        'bg-orange-500',
-        'bg-red-500',
-      ];
-
       return {
         name: serviceName,
-        revenue: `$${Number(payment._sum.amount || 0).toLocaleString()}`,
+        revenue: `$${data.total.toLocaleString()}`,
         growth: '+0%', // TODO: Calculate growth vs last month
         color: colors[index % colors.length],
       };
@@ -416,30 +523,28 @@ export async function getTopServices(): Promise<TopService[]> {
  */
 export async function getUserActivity(): Promise<UserActivityData[]> {
   try {
-    const roles: UserRole[] = [
-      UserRole.CLIENT,
-      UserRole.TAX_PREPARER,
-      UserRole.REFERRER,
-      UserRole.AFFILIATE,
-    ];
+    const roles: UserRole[] = ['CLIENT', 'TAX_PREPARER', 'REFERRER', 'AFFILIATE'];
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const activity: UserActivityData[] = [];
 
     for (const role of roles) {
-      const totalCount = await prisma.profile.count({
-        where: { role },
-      });
+      // Supabase count queries
+      const { count: totalCount } = await db
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', role);
 
-      const activeCount = await prisma.profile.count({
-        where: {
-          role,
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      });
+      const { count: activeCount } = await db
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', role)
+        .gte('createdAt', thirtyDaysAgo.toISOString());
 
-      const percentage = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0;
+      const total = totalCount || 0;
+      const active = activeCount || 0;
+      const percentage = total > 0 ? Math.round((active / total) * 100) : 0;
 
       const colorMap: Record<string, string> = {
         CLIENT: 'bg-gray-500',
@@ -450,9 +555,9 @@ export async function getUserActivity(): Promise<UserActivityData[]> {
 
       activity.push({
         role: role.charAt(0) + role.slice(1).toLowerCase().replace('_', ' ') + 's',
-        count: totalCount,
+        count: total,
         percentage,
-        active: activeCount,
+        active,
         color: colorMap[role],
       });
     }
@@ -470,60 +575,69 @@ export async function getUserActivity(): Promise<UserActivityData[]> {
 export async function getConversionFunnel(): Promise<ConversionStage[]> {
   try {
     // Stage 1: Leads (visitors who submitted lead forms)
-    const totalLeads = await prisma.lead.count();
+    const { count: totalLeads } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true });
 
     // Stage 2: Signups (profiles created)
-    const totalSignups = await prisma.profile.count();
+    const { count: totalSignups } = await db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
 
     // Stage 3: Started Filing (tax returns in any status)
-    const startedFiling = await prisma.taxReturn.count();
+    const { count: startedFiling } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true });
 
-    // Stage 4: Uploaded Documents
-    const uploadedDocs = await prisma.document.count({
-      where: {
-        taxReturnId: { not: null },
-      },
-    });
+    // Stage 4: Uploaded Documents (documents with taxReturnId)
+    const { count: uploadedDocs } = await db
+      .from('documents')
+      .select('id', { count: 'exact', head: true })
+      .not('taxReturnId', 'is', null);
 
     // Stage 5: Completed Returns (filed or accepted)
-    const completedReturns = await prisma.taxReturn.count({
-      where: {
-        status: { in: ['FILED', 'ACCEPTED'] },
-      },
-    });
+    const { count: completedReturns } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['FILED', 'ACCEPTED']);
 
     // Calculate percentages (base 100% on total leads or signups, whichever is higher)
-    const baseCount = Math.max(totalLeads, totalSignups, 1);
+    const leads = totalLeads || 0;
+    const signups = totalSignups || 0;
+    const filing = startedFiling || 0;
+    const docs = uploadedDocs || 0;
+    const completed = completedReturns || 0;
+    const baseCount = Math.max(leads, signups, 1);
 
     return [
       {
         stage: 'Visited Site / Leads',
-        count: totalLeads,
+        count: leads,
         percentage: 100,
         color: 'bg-blue-500',
       },
       {
         stage: 'Signed Up',
-        count: totalSignups,
-        percentage: Math.round((totalSignups / baseCount) * 100),
+        count: signups,
+        percentage: Math.round((signups / baseCount) * 100),
         color: 'bg-blue-600',
       },
       {
         stage: 'Started Filing',
-        count: startedFiling,
-        percentage: Math.round((startedFiling / baseCount) * 100),
+        count: filing,
+        percentage: Math.round((filing / baseCount) * 100),
         color: 'bg-blue-700',
       },
       {
         stage: 'Uploaded Documents',
-        count: uploadedDocs,
-        percentage: Math.round((uploadedDocs / baseCount) * 100),
+        count: docs,
+        percentage: Math.round((docs / baseCount) * 100),
         color: 'bg-blue-800',
       },
       {
         stage: 'Completed Return',
-        count: completedReturns,
-        percentage: Math.round((completedReturns / baseCount) * 100),
+        count: completed,
+        percentage: Math.round((completed / baseCount) * 100),
         color: 'bg-blue-900',
       },
     ];
@@ -549,20 +663,22 @@ export async function getRevenueChart() {
       const nextDay = new Date(date);
       nextDay.setDate(nextDay.getDate() + 1);
 
-      const revenue = await prisma.payment.aggregate({
-        where: {
-          status: 'COMPLETED',
-          createdAt: {
-            gte: date,
-            lt: nextDay,
-          },
-        },
-        _sum: { amount: true },
-      });
+      // Supabase: fetch and sum manually
+      const { data: paymentsData } = await db
+        .from('payments')
+        .select('amount')
+        .eq('status', 'COMPLETED')
+        .gte('createdAt', date.toISOString())
+        .lt('createdAt', nextDay.toISOString());
+
+      const revenueSum = (paymentsData || []).reduce(
+        (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+        0
+      );
 
       days.push({
         day: date.toLocaleDateString('en-US', { weekday: 'short' }),
-        value: Number(revenue._sum.amount || 0),
+        value: revenueSum,
       });
     }
 
@@ -584,39 +700,58 @@ export async function getPagePerformance() {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Group by path and sum views
-    const pages = await prisma.pageAnalytics.groupBy({
-      by: ['path'],
-      where: {
-        date: { gte: sevenDaysAgo },
-      },
-      _sum: {
-        views: true,
-        uniqueVisitors: true,
-        conversions: true,
-      },
-      _avg: {
-        bounceRate: true,
-      },
-      orderBy: {
-        _sum: {
-          views: 'desc',
-        },
-      },
-      take: 5,
-    });
+    // Supabase: fetch all and group manually (no groupBy support)
+    const { data: pagesData } = await db
+      .from('page_analytics')
+      .select('path, views, uniqueVisitors, conversions, bounceRate')
+      .gte('date', sevenDaysAgo.toISOString());
 
-    return pages.map((page) => ({
-      path: page.path,
-      views: page._sum.views || 0,
-      visitors: page._sum.uniqueVisitors || 0,
-      conversions: page._sum.conversions || 0,
-      bounceRate: page._avg.bounceRate ? Math.round(page._avg.bounceRate) : 0,
-      conversionRate:
-        page._sum.views && page._sum.conversions
-          ? Math.round((page._sum.conversions / page._sum.views) * 100)
-          : 0,
-    }));
+    // Group by path manually
+    const grouped = new Map<
+      string,
+      {
+        views: number;
+        visitors: number;
+        conversions: number;
+        bounceRates: number[];
+      }
+    >();
+
+    for (const page of (pagesData || []) as PageAnalyticsRecord[]) {
+      const path = page.path;
+      const existing = grouped.get(path) || {
+        views: 0,
+        visitors: 0,
+        conversions: 0,
+        bounceRates: [],
+      };
+      existing.views += page.views || 0;
+      existing.visitors += page.uniqueVisitors || 0;
+      existing.conversions += page.conversions || 0;
+      if (page.bounceRate != null) existing.bounceRates.push(page.bounceRate);
+      grouped.set(path, existing);
+    }
+
+    // Convert to array and sort by views descending
+    const sortedPages = Array.from(grouped.entries())
+      .map(([path, data]) => ({
+        path,
+        views: data.views,
+        visitors: data.visitors,
+        conversions: data.conversions,
+        bounceRate:
+          data.bounceRates.length > 0
+            ? Math.round(data.bounceRates.reduce((a, b) => a + b, 0) / data.bounceRates.length)
+            : 0,
+        conversionRate:
+          data.views > 0 && data.conversions > 0
+            ? Math.round((data.conversions / data.views) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 5);
+
+    return sortedPages;
   } catch (error) {
     logger.error('Error fetching page performance:', error);
     return [];
@@ -630,22 +765,25 @@ export async function getTrafficSources() {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const sources = await prisma.pageAnalytics.groupBy({
-      by: ['source'],
-      where: {
-        date: { gte: sevenDaysAgo },
-      },
-      _sum: {
-        views: true,
-      },
-    });
+    // Supabase: fetch all and group manually
+    const { data: pagesData } = await db
+      .from('page_analytics')
+      .select('source, views')
+      .gte('date', sevenDaysAgo.toISOString());
 
-    const total = sources.reduce((sum, s) => sum + (s._sum.views || 0), 0);
+    // Group by source manually
+    const grouped = new Map<string, number>();
+    for (const page of (pagesData || []) as { source?: string | null; views?: number | null }[]) {
+      const source = page.source || 'direct';
+      grouped.set(source, (grouped.get(source) || 0) + (page.views || 0));
+    }
 
-    return sources.map((source) => ({
-      source: source.source || 'direct',
-      views: source._sum.views || 0,
-      percentage: total > 0 ? Math.round(((source._sum.views || 0) / total) * 100) : 0,
+    const total = Array.from(grouped.values()).reduce((sum, v) => sum + v, 0);
+
+    return Array.from(grouped.entries()).map(([source, views]) => ({
+      source,
+      views,
+      percentage: total > 0 ? Math.round((views / total) * 100) : 0,
     }));
   } catch (error) {
     logger.error('Error fetching traffic sources:', error);
@@ -658,42 +796,52 @@ export async function getTrafficSources() {
  */
 export async function getAIContentMetrics() {
   try {
-    // AI generated landing pages
-    const aiGenerated = await prisma.landingPage.count({
-      where: { generatedBy: { not: null } },
-    });
+    // AI generated landing pages (generatedBy is not null)
+    const { count: aiGenerated } = await db
+      .from('landing_pages')
+      .select('id', { count: 'exact', head: true })
+      .not('generatedBy', 'is', null);
 
-    const published = await prisma.landingPage.count({
-      where: {
-        generatedBy: { not: null },
-        isPublished: true,
-      },
-    });
+    const { count: published } = await db
+      .from('landing_pages')
+      .select('id', { count: 'exact', head: true })
+      .not('generatedBy', 'is', null)
+      .eq('isPublished', true);
 
-    // Content performance for AI pages
-    const aiPerformance = await prisma.contentPerformance.aggregate({
-      where: { contentType: 'ai_generated' },
-      _sum: {
-        views: true,
-        clicks: true,
-        conversions: true,
-      },
-      _avg: {
-        ctr: true,
-        conversionRate: true,
-      },
-    });
+    // Content performance for AI pages - fetch and aggregate manually
+    const { data: perfData } = await db
+      .from('content_performance')
+      .select('views, clicks, conversions, ctr, conversionRate')
+      .eq('contentType', 'ai_generated');
+
+    let totalViews = 0;
+    let totalClicks = 0;
+    let totalConversions = 0;
+    const ctrs: number[] = [];
+    const conversionRates: number[] = [];
+
+    for (const perf of (perfData || []) as ContentPerformanceRecord[]) {
+      totalViews += perf.views || 0;
+      totalClicks += perf.clicks || 0;
+      totalConversions += perf.conversions || 0;
+      if (perf.ctr != null) ctrs.push(perf.ctr);
+      if (perf.conversionRate != null) conversionRates.push(perf.conversionRate);
+    }
+
+    const avgCTR = ctrs.length > 0 ? ctrs.reduce((a, b) => a + b, 0) / ctrs.length : 0;
+    const avgConvRate =
+      conversionRates.length > 0
+        ? conversionRates.reduce((a, b) => a + b, 0) / conversionRates.length
+        : 0;
 
     return {
-      generated: aiGenerated,
-      published,
-      totalViews: aiPerformance._sum.views || 0,
-      totalClicks: aiPerformance._sum.clicks || 0,
-      totalConversions: aiPerformance._sum.conversions || 0,
-      avgCTR: aiPerformance._avg.ctr ? Math.round(aiPerformance._avg.ctr * 10) / 10 : 0,
-      avgConversionRate: aiPerformance._avg.conversionRate
-        ? Math.round(aiPerformance._avg.conversionRate * 10) / 10
-        : 0,
+      generated: aiGenerated || 0,
+      published: published || 0,
+      totalViews,
+      totalClicks,
+      totalConversions,
+      avgCTR: Math.round(avgCTR * 10) / 10,
+      avgConversionRate: Math.round(avgConvRate * 10) / 10,
     };
   } catch (error) {
     logger.error('Error fetching AI content metrics:', error);
@@ -715,41 +863,44 @@ export async function getAIContentMetrics() {
 export async function getPendingActionsCount() {
   try {
     // Pending payouts
-    const pendingPayouts = await prisma.payoutRequest.count({
-      where: { status: 'PENDING' },
-    });
+    const { count: pendingPayouts } = await db
+      .from('payout_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'PENDING');
 
     // New leads in last 24h
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const newLeads = await prisma.lead.count({
-      where: {
-        status: 'NEW',
-        createdAt: { gte: twentyFourHoursAgo },
-      },
-    });
+    const { count: newLeads } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'NEW')
+      .gte('createdAt', twentyFourHoursAgo.toISOString());
 
     // Failed payments in last 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const failedPayments = await prisma.payment.count({
-      where: {
-        status: 'FAILED',
-        createdAt: { gte: sevenDaysAgo },
-      },
-    });
+    const { count: failedPayments } = await db
+      .from('payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'FAILED')
+      .gte('createdAt', sevenDaysAgo.toISOString());
 
-    const failedPaymentsAmount = await prisma.payment.aggregate({
-      where: {
-        status: 'FAILED',
-        createdAt: { gte: sevenDaysAgo },
-      },
-      _sum: { amount: true },
-    });
+    // Sum failed payment amounts
+    const { data: failedPaymentsData } = await db
+      .from('payments')
+      .select('amount')
+      .eq('status', 'FAILED')
+      .gte('createdAt', sevenDaysAgo.toISOString());
+
+    const failedPaymentsAmount = (failedPaymentsData || []).reduce(
+      (sum: number, p: { amount?: number | null }) => sum + (p.amount || 0),
+      0
+    );
 
     return {
-      pendingPayouts,
-      newLeads,
-      failedPayments,
-      failedPaymentsAmount: Number(failedPaymentsAmount._sum.amount || 0),
+      pendingPayouts: pendingPayouts || 0,
+      newLeads: newLeads || 0,
+      failedPayments: failedPayments || 0,
+      failedPaymentsAmount,
     };
   } catch (error) {
     logger.error('Error fetching pending actions:', error);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { trackJourneyStage } from '@/lib/services/journey-tracking.service';
 import { getUTMCookie } from '@/lib/utils/cookie-manager';
 import { getAttribution, saveTaxIntakeAttribution } from '@/lib/services/attribution.service';
@@ -15,38 +15,93 @@ import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.
 import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
+// TypeScript interfaces for database types (replacing @prisma/client imports)
+interface Profile {
+  id: string;
+  role: string;
+  userId: string;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  shortLinkUsername: string | null;
+  bookingEnabled: boolean;
+  createdAt: string;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  email: string;
+  phone: string;
+  country_code: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  tax_year: number;
+  completed: boolean;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  attributionMethod: string | null;
+  assignedPreparerId: string | null;
+  full_form_data: Record<string, unknown> | null;
+  expiresAt: string | null;
+  clientFolderId: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  assignedPreparerId: string | null;
+  stage: string;
+}
+
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
  * All leads MUST be assigned to a preparer - Owliver is the fallback.
  */
 async function getDefaultPreparerId(): Promise<string | null> {
   try {
-    const owliver = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { customTrackingCode: 'ow' },
-          { trackingCode: 'ow' },
-          { user: { email: 'taxgenius.tax@gmail.com' } },
-        ],
-        role: { in: ['admin', 'tax_preparer'] },
-      },
-      select: { id: true },
-    });
+    // Try to find Owliver by tracking code
+    const { data: owliverByCode } = await db
+      .from('profiles')
+      .select('id')
+      .or('customTrackingCode.eq.ow,trackingCode.eq.ow')
+      .in('role', ['admin', 'tax_preparer'])
+      .limit(1);
 
+    const owliver = firstOrNull(owliverByCode);
     if (owliver) {
       return owliver.id;
     }
 
-    // Fallback: find any admin with booking enabled
-    const fallbackAdmin = await prisma.profile.findFirst({
-      where: {
-        role: 'admin',
-        bookingEnabled: true,
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
+    // Try by email via users join
+    const { data: owliverByEmail } = await db
+      .from('profiles')
+      .select('id, users!inner(email)')
+      .eq('users.email', 'taxgenius.tax@gmail.com')
+      .in('role', ['admin', 'tax_preparer'])
+      .limit(1);
 
+    const owliverEmail = firstOrNull(owliverByEmail);
+    if (owliverEmail) {
+      return owliverEmail.id;
+    }
+
+    // Fallback: find any admin with booking enabled
+    const { data: fallbackAdmins } = await db
+      .from('profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .eq('bookingEnabled', true)
+      .order('createdAt', { ascending: true })
+      .limit(1);
+
+    const fallbackAdmin = firstOrNull(fallbackAdmins);
     return fallbackAdmin?.id || null;
   } catch (error) {
     logger.error('Failed to get default preparer ID', { error });
@@ -155,20 +210,13 @@ export async function POST(req: NextRequest) {
 
     if (refParam) {
       // Look up the referrer by tracking code (optimization: cache this result)
-      cachedReferrerProfile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { trackingCode: refParam },
-            { customTrackingCode: refParam },
-            { shortLinkUsername: refParam },
-          ],
-        },
-        select: {
-          id: true,
-          role: true,
-          userId: true,
-        },
-      });
+      const { data: referrerProfiles } = await db
+        .from('profiles')
+        .select('id, role, userId')
+        .or(`trackingCode.eq.${refParam},customTrackingCode.eq.${refParam},shortLinkUsername.eq.${refParam}`)
+        .limit(1);
+
+      cachedReferrerProfile = firstOrNull(referrerProfiles);
 
       if (cachedReferrerProfile) {
         refOverride = {
@@ -195,24 +243,16 @@ export async function POST(req: NextRequest) {
 
     if (attributionResult.attribution.referrerUsername) {
       // Optimization: Reuse cached profile if same referrer, avoiding N+1 query
-      const referrerProfile =
-        cachedReferrerProfile &&
-        (attributionResult.attribution.referrerUsername === refParam)
-          ? cachedReferrerProfile
-          : await prisma.profile.findFirst({
-              where: {
-                OR: [
-                  { trackingCode: attributionResult.attribution.referrerUsername },
-                  { customTrackingCode: attributionResult.attribution.referrerUsername },
-                  { shortLinkUsername: attributionResult.attribution.referrerUsername },
-                ],
-              },
-              select: {
-                id: true,
-                role: true,
-                userId: true,
-              },
-            });
+      let referrerProfile = cachedReferrerProfile;
+      if (!cachedReferrerProfile || attributionResult.attribution.referrerUsername !== refParam) {
+        const refUsername = attributionResult.attribution.referrerUsername;
+        const { data: profiles } = await db
+          .from('profiles')
+          .select('id, role, userId')
+          .or(`trackingCode.eq.${refUsername},customTrackingCode.eq.${refUsername},shortLinkUsername.eq.${refUsername}`)
+          .limit(1);
+        referrerProfile = firstOrNull(profiles);
+      }
 
       if (referrerProfile) {
         // Business Rule: Assign lead based on referrer role
@@ -221,10 +261,12 @@ export async function POST(req: NextRequest) {
             // CLIENT refers → Assign to the client's assigned preparer (for commission tracking)
             // Look up client's assigned preparer via CRMContact relation
             try {
-              const clientCrmContact = await prisma.cRMContact.findFirst({
-                where: { userId: referrerProfile.userId },
-                select: { assignedPreparerId: true },
-              });
+              const { data: crmContacts } = await db
+                .from('crm_contacts')
+                .select('assignedPreparerId')
+                .eq('userId', referrerProfile.userId)
+                .limit(1);
+              const clientCrmContact = firstOrNull(crmContacts);
               if (clientCrmContact?.assignedPreparerId) {
                 assignedPreparerId = clientCrmContact.assignedPreparerId;
                 logger.info(`Lead from CLIENT referral assigned to client's preparer`, {
@@ -290,25 +332,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if lead already exists for this email AND tax year (composite key)
-    let lead = await prisma.taxIntakeLead.findUnique({
-      where: {
-        email_tax_year: {
-          email,
-          tax_year
-        }
-      },
-    });
+    const { data: existingLeads } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('email', email)
+      .eq('tax_year', tax_year)
+      .limit(1);
+
+    let lead = firstOrNull(existingLeads) as TaxIntakeLead | null;
 
     if (lead) {
       // Update existing lead for this tax year
-      lead = await prisma.taxIntakeLead.update({
-        where: {
-          email_tax_year: {
-            email,
-            tax_year
-          }
-        },
-        data: {
+      const { data: updatedLeads, error: updateError } = await db
+        .from('tax_intake_leads')
+        .update({
           first_name,
           middle_name,
           last_name,
@@ -319,7 +356,7 @@ export async function POST(req: NextRequest) {
           city,
           state,
           zip_code,
-          updated_at: new Date(),
+          updated_at: new Date().toISOString(),
           // Mark as completed if all tax fields are present
           completed: isCompleteTaxIntake,
           // EPIC 6: Attribution fields (update on re-submit)
@@ -330,15 +367,24 @@ export async function POST(req: NextRequest) {
           assignedPreparerId: assignedPreparerId,
           // Store complete tax intake data if provided
           full_form_data: full_form_data || lead.full_form_data,
-        },
-      });
+        })
+        .eq('id', lead.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        logger.error('Failed to update tax intake lead', { error: updateError });
+        throw updateError;
+      }
+      lead = updatedLeads as TaxIntakeLead;
     } else {
       // Create new lead for this tax year
       // Lead expires in 6 months if not converted to client
       const expiresAt = addMonths(new Date(), 6);
 
-      lead = await prisma.taxIntakeLead.create({
-        data: {
+      const { data: newLead, error: createError } = await db
+        .from('tax_intake_leads')
+        .insert({
           first_name,
           middle_name,
           last_name,
@@ -362,9 +408,16 @@ export async function POST(req: NextRequest) {
           // Store complete tax intake data if provided
           full_form_data: full_form_data,
           // Lead expiration: auto-delete in 6 months if not converted
-          expiresAt,
-        },
-      });
+          expiresAt: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        logger.error('Failed to create tax intake lead', { error: createError });
+        throw createError;
+      }
+      lead = newLead as TaxIntakeLead;
     }
 
     // ========================================
@@ -392,10 +445,10 @@ export async function POST(req: NextRequest) {
         );
 
         // Link folder to lead
-        await prisma.taxIntakeLead.update({
-          where: { id: lead.id },
-          data: { clientFolderId: folderResult.folderId },
-        });
+        await db
+          .from('tax_intake_leads')
+          .update({ clientFolderId: folderResult.folderId })
+          .eq('id', lead.id);
 
         logger.info('Client folder created for tax intake lead', {
           leadId: lead.id,
@@ -420,42 +473,68 @@ export async function POST(req: NextRequest) {
     // CRITICAL: CRM INTEGRATION
     // Create/Update CRMContact for unified tracking
     // ========================================
-    let crmContact;
+    let crmContact: CRMContact | null = null;
     try {
-      crmContact = await prisma.cRMContact.upsert({
-        where: { email: email.toLowerCase() },
-        create: {
-          contactType: 'LEAD',
-          firstName: first_name,
-          lastName: last_name,
-          email: email.toLowerCase(),
-          phone: phone,
-          stage: 'NEW',
-          source: 'tax_intake_form',
-          assignedPreparerId: assignedPreparerId,
-          referrerUsername: attributionResult.attribution.referrerUsername,
-          referrerType: attributionResult.attribution.referrerType,
-          attributionMethod: attributionResult.attribution.attributionMethod,
-          lastContactedAt: new Date(),
-          // Tax-specific fields from intake
-          filingStatus: filing_status,
-          dependents: number_of_dependents ? parseInt(number_of_dependents) : null,
-          taxYear: tax_year, // Use the intake's tax year
-        },
-        update: {
-          firstName: first_name,
-          lastName: last_name,
-          phone: phone,
-          assignedPreparerId: assignedPreparerId,
-          referrerUsername: attributionResult.attribution.referrerUsername,
-          referrerType: attributionResult.attribution.referrerType,
-          attributionMethod: attributionResult.attribution.attributionMethod,
-          lastContactedAt: new Date(),
-          // Update tax-specific fields
-          filingStatus: filing_status || undefined,
-          dependents: number_of_dependents ? parseInt(number_of_dependents) : undefined,
-        },
-      });
+      // Check if CRM contact exists
+      const { data: existingContacts } = await db
+        .from('crm_contacts')
+        .select('id, email, assignedPreparerId, stage')
+        .eq('email', email.toLowerCase())
+        .limit(1);
+
+      const existingContact = firstOrNull(existingContacts);
+
+      if (existingContact) {
+        // Update existing contact
+        const { data: updatedContact, error: updateErr } = await db
+          .from('crm_contacts')
+          .update({
+            firstName: first_name,
+            lastName: last_name,
+            phone: phone,
+            assignedPreparerId: assignedPreparerId,
+            referrerUsername: attributionResult.attribution.referrerUsername,
+            referrerType: attributionResult.attribution.referrerType,
+            attributionMethod: attributionResult.attribution.attributionMethod,
+            lastContactedAt: new Date().toISOString(),
+            // Update tax-specific fields
+            filingStatus: filing_status || undefined,
+            dependents: number_of_dependents ? parseInt(number_of_dependents) : undefined,
+          })
+          .eq('id', existingContact.id)
+          .select('id, email, assignedPreparerId, stage')
+          .single();
+
+        if (updateErr) throw updateErr;
+        crmContact = updatedContact as CRMContact;
+      } else {
+        // Create new contact
+        const { data: newContact, error: createErr } = await db
+          .from('crm_contacts')
+          .insert({
+            contactType: 'LEAD',
+            firstName: first_name,
+            lastName: last_name,
+            email: email.toLowerCase(),
+            phone: phone,
+            stage: 'NEW',
+            source: 'tax_intake_form',
+            assignedPreparerId: assignedPreparerId,
+            referrerUsername: attributionResult.attribution.referrerUsername,
+            referrerType: attributionResult.attribution.referrerType,
+            attributionMethod: attributionResult.attribution.attributionMethod,
+            lastContactedAt: new Date().toISOString(),
+            // Tax-specific fields from intake
+            filingStatus: filing_status,
+            dependents: number_of_dependents ? parseInt(number_of_dependents) : null,
+            taxYear: tax_year, // Use the intake's tax year
+          })
+          .select('id, email, assignedPreparerId, stage')
+          .single();
+
+        if (createErr) throw createErr;
+        crmContact = newContact as CRMContact;
+      }
 
       logger.info('CRM contact created/updated from tax intake', {
         contactId: crmContact.id,
@@ -510,8 +589,9 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
 
 **Lead ID:** ${lead.id}`;
 
-      await prisma.cRMInteraction.create({
-        data: {
+      await db
+        .from('crm_interactions')
+        .insert({
           contactId: crmContact.id,
           type: 'NOTE',
           direction: 'INBOUND',
@@ -519,9 +599,8 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
             ? '📋 Complete Tax Intake Form Submitted'
             : '📝 Tax Intake Form Started (Partial)',
           body: interactionBody,
-          occurredAt: new Date(),
-        },
-      });
+          occurredAt: new Date().toISOString(),
+        });
 
       logger.info('CRM interaction created for tax intake submission', {
         contactId: crmContact.id,
@@ -604,10 +683,12 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
       // NOTE: assignedPreparerId IS the Profile.id (not User.id)
       let preparerCode = 'tg'; // Default to Tax Genius
       if (assignedPreparerId) {
-        const preparerProfile = await prisma.profile.findUnique({
-          where: { id: assignedPreparerId },
-          select: { customTrackingCode: true, trackingCode: true },
-        });
+        const { data: preparerProfiles } = await db
+          .from('profiles')
+          .select('customTrackingCode, trackingCode')
+          .eq('id', assignedPreparerId)
+          .limit(1);
+        const preparerProfile = firstOrNull(preparerProfiles);
         if (preparerProfile) {
           preparerCode = preparerProfile.customTrackingCode || preparerProfile.trackingCode || 'tg';
         }

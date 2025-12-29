@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces (replacing Prisma types)
+interface TaxFormEdit {
+  id: string;
+  clientTaxFormId: string;
+  editedBy: string;
+  editedByRole: string;
+  fieldChanges: any;
+  editNote?: string | null;
+  formDataSnapshot: any;
+  editedAt: Date;
+}
 
 /**
  * GET /api/shared-forms/[token]/history
@@ -13,6 +25,7 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const session = await auth();
     const userId = session?.user?.id;
 
@@ -21,37 +34,36 @@ export async function GET(
     }
 
     // Get current user's profile
-    const currentUserProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: currentUserProfile } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .single();
 
     if (!currentUserProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get share record
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: params.token },
-      select: { taxFormId: true, sharedWith: true },
-    });
+    const { data: share } = await db
+      .from('tax_form_shares')
+      .select('taxFormId, sharedWith')
+      .eq('shareToken', resolvedParams.token)
+      .single();
 
     if (!share) {
       return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
     }
 
     // Get client tax form
-    const clientTaxForm = await prisma.clientTaxForm.findFirst({
-      where: {
-        taxFormId: share.taxFormId,
-        clientId: share.sharedWith,
-      },
-      select: {
-        id: true,
-        clientId: true,
-        assignedBy: true,
-      },
-    });
+    const { data: clientTaxForms } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, assignedBy')
+      .eq('taxFormId', share.taxFormId)
+      .eq('clientId', share.sharedWith)
+      .limit(1);
+
+    const clientTaxForm = firstOrNull(clientTaxForms);
 
     if (!clientTaxForm) {
       return NextResponse.json({ error: 'Form assignment not found' }, { status: 404 });
@@ -61,7 +73,6 @@ export async function GET(
     const canView =
       currentUserProfile.id === clientTaxForm.clientId ||
       currentUserProfile.id === clientTaxForm.assignedBy ||
-      currentUserProfile.role === 'admin' ||
       currentUserProfile.role === 'admin';
 
     if (!canView) {
@@ -69,31 +80,35 @@ export async function GET(
     }
 
     // Get edit history
-    const edits = await prisma.taxFormEdit.findMany({
-      where: { clientTaxFormId: clientTaxForm.id },
-      include: {
-        editedByProfile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: { editedAt: 'desc' },
-    });
+    const { data: edits } = await db
+      .from('tax_form_edits')
+      .select('*')
+      .eq('clientTaxFormId', clientTaxForm.id)
+      .order('editedAt', { ascending: false });
 
-    const history = edits.map((edit) => ({
-      id: edit.id,
-      editedBy: {
-        id: edit.editedBy,
-        name: `${edit.editedByProfile.firstName} ${edit.editedByProfile.lastName}`,
-        role: edit.editedByRole,
-      },
-      fieldChanges: edit.fieldChanges,
-      editNote: edit.editNote,
-      editedAt: edit.editedAt,
-    }));
+    // Get profile info for each editor
+    const editorIds = [...new Set((edits || []).map((e: any) => e.editedBy))];
+    const { data: editors } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', editorIds);
+
+    const editorMap = new Map((editors || []).map((e: any) => [e.id, e]));
+
+    const history = (edits || []).map((edit: any) => {
+      const editor = editorMap.get(edit.editedBy);
+      return {
+        id: edit.id,
+        editedBy: {
+          id: edit.editedBy,
+          name: editor ? `${editor.firstName || ''} ${editor.lastName || ''}`.trim() : 'Unknown',
+          role: edit.editedByRole,
+        },
+        fieldChanges: edit.fieldChanges,
+        editNote: edit.editNote,
+        editedAt: edit.editedAt,
+      };
+    });
 
     logger.info(`Form history retrieved: ${clientTaxForm.id}`);
 
@@ -119,6 +134,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const session = await auth();
     const userId = session?.user?.id;
 
@@ -127,39 +143,36 @@ export async function POST(
     }
 
     // Get current user's profile
-    const currentUserProfile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: currentUserProfile } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .single();
 
     if (!currentUserProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get share record
-    const share = await prisma.taxFormShare.findUnique({
-      where: { shareToken: params.token },
-      select: { taxFormId: true, sharedWith: true },
-    });
+    const { data: share } = await db
+      .from('tax_form_shares')
+      .select('taxFormId, sharedWith')
+      .eq('shareToken', resolvedParams.token)
+      .single();
 
     if (!share) {
       return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
     }
 
     // Get client tax form
-    const clientTaxForm = await prisma.clientTaxForm.findFirst({
-      where: {
-        taxFormId: share.taxFormId,
-        clientId: share.sharedWith,
-      },
-      select: {
-        id: true,
-        clientId: true,
-        assignedBy: true,
-        status: true,
-        formData: true,
-      },
-    });
+    const { data: clientTaxForms } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, assignedBy, status, formData')
+      .eq('taxFormId', share.taxFormId)
+      .eq('clientId', share.sharedWith)
+      .limit(1);
+
+    const clientTaxForm = firstOrNull(clientTaxForms);
 
     if (!clientTaxForm) {
       return NextResponse.json({ error: 'Form assignment not found' }, { status: 404 });
@@ -168,7 +181,6 @@ export async function POST(
     // Only preparer or admin can revert
     const canRevert =
       currentUserProfile.id === clientTaxForm.assignedBy ||
-      currentUserProfile.role === 'admin' ||
       currentUserProfile.role === 'admin';
 
     if (!canRevert) {
@@ -188,42 +200,45 @@ export async function POST(
     }
 
     // Get the edit to revert to
-    const targetEdit = await prisma.taxFormEdit.findUnique({
-      where: { id: editId },
-      select: { formDataSnapshot: true, clientTaxFormId: true },
-    });
+    const { data: targetEdit } = await db
+      .from('tax_form_edits')
+      .select('formDataSnapshot, clientTaxFormId')
+      .eq('id', editId)
+      .single();
 
     if (!targetEdit || targetEdit.clientTaxFormId !== clientTaxForm.id) {
       return NextResponse.json({ error: 'Edit not found or does not belong to this form' }, { status: 404 });
     }
 
     // Revert to the snapshot
-    const updated = await prisma.clientTaxForm.update({
-      where: { id: clientTaxForm.id },
-      data: {
+    const { data: updated } = await db
+      .from('client_tax_forms')
+      .update({
         formData: targetEdit.formDataSnapshot,
         lastEditedBy: currentUserProfile.id,
-        lastEditedAt: new Date(),
-      },
-    });
+        lastEditedAt: new Date().toISOString(),
+      })
+      .eq('id', clientTaxForm.id)
+      .select()
+      .single();
 
     // Create audit trail entry for the revert
-    await prisma.taxFormEdit.create({
-      data: {
+    await db
+      .from('tax_form_edits')
+      .insert({
         clientTaxFormId: clientTaxForm.id,
         editedBy: currentUserProfile.id,
         editedByRole: currentUserProfile.role,
         fieldChanges: {}, // No specific field changes, just a revert
         formDataSnapshot: targetEdit.formDataSnapshot,
-        editNote: `Reverted to version from ${new Date(targetEdit.formDataSnapshot).toLocaleString()}`,
-      },
-    });
+        editNote: `Reverted to previous version`,
+      });
 
     logger.info(`Form reverted: ${clientTaxForm.id} to edit ${editId}`);
 
     return NextResponse.json({
       success: true,
-      formData: updated.formData,
+      formData: updated?.formData,
     });
   } catch (error) {
     logger.error('Error reverting form:', error);

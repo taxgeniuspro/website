@@ -28,8 +28,24 @@
  * - {{companyName}} - Company name (Tax Genius Pro)
  */
 
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions
+interface EmailTemplateRecord {
+  id: string;
+  profileId?: string | null;
+  name: string;
+  subject: string;
+  body: string;
+  category: string;
+  isShared: boolean;
+  isDefault: boolean;
+  usageCount: number;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * Template variables for substitution
@@ -155,8 +171,9 @@ export class EmailTemplateService {
         category: data.category,
       });
 
-      const template = await prisma.emailTemplate.create({
-        data: {
+      const { data: template, error } = await db
+        .from('email_templates')
+        .insert({
           profileId,
           name: data.name,
           subject: data.subject,
@@ -165,15 +182,18 @@ export class EmailTemplateService {
           isShared: data.isShared || false,
           isDefault: false,
           usageCount: 0,
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
 
       logger.info('Email template created', {
-        templateId: template.id,
-        name: template.name,
+        templateId: template?.id,
+        name: template?.name,
       });
 
-      return template;
+      return template as EmailTemplateRecord;
     } catch (error) {
       logger.error('Error creating email template', { error });
       throw error;
@@ -202,9 +222,13 @@ export class EmailTemplateService {
       logger.info('Updating email template', { templateId, profileId });
 
       // Verify ownership (or admin)
-      const existing = await prisma.emailTemplate.findUnique({
-        where: { id: templateId },
-      });
+      const { data: existingData } = await db
+        .from('email_templates')
+        .select('*')
+        .eq('id', templateId)
+        .limit(1);
+
+      const existing = firstOrNull(existingData) as EmailTemplateRecord | null;
 
       if (!existing) {
         throw new Error('Template not found');
@@ -214,19 +238,24 @@ export class EmailTemplateService {
         throw new Error('Not authorized to update this template');
       }
 
-      const template = await prisma.emailTemplate.update({
-        where: { id: templateId },
-        data: {
-          name: data.name,
-          subject: data.subject,
-          body: data.body,
-          category: data.category,
-        },
-      });
+      const updateData: Record<string, unknown> = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.subject !== undefined) updateData.subject = data.subject;
+      if (data.body !== undefined) updateData.body = data.body;
+      if (data.category !== undefined) updateData.category = data.category;
 
-      logger.info('Email template updated', { templateId: template.id });
+      const { data: template, error } = await db
+        .from('email_templates')
+        .update(updateData)
+        .eq('id', templateId)
+        .select()
+        .single();
 
-      return template;
+      if (error) throw error;
+
+      logger.info('Email template updated', { templateId: template?.id });
+
+      return template as EmailTemplateRecord;
     } catch (error) {
       logger.error('Error updating email template', { templateId, error });
       throw error;
@@ -244,9 +273,13 @@ export class EmailTemplateService {
       logger.info('Deleting email template', { templateId, profileId });
 
       // Verify ownership
-      const existing = await prisma.emailTemplate.findUnique({
-        where: { id: templateId },
-      });
+      const { data: existingData } = await db
+        .from('email_templates')
+        .select('*')
+        .eq('id', templateId)
+        .limit(1);
+
+      const existing = firstOrNull(existingData) as EmailTemplateRecord | null;
 
       if (!existing) {
         throw new Error('Template not found');
@@ -260,9 +293,12 @@ export class EmailTemplateService {
         throw new Error('Cannot delete default templates');
       }
 
-      await prisma.emailTemplate.delete({
-        where: { id: templateId },
-      });
+      const { error } = await db
+        .from('email_templates')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) throw error;
 
       logger.info('Email template deleted', { templateId });
     } catch (error) {
@@ -282,23 +318,29 @@ export class EmailTemplateService {
     try {
       logger.info('Listing email templates', { profileId, category });
 
-      const templates = await prisma.emailTemplate.findMany({
-        where: {
-          OR: [
-            { profileId }, // User's own templates
-            { isShared: true }, // Shared templates
-          ],
-          ...(category && { category }),
-        },
-        orderBy: [{ isDefault: 'desc' }, { usageCount: 'desc' }, { createdAt: 'desc' }],
-      });
+      // Build query for user's own templates OR shared templates
+      let query = db
+        .from('email_templates')
+        .select('*')
+        .or(`profileId.eq.${profileId},isShared.eq.true`)
+        .order('isDefault', { ascending: false })
+        .order('usageCount', { ascending: false })
+        .order('createdAt', { ascending: false });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      const { data: templates, error } = await query;
+
+      if (error) throw error;
 
       logger.info('Email templates retrieved', {
         profileId,
-        count: templates.length,
+        count: (templates || []).length,
       });
 
-      return templates;
+      return (templates || []) as EmailTemplateRecord[];
     } catch (error) {
       logger.error('Error listing email templates', { profileId, error });
       return [];
@@ -314,15 +356,14 @@ export class EmailTemplateService {
    */
   async getTemplate(templateId: string, profileId: string) {
     try {
-      const template = await prisma.emailTemplate.findFirst({
-        where: {
-          id: templateId,
-          OR: [
-            { profileId }, // User's template
-            { isShared: true }, // Shared template
-          ],
-        },
-      });
+      const { data: templateData } = await db
+        .from('email_templates')
+        .select('*')
+        .eq('id', templateId)
+        .or(`profileId.eq.${profileId},isShared.eq.true`)
+        .limit(1);
+
+      const template = firstOrNull(templateData) as EmailTemplateRecord | null;
 
       return template;
     } catch (error) {
@@ -338,13 +379,24 @@ export class EmailTemplateService {
    */
   async incrementUsageCount(templateId: string): Promise<void> {
     try {
-      await prisma.emailTemplate.update({
-        where: { id: templateId },
-        data: {
-          usageCount: { increment: 1 },
-          lastUsedAt: new Date(),
-        },
-      });
+      // Get current count
+      const { data: templateData } = await db
+        .from('email_templates')
+        .select('usageCount')
+        .eq('id', templateId)
+        .limit(1);
+
+      const template = firstOrNull(templateData) as { usageCount: number } | null;
+
+      if (template) {
+        await db
+          .from('email_templates')
+          .update({
+            usageCount: (template.usageCount || 0) + 1,
+            lastUsedAt: new Date().toISOString(),
+          })
+          .eq('id', templateId);
+      }
 
       logger.info('Template usage count incremented', { templateId });
     } catch (error) {
@@ -363,6 +415,7 @@ export class EmailTemplateService {
       const defaultTemplates = [
         // LEAD Templates
         {
+          id: 'default-initial-lead-contact',
           name: 'Initial Lead Contact',
           subject: "Hi {{firstName}}! Let's get started on your {{year}} taxes",
           body: `Hi {{firstName}},
@@ -393,6 +446,7 @@ Looking forward to helping you with your taxes,
           isDefault: true,
         },
         {
+          id: 'default-follow-up-with-lead',
           name: 'Follow-up with Lead',
           subject: "Following up on your {{year}} tax return",
           body: `Hi {{firstName}},
@@ -415,6 +469,7 @@ Best regards,
 
         // CLIENT Templates
         {
+          id: 'default-welcome-new-client',
           name: 'Welcome New Client',
           subject: 'Welcome to {{companyName}}! Next steps for your tax return',
           body: `Hi {{firstName}},
@@ -445,6 +500,7 @@ Let's get started!
           isDefault: true,
         },
         {
+          id: 'default-request-missing-documents',
           name: 'Request Missing Documents',
           subject: 'Missing documents needed for your {{year}} tax return',
           body: `Hi {{firstName}},
@@ -469,6 +525,7 @@ Thanks,
           isDefault: true,
         },
         {
+          id: 'default-tax-return-ready-for-review',
           name: 'Tax Return Ready for Review',
           subject: 'Great news! Your {{year}} tax return is ready',
           body: `Hi {{firstName}},
@@ -495,6 +552,7 @@ If you have any questions about your return, I'm here to help.
 
         // GENERAL Templates
         {
+          id: 'default-schedule-a-consultation',
           name: 'Schedule a Consultation',
           subject: "Let's schedule a time to talk about your taxes",
           body: `Hi {{firstName}},
@@ -517,19 +575,44 @@ Looking forward to speaking with you!
       ];
 
       for (const template of defaultTemplates) {
-        await prisma.emailTemplate.upsert({
-          where: {
-            id: `default-${template.name.toLowerCase().replace(/\s+/g, '-')}`,
-          },
-          create: {
-            id: `default-${template.name.toLowerCase().replace(/\s+/g, '-')}`,
-            ...template,
-            profileId: null, // Shared templates have no owner
-          },
-          update: {
-            ...template,
-          },
-        });
+        // Check if template exists
+        const { data: existingData } = await db
+          .from('email_templates')
+          .select('id')
+          .eq('id', template.id)
+          .limit(1);
+
+        const existing = firstOrNull(existingData);
+
+        if (existing) {
+          // Update existing
+          await db
+            .from('email_templates')
+            .update({
+              name: template.name,
+              subject: template.subject,
+              body: template.body,
+              category: template.category,
+              isShared: template.isShared,
+              isDefault: template.isDefault,
+            })
+            .eq('id', template.id);
+        } else {
+          // Insert new
+          await db
+            .from('email_templates')
+            .insert({
+              id: template.id,
+              profileId: null, // Shared templates have no owner
+              name: template.name,
+              subject: template.subject,
+              body: template.body,
+              category: template.category,
+              isShared: template.isShared,
+              isDefault: template.isDefault,
+              usageCount: 0,
+            });
+        }
       }
 
       logger.info('Default email templates seeded successfully', {

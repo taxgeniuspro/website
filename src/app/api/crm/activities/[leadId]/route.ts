@@ -12,10 +12,24 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { checkCRMPermission, CRMFeature } from '@/lib/permissions/crm-permissions';
 import { logger } from '@/lib/logger';
-import { ActivityType } from '@prisma/client';
+
+// Local type definitions (replacing @prisma/client imports)
+type ActivityType =
+  | 'NOTE_ADDED'
+  | 'STATUS_CHANGED'
+  | 'DOCUMENT_UPLOADED'
+  | 'EMAIL_SENT'
+  | 'CALL_MADE'
+  | 'TASK_CREATED'
+  | 'TASK_COMPLETED'
+  | 'APPOINTMENT_SCHEDULED'
+  | 'FORM_SUBMITTED'
+  | 'PAYMENT_RECEIVED'
+  | 'ASSIGNED'
+  | 'SYSTEM';
 
 /**
  * GET /api/crm/activities/[leadId]
@@ -52,26 +66,29 @@ export async function GET(
       );
     }
 
-    const leadId = params.leadId;
+    const { leadId } = await params;
 
     // Verify lead exists and user has access to it
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        assignedTo: true,
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, assignedTo')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
     // Get user profile to check access
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     // Only admins or assigned preparer can view activities
     const isAdmin = profile?.role === 'admin';
@@ -90,28 +107,32 @@ export async function GET(
     const offset = parseInt(searchParams.get('offset') || '0');
     const activityType = searchParams.get('type') as ActivityType | null;
 
-    // Build where clause
-    const where: any = { leadId };
-    if (activityType && Object.values(ActivityType).includes(activityType)) {
-      where.activityType = activityType;
+    // Valid activity types
+    const validActivityTypes: ActivityType[] = [
+      'NOTE_ADDED', 'STATUS_CHANGED', 'DOCUMENT_UPLOADED', 'EMAIL_SENT',
+      'CALL_MADE', 'TASK_CREATED', 'TASK_COMPLETED', 'APPOINTMENT_SCHEDULED',
+      'FORM_SUBMITTED', 'PAYMENT_RECEIVED', 'ASSIGNED', 'SYSTEM'
+    ];
+
+    // Build query
+    let query = db
+      .from('lead_activities')
+      .select('*', { count: 'exact' })
+      .eq('leadId', leadId)
+      .order('createdAt', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (activityType && validActivityTypes.includes(activityType)) {
+      query = query.eq('activityType', activityType);
     }
 
-    // Fetch activities
-    const [activities, total] = await Promise.all([
-      prisma.leadActivity.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      prisma.leadActivity.count({ where }),
-    ]);
+    const { data: activities, count } = await query;
 
-    logger.info(`User ${userId} fetched ${activities.length} activities for lead ${leadId}`);
+    logger.info(`User ${userId} fetched ${(activities || []).length} activities for lead ${leadId}`);
 
     return NextResponse.json({
-      activities,
-      total,
+      activities: activities || [],
+      total: count || 0,
       limit,
       offset,
     });
@@ -159,31 +180,29 @@ export async function POST(
       );
     }
 
-    const leadId = params.leadId;
+    const { leadId } = await params;
 
     // Verify lead exists and user has access
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        assignedTo: true,
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, assignedTo')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -203,8 +222,15 @@ export async function POST(
     // Parse request body
     const { activityType, title, description, metadata } = await req.json();
 
+    // Valid activity types
+    const validActivityTypes: ActivityType[] = [
+      'NOTE_ADDED', 'STATUS_CHANGED', 'DOCUMENT_UPLOADED', 'EMAIL_SENT',
+      'CALL_MADE', 'TASK_CREATED', 'TASK_COMPLETED', 'APPOINTMENT_SCHEDULED',
+      'FORM_SUBMITTED', 'PAYMENT_RECEIVED', 'ASSIGNED', 'SYSTEM'
+    ];
+
     // Validate activity type
-    if (!activityType || !Object.values(ActivityType).includes(activityType)) {
+    if (!activityType || !validActivityTypes.includes(activityType)) {
       return NextResponse.json(
         { error: 'Invalid activity type' },
         { status: 400 }
@@ -223,8 +249,9 @@ export async function POST(
       .filter(Boolean)
       .join(' ') || 'Unknown';
 
-    const activity = await prisma.leadActivity.create({
-      data: {
+    const { data: activity, error: insertError } = await db
+      .from('lead_activities')
+      .insert({
         leadId,
         activityType,
         title: title.trim(),
@@ -233,8 +260,13 @@ export async function POST(
         createdBy: profile.id,
         createdByName,
         automated: false,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (insertError || !activity) {
+      throw new Error(insertError?.message || 'Failed to create activity');
+    }
 
     logger.info(`User ${userId} created activity for lead ${leadId}`, {
       activityType,

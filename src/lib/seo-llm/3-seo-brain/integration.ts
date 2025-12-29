@@ -1,5 +1,29 @@
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
 import { SERVICE_ENDPOINTS } from '@/lib/constants'
+
+// Local type definitions (replacing @prisma/client)
+interface N8NWebhook {
+  id: string
+  name: string
+  url: string
+  trigger: string
+  description?: string | null
+  payload?: any
+  isActive: boolean
+  triggerCount: number
+  lastTriggered?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface N8NWebhookLog {
+  id: string
+  webhookId: string
+  payload: any
+  response: any
+  status: number
+  executedAt: string
+}
 
 export interface N8NWorkflowConfig {
   id: string
@@ -43,79 +67,107 @@ export class N8NIntegration {
     const webhookUrl = `${this.N8N_BASE_URL}/${webhookPath}`
 
     // Create webhook in database
-    return await prisma.n8NWebhook.create({
-      data: {
+    const { data, error } = await db
+      .from('n8n_webhooks')
+      .insert({
         name,
         url: webhookUrl,
         trigger,
         description,
         payload,
         isActive: true,
-      },
-    })
+        triggerCount: 0,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data as N8NWebhook
   }
 
   static async getWebhooks(): Promise<N8NWebhook[]> {
-    return await prisma.n8NWebhook.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
-    })
+    const { data } = await db
+      .from('n8n_webhooks')
+      .select('*')
+      .eq('isActive', true)
+      .order('createdAt', { ascending: false })
+
+    return (data || []) as N8NWebhook[]
   }
 
-  static async getWebhook(id: string): Promise<N8NWebhook | null> {
-    return await prisma.n8NWebhook.findUnique({
-      where: { id },
-      include: {
-        logs: {
-          take: 10,
-          orderBy: { executedAt: 'desc' },
-        },
-      },
-    })
+  static async getWebhook(id: string): Promise<(N8NWebhook & { logs?: N8NWebhookLog[] }) | null> {
+    const { data: webhookData } = await db
+      .from('n8n_webhooks')
+      .select('*')
+      .eq('id', id)
+      .limit(1)
+
+    const webhook = firstOrNull(webhookData) as N8NWebhook | null
+    if (!webhook) return null
+
+    // Get logs separately
+    const { data: logsData } = await db
+      .from('n8n_webhook_logs')
+      .select('*')
+      .eq('webhookId', id)
+      .order('executedAt', { ascending: false })
+      .limit(10)
+
+    return {
+      ...webhook,
+      logs: (logsData || []) as N8NWebhookLog[],
+    }
   }
 
-  static async updateWebhook(id: string, data: Partial<N8NWebhook>): Promise<N8NWebhook> {
-    return await prisma.n8NWebhook.update({
-      where: { id },
-      data,
-    })
+  static async updateWebhook(id: string, updateData: Partial<N8NWebhook>): Promise<N8NWebhook> {
+    const { data, error } = await db
+      .from('n8n_webhooks')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data as N8NWebhook
   }
 
   static async deleteWebhook(id: string): Promise<void> {
-    await prisma.n8NWebhook.delete({
-      where: { id },
-    })
+    await db
+      .from('n8n_webhooks')
+      .delete()
+      .eq('id', id)
   }
 
   static async triggerWebhook(
     trigger: string,
-    data: Record<string, unknown>
+    triggerData: Record<string, unknown>
   ): Promise<N8NExecutionResult[]> {
-    const webhooks = await prisma.n8NWebhook.findMany({
-      where: {
-        trigger,
-        isActive: true,
-      },
-    })
+    const { data: webhooksData } = await db
+      .from('n8n_webhooks')
+      .select('*')
+      .eq('trigger', trigger)
+      .eq('isActive', true)
+
+    const webhooks = (webhooksData || []) as N8NWebhook[]
 
     const results: N8NExecutionResult[] = []
 
     for (const webhook of webhooks) {
       try {
-        const result = await this.executeWebhook(webhook, data)
+        const result = await this.executeWebhook(webhook, triggerData)
         results.push(result)
 
         // Log the execution
-        await this.logWebhookExecution(webhook.id, data, result)
+        await this.logWebhookExecution(webhook.id, triggerData, result)
 
-        // Update trigger count
-        await prisma.n8NWebhook.update({
-          where: { id: webhook.id },
-          data: {
-            triggerCount: { increment: 1 },
-            lastTriggered: new Date(),
-          },
-        })
+        // Update trigger count - get current and increment
+        await db
+          .from('n8n_webhooks')
+          .update({
+            triggerCount: (webhook.triggerCount || 0) + 1,
+            lastTriggered: new Date().toISOString(),
+          })
+          .eq('id', webhook.id)
       } catch (error) {
         const errorResult: N8NExecutionResult = {
           success: false,
@@ -124,7 +176,7 @@ export class N8NIntegration {
         results.push(errorResult)
 
         // Log the error
-        await this.logWebhookExecution(webhook.id, data, errorResult, 500)
+        await this.logWebhookExecution(webhook.id, triggerData, errorResult, 500)
       }
     }
 
@@ -171,14 +223,15 @@ export class N8NIntegration {
     response: N8NExecutionResult,
     status: number = 200
   ): Promise<void> {
-    await prisma.n8NWebhookLog.create({
-      data: {
+    await db
+      .from('n8n_webhook_logs')
+      .insert({
         webhookId,
         payload,
         response,
         status,
-      },
-    })
+        executedAt: new Date().toISOString(),
+      })
   }
 
   // Marketing-specific webhook triggers
@@ -404,9 +457,13 @@ export class N8NIntegration {
 
   // Webhook health check
   static async testWebhook(webhookId: string): Promise<boolean> {
-    const webhook = await prisma.n8NWebhook.findUnique({
-      where: { id: webhookId },
-    })
+    const { data: webhookData } = await db
+      .from('n8n_webhooks')
+      .select('*')
+      .eq('id', webhookId)
+      .limit(1)
+
+    const webhook = firstOrNull(webhookData) as N8NWebhook | null
 
     if (!webhook) {
       throw new Error('Webhook not found')

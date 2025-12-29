@@ -4,10 +4,24 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { getUserPermissions, UserRole } from '@/lib/permissions';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  permissions: Record<string, boolean> | null;
+  email: string | null;
+}
+
+interface Lead {
+  id: string;
+  email: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,9 +31,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const userProfile = firstOrNull<Profile>(profileData);
 
     const role = userProfile?.role as UserRole | undefined;
     const permissions = getUserPermissions(
@@ -78,18 +99,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Try to find existing client/lead by email
-    let clientId = null;
-    const existingProfile = await prisma.profile.findFirst({
-      where: { email: clientEmail.toLowerCase() },
-    });
+    let clientId: string | null = null;
+    const { data: existingProfileData } = await db.from('profiles')
+      .select('id')
+      .ilike('email', clientEmail.toLowerCase())
+      .limit(1);
+
+    const existingProfile = firstOrNull<{ id: string }>(existingProfileData);
 
     if (existingProfile) {
       clientId = existingProfile.id;
     } else {
       // Check in leads
-      const existingLead = await prisma.lead.findFirst({
-        where: { email: clientEmail.toLowerCase() },
-      });
+      const { data: leadData } = await db.from('leads')
+        .select('id')
+        .ilike('email', clientEmail.toLowerCase())
+        .limit(1);
+
+      const existingLead = firstOrNull<{ id: string }>(leadData);
       if (existingLead) {
         clientId = existingLead.id;
       }
@@ -102,19 +129,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate scheduled end if scheduledFor is provided
-    let scheduledEnd = null;
+    let scheduledEnd: string | null = null;
     if (scheduledFor && duration) {
       scheduledEnd = new Date(
         new Date(scheduledFor).getTime() + duration * 60000
-      );
+      ).toISOString();
     }
 
     // Determine status based on whether it's scheduled or just requested
     const status = scheduledFor ? 'SCHEDULED' : 'REQUESTED';
 
     // Create appointment
-    const appointment = await prisma.appointment.create({
-      data: {
+    const { data: appointment, error: createError } = await db.from('appointments')
+      .insert({
         clientId,
         clientName,
         clientEmail,
@@ -122,15 +149,20 @@ export async function POST(request: NextRequest) {
         preparerId: assignedPreparerId,
         type,
         status,
-        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+        scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null,
         scheduledEnd,
         duration: duration || 60, // Default 60 minutes
         subject,
         notes,
         location,
         meetingLink,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
 
     logger.info('Appointment created manually:', {
       id: appointment.id,

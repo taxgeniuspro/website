@@ -1,8 +1,33 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getOrCreateMarketingLinks } from '@/lib/services/marketing-links.service';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  role: string;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  trackingCodeFinalized: boolean;
+}
+
+interface MarketingLink {
+  id: string;
+  code: string;
+  shortUrl: string;
+  url: string;
+  targetPage: string;
+  title: string;
+  description: string | null;
+  qrCodeDataUrl: string | null;
+  clicks: number;
+  leads: number;
+  conversions: number;
+  isActive: boolean;
+  type: string;
+}
 
 /**
  * GET /api/tax-preparer/links
@@ -22,16 +47,13 @@ export async function GET() {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        role: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeFinalized: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, trackingCode, customTrackingCode, trackingCodeFinalized')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -60,7 +82,7 @@ export async function GET() {
     }
 
     // Transform to backward-compatible format
-    const links = result.links.map((link) => ({
+    const links = result.links.map((link: MarketingLink) => ({
       id: link.id,
       shortCode: link.code,
       shortUrl: link.shortUrl,

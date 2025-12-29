@@ -5,11 +5,22 @@
  * using patterns from top performers
  */
 
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
 import { ollamaClient } from './ollama-client'
 import { type WinnerPattern } from './winner-analyzer'
 import { type PerformanceMetrics } from './performance-analyzer'
 import { type DecisionOption } from './telegram-notifier'
+
+// Local type definitions (replacing @prisma/client)
+interface CityLandingPage {
+  id: string
+  slug: string
+  title: string
+  aiIntro?: string | null
+  aiBenefits?: string | null
+  faqSchema?: any
+  revenue: number
+}
 
 export interface ImprovementPlan {
   pageId: string
@@ -31,9 +42,13 @@ export async function generateImprovementOptions(params: {
     const { loserPage, winnerPattern, campaignId } = params
 
     // Get current page content
-    const currentPage = await prisma.cityLandingPage.findUnique({
-      where: { id: loserPage.pageId },
-    })
+    const { data: pageData } = await db
+      .from('city_landing_pages')
+      .select('*')
+      .eq('id', loserPage.pageId)
+      .limit(1)
+
+    const currentPage = firstOrNull(pageData) as CityLandingPage | null
 
     if (!currentPage) {
       throw new Error('Page not found')
@@ -213,9 +228,13 @@ export async function executeImprovement(params: {
   try {
     const { pageId, selectedOption, winnerPattern } = params
 
-    const page = await prisma.cityLandingPage.findUnique({
-      where: { id: pageId },
-    })
+    const { data: pageData } = await db
+      .from('city_landing_pages')
+      .select('*')
+      .eq('id', pageId)
+      .limit(1)
+
+    const page = firstOrNull(pageData) as CityLandingPage | null
 
     if (!page) {
       throw new Error('Page not found')
@@ -250,16 +269,16 @@ export async function executeImprovement(params: {
   }
 }
 
-async function applyConservativeChanges(page: any, pattern: WinnerPattern): Promise<string[]> {
+async function applyConservativeChanges(page: CityLandingPage, pattern: WinnerPattern): Promise<string[]> {
   const changes: string[] = []
 
   // Update title format if needed
   if (page.title && !page.title.includes('$')) {
     const newTitle = `${page.title} | Fast Turnaround | $${page.revenue || '179'}`
-    await prisma.cityLandingPage.update({
-      where: { id: page.id },
-      data: { title: newTitle },
-    })
+    await db
+      .from('city_landing_pages')
+      .update({ title: newTitle })
+      .eq('id', page.id)
     changes.push('Updated title format to match winners')
   }
 

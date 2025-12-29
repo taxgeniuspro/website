@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 interface RouteParams {
@@ -39,41 +39,43 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     // Get preparer profile ID for access check
     let preparerProfileId: string | undefined;
     if (isTaxPreparer) {
-      const preparerProfile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles);
 
       if (!preparerProfile) {
-        return NextResponse.json(
-          { error: 'Tax preparer profile not found' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
       }
       preparerProfileId = preparerProfile.id;
     }
 
-    // Fetch the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-          },
-        },
-        clientFolder: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-      },
-    });
+    // Fetch the lead with relations
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select(
+        `
+        *,
+        profile:profiles!profileId (
+          id,
+          firstName,
+          lastName,
+          role
+        ),
+        clientFolder:folders!clientFolderId (
+          id,
+          name,
+          path
+        )
+      `
+      )
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -88,20 +90,20 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     // Fetch CRM contact by email, but only return it if it's assigned to the same preparer
-    // This prevents showing CRM links that the user can't access
-    const crmContact = await prisma.cRMContact.findUnique({
-      where: { email: lead.email.toLowerCase() },
-      select: { id: true, assignedPreparerId: true },
-    });
+    const { data: crmContacts } = await db
+      .from('crm_contacts')
+      .select('id, assignedPreparerId')
+      .eq('email', lead.email.toLowerCase())
+      .limit(1);
+
+    const crmContact = firstOrNull(crmContacts);
 
     // Only include CRM contact if it matches the preparer (or user is admin)
     const canAccessCrmContact =
-      isAdmin ||
-      !crmContact?.assignedPreparerId ||
-      crmContact.assignedPreparerId === preparerProfileId;
+      isAdmin || !crmContact?.assignedPreparerId || crmContact.assignedPreparerId === preparerProfileId;
 
     // Determine lead status
-    const getLeadStatus = (lead: any): string => {
+    const getLeadStatus = (lead: Record<string, unknown>): string => {
       if (lead.unqualified) return 'unqualified';
       if (lead.convertedToClient && lead.convertedAt) return 'complete';
       if (lead.convertedToClient) return 'converted';
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const leadWithStatus = {
       ...lead,
       status: getLeadStatus(lead),
-      crmContactId: canAccessCrmContact ? (crmContact?.id || null) : null,
+      crmContactId: canAccessCrmContact ? crmContact?.id || null : null,
     };
 
     logger.info(`Lead ${leadId} fetched by ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`);
@@ -124,9 +126,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     logger.error('Error fetching lead:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch lead' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch lead' }, { status: 500 });
   }
 }

@@ -7,9 +7,32 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { PaymentStatus } from '@prisma/client';
+
+// Define PaymentStatus locally (matches database enum)
+type PaymentStatus = 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED' | 'FAILED';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface Commission {
+  id: string;
+  referrerId: string;
+  amount: number;
+  status: string;
+  sourceId: string | null;
+  approvalNotes: string | null;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  assignedPreparerId: string | null;
+}
 
 export async function POST(
   req: NextRequest,
@@ -43,39 +66,49 @@ export async function POST(
     }
 
     // Get preparer's profile
-    const preparerProfile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const preparerProfile = firstOrNull(profiles) as Profile | null;
 
     if (!preparerProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Get the commission
-    const commission = await prisma.commission.findUnique({
-      where: { id: commissionId },
-      include: {
-        referrer: {
-          select: {
-            firstName: true,
-            lastName: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
-    });
+    // Get the commission with referrer info
+    const { data: commissions } = await db
+      .from('commissions')
+      .select('*')
+      .eq('id', commissionId)
+      .limit(1);
+
+    const commission = firstOrNull(commissions) as Commission | null;
 
     if (!commission) {
       return NextResponse.json({ error: 'Commission not found' }, { status: 404 });
     }
 
+    // Get referrer info
+    const { data: referrerProfiles } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', commission.referrerId)
+      .limit(1);
+
+    const referrer = firstOrNull(referrerProfiles) as Profile | null;
+
     // Verify this commission belongs to a lead assigned to this preparer
     if (commission.sourceId) {
-      const lead = await prisma.taxIntakeLead.findUnique({
-        where: { id: commission.sourceId },
-        select: { assignedPreparerId: true },
-      });
+      const { data: leads } = await db
+        .from('tax_intake_leads')
+        .select('id, assignedPreparerId')
+        .eq('id', commission.sourceId)
+        .limit(1);
+
+      const lead = firstOrNull(leads) as TaxIntakeLead | null;
 
       if (lead?.assignedPreparerId !== preparerProfile.id && role !== 'admin') {
         return NextResponse.json(
@@ -86,7 +119,7 @@ export async function POST(
     }
 
     // Only APPROVED commissions can be marked as paid
-    if (commission.status !== PaymentStatus.APPROVED) {
+    if (commission.status !== 'APPROVED') {
       return NextResponse.json(
         { error: `Cannot mark ${commission.status} commission as paid. Only APPROVED commissions can be marked as paid.` },
         { status: 400 }
@@ -94,18 +127,26 @@ export async function POST(
     }
 
     // Update commission to PAID
-    const updatedCommission = await prisma.commission.update({
-      where: { id: commissionId },
-      data: {
-        status: PaymentStatus.PAID,
-        paidAt: new Date(),
+    const newApprovalNotes = notes
+      ? `${commission.approvalNotes || ''}\n[PAID] ${notes}`.trim()
+      : commission.approvalNotes;
+
+    const { data: updatedCommission, error: updateError } = await db
+      .from('commissions')
+      .update({
+        status: 'PAID' as PaymentStatus,
+        paidAt: new Date().toISOString(),
         paymentMethod,
         paymentRef: paymentReference || null,
-        approvalNotes: notes
-          ? `${commission.approvalNotes || ''}\n[PAID] ${notes}`.trim()
-          : commission.approvalNotes,
-      },
-    });
+        approvalNotes: newApprovalNotes,
+      })
+      .eq('id', commissionId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
 
     logger.info('Commission marked as paid', {
       commissionId,
@@ -121,8 +162,8 @@ export async function POST(
         id: updatedCommission.id,
         status: updatedCommission.status,
         amount: Number(updatedCommission.amount),
-        paidAt: updatedCommission.paidAt?.toISOString(),
-        referrerName: `${commission.referrer?.firstName || ''} ${commission.referrer?.lastName || ''}`.trim(),
+        paidAt: updatedCommission.paidAt,
+        referrerName: referrer ? `${referrer.firstName || ''} ${referrer.lastName || ''}`.trim() : 'Unknown',
       },
     });
   } catch (error) {

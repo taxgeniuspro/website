@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for profile (replacing @prisma/client types)
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  companyName: string | null;
+  avatarUrl: string | null;
+  phone: string | null;
+  affiliateBondedToPreparerId: string | null;
+}
 
 /**
  * GET /api/referrals/resolve?username=xxx
@@ -18,30 +30,28 @@ export async function GET(req: NextRequest) {
     }
 
     // Find profile by various username/code fields
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { shortLinkUsername: username },
-          { trackingCode: username },
-          { customTrackingCode: username },
-          { vanitySlug: username },
-        ],
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        companyName: true,
-        avatarUrl: true,
-        phone: true,
-        affiliateBondedToPreparerId: true, // For affiliates, get bonded preparer
-      },
-    });
+    // Supabase doesn't support OR in the same way, so we use .or() filter
+    const { data: profileData, error } = await db
+      .from('profiles')
+      .select('id, first_name, last_name, role, company_name, avatar_url, phone, affiliate_bonded_to_preparer_id')
+      .or(`short_link_username.eq.${username},tracking_code.eq.${username},custom_tracking_code.eq.${username},vanity_slug.eq.${username}`)
+      .limit(1);
 
-    if (!profile) {
+    if (error || !profileData || profileData.length === 0) {
       return NextResponse.json({ error: 'Referral code not found' }, { status: 404 });
     }
+
+    const dbProfile = profileData[0];
+    const profile: Profile = {
+      id: dbProfile.id,
+      firstName: dbProfile.first_name,
+      lastName: dbProfile.last_name,
+      role: dbProfile.role,
+      companyName: dbProfile.company_name,
+      avatarUrl: dbProfile.avatar_url,
+      phone: dbProfile.phone,
+      affiliateBondedToPreparerId: dbProfile.affiliate_bonded_to_preparer_id,
+    };
 
     // Determine the preparer ID based on role
     let preparerId: string | null = null;

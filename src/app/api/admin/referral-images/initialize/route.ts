@@ -12,9 +12,25 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { FolderType } from '@prisma/client';
+
+// Local type for FolderType
+type FolderType = 'preseason_loans' | 'tax_season_lead' | 'tax_season_intake' | 'client_referral';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+  firstName: string;
+  lastName: string;
+  customTrackingCode: string | null;
+}
+
+interface ExistingFolder {
+  preparerId: string | null;
+  folderType: string;
+}
 
 // Folder type configuration with display names and descriptions
 const FOLDER_TYPE_CONFIG: Record<FolderType, { displayName: string; description: string }> = {
@@ -52,10 +68,12 @@ export async function POST() {
     }
 
     // Check if user is admin
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { role: true },
-    });
+    const { data: profileData } = await db.from('profiles')
+      .select('role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -65,60 +83,59 @@ export async function POST() {
 
     // 1. Create default folders (4 types) if not exist
     for (const folderType of ALL_FOLDER_TYPES) {
-      const existingDefault = await prisma.referralImageSet.findFirst({
-        where: { category: 'default', preparerId: null, folderType },
-      });
+      const { data: existingDefaultData } = await db.from('referral_image_sets')
+        .select('id')
+        .eq('category', 'default')
+        .is('preparerId', null)
+        .eq('folderType', folderType)
+        .limit(1);
+
+      const existingDefault = firstOrNull(existingDefaultData);
 
       if (!existingDefault) {
         const config = FOLDER_TYPE_CONFIG[folderType];
-        await prisma.referralImageSet.create({
-          data: {
+        const { error: createError } = await db.from('referral_image_sets')
+          .insert({
             category: 'default',
             preparerId: null,
             folderType,
             name: `Tax Genius Default - ${config.displayName}`,
             description: config.description,
             isActive: true,
-          },
-        });
+          });
+
+        if (createError) {
+          throw createError;
+        }
         created++;
         logger.info('Created default referral image folder', { folderType });
       }
     }
 
     // 2. Get all tax preparers
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: { in: ['tax_preparer', 'admin'] },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: preparers } = await db.from('profiles')
+      .select('id, firstName, lastName, customTrackingCode')
+      .in('role', ['tax_preparer', 'admin']);
 
     // 3. Get existing preparer folders (grouped by preparerId and folderType)
-    const existingFolders = await prisma.referralImageSet.findMany({
-      where: { category: 'preparer' },
-      select: { preparerId: true, folderType: true },
-    });
+    const { data: existingFolders } = await db.from('referral_image_sets')
+      .select('preparerId, folderType')
+      .eq('category', 'preparer');
 
     // Create a Set of "preparerId:folderType" combinations
     const existingCombinations = new Set(
-      existingFolders.map(f => `${f.preparerId}:${f.folderType}`)
+      ((existingFolders || []) as ExistingFolder[]).map(f => `${f.preparerId}:${f.folderType}`)
     );
 
     // 4. Create 4 folders per preparer (if not exist)
-    for (const preparer of preparers) {
+    for (const preparer of (preparers || []) as Profile[]) {
       for (const folderType of ALL_FOLDER_TYPES) {
         const key = `${preparer.id}:${folderType}`;
 
         if (!existingCombinations.has(key)) {
           const config = FOLDER_TYPE_CONFIG[folderType];
-          await prisma.referralImageSet.create({
-            data: {
+          const { error: createError } = await db.from('referral_image_sets')
+            .insert({
               category: 'preparer',
               preparerId: preparer.id,
               folderType,
@@ -127,8 +144,11 @@ export async function POST() {
                 ? `${config.displayName} images for ${preparer.firstName} (${preparer.customTrackingCode})`
                 : `${config.displayName} images for ${preparer.firstName} ${preparer.lastName}`,
               isActive: true,
-            },
-          });
+            });
+
+          if (createError) {
+            throw createError;
+          }
           created++;
         }
       }
@@ -136,13 +156,13 @@ export async function POST() {
 
     logger.info('Initialized referral image folders', {
       created,
-      preparerCount: preparers.length,
+      preparerCount: (preparers || []).length,
     });
 
     return NextResponse.json({
       success: true,
       created,
-      message: `Created ${created} folders (${preparers.length} preparers × 4 folder types + 4 defaults)`,
+      message: `Created ${created} folders (${(preparers || []).length} preparers × 4 folder types + 4 defaults)`,
     });
   } catch (error) {
     logger.error('Error initializing referral image folders', { error });

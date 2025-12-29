@@ -5,9 +5,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import bcrypt from 'bcryptjs';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface MagicLink {
+  id: string;
+  userId: string;
+  token: string;
+  expiresAt: Date;
+  used: boolean;
+  createdAt: Date;
+}
+
+interface User {
+  id: string;
+  email: string | null;
+  hashedPassword: string | null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,18 +39,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Find magic link
-    const magicLink = await prisma.magicLink.findUnique({
-      where: { token },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            hashedPassword: true,
-          },
-        },
-      },
-    });
+    const { data: magicLinksData, error: magicLinkError } = await db
+      .from('magic_links')
+      .select('*')
+      .eq('token', token)
+      .limit(1);
+
+    if (magicLinkError) {
+      logger.error('Error finding magic link', { error: magicLinkError.message });
+      return NextResponse.json({ error: 'Failed to validate link' }, { status: 500 });
+    }
+
+    const magicLink = firstOrNull<MagicLink>(magicLinksData);
 
     if (!magicLink) {
       return NextResponse.json({ error: 'Invalid magic link' }, { status: 404 });
@@ -46,34 +62,52 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if expired
-    if (new Date() > magicLink.expiresAt) {
+    if (new Date() > new Date(magicLink.expiresAt)) {
       return NextResponse.json({ error: 'This link has expired' }, { status: 400 });
+    }
+
+    // Get user info
+    const { data: usersData } = await db
+      .from('users')
+      .select('id, email, hashedPassword')
+      .eq('id', magicLink.userId)
+      .limit(1);
+
+    const user = firstOrNull<User>(usersData);
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Update user with password and mark email as verified
-    await prisma.user.update({
-      where: { id: magicLink.userId },
-      data: {
+    const { error: updateError } = await db
+      .from('users')
+      .update({
         hashedPassword,
-        emailVerified: new Date(), // Mark as verified
-      },
-    });
+        emailVerified: new Date().toISOString(), // Mark as verified
+      })
+      .eq('id', magicLink.userId);
+
+    if (updateError) {
+      logger.error('Error updating user password', { error: updateError.message });
+      return NextResponse.json({ error: 'Failed to set password' }, { status: 500 });
+    }
 
     // Mark magic link as used
-    await prisma.magicLink.update({
-      where: { id: magicLink.id },
-      data: { used: true },
-    });
+    await db
+      .from('magic_links')
+      .update({ used: true })
+      .eq('id', magicLink.id);
 
     logger.info(`Password set for user ${magicLink.userId} via magic link`);
 
     return NextResponse.json({
       success: true,
       message: 'Password set successfully',
-      email: magicLink.user.email,
+      email: user.email,
     });
   } catch (error) {
     logger.error('Error setting password:', error);

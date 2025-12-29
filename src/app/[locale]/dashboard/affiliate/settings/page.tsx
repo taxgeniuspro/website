@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { hasAffiliateAccess } from '@/lib/permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -44,10 +44,13 @@ export default async function AffiliateSettingsPage() {
     redirect('/forbidden');
   }
 
-  const profile = await prisma.profile.findUnique({
-    where: { userId: user.id },
-    select: { role: true, affiliateStatus: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('role, affiliateStatus')
+    .eq('userId', user.id)
+    .limit(1);
+
+  const profile = firstOrNull(profiles);
 
   if (!profile) {
     redirect('/forbidden');

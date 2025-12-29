@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // Owliver Owl - Company mascot/icon used as default display image
@@ -28,24 +28,32 @@ const DEFAULT_PREPARER_FALLBACK = {
  */
 export async function GET() {
   try {
-    // First, try to find Ray Hamilton (the default preparer for English forms)
-    const rayHamilton = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { customTrackingCode: 'rh' },
-          { trackingCode: 'rh' },
-          { user: { email: 'rhamiltonfirm@gmail.com' } },
-        ],
-        role: { in: ['admin', 'tax_preparer'] },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        avatarUrl: true,
-      },
-    });
+    // First, try to find Ray Hamilton by tracking codes
+    const { data: rayByCode } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role, avatarUrl')
+      .or('customTrackingCode.eq.rh,trackingCode.eq.rh')
+      .in('role', ['admin', 'tax_preparer'])
+      .limit(1);
+
+    let rayHamilton = firstOrNull(rayByCode);
+
+    // If not found by tracking code, try by email
+    if (!rayHamilton) {
+      const { data: userWithProfile } = await db
+        .from('users')
+        .select('id, profiles(id, firstName, lastName, role, avatarUrl)')
+        .eq('email', 'rhamiltonfirm@gmail.com')
+        .limit(1);
+
+      const userResult = firstOrNull(userWithProfile);
+      if (userResult?.profiles) {
+        const profileData = Array.isArray(userResult.profiles) ? userResult.profiles[0] : userResult.profiles;
+        if (['admin', 'tax_preparer'].includes(profileData.role)) {
+          rayHamilton = profileData;
+        }
+      }
+    }
 
     if (rayHamilton) {
       return NextResponse.json({
@@ -62,20 +70,16 @@ export async function GET() {
     }
 
     // Fallback: find any admin or tax_preparer with booking enabled
-    const fallbackPreparer = await prisma.profile.findFirst({
-      where: {
-        role: { in: ['admin', 'tax_preparer'] },
-        bookingEnabled: true,
-      },
-      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        avatarUrl: true,
-      },
-    });
+    const { data: fallbackData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role, avatarUrl')
+      .in('role', ['admin', 'tax_preparer'])
+      .eq('bookingEnabled', true)
+      .order('role', { ascending: true })
+      .order('createdAt', { ascending: true })
+      .limit(1);
+
+    const fallbackPreparer = firstOrNull(fallbackData);
 
     if (fallbackPreparer) {
       return NextResponse.json({

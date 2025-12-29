@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import {
   getSavedReplyById,
   updateSavedReply,
@@ -26,16 +26,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const savedReply = await getSavedReplyById(params.id);
+    const { id: replyId } = await params;
+    const savedReply = await getSavedReplyById(replyId);
 
     if (!savedReply) {
       return NextResponse.json({ error: 'Saved reply not found' }, { status: 404 });
@@ -53,7 +57,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
   } catch (error) {
-    logger.error('Failed to get saved reply', { error, id: params.id });
+    const { id: errorId } = await params;
+    logger.error('Failed to get saved reply', { error, id: errorId });
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to get saved reply',
@@ -74,27 +79,35 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Check ownership
-    const existing = await prisma.savedReply.findUnique({
-      where: { id: params.id },
-      select: { createdById: true },
-    });
+    const { id: replyId } = await params;
 
-    if (!existing) {
+    // Check ownership
+    const { data: existingData, error: existingError } = await db
+      .from('saved_replies')
+      .select('created_by_id')
+      .eq('id', replyId)
+      .limit(1);
+
+    const existing = firstOrNull(existingData);
+
+    if (existingError || !existing) {
       return NextResponse.json({ error: 'Saved reply not found' }, { status: 404 });
     }
 
-    const isAdmin = profile.role === 'admin';
-    if (existing.createdById !== profile.id && !isAdmin) {
+    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin';
+    if (existing.created_by_id !== profile.id && !isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -108,7 +121,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updates.isGlobal = isGlobal;
     }
 
-    const savedReply = await updateSavedReply(params.id, updates);
+    const savedReply = await updateSavedReply(replyId, updates);
 
     return NextResponse.json({
       success: true,
@@ -117,7 +130,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       },
     });
   } catch (error) {
-    logger.error('Failed to update saved reply', { error, id: params.id });
+    const { id: errorId } = await params;
+    logger.error('Failed to update saved reply', { error, id: errorId });
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to update saved reply',
@@ -138,23 +152,28 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    await deleteSavedReply(params.id, profile.id);
+    const { id: replyId } = await params;
+    await deleteSavedReply(replyId, profile.id);
 
     return NextResponse.json({
       success: true,
       message: 'Saved reply deleted successfully',
     });
   } catch (error) {
-    logger.error('Failed to delete saved reply', { error, id: params.id });
+    const { id: errorId } = await params;
+    logger.error('Failed to delete saved reply', { error, id: errorId });
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to delete saved reply',

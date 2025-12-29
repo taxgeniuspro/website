@@ -1,7 +1,23 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+// TypeScript interfaces for Supabase data
+interface BondedAffiliate {
+  id: string;
+  bondedAt: string;
+  isActive: boolean;
+  commissionStructure: unknown;
+  affiliate: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    customTrackingCode: string | null;
+    user: { email: string };
+  };
+}
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -46,68 +62,91 @@ export default async function BondedAffiliatesPage() {
   }
 
   // Get preparer's profile
-  const profile = await prisma.profile.findUnique({
-    where: { userId: preparerId },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('*')
+    .eq('userId', preparerId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles);
 
   if (!profile) {
     redirect('/login');
   }
 
   // Get bonded affiliates with their stats
-  const bondedAffiliates = await prisma.affiliateBonding.findMany({
-    where: {
-      preparerId: profile.id,
-      isActive: true,
-    },
-    include: {
-      affiliate: {
-        include: {
-          user: {
-            select: {
-              email: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: { bondedAt: 'desc' },
+  const { data: bondedAffiliatesData } = await db
+    .from('affiliate_bondings')
+    .select(`
+      id,
+      bondedAt,
+      isActive,
+      commissionStructure,
+      affiliate:profiles!affiliate_bondings_affiliateId_fkey(
+        id,
+        firstName,
+        lastName,
+        phone,
+        customTrackingCode,
+        user:users!profiles_userId_fkey(email)
+      )
+    `)
+    .eq('preparerId', profile.id)
+    .eq('isActive', true)
+    .order('bondedAt', { ascending: false });
+
+  // Transform data to match expected structure
+  const bondedAffiliates: BondedAffiliate[] = (bondedAffiliatesData || []).map((item: Record<string, unknown>) => {
+    const affiliateData = item.affiliate as {
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      customTrackingCode: string | null;
+      user: { email: string };
+    };
+    return {
+      id: item.id as string,
+      bondedAt: item.bondedAt as string,
+      isActive: item.isActive as boolean,
+      commissionStructure: item.commissionStructure,
+      affiliate: affiliateData,
+    };
   });
 
   // Get referral stats for each bonded affiliate
   const affiliateStats = await Promise.all(
     bondedAffiliates.map(async (bonding) => {
-      const [totalReferrals, convertedReferrals, totalCommissions] = await Promise.all([
-        prisma.taxIntakeLead.count({
-          where: {
-            taxPreparerId: profile.id,
-            referrerCode: bonding.affiliate.customTrackingCode || undefined,
-          },
-        }),
-        prisma.taxIntakeLead.count({
-          where: {
-            taxPreparerId: profile.id,
-            referrerCode: bonding.affiliate.customTrackingCode || undefined,
-            status: { in: ['CONVERTED', 'FILED'] },
-          },
-        }),
-        prisma.commission.aggregate({
-          where: {
-            profileId: bonding.affiliate.id,
-            status: 'PAID',
-          },
-          _sum: {
-            amount: true,
-          },
-        }),
-      ]);
+      // Count total referrals
+      const { count: totalReferrals } = await db
+        .from('tax_intake_leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('taxPreparerId', profile.id)
+        .eq('referrerCode', bonding.affiliate.customTrackingCode || '');
+
+      // Count converted referrals
+      const { count: convertedReferrals } = await db
+        .from('tax_intake_leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('taxPreparerId', profile.id)
+        .eq('referrerCode', bonding.affiliate.customTrackingCode || '')
+        .in('status', ['CONVERTED', 'FILED']);
+
+      // Get total commissions
+      const { data: commissionsData } = await db
+        .from('commissions')
+        .select('amount')
+        .eq('profileId', bonding.affiliate.id)
+        .eq('status', 'PAID');
+
+      const totalEarnings = (commissionsData || []).reduce((sum: number, c: { amount: number }) => sum + Number(c.amount), 0);
 
       return {
         ...bonding,
         stats: {
-          totalReferrals,
-          convertedReferrals,
-          totalEarnings: totalCommissions._sum.amount?.toNumber() || 0,
+          totalReferrals: totalReferrals || 0,
+          convertedReferrals: convertedReferrals || 0,
+          totalEarnings,
         },
       };
     })

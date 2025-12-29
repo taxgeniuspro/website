@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { trackCreativeUsage } from '@/lib/services/creative.service';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  role: string | null;
+  affiliateStatus: string | null;
+}
+
+interface AffiliateCreative {
+  id: string;
+}
 
 /**
  * POST /api/affiliate/creatives/[id]/track
@@ -18,16 +29,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    // Get user profile - use Supabase OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, affiliateStatus')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -52,9 +66,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Check if creative exists
-    const creative = await prisma.affiliateCreative.findUnique({
-      where: { id },
-    });
+    const { data: creativeData, error: creativeError } = await db
+      .from('affiliate_creatives')
+      .select('id')
+      .eq('id', id)
+      .limit(1);
+
+    if (creativeError) {
+      logger.error('Error fetching creative:', creativeError);
+      return NextResponse.json({ error: 'Failed to fetch creative' }, { status: 500 });
+    }
+
+    const creative = firstOrNull<AffiliateCreative>(creativeData);
 
     if (!creative) {
       return NextResponse.json({ error: 'Creative not found' }, { status: 404 });

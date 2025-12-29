@@ -1,7 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  category: string | null;
+  type: string;
+  isActive: boolean;
+  recurring: boolean;
+  interval: string | null;
+  availableFor: string[];
+  printable: boolean;
+  digitalDownload: boolean;
+  stock: number | null;
+  sku: string | null;
+  images: any[];
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * PUT /api/admin/products/[id]
@@ -16,15 +43,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -50,18 +78,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     } = body;
 
     // Check if product exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
+    const { data: existingProductData, error: existingError } = await db.from('products')
+      .select('id')
+      .eq('id', id)
+      .limit(1);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existingProduct = firstOrNull<{ id: string }>(existingProductData);
 
     if (!existingProduct) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
     // Update product
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
+    const { data: product, error: updateError } = await db.from('products')
+      .update({
         name,
         description: description || null,
         price,
@@ -81,8 +115,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           images && images.length > 0
             ? images.find((img: any) => img.isPrimary)?.url || images[0]?.url
             : null,
-      },
-    });
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     logger.info('Product updated', { productId: product.id, name: product.name });
 
@@ -110,15 +150,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -127,25 +168,28 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
 
     // Check if product exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
+    const { data: existingProductData, error: existingError } = await db.from('products')
+      .select('id')
+      .eq('id', id)
+      .limit(1);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existingProduct = firstOrNull<{ id: string }>(existingProductData);
 
     if (!existingProduct) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
     // Check if product has active subscriptions or orders
-    const hasActiveSubscriptions = await prisma.subscription.count({
-      where: {
-        productId: id,
-        status: {
-          in: ['ACTIVE', 'TRIALING'],
-        },
-      },
-    });
+    const { count: hasActiveSubscriptions } = await db.from('subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('productId', id)
+      .in('status', ['ACTIVE', 'TRIALING']);
 
-    if (hasActiveSubscriptions > 0) {
+    if (hasActiveSubscriptions && hasActiveSubscriptions > 0) {
       return NextResponse.json(
         {
           error: 'Cannot delete product with active subscriptions. Please deactivate instead.',
@@ -155,12 +199,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Soft delete by setting isActive to false instead of hard delete
-    await prisma.product.update({
-      where: { id },
-      data: {
-        isActive: false,
-      },
-    });
+    const { error: softDeleteError } = await db.from('products')
+      .update({ isActive: false })
+      .eq('id', id);
+
+    if (softDeleteError) {
+      throw softDeleteError;
+    }
 
     logger.info('Product deactivated (soft delete)', { productId: id });
 

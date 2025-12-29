@@ -24,7 +24,8 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, X, Plus } from 'lucide-react';
-import { TicketPriority } from '@prisma/client';
+// Ticket priority type (migrated from Prisma to local interface)
+export type TicketPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '@/lib/logger';
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getAttribution } from '@/lib/services/attribution.service';
 
@@ -25,35 +25,29 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch preparer profile by tracking code OR short link username
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: attribution.attribution.referrerUsername },
-          { customTrackingCode: attribution.attribution.referrerUsername },
-          { shortLinkUsername: attribution.attribution.referrerUsername },
-        ],
-        role: 'tax_preparer',
-      },
-      select: {
-        firstName: true,
-        lastName: true,
-        avatarUrl: true,
-        qrCodeLogoUrl: true,
-        companyName: true,
-        licenseNo: true,
-        bio: true,
-        phone: true,
-        trackingCodeQRUrl: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    const referrerUsername = attribution.attribution.referrerUsername;
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('firstName, lastName, avatarUrl, qrCodeLogoUrl, companyName, licenseNo, bio, phone, trackingCodeQRUrl, userId')
+      .or(`trackingCode.eq.${referrerUsername},customTrackingCode.eq.${referrerUsername},shortLinkUsername.eq.${referrerUsername}`)
+      .eq('role', 'tax_preparer')
+      .limit(1);
+
+    const profile = firstOrNull(profileData);
 
     if (!profile || !profile.firstName || !profile.lastName) {
       return NextResponse.json({ preparer: null }, { status: 200 });
+    }
+
+    // Get user email
+    let email: string | undefined;
+    if (profile.userId) {
+      const { data: userData } = await db
+        .from('users')
+        .select('email')
+        .eq('id', profile.userId)
+        .limit(1);
+      email = userData?.[0]?.email;
     }
 
     return NextResponse.json(
@@ -66,7 +60,7 @@ export async function GET(req: NextRequest) {
           licenseNo: profile.licenseNo,
           bio: profile.bio,
           phone: profile.phone,
-          email: profile.user?.email,
+          email: email,
           qrCodeUrl: profile.trackingCodeQRUrl,
         },
       },

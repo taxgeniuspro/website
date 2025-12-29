@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -46,10 +46,13 @@ export default async function CommissionSettingsPage() {
   }
 
   // Get preparer's profile
-  const profile = await prisma.profile.findUnique({
-    where: { userId: preparerId },
-    select: { id: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id')
+    .eq('userId', preparerId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles);
 
   if (!profile) {
     redirect('/login');

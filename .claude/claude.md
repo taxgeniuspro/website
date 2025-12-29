@@ -1,7 +1,84 @@
+# TaxGeniusPro Project Rules
+
+## APPROVED TECH STACK (LOCKED - Dec 2025)
+
+**Only use these packages. No exceptions without explicit approval.**
+
+### Core
+```
+next, react, typescript, tailwindcss
+```
+
+### Database + Auth + Storage (Self-Hosted Supabase - HTTP API)
+```
+@supabase/supabase-js   # Database, Auth, Storage - ONE client
+@supabase/ssr           # Server-side helpers
+```
+
+### State
+```
+@tanstack/react-query   # Server state + caching
+zustand                 # Client state
+```
+
+### Forms
+```
+react-hook-form
+@hookform/resolvers
+zod
+```
+
+### UI
+```
+@radix-ui/*
+lucide-react
+tailwind-merge, clsx
+sonner
+framer-motion
+next-themes
+vaul
+cmdk
+```
+
+### Business
+```
+stripe                  # Payments
+nodemailer              # Email (SMTP to Postal)
+@react-email/*          # Email templates
+qrcode                  # QR generation
+recharts                # Charts
+pdf-lib                 # PDF generation
+```
+
+### Utils
+```
+date-fns, nanoid, sharp, next-intl
+```
+
+### AI
+```
+openai                  # ONE AI provider only
+```
+
+### DO NOT USE (Migrate Away From)
+```
+prisma                  # Use Supabase client instead (HTTP, no network issues)
+next-auth               # Use Supabase Auth instead
+cloudinary              # Use Supabase Storage instead
+@aws-sdk/*              # Use Supabase Storage instead
+resend                  # Use nodemailer instead
+@google/genai           # Use openai instead
+bcryptjs                # Supabase handles this
+i18next                 # Use next-intl instead
+socket.io, twilio, web-push, ioredis  # Not needed
+```
+
+---
+
 # BMAD Method with MCP Integration for Tax Genius Pro
 
 ## Project Context
-Tax Genius Pro - An AI-powered tax preparation platform using Next.js 15.5.2, TypeScript, and modern tech stack.
+Tax Genius Pro - An AI-powered tax preparation platform using Next.js, TypeScript, and the approved tech stack above.
 
 ## Coolify Deployment (Self-Hosted)
 

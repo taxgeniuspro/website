@@ -5,13 +5,27 @@
  * GET /api/auth/verify-email?token=xxx - Verify token and mark email as verified
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auth } from '@/lib/auth';
 import { getResendClient } from '@/lib/resend';
 import { EmailVerificationEmail } from '../../../../../emails/email-verification';
 import { authRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
 import crypto from 'crypto';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface VerificationToken {
+  identifier: string;
+  token: string;
+  expires: Date;
+}
+
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  emailVerified: Date | null;
+}
 
 // Token expires in 24 hours
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -29,9 +43,18 @@ export async function GET(req: NextRequest) {
     }
 
     // Find the verification token
-    const verificationRecord = await prisma.verificationToken.findFirst({
-      where: { token },
-    });
+    const { data: verificationRecordsData, error: verificationError } = await db
+      .from('verification_tokens')
+      .select('*')
+      .eq('token', token)
+      .limit(1);
+
+    if (verificationError) {
+      logger.error('Error finding verification token', { error: verificationError.message });
+      return NextResponse.json({ error: 'Failed to verify email' }, { status: 500 });
+    }
+
+    const verificationRecord = firstOrNull<VerificationToken>(verificationRecordsData);
 
     if (!verificationRecord) {
       logger.warn('Invalid verification token attempted', { token: token.substring(0, 8) + '...' });
@@ -39,24 +62,26 @@ export async function GET(req: NextRequest) {
     }
 
     // Check if token is expired
-    if (verificationRecord.expires < new Date()) {
+    if (new Date(verificationRecord.expires) < new Date()) {
       // Delete expired token
-      await prisma.verificationToken.delete({
-        where: {
-          identifier_token: {
-            identifier: verificationRecord.identifier,
-            token: verificationRecord.token,
-          },
-        },
-      });
+      await db
+        .from('verification_tokens')
+        .delete()
+        .eq('identifier', verificationRecord.identifier)
+        .eq('token', verificationRecord.token);
+
       logger.warn('Expired verification token used', { email: verificationRecord.identifier });
       return NextResponse.json({ error: 'Verification token has expired. Please request a new one.' }, { status: 400 });
     }
 
     // Find user by email (identifier)
-    const user = await prisma.user.findUnique({
-      where: { email: verificationRecord.identifier.toLowerCase() },
-    });
+    const { data: usersData } = await db
+      .from('users')
+      .select('*')
+      .eq('email', verificationRecord.identifier.toLowerCase())
+      .limit(1);
+
+    const user = firstOrNull<User>(usersData);
 
     if (!user) {
       logger.error('Verification token valid but user not found', { email: verificationRecord.identifier });
@@ -64,20 +89,17 @@ export async function GET(req: NextRequest) {
     }
 
     // Mark email as verified
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerified: new Date() },
-    });
+    await db
+      .from('users')
+      .update({ emailVerified: new Date().toISOString() })
+      .eq('id', user.id);
 
     // Delete the used token
-    await prisma.verificationToken.delete({
-      where: {
-        identifier_token: {
-          identifier: verificationRecord.identifier,
-          token: verificationRecord.token,
-        },
-      },
-    });
+    await db
+      .from('verification_tokens')
+      .delete()
+      .eq('identifier', verificationRecord.identifier)
+      .eq('token', verificationRecord.token);
 
     logger.info('Email verified successfully', { userId: user.id, email: user.email });
 
@@ -123,10 +145,13 @@ export async function POST(req: NextRequest) {
       name = session.user.name || undefined;
 
       // Check if already verified
-      const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
-        select: { emailVerified: true },
-      });
+      const { data: usersData } = await db
+        .from('users')
+        .select('emailVerified')
+        .eq('email', email.toLowerCase())
+        .limit(1);
+
+      const user = firstOrNull<{ emailVerified: Date | null }>(usersData);
 
       if (user?.emailVerified) {
         return NextResponse.json({ message: 'Email is already verified' }, { status: 200 });
@@ -140,10 +165,13 @@ export async function POST(req: NextRequest) {
       email = body.email;
 
       // Look up user to get name
-      const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
-        select: { name: true, emailVerified: true },
-      });
+      const { data: usersData } = await db
+        .from('users')
+        .select('name, emailVerified')
+        .eq('email', email.toLowerCase())
+        .limit(1);
+
+      const user = firstOrNull<{ name: string | null; emailVerified: Date | null }>(usersData);
 
       if (!user) {
         // Don't reveal if email exists
@@ -158,22 +186,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Delete any existing verification tokens for this email
-    await prisma.verificationToken.deleteMany({
-      where: { identifier: email.toLowerCase() },
-    });
+    await db
+      .from('verification_tokens')
+      .delete()
+      .eq('identifier', email.toLowerCase());
 
     // Generate new token
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + TOKEN_EXPIRY_MS);
 
     // Save token
-    await prisma.verificationToken.create({
-      data: {
+    await db
+      .from('verification_tokens')
+      .insert({
         identifier: email.toLowerCase(),
         token,
-        expires,
-      },
-    });
+        expires: expires.toISOString(),
+      });
 
     // Build verification URL
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';

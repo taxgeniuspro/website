@@ -1,7 +1,24 @@
 import OpenAI from 'openai'
-import { PrismaClient } from '@prisma/client'
+import { db, firstOrNull } from '@/lib/db'
 
-const prisma = new PrismaClient()
+// Local type definitions (replacing @prisma/client)
+interface TranslationRecord {
+  id: string
+  tenantId?: string | null
+  key: string
+  namespace: string
+  locale: string
+  value: string
+  context?: string | null
+  source?: string | null
+  autoTranslated: boolean
+  isApproved: boolean
+  confidence?: number | null
+  translationModel?: string | null
+  originalText?: string | null
+  createdAt: Date | string
+  updatedAt: Date | string
+}
 
 // Lazy-initialize OpenAI client to avoid build-time errors
 let openaiClient: OpenAI | null = null
@@ -121,14 +138,21 @@ export class AutoTranslationService {
     tenantId?: string
   ): Promise<string> {
     // Check if translation already exists
-    const existing = await prisma.translation.findFirst({
-      where: {
-        tenantId,
-        key,
-        namespace,
-        locale: targetLocale,
-      },
-    })
+    let query = db
+      .from('translations')
+      .select('id')
+      .eq('key', key)
+      .eq('namespace', namespace)
+      .eq('locale', targetLocale)
+      .limit(1)
+
+    if (tenantId) {
+      query = query.eq('tenantId', tenantId)
+    }
+
+    const { data: existingData } = await query
+
+    const existing = firstOrNull(existingData) as { id: string } | null
 
     if (existing) {
       return existing.id
@@ -141,25 +165,35 @@ export class AutoTranslationService {
       context: context || `Translation for ${namespace}.${key}`,
     })
 
+    const now = new Date().toISOString()
+
     // Save translation to database
-    const translation = await prisma.translation.create({
-      data: {
-        tenantId,
+    const { data: translationData, error } = await db
+      .from('translations')
+      .insert({
+        tenantId: tenantId || null,
         key,
         namespace,
         locale: targetLocale,
         value: result.translatedText,
-        context,
+        context: context || null,
         source: 'AUTO_OPENAI',
         autoTranslated: true,
         isApproved: false,
         confidence: result.confidence,
         translationModel: result.model,
         originalText: sourceText,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
 
-    return translation.id
+    if (error || !translationData) {
+      throw new Error(`Failed to save translation: ${error?.message}`)
+    }
+
+    return translationData.id
   }
 
   /**
@@ -183,32 +217,43 @@ export class AutoTranslationService {
 
     try {
       // Find all translations in source locale
-      const sourceTranslations = await prisma.translation.findMany({
-        where: {
-          tenantId,
-          locale: sourceLocale,
-          namespace: namespace || undefined,
-          isApproved: true,
-        },
-      })
+      let sourceQuery = db
+        .from('translations')
+        .select('*')
+        .eq('locale', sourceLocale)
+        .eq('isApproved', true)
+
+      if (tenantId) {
+        sourceQuery = sourceQuery.eq('tenantId', tenantId)
+      }
+      if (namespace) {
+        sourceQuery = sourceQuery.eq('namespace', namespace)
+      }
+
+      const { data: sourceTranslations } = await sourceQuery
+      const sources = (sourceTranslations || []) as TranslationRecord[]
 
       // Find existing translations in target locale
-      const existingTargetKeys = await prisma.translation.findMany({
-        where: {
-          tenantId,
-          locale: targetLocale,
-          namespace: namespace || undefined,
-        },
-        select: {
-          key: true,
-          namespace: true,
-        },
-      })
+      let targetQuery = db
+        .from('translations')
+        .select('key, namespace')
+        .eq('locale', targetLocale)
 
-      const existingKeysSet = new Set(existingTargetKeys.map((t) => `${t.namespace}.${t.key}`))
+      if (tenantId) {
+        targetQuery = targetQuery.eq('tenantId', tenantId)
+      }
+      if (namespace) {
+        targetQuery = targetQuery.eq('namespace', namespace)
+      }
+
+      const { data: existingTargetKeys } = await targetQuery
+
+      const existingKeysSet = new Set(
+        (existingTargetKeys || []).map((t: { key: string; namespace: string }) => `${t.namespace}.${t.key}`)
+      )
 
       // Filter out already translated keys
-      const missingTranslations = sourceTranslations.filter(
+      const missingTranslations = sources.filter(
         (t) => !existingKeysSet.has(`${t.namespace}.${t.key}`)
       )
 
@@ -221,7 +266,7 @@ export class AutoTranslationService {
             sourceLocale,
             targetLocale,
             source.value,
-            source.context,
+            source.context || undefined,
             tenantId
           )
           results.translated++
@@ -235,7 +280,7 @@ export class AutoTranslationService {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
-      results.skipped = sourceTranslations.length - missingTranslations.length
+      results.skipped = sources.length - missingTranslations.length
     } catch (error) {
       results.errors.push(
         `Batch operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -249,37 +294,55 @@ export class AutoTranslationService {
    * Get translation statistics
    */
   async getTranslationStats(tenantId?: string) {
-    const stats = await prisma.translation.groupBy({
-      by: ['locale'],
-      where: {
-        tenantId,
-      },
-      _count: {
-        id: true,
-      },
-    })
+    // Fetch all translations for this tenant
+    let query = db.from('translations').select('locale, isApproved, autoTranslated')
 
-    const approvedStats = await prisma.translation.groupBy({
-      by: ['locale'],
-      where: {
-        tenantId,
-        isApproved: true,
-      },
-      _count: {
-        id: true,
-      },
-    })
+    if (tenantId) {
+      query = query.eq('tenantId', tenantId)
+    }
 
-    const autoStats = await prisma.translation.groupBy({
-      by: ['locale'],
-      where: {
-        tenantId,
-        autoTranslated: true,
-      },
-      _count: {
-        id: true,
-      },
-    })
+    const { data: translations } = await query
+    const allTranslations = (translations || []) as Array<{
+      locale: string
+      isApproved: boolean
+      autoTranslated: boolean
+    }>
+
+    // Group by locale for total counts
+    const totalByLocale = new Map<string, number>()
+    const approvedByLocale = new Map<string, number>()
+    const autoByLocale = new Map<string, number>()
+
+    for (const t of allTranslations) {
+      // Total counts
+      totalByLocale.set(t.locale, (totalByLocale.get(t.locale) || 0) + 1)
+
+      // Approved counts
+      if (t.isApproved) {
+        approvedByLocale.set(t.locale, (approvedByLocale.get(t.locale) || 0) + 1)
+      }
+
+      // Auto-translated counts
+      if (t.autoTranslated) {
+        autoByLocale.set(t.locale, (autoByLocale.get(t.locale) || 0) + 1)
+      }
+    }
+
+    // Convert to arrays
+    const stats = Array.from(totalByLocale.entries()).map(([locale, count]) => ({
+      locale,
+      _count: { id: count },
+    }))
+
+    const approvedStats = Array.from(approvedByLocale.entries()).map(([locale, count]) => ({
+      locale,
+      _count: { id: count },
+    }))
+
+    const autoStats = Array.from(autoByLocale.entries()).map(([locale, count]) => ({
+      locale,
+      _count: { id: count },
+    }))
 
     return {
       total: stats,

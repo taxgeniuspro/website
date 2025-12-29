@@ -1,6 +1,22 @@
 import { Resend } from '@/lib/resend';
 import { cache } from '@/lib/redis';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definitions (replacing @prisma/client)
+interface UserWithProfile {
+  id: string;
+  email: string;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+}
+
+interface ProfessionalEmailRecord {
+  emailAddress: string;
+  isPrimary: boolean;
+  status: string;
+}
 import { WelcomeEmail } from '../../../emails/WelcomeEmail';
 import { CommissionEmail } from '../../../emails/CommissionEmail';
 import { StatusUpdateEmail } from '../../../emails/StatusUpdateEmail';
@@ -63,89 +79,91 @@ export class EmailService {
     try {
       // preparerId can be either User.id or Profile.id
       // First try to find by User.id
-      const user = await prisma.user.findUnique({
-        where: { id: preparerId },
-        select: {
-          email: true,
-          profile: {
-            select: {
-              professionalEmails: {
-                where: {
-                  isPrimary: true,
-                  status: 'ACTIVE',
-                },
-                select: {
-                  emailAddress: true,
-                },
-                take: 1,
-              },
-            },
-          },
-        },
-      });
+      const { data: userData } = await db
+        .from('users')
+        .select('id, email')
+        .eq('id', preparerId)
+        .limit(1);
+
+      const user = firstOrNull(userData) as { id: string; email: string } | null;
+
+      if (user) {
+        // Found by User.id - check for professional email
+        const { data: profEmailData } = await db
+          .from('professional_emails')
+          .select('emailAddress')
+          .eq('userId', preparerId)
+          .eq('isPrimary', true)
+          .eq('status', 'ACTIVE')
+          .limit(1);
+
+        const profEmail = firstOrNull(profEmailData) as ProfessionalEmailRecord | null;
+
+        if (profEmail?.emailAddress) {
+          logger.info('Using professional email for preparer notification', {
+            preparerId,
+            email: profEmail.emailAddress,
+          });
+          return profEmail.emailAddress;
+        }
+
+        // Otherwise use their signup email
+        logger.info('Using signup email for preparer notification', {
+          preparerId,
+          email: user.email,
+        });
+        return user.email;
+      }
 
       // If not found by User.id, try Profile.id
-      if (!user) {
-        const profile = await prisma.profile.findUnique({
-          where: { id: preparerId },
-          select: {
-            user: {
-              select: {
-                email: true,
-              },
-            },
-            professionalEmails: {
-              where: {
-                isPrimary: true,
-                status: 'ACTIVE',
-              },
-              select: {
-                emailAddress: true,
-              },
-              take: 1,
-            },
-          },
-        });
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id, userId')
+        .eq('id', preparerId)
+        .limit(1);
 
-        if (profile) {
-          // Found by Profile.id - return professional email or user email
-          const professionalEmail = profile.professionalEmails?.[0]?.emailAddress;
-          if (professionalEmail) {
-            logger.info('Using professional email for preparer notification (via Profile.id)', {
-              preparerId,
-              email: professionalEmail,
-            });
-            return professionalEmail;
-          }
+      const profile = firstOrNull(profileData) as { id: string; userId: string } | null;
+
+      if (profile) {
+        // Found by Profile.id - get user email and check for professional email
+        const { data: userByProfileData } = await db
+          .from('users')
+          .select('email')
+          .eq('id', profile.userId)
+          .limit(1);
+
+        const userByProfile = firstOrNull(userByProfileData) as { email: string } | null;
+
+        // Check for professional email via profile
+        const { data: profEmailByProfileData } = await db
+          .from('professional_emails')
+          .select('emailAddress')
+          .eq('profileId', preparerId)
+          .eq('isPrimary', true)
+          .eq('status', 'ACTIVE')
+          .limit(1);
+
+        const profEmailByProfile = firstOrNull(profEmailByProfileData) as ProfessionalEmailRecord | null;
+
+        if (profEmailByProfile?.emailAddress) {
+          logger.info('Using professional email for preparer notification (via Profile.id)', {
+            preparerId,
+            email: profEmailByProfile.emailAddress,
+          });
+          return profEmailByProfile.emailAddress;
+        }
+
+        if (userByProfile?.email) {
           logger.info('Using signup email for preparer notification (via Profile.id)', {
             preparerId,
-            email: profile.user.email,
+            email: userByProfile.email,
           });
-          return profile.user.email;
+          return userByProfile.email;
         }
       }
 
-      if (!user) {
-        logger.error('User/Profile not found for preparer notification email', { preparerId });
-        throw new Error('User not found');
-      }
-
-      // If they have a professional email marked as primary and active, use it
-      const professionalEmail = user.profile?.professionalEmails?.[0]?.emailAddress;
-      if (professionalEmail) {
-        logger.info('Using professional email for preparer notification', {
-          preparerId,
-          email: professionalEmail,
-        });
-        return professionalEmail;
-      }
-
-      // Otherwise use their signup email
-      logger.info('Using signup email for preparer notification', {
-        preparerId,
-        email: user.email,
-      });
-      return user.email;
+      logger.error('User/Profile not found for preparer notification email', { preparerId });
+      throw new Error('User not found');
     } catch (error) {
       logger.error('Error getting preparer notification email', { preparerId, error });
       throw error;
@@ -1238,18 +1256,15 @@ export class EmailService {
       // Get preparer's name (only if preparerId is a user ID, not an email)
       let preparerName = 'Tax Professional';
       if (!isEmail) {
-        const preparer = await prisma.user.findUnique({
-          where: { id: preparerId },
-          select: {
-            profile: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        });
-        preparerName = preparer?.profile?.firstName || 'Tax Preparer';
+        // Supabase: query profiles table via userId
+        const { data: profileData } = await db
+          .from('profiles')
+          .select('firstName, lastName')
+          .eq('userId', preparerId)
+          .limit(1);
+
+        const profile = firstOrNull(profileData) as { firstName?: string | null; lastName?: string | null } | null;
+        preparerName = profile?.firstName || 'Tax Preparer';
       }
       // Include locale in dashboard URL for proper language routing
       const localePrefix = locale === 'es' ? '/es' : '/en';
@@ -1372,18 +1387,15 @@ export class EmailService {
       // Get preparer's name (only if preparerId is a user ID, not an email)
       let preparerName = 'Tax Professional';
       if (!isEmail) {
-        const preparer = await prisma.user.findUnique({
-          where: { id: preparerId },
-          select: {
-            profile: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        });
-        preparerName = preparer?.profile?.firstName || 'Tax Preparer';
+        // Supabase: query profiles table via userId
+        const { data: profileData } = await db
+          .from('profiles')
+          .select('firstName, lastName')
+          .eq('userId', preparerId)
+          .limit(1);
+
+        const profile = firstOrNull(profileData) as { firstName?: string | null; lastName?: string | null } | null;
+        preparerName = profile?.firstName || 'Tax Preparer';
       }
 
       // Determine recipientName based on locale for personalized greeting
@@ -1519,18 +1531,15 @@ export class EmailService {
       // Get preparer's name (only if preparerId is a user ID, not an email)
       let preparerName = 'Tax Professional';
       if (!isEmail) {
-        const preparer = await prisma.user.findUnique({
-          where: { id: preparerId },
-          select: {
-            profile: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        });
-        preparerName = preparer?.profile?.firstName || 'Tax Preparer';
+        // Supabase: query profiles table via userId
+        const { data: profileData } = await db
+          .from('profiles')
+          .select('firstName, lastName')
+          .eq('userId', preparerId)
+          .limit(1);
+
+        const profile = firstOrNull(profileData) as { firstName?: string | null; lastName?: string | null } | null;
+        preparerName = profile?.firstName || 'Tax Preparer';
       }
 
       // Include locale in dashboard URL for proper language routing

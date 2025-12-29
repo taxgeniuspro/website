@@ -3,9 +3,44 @@
  * Handles CRUD operations and management for affiliate groups
  */
 
-import { prisma } from '@/lib/prisma';
-import { CommissionType, type AffiliateGroup, type Profile } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { TierConfig, updateGroupStats } from './tiered-commission.service';
+
+// Local type definitions (replacing @prisma/client)
+type CommissionType = 'PERCENTAGE' | 'FLAT' | 'TIERED';
+
+interface AffiliateGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  commissionType: CommissionType;
+  commissionRate?: number | null;
+  flatAmount?: number | null;
+  tieredRates?: unknown;
+  minimumPayout: number;
+  payoutFrequency: string;
+  isActive: boolean;
+  totalAffiliates: number;
+  totalConversions: number;
+  totalEarnings: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  affiliateGroupId?: string | null;
+  affiliateStatus?: string | null;
+  totalConversions: number;
+  lifetimeEarnings: number | { toNumber: () => number };
+  avatarUrl?: string | null;
+  email?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // Group creation input
 export interface CreateGroupInput {
@@ -53,8 +88,9 @@ export interface PaginationOptions {
 export async function createAffiliateGroup(
   input: CreateGroupInput
 ): Promise<AffiliateGroup> {
-  const group = await prisma.affiliateGroup.create({
-    data: {
+  const { data: group, error } = await db
+    .from('affiliate_groups')
+    .insert({
       name: input.name,
       description: input.description,
       commissionType: input.commissionType,
@@ -63,10 +99,15 @@ export async function createAffiliateGroup(
       tieredRates: input.tieredRates,
       minimumPayout: input.minimumPayout ?? 50,
       payoutFrequency: input.payoutFrequency ?? 'MONTHLY',
-    },
-  });
+    })
+    .select()
+    .single();
 
-  return group;
+  if (error || !group) {
+    throw new Error(error?.message || 'Failed to create affiliate group');
+  }
+
+  return group as AffiliateGroup;
 }
 
 /**
@@ -81,41 +122,46 @@ export async function getAffiliateGroups(
   totalPages: number;
 }> {
   const { page = 1, limit = 10, search, isActive } = options;
-  const skip = (page - 1) * limit;
+  const offset = (page - 1) * limit;
 
-  const where: Record<string, unknown> = {};
+  // Build the query
+  let query = db.from('affiliate_groups').select('*');
+  let countQuery = db.from('affiliate_groups').select('id', { count: 'exact', head: true });
 
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-    ];
+    const searchPattern = `%${search}%`;
+    query = query.or(`name.ilike.${searchPattern},description.ilike.${searchPattern}`);
+    countQuery = countQuery.or(`name.ilike.${searchPattern},description.ilike.${searchPattern}`);
   }
 
   if (typeof isActive === 'boolean') {
-    where.isActive = isActive;
+    query = query.eq('isActive', isActive);
+    countQuery = countQuery.eq('isActive', isActive);
   }
 
-  const [groups, total] = await Promise.all([
-    prisma.affiliateGroup.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: { affiliates: true },
-        },
-      },
-    }),
-    prisma.affiliateGroup.count({ where }),
-  ]);
+  query = query.order('createdAt', { ascending: false }).range(offset, offset + limit - 1);
+
+  const [{ data: groupsData }, { count: total }] = await Promise.all([query, countQuery]);
+
+  // Enrich with affiliate count
+  const groups: GroupWithStats[] = [];
+  for (const group of (groupsData || []) as AffiliateGroup[]) {
+    const { count: affiliateCount } = await db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('affiliateGroupId', group.id);
+
+    groups.push({
+      ...group,
+      _count: { affiliates: affiliateCount || 0 },
+    });
+  }
 
   return {
     groups,
-    total,
+    total: total || 0,
     page,
-    totalPages: Math.ceil(total / limit),
+    totalPages: Math.ceil((total || 0) / limit),
   };
 }
 
@@ -126,29 +172,38 @@ export async function getAffiliateGroupById(
   id: string,
   includeAffiliates: boolean = false
 ): Promise<GroupWithStats | null> {
-  return prisma.affiliateGroup.findUnique({
-    where: { id },
-    include: {
-      _count: {
-        select: { affiliates: true },
-      },
-      affiliates: includeAffiliates
-        ? {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              avatarUrl: true,
-              affiliateStatus: true,
-              totalConversions: true,
-              lifetimeEarnings: true,
-            },
-            take: 10,
-          }
-        : false,
-    },
-  });
+  const { data: groupData } = await db
+    .from('affiliate_groups')
+    .select('*')
+    .eq('id', id)
+    .limit(1);
+
+  const group = firstOrNull(groupData) as AffiliateGroup | null;
+  if (!group) return null;
+
+  // Get affiliate count
+  const { count: affiliateCount } = await db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('affiliateGroupId', id);
+
+  const result: GroupWithStats = {
+    ...group,
+    _count: { affiliates: affiliateCount || 0 },
+  };
+
+  // Optionally include affiliates
+  if (includeAffiliates) {
+    const { data: affiliatesData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, email, avatarUrl, affiliateStatus, totalConversions, lifetimeEarnings')
+      .eq('affiliateGroupId', id)
+      .limit(10);
+
+    (result as GroupWithStats & { affiliates?: Profile[] }).affiliates = (affiliatesData || []) as Profile[];
+  }
+
+  return result;
 }
 
 /**
@@ -157,9 +212,13 @@ export async function getAffiliateGroupById(
 export async function getAffiliateGroupByName(
   name: string
 ): Promise<AffiliateGroup | null> {
-  return prisma.affiliateGroup.findUnique({
-    where: { name },
-  });
+  const { data: groupData } = await db
+    .from('affiliate_groups')
+    .select('*')
+    .eq('name', name)
+    .limit(1);
+
+  return firstOrNull(groupData) as AffiliateGroup | null;
 }
 
 /**
@@ -169,9 +228,9 @@ export async function updateAffiliateGroup(
   id: string,
   input: UpdateGroupInput
 ): Promise<AffiliateGroup> {
-  const group = await prisma.affiliateGroup.update({
-    where: { id },
-    data: {
+  const { data: group, error } = await db
+    .from('affiliate_groups')
+    .update({
       name: input.name,
       description: input.description,
       commissionType: input.commissionType,
@@ -181,10 +240,16 @@ export async function updateAffiliateGroup(
       minimumPayout: input.minimumPayout,
       payoutFrequency: input.payoutFrequency,
       isActive: input.isActive,
-    },
-  });
+    })
+    .eq('id', id)
+    .select()
+    .single();
 
-  return group;
+  if (error || !group) {
+    throw new Error(error?.message || 'Failed to update affiliate group');
+  }
+
+  return group as AffiliateGroup;
 }
 
 /**
@@ -196,11 +261,12 @@ export async function deleteAffiliateGroup(
   force: boolean = false
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   // Check if group has affiliates
-  const affiliateCount = await prisma.profile.count({
-    where: { affiliateGroupId: id },
-  });
+  const { count: affiliateCount } = await db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('affiliateGroupId', id);
 
-  if (affiliateCount > 0 && !force) {
+  if ((affiliateCount || 0) > 0 && !force) {
     return {
       success: false,
       error: `Cannot delete group with ${affiliateCount} affiliates. Use force=true to remove affiliates from group and delete.`,
@@ -208,17 +274,15 @@ export async function deleteAffiliateGroup(
   }
 
   // Remove all affiliates from the group if force is true
-  if (affiliateCount > 0) {
-    await prisma.profile.updateMany({
-      where: { affiliateGroupId: id },
-      data: { affiliateGroupId: null },
-    });
+  if ((affiliateCount || 0) > 0) {
+    await db
+      .from('profiles')
+      .update({ affiliateGroupId: null })
+      .eq('affiliateGroupId', id);
   }
 
   // Delete the group
-  await prisma.affiliateGroup.delete({
-    where: { id },
-  });
+  await db.from('affiliate_groups').delete().eq('id', id);
 
   return {
     success: true,
@@ -235,15 +299,21 @@ export async function addAffiliateToGroup(
   profileId: string,
   groupId: string
 ): Promise<Profile> {
-  const profile = await prisma.profile.update({
-    where: { id: profileId },
-    data: { affiliateGroupId: groupId },
-  });
+  const { data: profile, error } = await db
+    .from('profiles')
+    .update({ affiliateGroupId: groupId })
+    .eq('id', profileId)
+    .select()
+    .single();
+
+  if (error || !profile) {
+    throw new Error(error?.message || 'Failed to add affiliate to group');
+  }
 
   // Update group stats
   await updateGroupStats(groupId);
 
-  return profile;
+  return profile as Profile;
 }
 
 /**
@@ -252,24 +322,33 @@ export async function addAffiliateToGroup(
 export async function removeAffiliateFromGroup(
   profileId: string
 ): Promise<Profile> {
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { affiliateGroupId: true },
-  });
+  // Get current group first
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('affiliateGroupId')
+    .eq('id', profileId)
+    .limit(1);
 
-  const oldGroupId = profile?.affiliateGroupId;
+  const oldGroupId = (firstOrNull(profileData) as { affiliateGroupId?: string | null } | null)?.affiliateGroupId;
 
-  const updatedProfile = await prisma.profile.update({
-    where: { id: profileId },
-    data: { affiliateGroupId: null },
-  });
+  // Update profile
+  const { data: updatedProfile, error } = await db
+    .from('profiles')
+    .update({ affiliateGroupId: null })
+    .eq('id', profileId)
+    .select()
+    .single();
+
+  if (error || !updatedProfile) {
+    throw new Error(error?.message || 'Failed to remove affiliate from group');
+  }
 
   // Update old group stats if there was one
   if (oldGroupId) {
     await updateGroupStats(oldGroupId);
   }
 
-  return updatedProfile;
+  return updatedProfile as Profile;
 }
 
 /**
@@ -285,42 +364,33 @@ export async function getGroupAffiliates(
   totalPages: number;
 }> {
   const { page = 1, limit = 10, search } = options;
-  const skip = (page - 1) * limit;
+  const offset = (page - 1) * limit;
 
-  const where: Record<string, unknown> = {
-    affiliateGroupId: groupId,
-  };
+  // Build the query
+  let query = db.from('profiles').select('*').eq('affiliateGroupId', groupId);
+  let countQuery = db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('affiliateGroupId', groupId);
 
   if (search) {
-    where.OR = [
-      { firstName: { contains: search, mode: 'insensitive' } },
-      { lastName: { contains: search, mode: 'insensitive' } },
-      { user: { email: { contains: search, mode: 'insensitive' } } },
-    ];
+    const searchPattern = `%${search}%`;
+    query = query.or(`firstName.ilike.${searchPattern},lastName.ilike.${searchPattern},email.ilike.${searchPattern}`);
+    countQuery = countQuery.or(`firstName.ilike.${searchPattern},lastName.ilike.${searchPattern},email.ilike.${searchPattern}`);
   }
 
-  const [affiliates, total] = await Promise.all([
-    prisma.profile.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    }),
-    prisma.profile.count({ where }),
-  ]);
+  query = query.order('createdAt', { ascending: false }).range(offset, offset + limit - 1);
+
+  const [{ data: affiliatesData }, { count: total }] = await Promise.all([query, countQuery]);
+
+  // Enrich with user email if needed (email is already on profile in our schema)
+  const affiliates = (affiliatesData || []) as Profile[];
 
   return {
     affiliates,
-    total,
+    total: total || 0,
     page,
-    totalPages: Math.ceil(total / limit),
+    totalPages: Math.ceil((total || 0) / limit),
   };
 }
 
@@ -331,17 +401,24 @@ export async function bulkAddAffiliatesToGroup(
   profileIds: string[],
   groupId: string
 ): Promise<number> {
-  const result = await prisma.profile.updateMany({
-    where: {
-      id: { in: profileIds },
-    },
-    data: { affiliateGroupId: groupId },
-  });
+  let updateCount = 0;
+
+  // Supabase doesn't support updateMany with IN clause directly, so we use a workaround
+  for (const profileId of profileIds) {
+    const { error } = await db
+      .from('profiles')
+      .update({ affiliateGroupId: groupId })
+      .eq('id', profileId);
+
+    if (!error) {
+      updateCount++;
+    }
+  }
 
   // Update group stats
   await updateGroupStats(groupId);
 
-  return result.count;
+  return updateCount;
 }
 
 /**
@@ -352,18 +429,20 @@ export async function moveAffiliatesToGroup(
   fromGroupId: string | null,
   toGroupId: string
 ): Promise<number> {
-  const where: Record<string, unknown> = {
-    id: { in: profileIds },
-  };
+  let updateCount = 0;
 
-  if (fromGroupId) {
-    where.affiliateGroupId = fromGroupId;
+  for (const profileId of profileIds) {
+    let query = db.from('profiles').update({ affiliateGroupId: toGroupId }).eq('id', profileId);
+
+    if (fromGroupId) {
+      query = query.eq('affiliateGroupId', fromGroupId);
+    }
+
+    const { error } = await query;
+    if (!error) {
+      updateCount++;
+    }
   }
-
-  const result = await prisma.profile.updateMany({
-    where,
-    data: { affiliateGroupId: toGroupId },
-  });
 
   // Update both group stats
   if (fromGroupId) {
@@ -371,7 +450,7 @@ export async function moveAffiliatesToGroup(
   }
   await updateGroupStats(toGroupId);
 
-  return result.count;
+  return updateCount;
 }
 
 /**
@@ -393,14 +472,12 @@ export async function getGroupStatistics(
     earnings: number;
   }>;
 }> {
-  const affiliates = await prisma.profile.findMany({
-    where: { affiliateGroupId: groupId },
-    include: {
-      user: {
-        select: { email: true },
-      },
-    },
-  });
+  const { data: affiliatesData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, email, affiliateStatus, totalConversions, lifetimeEarnings')
+    .eq('affiliateGroupId', groupId);
+
+  const affiliates = (affiliatesData || []) as Profile[];
 
   const totalAffiliates = affiliates.length;
   const activeAffiliates = affiliates.filter(
@@ -412,13 +489,19 @@ export async function getGroupStatistics(
 
   const affiliateStats = affiliates.map((a) => {
     const conversions = a.totalConversions;
-    const earnings = a.lifetimeEarnings.toNumber();
+    // Handle both number and Decimal types
+    const earnings =
+      typeof a.lifetimeEarnings === 'number'
+        ? a.lifetimeEarnings
+        : typeof a.lifetimeEarnings === 'object' && 'toNumber' in a.lifetimeEarnings
+          ? a.lifetimeEarnings.toNumber()
+          : Number(a.lifetimeEarnings) || 0;
     totalConversions += conversions;
     totalEarnings += earnings;
 
     return {
       profileId: a.id,
-      name: `${a.firstName || ''} ${a.lastName || ''}`.trim() || a.user.email,
+      name: `${a.firstName || ''} ${a.lastName || ''}`.trim() || a.email || 'Unknown',
       conversions,
       earnings,
     };

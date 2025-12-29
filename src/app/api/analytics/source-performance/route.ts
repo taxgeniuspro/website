@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { subDays, startOfDay } from 'date-fns';
 
 interface SourceData {
@@ -19,6 +19,17 @@ interface SourceData {
   conversions: number;
   conversionRate: number;
   percentOfTotal: number;
+}
+
+interface MarketingLinkRow {
+  id: string;
+  code: string;
+  title: string | null;
+  targetPage: string | null;
+  clicks: number;
+  uniqueClicks: number | null;
+  conversions: number;
+  createdAt: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -56,32 +67,33 @@ export async function GET(request: NextRequest) {
     let profileId: string | null = null;
 
     if (role === 'tax_preparer' || preparerId) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: preparerId || user.id },
-        select: { id: true },
-      });
-      profileId = profile?.id || null;
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', preparerId || user.id)
+        .limit(1);
+      profileId = firstOrNull(profileData)?.id || null;
     }
 
     // Get marketing links with their stats
-    const marketingLinks = await prisma.marketingLink.findMany({
-      where: {
-        ...(profileId && { profileId }),
-        createdAt: { gte: startDate },
-      },
-      select: {
-        id: true,
-        code: true,
-        title: true,
-        targetPage: true,
-        clicks: true,
-        uniqueClicks: true,
-        conversions: true,
-        createdAt: true,
-      },
-      orderBy: { clicks: 'desc' },
-      take: 20,
-    });
+    let linksQuery = db
+      .from('marketing_links')
+      .select('id, code, title, targetPage, clicks, uniqueClicks, conversions, createdAt')
+      .gte('createdAt', startDate.toISOString())
+      .order('clicks', { ascending: false })
+      .limit(20);
+
+    if (profileId) {
+      linksQuery = linksQuery.eq('profileId', profileId);
+    }
+
+    const { data: linksData, error } = await linksQuery;
+
+    if (error) {
+      throw error;
+    }
+
+    const marketingLinks = (linksData || []) as MarketingLinkRow[];
 
     // Calculate totals
     const totalClicks = marketingLinks.reduce((sum, link) => sum + link.clicks, 0);

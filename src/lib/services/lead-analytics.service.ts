@@ -15,8 +15,76 @@
  * - Client/Referrer: Can ONLY see their own referral data
  */
 
-import { prisma } from '@/lib/prisma';
-import { UserRole } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definitions (replacing @prisma/client)
+type UserRole = 'admin' | 'tax_preparer' | 'affiliate' | 'client' | 'referrer';
+
+interface ProfileRecord {
+  id: string;
+  userId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  linkType: string;
+  title?: string | null;
+  url: string;
+  creatorId?: string | null;
+  creatorType?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface LeadRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  status: string;
+  source?: string | null;
+  assignedPreparerId?: string | null;
+  createdAt: Date | string;
+  lastContactedAt?: Date | string | null;
+  contactMethod?: string | null;
+}
+
+interface MarketingCampaignRecord {
+  id: string;
+  name: string;
+  type: string;
+  clicks: number;
+  signups: number;
+  creatorId: string;
+  createdAt: Date | string;
+}
+
+interface ReferralDBRecord {
+  id: string;
+  referrerId: string;
+  clientId: string;
+  status: string;
+  signupDate: Date | string;
+  returnFiledDate?: Date | string | null;
+  commissionEarned: number;
+  createdAt: Date | string;
+}
+
+interface CommissionRecord {
+  id: string;
+  referrerId: string;
+  referralId?: string | null;
+  amount: number;
+  status: string;
+  createdAt: Date | string;
+}
 
 // ============ TypeScript Interfaces ============
 
@@ -200,17 +268,23 @@ export interface TopPerformer {
  */
 async function getProfileId(userIdOrProfileId: string): Promise<string | null> {
   // First, try to find by userId (most common case)
-  let profile = await prisma.profile.findUnique({
-    where: { userId: userIdOrProfileId },
-    select: { id: true },
-  });
+  const { data: byUserId } = await db
+    .from('profiles')
+    .select('id')
+    .eq('userId', userIdOrProfileId)
+    .limit(1);
+
+  let profile = firstOrNull(byUserId) as { id: string } | null;
 
   // If not found, check if it's already a profile ID
   if (!profile) {
-    profile = await prisma.profile.findUnique({
-      where: { id: userIdOrProfileId },
-      select: { id: true },
-    });
+    const { data: byId } = await db
+      .from('profiles')
+      .select('id')
+      .eq('id', userIdOrProfileId)
+      .limit(1);
+
+    profile = firstOrNull(byId) as { id: string } | null;
   }
 
   return profile?.id || null;
@@ -342,55 +416,66 @@ async function getTaxGeniusLeadMetrics(
   currentRange: { start: Date; end: Date },
   previousRange: { start: Date; end: Date }
 ): Promise<LeadMetrics> {
-  // Current period
-  const currentLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      OR: [{ assignedPreparerId: null }, { source: { contains: 'taxgeniuspro.tax' } }],
-    },
-  });
+  // Current period - get leads with no preparer OR from taxgeniuspro.tax
+  const { data: currentLeadsData } = await db
+    .from('leads')
+    .select('id, assignedPreparerId, source')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  const currentConversions = await prisma.clientIntake.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      assignedPreparerId: null,
-    },
-  });
+  const allCurrentLeads = (currentLeadsData || []) as Array<{ id: string; assignedPreparerId: string | null; source: string | null }>;
+  const currentLeads = allCurrentLeads.filter(
+    (l) => l.assignedPreparerId === null || (l.source && l.source.includes('taxgeniuspro.tax'))
+  ).length;
 
-  // Get Tax Genius returns - count completed intakes with no assigned preparer
-  const currentReturns = await prisma.clientIntake.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      assignedPreparerId: null,
-      status: 'COMPLETED',
-    },
-  });
+  // Get conversions (intakes with no assigned preparer)
+  const { count: currentConversions } = await db
+    .from('client_intakes')
+    .select('id', { count: 'exact', head: true })
+    .is('assignedPreparerId', null)
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  const currentRevenue = await prisma.payment.aggregate({
-    where: {
-      status: 'COMPLETED',
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-    _sum: { amount: true },
-  });
+  // Get returns - completed intakes with no assigned preparer
+  const { count: currentReturns } = await db
+    .from('client_intakes')
+    .select('id', { count: 'exact', head: true })
+    .is('assignedPreparerId', null)
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
+
+  // Get revenue
+  const { data: revenueData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
+
+  const revenueItems = (revenueData || []) as Array<{ amount: number }>;
+  const revenue = revenueItems.reduce((sum, p) => sum + (p.amount || 0), 0);
 
   // Previous period for comparison
-  const previousLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: previousRange.start, lte: previousRange.end },
-      OR: [{ assignedPreparerId: null }, { source: { contains: 'taxgeniuspro.tax' } }],
-    },
-  });
+  const { data: previousLeadsData } = await db
+    .from('leads')
+    .select('id, assignedPreparerId, source')
+    .gte('createdAt', previousRange.start.toISOString())
+    .lte('createdAt', previousRange.end.toISOString());
+
+  const allPreviousLeads = (previousLeadsData || []) as Array<{ id: string; assignedPreparerId: string | null; source: string | null }>;
+  const previousLeads = allPreviousLeads.filter(
+    (l) => l.assignedPreparerId === null || (l.source && l.source.includes('taxgeniuspro.tax'))
+  ).length;
 
   const clicks = 0; // Tax Genius doesn't track clicks separately
-  const revenue = Number(currentRevenue._sum.amount || 0);
-  const conversionRate = currentLeads > 0 ? (currentConversions / currentLeads) * 100 : 0;
+  const conversionRate = currentLeads > 0 ? ((currentConversions || 0) / currentLeads) * 100 : 0;
 
   return {
     clicks,
     leads: currentLeads,
-    conversions: currentConversions,
-    returnsFiled: currentReturns,
+    conversions: currentConversions || 0,
+    returnsFiled: currentReturns || 0,
     conversionRate: Math.round(conversionRate * 10) / 10,
     revenue,
     growthRate: calculateGrowthRate(currentLeads, previousLeads),
@@ -405,65 +490,87 @@ async function getTaxPreparerLeadMetrics(
   previousRange: { start: Date; end: Date }
 ): Promise<LeadMetrics> {
   // Get all marketing links created by tax preparers
-  const preparerLinks = await prisma.marketingLink.findMany({
-    where: {
-      creatorType: 'TAX_PREPARER',
-    },
-    select: { id: true, code: true },
-  });
+  const { data: preparerLinksData } = await db
+    .from('marketing_links')
+    .select('id, code')
+    .eq('creatorType', 'TAX_PREPARER');
 
+  const preparerLinks = (preparerLinksData || []) as Array<{ id: string; code: string }>;
   const linkIds = preparerLinks.map((l) => l.id);
   const linkCodes = preparerLinks.map((l) => l.code);
 
-  // Current period
-  const currentClicks = await prisma.linkClick.count({
-    where: {
-      linkId: { in: linkIds },
-      clickedAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-  });
+  // Current period clicks
+  let currentClicks = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds)
+      .gte('clickedAt', currentRange.start.toISOString())
+      .lte('clickedAt', currentRange.end.toISOString());
+    currentClicks = count || 0;
+  }
 
-  const currentLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      source: { in: linkCodes },
-    },
-  });
+  // Current period leads
+  let currentLeads = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .in('source', linkCodes)
+      .gte('createdAt', currentRange.start.toISOString())
+      .lte('createdAt', currentRange.end.toISOString());
+    currentLeads = count || 0;
+  }
 
-  const currentConversions = await prisma.clientIntake.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      sourceLink: { in: linkCodes },
-    },
-  });
+  // Current period conversions
+  let currentConversions = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('client_intakes')
+      .select('id', { count: 'exact', head: true })
+      .in('sourceLink', linkCodes)
+      .gte('createdAt', currentRange.start.toISOString())
+      .lte('createdAt', currentRange.end.toISOString());
+    currentConversions = count || 0;
+  }
 
   // Get preparer returns - count completed intakes from preparer links
-  const currentReturns = await prisma.clientIntake.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      sourceLink: { in: linkCodes },
-      status: 'COMPLETED',
-    },
-  });
+  let currentReturns = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('client_intakes')
+      .select('id', { count: 'exact', head: true })
+      .in('sourceLink', linkCodes)
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', currentRange.start.toISOString())
+      .lte('createdAt', currentRange.end.toISOString());
+    currentReturns = count || 0;
+  }
 
-  // Get preparer revenue - simplified
-  const currentRevenue = await prisma.payment.aggregate({
-    where: {
-      status: 'COMPLETED',
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-    _sum: { amount: true },
-  });
+  // Get preparer revenue
+  const { data: revenueData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  // Previous period
-  const previousLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: previousRange.start, lte: previousRange.end },
-      source: { in: linkCodes },
-    },
-  });
+  const revenueItems = (revenueData || []) as Array<{ amount: number }>;
+  const revenue = revenueItems.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const revenue = Number(currentRevenue._sum.amount || 0);
+  // Previous period leads
+  let previousLeads = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .in('source', linkCodes)
+      .gte('createdAt', previousRange.start.toISOString())
+      .lte('createdAt', previousRange.end.toISOString());
+    previousLeads = count || 0;
+  }
+
   const conversionRate = currentClicks > 0 ? (currentConversions / currentClicks) * 100 : 0;
 
   return {
@@ -485,60 +592,74 @@ async function getAffiliateLeadMetrics(
   previousRange: { start: Date; end: Date }
 ): Promise<LeadMetrics> {
   // Get all marketing links created by affiliates
-  const affiliateLinks = await prisma.marketingLink.findMany({
-    where: {
-      creatorType: 'AFFILIATE',
-    },
-    select: { id: true, code: true },
-  });
+  const { data: affiliateLinksData } = await db
+    .from('marketing_links')
+    .select('id, code')
+    .eq('creatorType', 'AFFILIATE');
 
+  const affiliateLinks = (affiliateLinksData || []) as Array<{ id: string; code: string }>;
   const linkIds = affiliateLinks.map((l) => l.id);
   const linkCodes = affiliateLinks.map((l) => l.code);
 
-  // Current period
-  const currentClicks = await prisma.linkClick.count({
-    where: {
-      linkId: { in: linkIds },
-      clickedAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-  });
+  // Current period clicks
+  let currentClicks = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds)
+      .gte('clickedAt', currentRange.start.toISOString())
+      .lte('clickedAt', currentRange.end.toISOString());
+    currentClicks = count || 0;
+  }
 
-  const currentLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      source: { in: linkCodes },
-    },
-  });
+  // Current period leads
+  let currentLeads = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .in('source', linkCodes)
+      .gte('createdAt', currentRange.start.toISOString())
+      .lte('createdAt', currentRange.end.toISOString());
+    currentLeads = count || 0;
+  }
 
-  const currentSignups = await prisma.profile.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      // Track signups from affiliate campaigns
-    },
-  });
+  // Current period signups
+  const { count: currentSignups } = await db
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  const currentCommissions = await prisma.commission.aggregate({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-    _sum: { amount: true },
-  });
+  // Current period commissions
+  const { data: commissionsData } = await db
+    .from('commissions')
+    .select('amount')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  // Previous period
-  const previousLeads = await prisma.lead.count({
-    where: {
-      createdAt: { gte: previousRange.start, lte: previousRange.end },
-      source: { in: linkCodes },
-    },
-  });
+  const commissions = (commissionsData || []) as Array<{ amount: number }>;
+  const revenue = commissions.reduce((sum, c) => sum + (c.amount || 0), 0);
 
-  const revenue = Number(currentCommissions._sum.amount || 0);
-  const conversionRate = currentClicks > 0 ? (currentSignups / currentClicks) * 100 : 0;
+  // Previous period leads
+  let previousLeads = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .in('source', linkCodes)
+      .gte('createdAt', previousRange.start.toISOString())
+      .lte('createdAt', previousRange.end.toISOString());
+    previousLeads = count || 0;
+  }
+
+  const conversionRate = currentClicks > 0 ? ((currentSignups || 0) / currentClicks) * 100 : 0;
 
   return {
     clicks: currentClicks,
     leads: currentLeads,
-    conversions: currentSignups,
+    conversions: currentSignups || 0,
     returnsFiled: 0, // Affiliates don't track returns directly
     conversionRate: Math.round(conversionRate * 10) / 10,
     revenue,
@@ -553,51 +674,55 @@ async function getClientReferralMetrics(
   currentRange: { start: Date; end: Date },
   previousRange: { start: Date; end: Date }
 ): Promise<LeadMetrics> {
-  // Current period
-  const currentReferrals = await prisma.referral.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-  });
+  // Current period referrals
+  const { count: currentReferrals } = await db
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  const currentConversions = await prisma.referral.count({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-      status: { in: ['ACTIVE', 'COMPLETED'] },
-    },
-  });
+  // Current conversions
+  const { count: currentConversions } = await db
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['ACTIVE', 'COMPLETED'])
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  const currentReturns = await prisma.referral.count({
-    where: {
-      returnFiledDate: { gte: currentRange.start, lte: currentRange.end },
-    },
-  });
+  // Current returns
+  const { count: currentReturns } = await db
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .gte('returnFiledDate', currentRange.start.toISOString())
+    .lte('returnFiledDate', currentRange.end.toISOString());
 
-  const currentCommissions = await prisma.referral.aggregate({
-    where: {
-      createdAt: { gte: currentRange.start, lte: currentRange.end },
-    },
-    _sum: { commissionEarned: true },
-  });
+  // Current commissions
+  const { data: commissionsData } = await db
+    .from('referrals')
+    .select('commissionEarned')
+    .gte('createdAt', currentRange.start.toISOString())
+    .lte('createdAt', currentRange.end.toISOString());
 
-  // Previous period
-  const previousReferrals = await prisma.referral.count({
-    where: {
-      createdAt: { gte: previousRange.start, lte: previousRange.end },
-    },
-  });
+  const allCommissions = (commissionsData || []) as Array<{ commissionEarned: number }>;
+  const revenue = allCommissions.reduce((sum, c) => sum + (c.commissionEarned || 0), 0);
 
-  const revenue = Number(currentCommissions._sum.commissionEarned || 0);
-  const conversionRate = currentReferrals > 0 ? (currentConversions / currentReferrals) * 100 : 0;
+  // Previous period referrals
+  const { count: previousReferrals } = await db
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .gte('createdAt', previousRange.start.toISOString())
+    .lte('createdAt', previousRange.end.toISOString());
+
+  const conversionRate = (currentReferrals || 0) > 0 ? ((currentConversions || 0) / (currentReferrals || 1)) * 100 : 0;
 
   return {
     clicks: 0, // Referrals don't track clicks
-    leads: currentReferrals,
-    conversions: currentConversions,
-    returnsFiled: currentReturns,
+    leads: currentReferrals || 0,
+    conversions: currentConversions || 0,
+    returnsFiled: currentReturns || 0,
     conversionRate: Math.round(conversionRate * 10) / 10,
     revenue,
-    growthRate: calculateGrowthRate(currentReferrals, previousReferrals),
+    growthRate: calculateGrowthRate(currentReferrals || 0, previousReferrals || 0),
   };
 }
 
@@ -616,18 +741,17 @@ export async function getPreparersAnalytics(
   }
 
   // Get all tax preparers or specific one
-  const preparers = await prisma.profile.findMany({
-    where: {
-      role: 'TAX_PREPARER',
-      ...(filterPreparerId && { id: filterPreparerId }),
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  let query = db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('role', 'tax_preparer');
+
+  if (filterPreparerId) {
+    query = query.eq('id', filterPreparerId);
+  }
+
+  const { data: preparersData } = await query;
+  const preparers = (preparersData || []) as ProfileRecord[];
 
   const analyticsPromises = preparers.map(async (preparer) => {
     return await getMyPreparerAnalytics(preparer.id);
@@ -651,18 +775,17 @@ export async function getAffiliatesAnalytics(
   }
 
   // Get all affiliates or specific one
-  const affiliates = await prisma.profile.findMany({
-    where: {
-      role: 'AFFILIATE',
-      ...(filterAffiliateId && { id: filterAffiliateId }),
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  let query = db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('role', 'affiliate');
+
+  if (filterAffiliateId) {
+    query = query.eq('id', filterAffiliateId);
+  }
+
+  const { data: affiliatesData } = await query;
+  const affiliates = (affiliatesData || []) as ProfileRecord[];
 
   const analyticsPromises = affiliates.map(async (affiliate) => {
     return await getMyAffiliateAnalytics(affiliate.id);
@@ -685,22 +808,32 @@ export async function getClientsReferralAnalytics(
     throw new Error('Forbidden: Insufficient permissions to view analytics');
   }
 
-  // Get all clients who have made referrals or specific one
-  const clients = await prisma.profile.findMany({
-    where: {
-      role: { in: ['CLIENT', 'REFERRER'] },
-      referrerReferrals: {
-        some: {},
-      },
-      ...(filterClientId && { id: filterClientId }),
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  // Get all clients who have made referrals
+  // First get referrer IDs from referrals table
+  const { data: referrerIdsData } = await db
+    .from('referrals')
+    .select('referrerId');
+
+  const referrerIds = [...new Set((referrerIdsData || []).map((r: { referrerId: string }) => r.referrerId))];
+
+  if (referrerIds.length === 0 && !filterClientId) {
+    return [];
+  }
+
+  // Get clients who are referrers
+  let query = db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .in('role', ['client', 'referrer']);
+
+  if (filterClientId) {
+    query = query.eq('id', filterClientId);
+  } else if (referrerIds.length > 0) {
+    query = query.in('id', referrerIds);
+  }
+
+  const { data: clientsData } = await query;
+  const clients = (clientsData || []) as ProfileRecord[];
 
   const analyticsPromises = clients.map(async (client) => {
     return await getMyReferralAnalytics(client.id);
@@ -741,15 +874,13 @@ export async function getMyPreparerAnalytics(
     };
   }
 
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  const { data: preparerData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(preparerData) as ProfileRecord | null;
 
   if (!preparer) {
     // Return empty analytics if profile not found
@@ -771,75 +902,86 @@ export async function getMyPreparerAnalytics(
   }
 
   // Get preparer's marketing links
-  const marketingLinks = await prisma.marketingLink.findMany({
-    where: {
-      creatorId: preparerId,
-      creatorType: 'TAX_PREPARER',
-    },
-  });
+  const { data: marketingLinksData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', preparerId)
+    .eq('creatorType', 'TAX_PREPARER');
 
+  const marketingLinks = (marketingLinksData || []) as MarketingLinkRecord[];
   const linkIds = marketingLinks.map((l) => l.id);
   const linkCodes = marketingLinks.map((l) => l.code);
 
   // Get clicks
-  const totalClicks = await prisma.linkClick.count({
-    where: { linkId: { in: linkIds } },
-  });
+  let totalClicks = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds);
+    totalClicks = count || 0;
+  }
 
-  // Get leads
-  const totalLeads = await prisma.lead.count({
-    where: {
-      OR: [{ source: { in: linkCodes } }, { assignedPreparerId: preparerId }],
-    },
-  });
+  // Get leads (with source in linkCodes OR assigned to this preparer)
+  const { data: leadsData } = await db
+    .from('leads')
+    .select('id, source, assignedPreparerId');
 
-  // Get conversions (intake forms submitted)
-  const totalConversions = await prisma.clientIntake.count({
-    where: {
-      OR: [{ sourceLink: { in: linkCodes } }, { assignedPreparerId: preparerId }],
-    },
-  });
+  const allLeads = (leadsData || []) as Array<{ id: string; source: string | null; assignedPreparerId: string | null }>;
+  const totalLeads = allLeads.filter(
+    (l) => (l.source && linkCodes.includes(l.source)) || l.assignedPreparerId === preparerId
+  ).length;
 
-  // Get returns filed - query directly by preparer
-  // Note: ClientIntake doesn't have profileId, so we count intakes for this preparer
-  const totalReturnsFiled = await prisma.clientIntake.count({
-    where: {
-      assignedPreparerId: preparerId,
-      status: 'COMPLETED',
-    },
-  });
+  // Get conversions (intake forms)
+  const { data: intakesData } = await db
+    .from('client_intakes')
+    .select('id, sourceLink, assignedPreparerId, status');
 
-  // Get revenue - aggregate from all sources for this preparer
-  // Since we can't directly link ClientIntake to Profile payments, use a broader query
-  const revenueResult = await prisma.payment.aggregate({
-    where: {
-      status: 'COMPLETED',
-    },
-    _sum: { amount: true },
-  });
+  const allIntakes = (intakesData || []) as Array<{ id: string; sourceLink: string | null; assignedPreparerId: string | null; status: string }>;
+  const totalConversions = allIntakes.filter(
+    (i) => (i.sourceLink && linkCodes.includes(i.sourceLink)) || i.assignedPreparerId === preparerId
+  ).length;
+
+  // Get returns filed
+  const totalReturnsFiled = allIntakes.filter(
+    (i) => i.assignedPreparerId === preparerId && i.status === 'COMPLETED'
+  ).length;
+
+  // Get revenue
+  const { data: paymentsData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED');
+
+  const payments = (paymentsData || []) as Array<{ amount: number }>;
+  const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
   // Get link breakdown
   const linkBreakdown: LinkPerformance[] = await Promise.all(
     marketingLinks.map(async (link) => {
-      const linkClicksCount = await prisma.linkClick.count({
-        where: { linkId: link.id },
-      });
+      const { count: linkClicksCount } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .eq('linkId', link.id);
 
-      const linkLeads = await prisma.lead.count({
-        where: { source: link.code },
-      });
+      const { count: linkLeads } = await db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', link.code);
 
-      const linkConversions = await prisma.clientIntake.count({
-        where: { sourceLink: link.code },
-      });
+      const { count: linkConversions } = await db
+        .from('client_intakes')
+        .select('id', { count: 'exact', head: true })
+        .eq('sourceLink', link.code);
 
-      // Get revenue for this link - simplified since ClientIntake doesn't link to Profile
-      const linkRevenue = await prisma.payment.aggregate({
-        where: {
-          status: 'COMPLETED',
-        },
-        _sum: { amount: true },
-      });
+      // Get revenue for this link
+      const { data: linkPayments } = await db
+        .from('payments')
+        .select('amount')
+        .eq('status', 'COMPLETED');
+
+      const linkPaymentsList = (linkPayments || []) as Array<{ amount: number }>;
+      const linkRevenue = linkPaymentsList.reduce((sum, p) => sum + (p.amount || 0), 0);
 
       return {
         linkId: link.id,
@@ -848,24 +990,28 @@ export async function getMyPreparerAnalytics(
         title: link.title,
         linkName: link.title || link.code, // Human-readable name
         linkUrl: link.url, // Full URL
-        clicks: linkClicksCount,
-        leads: linkLeads,
-        conversions: linkConversions,
-        conversionRate: linkClicksCount > 0 ? (linkConversions / linkClicksCount) * 100 : 0,
-        revenue: Number(linkRevenue._sum.amount || 0),
-        createdAt: link.createdAt,
+        clicks: linkClicksCount || 0,
+        leads: linkLeads || 0,
+        conversions: linkConversions || 0,
+        conversionRate: (linkClicksCount || 0) > 0 ? ((linkConversions || 0) / (linkClicksCount || 1)) * 100 : 0,
+        revenue: linkRevenue,
+        createdAt: link.createdAt as Date,
       };
     })
   );
 
   // Get recent leads
-  const recentLeadsData = await prisma.lead.findMany({
-    where: {
-      OR: [{ source: { in: linkCodes } }, { assignedPreparerId: preparerId }],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  const { data: recentLeadsRaw } = await db
+    .from('leads')
+    .select('id, firstName, lastName, email, phone, status, source, assignedPreparerId, createdAt, lastContactedAt, contactMethod')
+    .order('createdAt', { ascending: false })
+    .limit(50);
+
+  const recentLeadsFiltered = ((recentLeadsRaw || []) as LeadRecord[]).filter(
+    (l) => (l.source && linkCodes.includes(l.source)) || l.assignedPreparerId === preparerId
+  ).slice(0, 10);
+
+  const recentLeadsData = recentLeadsFiltered;
 
   const recentLeads: LeadSummary[] = recentLeadsData.map((lead) => ({
     id: lead.id,
@@ -893,8 +1039,8 @@ export async function getMyPreparerAnalytics(
     conversions: totalConversions,
     returnsFiled: totalReturnsFiled,
     conversionRate: Math.round(conversionRate * 10) / 10,
-    revenue: Number(revenueResult._sum.amount || 0),
-    lastActive: marketingLinks.length > 0 ? marketingLinks[0].updatedAt : null,
+    revenue: totalRevenue,
+    lastActive: marketingLinks.length > 0 ? (marketingLinks[0] as MarketingLinkRecord).updatedAt as Date | null : null,
     linkBreakdown,
     recentLeads,
   };
@@ -936,15 +1082,13 @@ export async function getMyAffiliateAnalytics(
     };
   }
 
-  const affiliate = await prisma.profile.findUnique({
-    where: { id: affiliateId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  const { data: affiliateData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('id', affiliateId)
+    .limit(1);
+
+  const affiliate = firstOrNull(affiliateData) as ProfileRecord | null;
 
   if (!affiliate) {
     // Return empty analytics if profile not found
@@ -971,43 +1115,63 @@ export async function getMyAffiliateAnalytics(
     };
   }
 
-  // Get affiliate's campaigns/links
-  const campaigns = await prisma.marketingCampaign.findMany({
-    where: { creatorId: affiliateId },
-  });
+  // Get affiliate's campaigns
+  const { data: campaignsData } = await db
+    .from('marketing_campaigns')
+    .select('*')
+    .eq('creatorId', affiliateId);
 
-  const marketingLinks = await prisma.marketingLink.findMany({
-    where: {
-      creatorId: affiliateId,
-      creatorType: 'AFFILIATE',
-    },
-  });
+  const campaigns = (campaignsData || []) as MarketingCampaignRecord[];
 
+  // Get affiliate's marketing links
+  const { data: marketingLinksData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', affiliateId)
+    .eq('creatorType', 'AFFILIATE');
+
+  const marketingLinks = (marketingLinksData || []) as MarketingLinkRecord[];
   const linkIds = marketingLinks.map((l) => l.id);
   const linkCodes = marketingLinks.map((l) => l.code);
 
   // Get clicks
-  const totalClicks = await prisma.linkClick.count({
-    where: { linkId: { in: linkIds } },
-  });
+  let totalClicks = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds);
+    totalClicks = count || 0;
+  }
 
   // Get leads
-  const totalLeads = await prisma.lead.count({
-    where: { source: { in: linkCodes } },
-  });
+  let totalLeads = 0;
+  if (linkCodes.length > 0) {
+    const { count } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .in('source', linkCodes);
+    totalLeads = count || 0;
+  }
 
   // Get signups (profiles created from affiliate campaigns)
-  const totalSignups = await prisma.linkClick.count({
-    where: {
-      linkId: { in: linkIds },
-      signedUp: true,
-    },
-  });
+  let totalSignups = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds)
+      .eq('signedUp', true);
+    totalSignups = count || 0;
+  }
 
   // Get commissions
-  const commissionsResult = await prisma.commission.findMany({
-    where: { referrerId: affiliateId },
-  });
+  const { data: commissionsData } = await db
+    .from('commissions')
+    .select('*')
+    .eq('referrerId', affiliateId);
+
+  const commissionsResult = (commissionsData || []) as CommissionRecord[];
 
   const commissionsEarned = commissionsResult.reduce((sum, c) => sum + Number(c.amount), 0);
   const commissionsPaid = commissionsResult
@@ -1026,17 +1190,22 @@ export async function getMyAffiliateAnalytics(
     leads: campaign.signups, // Using signups as leads for campaigns
     signups: campaign.signups,
     conversionRate: campaign.clicks > 0 ? (campaign.signups / campaign.clicks) * 100 : 0,
-    createdAt: campaign.createdAt,
+    createdAt: campaign.createdAt as Date,
   }));
 
   // Recent leads
-  const recentLeadsData = await prisma.lead.findMany({
-    where: { source: { in: linkCodes } },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  let recentLeadsRaw: LeadRecord[] = [];
+  if (linkCodes.length > 0) {
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id, firstName, lastName, email, phone, status, source, createdAt, lastContactedAt, contactMethod')
+      .in('source', linkCodes)
+      .order('createdAt', { ascending: false })
+      .limit(10);
+    recentLeadsRaw = (leadsData || []) as LeadRecord[];
+  }
 
-  const recentLeads: LeadSummary[] = recentLeadsData.map((lead) => ({
+  const recentLeads: LeadSummary[] = recentLeadsRaw.map((lead) => ({
     id: lead.id,
     firstName: lead.firstName,
     lastName: lead.lastName,
@@ -1045,8 +1214,8 @@ export async function getMyAffiliateAnalytics(
     phone: lead.phone,
     status: lead.status,
     source: lead.source,
-    createdAt: lead.createdAt,
-    lastContactedAt: lead.lastContactedAt,
+    createdAt: lead.createdAt as Date,
+    lastContactedAt: lead.lastContactedAt as Date | null,
     contactMethod: lead.contactMethod,
   }));
 
@@ -1056,17 +1225,21 @@ export async function getMyAffiliateAnalytics(
   // Build linkBreakdown from marketingLinks
   const linkBreakdown: LinkPerformance[] = await Promise.all(
     marketingLinks.map(async (link) => {
-      const linkClicksCount = await prisma.linkClick.count({
-        where: { linkId: link.id },
-      });
+      const { count: linkClicksCount } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .eq('linkId', link.id);
 
-      const linkLeads = await prisma.lead.count({
-        where: { source: link.code },
-      });
+      const { count: linkLeads } = await db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', link.code);
 
-      const linkConversions = await prisma.linkClick.count({
-        where: { linkId: link.id, signedUp: true },
-      });
+      const { count: linkConversions } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .eq('linkId', link.id)
+        .eq('signedUp', true);
 
       // Get commission for this link
       const linkCommissions = commissionsResult
@@ -1080,13 +1253,13 @@ export async function getMyAffiliateAnalytics(
         title: link.title,
         linkName: link.title || link.code,
         linkUrl: link.url,
-        clicks: linkClicksCount,
-        leads: linkLeads,
-        conversions: linkConversions,
-        conversionRate: linkClicksCount > 0 ? (linkConversions / linkClicksCount) * 100 : 0,
+        clicks: linkClicksCount || 0,
+        leads: linkLeads || 0,
+        conversions: linkConversions || 0,
+        conversionRate: (linkClicksCount || 0) > 0 ? ((linkConversions || 0) / (linkClicksCount || 1)) * 100 : 0,
         revenue: linkCommissions,
         commission: linkCommissions,
-        createdAt: link.createdAt,
+        createdAt: link.createdAt as Date,
       };
     })
   );
@@ -1109,7 +1282,7 @@ export async function getMyAffiliateAnalytics(
     commissionsEarned,
     commissionsPaid,
     commissionsPending,
-    lastActive: marketingLinks.length > 0 ? marketingLinks[0].updatedAt : null,
+    lastActive: marketingLinks.length > 0 ? (marketingLinks[0] as MarketingLinkRecord).updatedAt as Date | null : null,
     campaignBreakdown,
     linkBreakdown,
     recentLeads,
@@ -1150,15 +1323,13 @@ export async function getMyReferralAnalytics(
     };
   }
 
-  const client = await prisma.profile.findUnique({
-    where: { id: clientId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-  });
+  const { data: clientData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('id', clientId)
+    .limit(1);
+
+  const client = firstOrNull(clientData) as ProfileRecord | null;
 
   if (!client) {
     // Return empty analytics if profile not found
@@ -1184,43 +1355,73 @@ export async function getMyReferralAnalytics(
   }
 
   // Get client's referral links
-  const referralLinks = await prisma.marketingLink.findMany({
-    where: {
-      creatorId: clientId,
-      creatorType: 'REFERRER',
-    },
-  });
+  const { data: referralLinksData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', clientId)
+    .eq('creatorType', 'REFERRER');
+
+  const referralLinks = (referralLinksData || []) as MarketingLinkRecord[];
 
   // Get referrals
-  const referrals = await prisma.referral.findMany({
-    where: { referrerId: clientId },
-    include: {
-      client: {
-        select: {
-          firstName: true,
-          lastName: true,
-          userId: true,
-        },
-      },
-    },
-  });
+  const { data: referralsData } = await db
+    .from('referrals')
+    .select('*')
+    .eq('referrerId', clientId);
+
+  const referralsRaw = (referralsData || []) as ReferralDBRecord[];
+
+  // Get client profiles for referral history (separate query instead of include)
+  const clientIds = referralsRaw.map((r) => r.clientId);
+  let clientProfilesMap = new Map<string, { firstName: string | null; lastName: string | null; userId: string | null }>();
+  if (clientIds.length > 0) {
+    const { data: clientProfilesData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, userId')
+      .in('id', clientIds);
+
+    const clientProfiles = (clientProfilesData || []) as ProfileRecord[];
+    clientProfiles.forEach((p) => {
+      clientProfilesMap.set(p.id, {
+        firstName: p.firstName || null,
+        lastName: p.lastName || null,
+        userId: p.userId || null,
+      });
+    });
+  }
+
+  // Add client data to referrals
+  const referrals = referralsRaw.map((r) => ({
+    ...r,
+    client: clientProfilesMap.get(r.clientId) || { firstName: null, lastName: null, userId: null },
+  }));
 
   const linkIds = referralLinks.map((l) => l.id);
   const linkCodes = referralLinks.map((l) => l.code);
 
   // Get clicks from referral links
-  const totalClicks = await prisma.linkClick.count({
-    where: { linkId: { in: linkIds } },
-  });
+  let totalClicks = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds);
+    totalClicks = count || 0;
+  }
 
   // Get recent leads through referral links
-  const recentLeadsData = await prisma.lead.findMany({
-    where: { source: { in: linkCodes } },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  let recentLeadsRaw: LeadRecord[] = [];
+  if (linkCodes.length > 0) {
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id, firstName, lastName, email, phone, status, source, createdAt, lastContactedAt, contactMethod')
+      .in('source', linkCodes)
+      .order('createdAt', { ascending: false })
+      .limit(10);
+    recentLeadsRaw = (leadsData || []) as LeadRecord[];
+  }
 
-  const recentLeads: LeadSummary[] = recentLeadsData.map((lead) => ({
+  const recentLeads: LeadSummary[] = recentLeadsRaw.map((lead) => ({
     id: lead.id,
     firstName: lead.firstName,
     lastName: lead.lastName,
@@ -1229,8 +1430,8 @@ export async function getMyReferralAnalytics(
     phone: lead.phone,
     status: lead.status,
     source: lead.source,
-    createdAt: lead.createdAt,
-    lastContactedAt: lead.lastContactedAt,
+    createdAt: lead.createdAt as Date,
+    lastContactedAt: lead.lastContactedAt as Date | null,
     contactMethod: lead.contactMethod,
   }));
 
@@ -1247,20 +1448,21 @@ export async function getMyReferralAnalytics(
   // Build linkBreakdown from referral links
   const linkBreakdown: LinkPerformance[] = await Promise.all(
     referralLinks.map(async (link) => {
-      const linkClicksCount = await prisma.linkClick.count({
-        where: { linkId: link.id },
-      });
+      const { count: linkClicksCount } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .eq('linkId', link.id);
 
-      const linkLeads = await prisma.lead.count({
-        where: { source: link.code },
-      });
+      const { count: linkLeads } = await db
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', link.code);
 
-      const linkConversions = await prisma.referral.count({
-        where: {
-          referrerId: clientId,
-          status: { in: ['ACTIVE', 'COMPLETED'] },
-        },
-      });
+      const { count: linkConversions } = await db
+        .from('referrals')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrerId', clientId)
+        .in('status', ['ACTIVE', 'COMPLETED']);
 
       // Get rewards for this link
       const linkRewards = referrals.reduce((sum, r) => sum + Number(r.commissionEarned), 0);
@@ -1272,13 +1474,13 @@ export async function getMyReferralAnalytics(
         title: link.title,
         linkName: link.title || link.code,
         linkUrl: link.url,
-        clicks: linkClicksCount,
-        leads: linkLeads,
-        conversions: linkConversions,
-        conversionRate: linkClicksCount > 0 ? (linkConversions / linkClicksCount) * 100 : 0,
+        clicks: linkClicksCount || 0,
+        leads: linkLeads || 0,
+        conversions: linkConversions || 0,
+        conversionRate: (linkClicksCount || 0) > 0 ? ((linkConversions || 0) / (linkClicksCount || 1)) * 100 : 0,
         revenue: linkRewards,
         reward: linkRewards,
-        createdAt: link.createdAt,
+        createdAt: link.createdAt as Date,
       };
     })
   );
@@ -1289,8 +1491,8 @@ export async function getMyReferralAnalytics(
     referredName: `${r.client.firstName || ''} ${r.client.lastName || ''}`.trim(),
     referredEmail: r.client.userId || '',
     status: r.status,
-    signupDate: r.signupDate,
-    returnFiledDate: r.returnFiledDate,
+    signupDate: r.signupDate as Date,
+    returnFiledDate: r.returnFiledDate as Date | null,
     commissionEarned: Number(r.commissionEarned),
   }));
 
@@ -1310,7 +1512,7 @@ export async function getMyReferralAnalytics(
     revenue: rewardsEarned,
     rewardsEarned,
     rewardsPending,
-    lastActive: referralLinks.length > 0 ? referralLinks[0].updatedAt : null,
+    lastActive: referralLinks.length > 0 ? (referralLinks[0] as MarketingLinkRecord).updatedAt as Date | null : null,
     linkBreakdown,
     referralHistory,
     recentLeads,
@@ -1333,90 +1535,115 @@ export async function getLeadConversionFunnel(
   let linkCodes: string[] = [];
 
   if (creatorId && creatorType) {
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId,
-        creatorType,
-      },
-      select: { id: true, code: true },
-    });
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('id, code')
+      .eq('creatorId', creatorId)
+      .eq('creatorType', creatorType);
+
+    const links = (linksData || []) as Array<{ id: string; code: string }>;
     linkIds = links.map((l) => l.id);
     linkCodes = links.map((l) => l.code);
   }
 
   // Stage 1: Clicks
-  const clicks = await prisma.linkClick.count({
-    where: {
-      ...(linkIds.length > 0 && { linkId: { in: linkIds } }),
-      clickedAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-  });
+  let clicksQuery = db
+    .from('link_clicks')
+    .select('id', { count: 'exact', head: true })
+    .gte('clickedAt', dateRange.start.toISOString())
+    .lte('clickedAt', dateRange.end.toISOString());
+
+  if (linkIds.length > 0) {
+    clicksQuery = clicksQuery.in('linkId', linkIds);
+  }
+
+  const { count: clicks } = await clicksQuery;
 
   // Stage 2: Leads
-  const leads = await prisma.lead.count({
-    where: {
-      ...(linkCodes.length > 0 && { source: { in: linkCodes } }),
-      createdAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-  });
+  let leadsQuery = db
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
+
+  if (linkCodes.length > 0) {
+    leadsQuery = leadsQuery.in('source', linkCodes);
+  }
+
+  const { count: leads } = await leadsQuery;
 
   // Stage 3: Intake Started
-  const intakeStarted = await prisma.clientIntake.count({
-    where: {
-      ...(linkCodes.length > 0 && { sourceLink: { in: linkCodes } }),
-      createdAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-  });
+  let intakeStartedQuery = db
+    .from('client_intakes')
+    .select('id', { count: 'exact', head: true })
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
+
+  if (linkCodes.length > 0) {
+    intakeStartedQuery = intakeStartedQuery.in('sourceLink', linkCodes);
+  }
+
+  const { count: intakeStarted } = await intakeStartedQuery;
 
   // Stage 4: Intake Completed
-  const intakeCompleted = await prisma.clientIntake.count({
-    where: {
-      ...(linkCodes.length > 0 && { sourceLink: { in: linkCodes } }),
-      status: 'COMPLETED',
-      createdAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-  });
+  let intakeCompletedQuery = db
+    .from('client_intakes')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
+
+  if (linkCodes.length > 0) {
+    intakeCompletedQuery = intakeCompletedQuery.in('sourceLink', linkCodes);
+  }
+
+  const { count: intakeCompleted } = await intakeCompletedQuery;
 
   // Stage 5: Returns Filed
-  const returnsFiled = await prisma.taxReturn.count({
-    where: {
-      status: { in: ['FILED', 'ACCEPTED'] },
-      createdAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-  });
+  const { count: returnsFiled } = await db
+    .from('tax_returns')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['FILED', 'ACCEPTED'])
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
 
-  const baseCount = clicks || 1;
+  const baseCount = (clicks || 0) || 1;
+  const clicksCount = clicks || 0;
+  const leadsCount = leads || 0;
+  const intakeStartedCount = intakeStarted || 0;
+  const intakeCompletedCount = intakeCompleted || 0;
+  const returnsFiledCount = returnsFiled || 0;
 
   const stages = [
     {
       name: 'Clicks',
-      count: clicks,
+      count: clicksCount,
       percentage: 100,
       dropoff: 0,
     },
     {
       name: 'Leads',
-      count: leads,
-      percentage: Math.round((leads / baseCount) * 100),
-      dropoff: clicks - leads,
+      count: leadsCount,
+      percentage: Math.round((leadsCount / baseCount) * 100),
+      dropoff: clicksCount - leadsCount,
     },
     {
       name: 'Intake Started',
-      count: intakeStarted,
-      percentage: Math.round((intakeStarted / baseCount) * 100),
-      dropoff: leads - intakeStarted,
+      count: intakeStartedCount,
+      percentage: Math.round((intakeStartedCount / baseCount) * 100),
+      dropoff: leadsCount - intakeStartedCount,
     },
     {
       name: 'Intake Completed',
-      count: intakeCompleted,
-      percentage: Math.round((intakeCompleted / baseCount) * 100),
-      dropoff: intakeStarted - intakeCompleted,
+      count: intakeCompletedCount,
+      percentage: Math.round((intakeCompletedCount / baseCount) * 100),
+      dropoff: intakeStartedCount - intakeCompletedCount,
     },
     {
       name: 'Returns Filed',
-      count: returnsFiled,
-      percentage: Math.round((returnsFiled / baseCount) * 100),
-      dropoff: intakeCompleted - returnsFiled,
+      count: returnsFiledCount,
+      percentage: Math.round((returnsFiledCount / baseCount) * 100),
+      dropoff: intakeCompletedCount - returnsFiledCount,
     },
   ];
 
@@ -1433,35 +1660,42 @@ export async function getSourceBreakdown(
 ): Promise<SourceBreakdownData> {
   const dateRange = getPeriodDateRange(period);
 
-  const sources = await prisma.lead.groupBy({
-    by: ['source'],
-    where: {
-      createdAt: { gte: dateRange.start, lte: dateRange.end },
-    },
-    _count: { source: true },
+  // Fetch all leads and group by source in JS (Supabase doesn't support groupBy)
+  const { data: leadsData } = await db
+    .from('leads')
+    .select('source')
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
+
+  const allLeads = (leadsData || []) as Array<{ source: string | null }>;
+
+  // Group by source
+  const sourceCountMap = new Map<string, number>();
+  allLeads.forEach((lead) => {
+    const source = lead.source || 'Direct';
+    sourceCountMap.set(source, (sourceCountMap.get(source) || 0) + 1);
   });
 
-  const total = sources.reduce((sum, s) => sum + s._count.source, 0);
+  const total = allLeads.length;
 
-  const sourcesData = await Promise.all(
-    sources.map(async (source) => {
-      // Get revenue - simplified since ClientIntake doesn't link to Profile
-      const revenue = await prisma.payment.aggregate({
-        where: {
-          status: 'COMPLETED',
-          createdAt: { gte: dateRange.start, lte: dateRange.end },
-        },
-        _sum: { amount: true },
-      });
+  // Get total revenue for the period
+  const { data: paymentsData } = await db
+    .from('payments')
+    .select('amount')
+    .eq('status', 'COMPLETED')
+    .gte('createdAt', dateRange.start.toISOString())
+    .lte('createdAt', dateRange.end.toISOString());
 
-      return {
-        name: source.source || 'Direct',
-        count: source._count.source,
-        percentage: total > 0 ? Math.round((source._count.source / total) * 100) : 0,
-        revenue: Number(revenue._sum.amount || 0),
-      };
-    })
-  );
+  const payments = (paymentsData || []) as Array<{ amount: number }>;
+  const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  // Build source breakdown
+  const sourcesData = Array.from(sourceCountMap.entries()).map(([source, count]) => ({
+    name: source,
+    count,
+    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    revenue: totalRevenue, // Same total revenue for each source (simplified)
+  }));
 
   return { sources: sourcesData };
 }
@@ -1473,32 +1707,28 @@ export async function getTopPerformers(
   type: 'preparer' | 'affiliate' | 'client',
   limit: number = 10
 ): Promise<TopPerformer[]> {
-  let role: UserRole;
+  // Map type to database role string
+  let role: string;
 
   switch (type) {
     case 'preparer':
-      role = UserRole.TAX_PREPARER;
+      role = 'tax_preparer';
       break;
     case 'affiliate':
-      role = UserRole.AFFILIATE;
+      role = 'affiliate';
       break;
     case 'client':
-      role = UserRole.CLIENT;
+      role = 'client';
       break;
   }
 
-  const profiles = await prisma.profile.findMany({
-    where: {
-      role,
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      userId: true,
-    },
-    take: limit * 2, // Get extra to filter
-  });
+  const { data: profilesData } = await db
+    .from('profiles')
+    .select('id, firstName, lastName, userId')
+    .eq('role', role)
+    .limit(limit * 2); // Get extra to filter
+
+  const profiles = (profilesData || []) as ProfileRecord[];
 
   const performersData = await Promise.all(
     profiles.map(async (profile) => {

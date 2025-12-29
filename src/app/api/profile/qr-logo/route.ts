@@ -7,9 +7,15 @@
 
 import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import sharp from 'sharp';
+
+/** Profile data interface */
+interface Profile {
+  id: string;
+  role: string;
+}
 
 /**
  * POST: Upload cropped image as QR code logo
@@ -24,10 +30,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profiles, error: fetchError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', userId);
+
+    if (fetchError) {
+      logger.error('Error fetching profile:', fetchError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -68,12 +81,15 @@ export async function POST(request: NextRequest) {
     const dataUrl = `data:image/png;base64,${processedImage.toString('base64')}`;
 
     // Update profile with QR logo
-    await prisma.profile.update({
-      where: { id: profile.id },
-      data: {
-        qrCodeLogoUrl: dataUrl,
-      },
-    });
+    const { error: updateError } = await db
+      .from('profiles')
+      .update({ qrCodeLogoUrl: dataUrl })
+      .eq('id', profile.id);
+
+    if (updateError) {
+      logger.error('Error updating QR logo:', updateError);
+      return NextResponse.json({ error: 'Failed to update QR logo' }, { status: 500 });
+    }
 
     logger.info(`QR logo updated for profile ${profile.id}`);
 
@@ -101,22 +117,32 @@ export async function DELETE() {
     }
 
     // Get profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
+    const { data: profiles, error: fetchError } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', userId);
+
+    if (fetchError) {
+      logger.error('Error fetching profile:', fetchError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<{ id: string }>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Remove QR logo
-    await prisma.profile.update({
-      where: { id: profile.id },
-      data: {
-        qrCodeLogoUrl: null,
-      },
-    });
+    const { error: updateError } = await db
+      .from('profiles')
+      .update({ qrCodeLogoUrl: null })
+      .eq('id', profile.id);
+
+    if (updateError) {
+      logger.error('Error removing QR logo:', updateError);
+      return NextResponse.json({ error: 'Failed to remove QR logo' }, { status: 500 });
+    }
 
     logger.info(`QR logo removed for profile ${profile.id}`);
 

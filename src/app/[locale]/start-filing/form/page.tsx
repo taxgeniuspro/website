@@ -3,7 +3,26 @@ import { Suspense } from 'react';
 import SimpleTaxForm from '@/components/SimpleTaxForm';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { ReferralBanner } from '@/components/ReferralBanner';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// Profile interface for type safety
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+  phone: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  shortLinkUsername: string | null;
+  role: string;
+  affiliateBondedToPreparerId: string | null;
+  userId: string | null;
+}
+
+interface User {
+  email: string;
+}
 
 // Default preparer (Owliver Owl)
 const DEFAULT_PREPARER = {
@@ -43,62 +62,55 @@ async function getPreparerByRef(ref: string | undefined) {
 
   try {
     // First try to find a tax preparer or admin with this code
-    const preparerProfile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: ref },
-          { customTrackingCode: ref },
-          { shortLinkUsername: ref },
-        ],
-        role: { in: ['tax_preparer', 'admin'] },
-      },
-      include: {
-        user: { select: { email: true } },
-      },
-    });
+    const { data: preparerProfiles, error: preparerError } = await db
+      .from('profiles')
+      .select('*, users!inner(email)')
+      .or(`tracking_code.eq.${ref},custom_tracking_code.eq.${ref},short_link_username.eq.${ref}`)
+      .in('role', ['tax_preparer', 'admin']);
 
-    if (preparerProfile && preparerProfile.firstName && preparerProfile.lastName) {
+    if (preparerError) throw preparerError;
+
+    const preparerProfile = firstOrNull(preparerProfiles);
+    if (preparerProfile && preparerProfile.first_name && preparerProfile.last_name) {
       return {
-        firstName: preparerProfile.firstName,
-        lastName: preparerProfile.lastName,
-        avatarUrl: preparerProfile.avatarUrl,
+        firstName: preparerProfile.first_name,
+        lastName: preparerProfile.last_name,
+        avatarUrl: preparerProfile.avatar_url,
         phone: preparerProfile.phone,
-        email: preparerProfile.user?.email,
-        trackingCode: preparerProfile.customTrackingCode || preparerProfile.trackingCode,
+        email: preparerProfile.users?.email,
+        trackingCode: preparerProfile.custom_tracking_code || preparerProfile.tracking_code,
       };
     }
 
     // Check if it's an affiliate code - if so, return default preparer (Owliver)
-    const affiliateProfile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: ref },
-          { customTrackingCode: ref },
-        ],
-        role: { in: ['client', 'affiliate'] },
-      },
-      select: {
-        id: true,
-        affiliateBondedToPreparerId: true,
-      },
-    });
+    const { data: affiliateProfiles, error: affiliateError } = await db
+      .from('profiles')
+      .select('id, affiliate_bonded_to_preparer_id')
+      .or(`tracking_code.eq.${ref},custom_tracking_code.eq.${ref}`)
+      .in('role', ['client', 'affiliate']);
 
+    if (affiliateError) throw affiliateError;
+
+    const affiliateProfile = firstOrNull(affiliateProfiles);
     if (affiliateProfile) {
       // If affiliate is bonded to a preparer, return that preparer
-      if (affiliateProfile.affiliateBondedToPreparerId) {
-        const bondedPreparer = await prisma.profile.findUnique({
-          where: { id: affiliateProfile.affiliateBondedToPreparerId },
-          include: { user: { select: { email: true } } },
-        });
+      if (affiliateProfile.affiliate_bonded_to_preparer_id) {
+        const { data: bondedPreparerData, error: bondedError } = await db
+          .from('profiles')
+          .select('*, users!inner(email)')
+          .eq('id', affiliateProfile.affiliate_bonded_to_preparer_id)
+          .single();
 
-        if (bondedPreparer && bondedPreparer.firstName && bondedPreparer.lastName) {
+        if (bondedError) throw bondedError;
+
+        if (bondedPreparerData && bondedPreparerData.first_name && bondedPreparerData.last_name) {
           return {
-            firstName: bondedPreparer.firstName,
-            lastName: bondedPreparer.lastName,
-            avatarUrl: bondedPreparer.avatarUrl,
-            phone: bondedPreparer.phone,
-            email: bondedPreparer.user?.email,
-            trackingCode: bondedPreparer.customTrackingCode || bondedPreparer.trackingCode,
+            firstName: bondedPreparerData.first_name,
+            lastName: bondedPreparerData.last_name,
+            avatarUrl: bondedPreparerData.avatar_url,
+            phone: bondedPreparerData.phone,
+            email: bondedPreparerData.users?.email,
+            trackingCode: bondedPreparerData.custom_tracking_code || bondedPreparerData.tracking_code,
           };
         }
       }

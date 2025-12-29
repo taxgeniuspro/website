@@ -11,9 +11,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { terminatePreparer } from '@/lib/services/preparer-termination.service';
+
+// Local interfaces
+interface Profile {
+  role: string;
+}
 
 export async function POST(
   req: NextRequest,
@@ -28,10 +33,16 @@ export async function POST(
     }
 
     // Check if user is admin
-    const adminProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { role: true },
-    });
+    const { data: adminProfileData, error: adminProfileError } = await db.from('profiles')
+      .select('role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    if (adminProfileError) {
+      throw adminProfileError;
+    }
+
+    const adminProfile = firstOrNull<Profile>(adminProfileData);
 
     if (adminProfile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });

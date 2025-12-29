@@ -8,9 +8,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getCurrentImageSet } from '@/lib/services/client-referral.service';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for profile with client preparers
+interface ProfileWithPreparers {
+  id: string;
+  role: string;
+  clientPreparers: Array<{ preparerId: string }>;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,21 +34,27 @@ export async function GET(req: NextRequest) {
     if (preparerIdParam) {
       preparerId = preparerIdParam;
     } else if (session?.user?.id) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: session.user.id },
-        select: {
-          id: true,
-          role: true,
-          clientPreparers: {
-            where: { isActive: true },
-            select: { preparerId: true },
-            take: 1,
-          },
-        },
-      });
+      // First get the profile
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id, role')
+        .eq('user_id', session.user.id)
+        .limit(1);
 
-      if (profile?.clientPreparers?.[0]?.preparerId) {
-        preparerId = profile.clientPreparers[0].preparerId;
+      const profile = firstOrNull(profileData);
+
+      if (profile) {
+        // Then get active client-preparer relationships
+        const { data: clientPreparersData } = await db
+          .from('client_preparers')
+          .select('preparer_id')
+          .eq('client_id', profile.id)
+          .eq('is_active', true)
+          .limit(1);
+
+        if (clientPreparersData && clientPreparersData.length > 0) {
+          preparerId = clientPreparersData[0].preparer_id;
+        }
       }
     }
 

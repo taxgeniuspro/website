@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { PreparerApplicationConfirmation } from '../../../../../emails/preparer-application-confirmation';
 import { PreparerApplicationNotification } from '../../../../../emails/preparer-application-notification';
 import { getEmailRecipients } from '@/config/email-routing';
 import { generatePreparerApplicationPDF } from '@/lib/services/pdf-form-generator.service';
+
+// TypeScript interfaces
+interface PreparerApplication {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  status: string;
+  interviewDate: string | null;
+  createdAt: string;
+}
 
 // POST /api/preparers/apply - Submit tax preparer application
 export async function POST(req: NextRequest) {
@@ -51,8 +63,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Create preparer application (allow multiple submissions)
-    const application = await prisma.preparerApplication.create({
-      data: {
+    const { data: applicationData, error: applicationError } = await db
+      .from('preparer_applications')
+      .insert({
         firstName,
         middleName: middleName || null,
         lastName,
@@ -63,8 +76,15 @@ export async function POST(req: NextRequest) {
         experienceLevel: experienceLevel || null,
         taxSoftware: taxSoftware || [],
         status: 'PENDING',
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (applicationError) {
+      throw applicationError;
+    }
+
+    const application = applicationData;
 
     logger.info('Preparer application created', {
       applicationId: application.id,
@@ -76,44 +96,67 @@ export async function POST(req: NextRequest) {
     // CRM INTEGRATION: Create CRM contact and interaction
     // ========================================
     try {
-      const crmContact = await prisma.cRMContact.upsert({
-        where: { email: email.toLowerCase() },
-        create: {
-          contactType: 'PREPARER',
-          firstName,
-          lastName,
-          email: email.toLowerCase(),
-          phone,
-          stage: 'NEW',
-          source: 'preparer_application',
-          lastContactedAt: new Date(),
-        },
-        update: {
-          firstName,
-          lastName,
-          phone,
-          lastContactedAt: new Date(),
-        },
-      });
+      // Check if CRM contact exists
+      const { data: existingContact } = await db
+        .from('crm_contacts')
+        .select('id')
+        .eq('email', email.toLowerCase())
+        .limit(1);
 
-      logger.info('CRM contact created/updated from preparer application', {
-        contactId: crmContact.id,
-        applicationId: application.id,
-        email,
-      });
+      let crmContact;
+      if (existingContact && existingContact.length > 0) {
+        // Update existing contact
+        const { data: updatedContact } = await db
+          .from('crm_contacts')
+          .update({
+            firstName,
+            lastName,
+            phone,
+            lastContactedAt: new Date().toISOString(),
+          })
+          .eq('email', email.toLowerCase())
+          .select()
+          .single();
+        crmContact = updatedContact;
+      } else {
+        // Create new contact
+        const { data: newContact } = await db
+          .from('crm_contacts')
+          .insert({
+            contactType: 'PREPARER',
+            firstName,
+            lastName,
+            email: email.toLowerCase(),
+            phone,
+            stage: 'NEW',
+            source: 'preparer_application',
+            lastContactedAt: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        crmContact = newContact;
+      }
 
-      // Create CRMInteraction to log the application
-      const softwareList = taxSoftware && Array.isArray(taxSoftware) && taxSoftware.length > 0
-        ? taxSoftware.join(', ')
-        : 'Not specified';
-
-      await prisma.cRMInteraction.create({
-        data: {
+      if (crmContact) {
+        logger.info('CRM contact created/updated from preparer application', {
           contactId: crmContact.id,
-          type: 'NOTE',
-          direction: 'INBOUND',
-          subject: '👔 Tax Preparer Application Submitted',
-          body: `**Tax Preparer Application Received**
+          applicationId: application.id,
+          email,
+        });
+
+        // Create CRMInteraction to log the application
+        const softwareList = taxSoftware && Array.isArray(taxSoftware) && taxSoftware.length > 0
+          ? taxSoftware.join(', ')
+          : 'Not specified';
+
+        await db
+          .from('crm_interactions')
+          .insert({
+            contactId: crmContact.id,
+            type: 'NOTE',
+            direction: 'INBOUND',
+            subject: '👔 Tax Preparer Application Submitted',
+            body: `**Tax Preparer Application Received**
 
 **Applicant Information:**
 - Name: ${firstName} ${middleName ? middleName + ' ' : ''}${lastName}
@@ -129,20 +172,20 @@ export async function POST(req: NextRequest) {
 **Application Status:** PENDING Review
 
 **Application ID:** ${application.id}`,
-          occurredAt: new Date(),
-        },
-      });
+            occurredAt: new Date().toISOString(),
+          });
 
-      logger.info('CRM interaction created for preparer application', {
-        contactId: crmContact.id,
-        applicationId: application.id,
-      });
+        logger.info('CRM interaction created for preparer application', {
+          contactId: crmContact.id,
+          applicationId: application.id,
+        });
 
-      // Link CRM contact to the application
-      await prisma.preparerApplication.update({
-        where: { id: application.id },
-        data: { crmContactId: crmContact.id },
-      });
+        // Link CRM contact to the application
+        await db
+          .from('preparer_applications')
+          .update({ crmContactId: crmContact.id })
+          .eq('id', application.id);
+      }
     } catch (crmError) {
       // Log error but don't fail the request
       logger.error('Failed to create CRM contact/interaction', {
@@ -294,19 +337,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Email parameter required' }, { status: 400 });
     }
 
-    const application = await prisma.preparerApplication.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        status: true,
-        interviewDate: true,
-        createdAt: true,
-      },
-    });
+    const { data: applicationData } = await db
+      .from('preparer_applications')
+      .select('id, firstName, lastName, email, phone, status, interviewDate, createdAt')
+      .eq('email', email.toLowerCase())
+      .limit(1);
+
+    const application = firstOrNull(applicationData);
 
     if (!application) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 });

@@ -1,7 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  role: string;
+  customTrackingCode: string | null;
+  trackingCode: string | null;
+}
+
+interface CRMContact {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  contactType: string;
+  stage: string;
+  source: string | null;
+  leadScore: number | null;
+  createdAt: string;
+  lastContactedAt: string | null;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  attributionMethod: string | null;
+  filingStatus: string | null;
+  taxYear: number | null;
+  assignedPreparerId: string | null;
+}
+
+interface CRMInteraction {
+  type: string;
+  subject: string | null;
+  occurredAt: string;
+}
 
 /**
  * GET /api/tax-preparer/crm-contacts
@@ -26,15 +60,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        role: true,
-        customTrackingCode: true,
-        trackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, customTrackingCode, trackingCode')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -54,101 +86,123 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
-    // Build where clause
-    const whereClause: Record<string, unknown> = {};
+    // Build query
+    let query = db
+      .from('crm_contacts')
+      .select('*')
+      .in('contactType', ['LEAD', 'CLIENT']);
 
     // For tax preparers, only show contacts assigned to them OR with their tracking code
     if (profile.role === 'tax_preparer') {
       const trackingCode = profile.customTrackingCode || profile.trackingCode;
-      whereClause.OR = [
-        { assignedPreparerId: profile.id },
-        ...(trackingCode ? [{ referrerUsername: trackingCode }] : []),
-      ];
+      if (trackingCode) {
+        query = query.or(`assignedPreparerId.eq.${profile.id},referrerUsername.eq.${trackingCode}`);
+      } else {
+        query = query.eq('assignedPreparerId', profile.id);
+      }
     }
 
     // Stage filter
     if (stage) {
-      whereClause.stage = stage;
+      query = query.eq('stage', stage);
     }
 
-    // Search filter
+    // Search filter (case-insensitive)
     if (search) {
-      whereClause.AND = [
-        {
-          OR: [
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search } },
-          ],
-        },
-      ];
+      query = query.or(
+        `firstName.ilike.%${search}%,lastName.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+      );
     }
 
-    // Only show LEADs and CLIENTs (not PREPARER or AFFILIATE contact types)
-    whereClause.contactType = { in: ['LEAD', 'CLIENT'] };
+    // Sorting and pagination
+    query = query
+      .order(sortBy, { ascending: sortOrder === 'asc' })
+      .range(offset, offset + limit - 1);
 
-    // Get contacts with pagination
-    const [contacts, totalCount] = await Promise.all([
-      prisma.cRMContact.findMany({
-        where: whereClause,
-        orderBy: { [sortBy]: sortOrder },
-        take: limit,
-        skip: offset,
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          contactType: true,
-          stage: true,
-          source: true,
-          leadScore: true,
-          createdAt: true,
-          lastContactedAt: true,
-          referrerUsername: true,
-          referrerType: true,
-          attributionMethod: true,
-          filingStatus: true,
-          taxYear: true,
-          interactions: {
-            orderBy: { occurredAt: 'desc' },
-            take: 1,
-            select: {
-              type: true,
-              subject: true,
-              occurredAt: true,
-            },
-          },
-        },
-      }),
-      prisma.cRMContact.count({ where: whereClause }),
-    ]);
+    const { data: contacts, error: contactsError } = await query;
+
+    if (contactsError) {
+      throw new Error(contactsError.message);
+    }
+
+    // Get total count for pagination (without pagination limits)
+    let countQuery = db
+      .from('crm_contacts')
+      .select('id', { count: 'exact', head: true })
+      .in('contactType', ['LEAD', 'CLIENT']);
+
+    if (profile.role === 'tax_preparer') {
+      const trackingCode = profile.customTrackingCode || profile.trackingCode;
+      if (trackingCode) {
+        countQuery = countQuery.or(`assignedPreparerId.eq.${profile.id},referrerUsername.eq.${trackingCode}`);
+      } else {
+        countQuery = countQuery.eq('assignedPreparerId', profile.id);
+      }
+    }
+
+    if (stage) {
+      countQuery = countQuery.eq('stage', stage);
+    }
+
+    if (search) {
+      countQuery = countQuery.or(
+        `firstName.ilike.%${search}%,lastName.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+      );
+    }
+
+    const { count: totalCount } = await countQuery;
+
+    // Get latest interaction for each contact
+    const contactIds = (contacts || []).map((c: CRMContact) => c.id);
+    let interactionsMap = new Map<string, CRMInteraction>();
+
+    if (contactIds.length > 0) {
+      const { data: interactions } = await db
+        .from('crm_interactions')
+        .select('contactId, type, subject, occurredAt')
+        .in('contactId', contactIds)
+        .order('occurredAt', { ascending: false });
+
+      // Keep only the latest per contact
+      for (const interaction of interactions || []) {
+        if (!interactionsMap.has(interaction.contactId)) {
+          interactionsMap.set(interaction.contactId, {
+            type: interaction.type,
+            subject: interaction.subject,
+            occurredAt: interaction.occurredAt,
+          });
+        }
+      }
+    }
 
     // Get stage counts for filters
-    const stageCounts = await prisma.cRMContact.groupBy({
-      by: ['stage'],
-      where: {
-        ...whereClause,
-        stage: undefined, // Remove stage filter for count
-      },
-      _count: true,
-    });
+    let stageCountQuery = db
+      .from('crm_contacts')
+      .select('stage')
+      .in('contactType', ['LEAD', 'CLIENT']);
 
-    const stageCountMap = stageCounts.reduce(
-      (acc, item) => {
-        acc[item.stage] = item._count;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
+    if (profile.role === 'tax_preparer') {
+      const trackingCode = profile.customTrackingCode || profile.trackingCode;
+      if (trackingCode) {
+        stageCountQuery = stageCountQuery.or(`assignedPreparerId.eq.${profile.id},referrerUsername.eq.${trackingCode}`);
+      } else {
+        stageCountQuery = stageCountQuery.eq('assignedPreparerId', profile.id);
+      }
+    }
+
+    const { data: stageData } = await stageCountQuery;
+
+    // Count by stage
+    const stageCountMap: Record<string, number> = {};
+    for (const item of stageData || []) {
+      stageCountMap[item.stage] = (stageCountMap[item.stage] || 0) + 1;
+    }
 
     return NextResponse.json({
       success: true,
-      contacts: contacts.map((c) => ({
+      contacts: (contacts || []).map((c: CRMContact) => ({
         id: c.id,
-        name: `${c.firstName} ${c.lastName}`.trim(),
+        name: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
         firstName: c.firstName,
         lastName: c.lastName,
         email: c.email,
@@ -159,7 +213,7 @@ export async function GET(request: NextRequest) {
         leadScore: c.leadScore,
         createdAt: c.createdAt,
         lastContactedAt: c.lastContactedAt,
-        lastInteraction: c.interactions[0] || null,
+        lastInteraction: interactionsMap.get(c.id) || null,
         attribution: {
           referrerUsername: c.referrerUsername,
           referrerType: c.referrerType,
@@ -171,10 +225,10 @@ export async function GET(request: NextRequest) {
         },
       })),
       pagination: {
-        total: totalCount,
+        total: totalCount || 0,
         limit,
         offset,
-        hasMore: offset + limit < totalCount,
+        hasMore: offset + limit < (totalCount || 0),
       },
       filters: {
         stageCounts: stageCountMap,
@@ -209,15 +263,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        role: true,
-        customTrackingCode: true,
-        trackingCode: true,
-      },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, customTrackingCode, trackingCode')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile || (profile.role !== 'tax_preparer' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -230,15 +282,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Contact ID is required' }, { status: 400 });
     }
 
-    // Verify the contact belongs to this preparer
-    const contact = await prisma.cRMContact.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        assignedPreparerId: true,
-        referrerUsername: true,
-      },
-    });
+    // Verify the contact exists and check access
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('id, assignedPreparerId, referrerUsername')
+      .eq('id', id)
+      .limit(1);
+
+    const contact = firstOrNull(contacts);
 
     if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
@@ -256,40 +307,42 @@ export async function PATCH(request: NextRequest) {
     const updateData: Record<string, unknown> = {};
     if (stage) {
       updateData.stage = stage;
-      updateData.stageEnteredAt = new Date();
+      updateData.stageEnteredAt = new Date().toISOString();
     }
     if (lastContactedAt) {
-      updateData.lastContactedAt = new Date(lastContactedAt);
+      updateData.lastContactedAt = new Date(lastContactedAt).toISOString();
     }
 
     // Update the contact
-    const updatedContact = await prisma.cRMContact.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: updatedContact, error: updateError } = await db
+      .from('crm_contacts')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
 
     // Create an interaction if notes were provided
     if (notes) {
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: id,
-          type: 'NOTE',
-          direction: 'OUTBOUND',
-          subject: stage ? `Stage changed to ${stage}` : 'Note added',
-          body: notes,
-          occurredAt: new Date(),
-        },
+      await db.from('crm_interactions').insert({
+        contactId: id,
+        type: 'NOTE',
+        direction: 'OUTBOUND',
+        subject: stage ? `Stage changed to ${stage}` : 'Note added',
+        body: notes,
+        occurredAt: new Date().toISOString(),
       });
     }
 
     // Create stage history if stage changed
     if (stage) {
-      await prisma.cRMStageHistory.create({
-        data: {
-          contactId: id,
-          stage: stage,
-          notes: notes || `Stage updated to ${stage}`,
-        },
+      await db.from('crm_stage_history').insert({
+        contactId: id,
+        stage: stage,
+        notes: notes || `Stage updated to ${stage}`,
       });
     }
 

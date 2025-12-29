@@ -1,8 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
+
+// Local type definitions
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  phone: string | null;
+  tax_year: number;
+  completed: boolean;
+  convertedToClient: boolean;
+  convertedAt: string | null;
+  lastContactedAt: string | null;
+  contactNotes: string | null;
+  unqualified: boolean;
+  assignedPreparerId: string | null;
+  profileId: string | null;
+  created_at: string;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  assignedPreparerId: string | null;
+}
 
 /**
  * GET /api/tax-preparer/intake-forms
@@ -42,26 +74,16 @@ export async function GET(req: NextRequest) {
     const searchTerm = searchParams.get('search');
     const taxYearParam = searchParams.get('taxYear');
 
-    // Build where clause
-    const where: any = {};
-
-    // CRITICAL: Only show COMPLETE intake forms (full tax data with SSN, DOB, filing status)
-    // Basic leads (incomplete) stay in /api/tax-preparer/leads
-    where.completed = true;
-
-    // Filter by tax year (default to current filing year, 'all' shows all years)
-    if (taxYearParam !== 'all') {
-      const taxYear = taxYearParam ? parseInt(taxYearParam) : getCurrentFilingTaxYear();
-      where.tax_year = taxYear;
-    }
-
-    // Tax preparers can only see their own assigned intake forms
+    // Get preparer profile ID if needed
+    let preparerProfileId: string | null = null;
     if (isTaxPreparer) {
-      // Get preparer profile ID
-      const preparerProfile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles);
 
       if (!preparerProfile) {
         return NextResponse.json(
@@ -69,57 +91,72 @@ export async function GET(req: NextRequest) {
           { status: 404 }
         );
       }
+      preparerProfileId = preparerProfile.id;
+    }
 
-      where.assignedPreparerId = preparerProfile.id;
+    // Build query for complete intake forms
+    let query = db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('completed', true);
+
+    // Filter by tax year (default to current filing year, 'all' shows all years)
+    if (taxYearParam !== 'all') {
+      const taxYear = taxYearParam ? parseInt(taxYearParam) : getCurrentFilingTaxYear();
+      query = query.eq('tax_year', taxYear);
+    }
+
+    // Tax preparers can only see their own assigned intake forms
+    if (isTaxPreparer && preparerProfileId) {
+      query = query.eq('assignedPreparerId', preparerProfileId);
     } else if (preparerId) {
       // Admins can filter by specific preparer
-      where.assignedPreparerId = preparerId;
+      query = query.eq('assignedPreparerId', preparerId);
     }
 
     // Filter by search term
     if (searchTerm) {
-      where.OR = [
-        { first_name: { contains: searchTerm, mode: 'insensitive' } },
-        { last_name: { contains: searchTerm, mode: 'insensitive' } },
-        { email: { contains: searchTerm, mode: 'insensitive' } },
-        { phone: { contains: searchTerm } },
-      ];
+      query = query.or(
+        `first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`
+      );
     }
 
-    // Fetch all complete intake forms
-    const intakeForms = await prisma.taxIntakeLead.findMany({
-      where,
-      orderBy: { created_at: 'desc' },
-      include: {
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-          },
-        },
-      },
-    });
+    // Order by created date
+    query = query.order('created_at', { ascending: false });
+
+    const { data: intakeForms, error: formsError } = await query;
+
+    if (formsError) {
+      throw new Error(formsError.message);
+    }
+
+    // Get profile info for linked profiles
+    const profileIds = (intakeForms || [])
+      .map((f: TaxIntakeLead) => f.profileId)
+      .filter(Boolean);
+
+    let profileMap = new Map<string, Profile>();
+    if (profileIds.length > 0) {
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id, firstName, lastName, role')
+        .in('id', profileIds);
+
+      for (const p of profiles || []) {
+        profileMap.set(p.id, p);
+      }
+    }
 
     // Fetch CRM contact IDs for each intake by email
-    // Include assignedPreparerId to check access permissions
-    const intakeEmails = intakeForms.map(i => i.email.toLowerCase());
-    const crmContacts = await prisma.cRMContact.findMany({
-      where: {
-        email: { in: intakeEmails },
-      },
-      select: {
-        id: true,
-        email: true,
-        assignedPreparerId: true,
-      },
-    });
+    const intakeEmails = (intakeForms || []).map((i: TaxIntakeLead) => i.email.toLowerCase());
+    let crmContacts: CRMContact[] = [];
 
-    // Get current preparer's Profile ID for access check
-    let currentPreparerProfileId: string | null = null;
-    if (isTaxPreparer) {
-      currentPreparerProfileId = where.assignedPreparerId;
+    if (intakeEmails.length > 0) {
+      const { data: contacts } = await db
+        .from('crm_contacts')
+        .select('id, email, assignedPreparerId')
+        .in('email', intakeEmails);
+      crmContacts = contacts || [];
     }
 
     // Create email -> CRM contact ID map (only if preparer has access)
@@ -132,13 +169,13 @@ export async function GET(req: NextRequest) {
       const canAccess =
         isAdmin ||
         !c.assignedPreparerId ||
-        c.assignedPreparerId === currentPreparerProfileId;
+        c.assignedPreparerId === preparerProfileId;
 
       emailToCrmId.set(c.email.toLowerCase(), canAccess ? c.id : null);
     }
 
     // Determine intake status
-    const getIntakeStatus = (intake: any): string => {
+    const getIntakeStatus = (intake: TaxIntakeLead): string => {
       // Unqualified takes precedence
       if (intake.unqualified) return 'unqualified';
       // Complete = has convertedAt timestamp (return filed)
@@ -149,31 +186,32 @@ export async function GET(req: NextRequest) {
       return 'new';
     };
 
-    const intakeFormsWithStatus = intakeForms.map(intake => ({
+    const intakeFormsWithStatus = (intakeForms || []).map((intake: TaxIntakeLead) => ({
       ...intake,
       status: getIntakeStatus(intake),
       crmContactId: emailToCrmId.get(intake.email.toLowerCase()) || null,
+      profile: intake.profileId ? profileMap.get(intake.profileId) || null : null,
     }));
 
     // Filter by status if provided
     const filteredIntakeForms =
       statusFilter && statusFilter !== 'all'
-        ? intakeFormsWithStatus.filter(intake => intake.status === statusFilter)
+        ? intakeFormsWithStatus.filter((intake: { status: string }) => intake.status === statusFilter)
         : intakeFormsWithStatus;
 
     // Calculate stats
     const stats = {
-      total: intakeForms.length,
-      new: intakeFormsWithStatus.filter(i => i.status === 'new').length,
-      contacted: intakeFormsWithStatus.filter(i => i.status === 'contacted').length,
-      qualified: intakeFormsWithStatus.filter(i => i.status === 'qualified').length,
-      converted: intakeFormsWithStatus.filter(i => i.status === 'converted').length,
-      complete: intakeFormsWithStatus.filter(i => i.status === 'complete').length,
-      unqualified: intakeFormsWithStatus.filter(i => i.status === 'unqualified').length,
+      total: intakeForms?.length || 0,
+      new: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'new').length,
+      contacted: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'contacted').length,
+      qualified: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'qualified').length,
+      converted: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'converted').length,
+      complete: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'complete').length,
+      unqualified: intakeFormsWithStatus.filter((i: { status: string }) => i.status === 'unqualified').length,
     };
 
     logger.info(
-      `📋 Fetched ${filteredIntakeForms.length} intake forms for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
+      `Fetched ${filteredIntakeForms.length} intake forms for ${isTaxPreparer ? 'preparer' : 'admin'} ${user.id}`
     );
 
     return NextResponse.json({

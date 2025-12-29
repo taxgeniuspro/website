@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { AppointmentConfirmation } from '../../../../../emails/appointment-confirmation';
@@ -9,6 +9,30 @@ import { getUTMCookie } from '@/lib/utils/cookie-manager';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { addMinutes } from 'date-fns';
 import { generateAppointmentPDF } from '@/lib/services/pdf-form-generator.service';
+
+// Local TypeScript interfaces
+interface ProfileBase {
+  id: string;
+  role: string | null;
+  userId: string;
+}
+
+interface ProfileWithBooking extends ProfileBase {
+  bookingEnabled: boolean | null;
+  allowPhoneBookings: boolean | null;
+  allowVideoBookings: boolean | null;
+  allowInPersonBookings: boolean | null;
+  requireApprovalForBookings: boolean | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface CRMContact {
+  id: string;
+  email: string;
+  referrerUsername: string | null;
+  assignedPreparerId: string | null;
+}
 
 /**
  * POST /api/appointments/book - Book an appointment
@@ -91,10 +115,12 @@ export async function POST(req: NextRequest) {
 
     // PRIORITY 1: If explicit preparerId provided from booking page, use it directly
     if (explicitPreparerId) {
-      const explicitPreparer = await prisma.profile.findUnique({
-        where: { id: explicitPreparerId },
-        select: { id: true, userId: true, role: true },
-      });
+      const { data: explicitPreparerData } = await db
+        .from('profiles')
+        .select('id, userId:user_id, role')
+        .eq('id', explicitPreparerId)
+        .limit(1);
+      const explicitPreparer = firstOrNull<ProfileBase>(explicitPreparerData);
       if (explicitPreparer && explicitPreparer.role === 'tax_preparer') {
         preparerProfileId = explicitPreparer.id;
         preparerUserId = explicitPreparer.userId;
@@ -107,21 +133,13 @@ export async function POST(req: NextRequest) {
 
     // PRIORITY 2: If ref parameter provided, resolve preparer from it
     if (!preparerProfileId && effectiveRef) {
-      // Find the referrer profile
-      const referrerProfile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { trackingCode: effectiveRef },
-            { customTrackingCode: effectiveRef },
-            { shortLinkUsername: effectiveRef },
-          ],
-        },
-        select: {
-          id: true,
-          role: true,
-          userId: true,
-        },
-      });
+      // Find the referrer profile by tracking code
+      const { data: referrerData } = await db
+        .from('profiles')
+        .select('id, role, userId:user_id')
+        .or(`tracking_code.eq.${effectiveRef},custom_tracking_code.eq.${effectiveRef},short_link_username.eq.${effectiveRef}`)
+        .limit(1);
+      const referrerProfile = firstOrNull<ProfileBase>(referrerData);
 
       if (referrerProfile) {
         // Business Rule: Assign lead based on referrer role
@@ -168,32 +186,34 @@ export async function POST(req: NextRequest) {
 
     // Fallback: Get default preparer if no smart assignment
     if (!preparerProfileId) {
-      const defaultPreparer = await prisma.profile.findFirst({
-        where: {
-          OR: [{ role: 'admin' }, { role: 'admin' }, { role: 'tax_preparer' }],
-          bookingEnabled: true, // Only assign to preparers who accept bookings
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, userId: true },
-      });
+      const { data: defaultPreparerData } = await db
+        .from('profiles')
+        .select('id, userId:user_id')
+        .in('role', ['admin', 'tax_preparer'])
+        .eq('booking_enabled', true)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      const defaultPreparer = firstOrNull<{ id: string; userId: string }>(defaultPreparerData);
       preparerProfileId = defaultPreparer?.id || null;
       preparerUserId = defaultPreparer?.userId || null;
     }
 
     // Validate preparer booking preferences
     if (preparerProfileId) {
-      const preparerPreferences = await prisma.profile.findUnique({
-        where: { id: preparerProfileId },
-        select: {
-          bookingEnabled: true,
-          allowPhoneBookings: true,
-          allowVideoBookings: true,
-          allowInPersonBookings: true,
-          requireApprovalForBookings: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
+      const { data: preparerPreferencesData } = await db
+        .from('profiles')
+        .select('bookingEnabled:booking_enabled, allowPhoneBookings:allow_phone_bookings, allowVideoBookings:allow_video_bookings, allowInPersonBookings:allow_in_person_bookings, requireApprovalForBookings:require_approval_for_bookings, firstName:first_name, lastName:last_name')
+        .eq('id', preparerProfileId)
+        .limit(1);
+      const preparerPreferences = firstOrNull<{
+        bookingEnabled: boolean | null;
+        allowPhoneBookings: boolean | null;
+        allowVideoBookings: boolean | null;
+        allowInPersonBookings: boolean | null;
+        requireApprovalForBookings: boolean | null;
+        firstName: string | null;
+        lastName: string | null;
+      }>(preparerPreferencesData);
 
       if (!preparerPreferences || !preparerPreferences.bookingEnabled) {
         return NextResponse.json(
@@ -252,46 +272,56 @@ export async function POST(req: NextRequest) {
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(' ') || firstName;
 
-    let crmContact = await prisma.cRMContact.findUnique({
-      where: { email: clientEmail.toLowerCase() },
-    });
+    const { data: existingContactData } = await db
+      .from('crm_contacts')
+      .select('id, email, referrerUsername:referrer_username, assignedPreparerId:assigned_preparer_id')
+      .eq('email', clientEmail.toLowerCase())
+      .limit(1);
+    let crmContact = firstOrNull<CRMContact>(existingContactData);
 
     if (!crmContact) {
-      crmContact = await prisma.cRMContact.create({
-        data: {
-          contactType: 'LEAD',
-          firstName,
-          lastName,
+      const { data: newContactData, error: createError } = await db
+        .from('crm_contacts')
+        .insert({
+          contact_type: 'LEAD',
+          first_name: firstName,
+          last_name: lastName,
           email: clientEmail.toLowerCase(),
           phone: clientPhone,
           source: source || 'appointment_booking',
           stage: 'NEW',
-          lastContactedAt: new Date(),
-          assignedPreparerId: preparerUserId, // Use User ID for CRM service
+          last_contacted_at: new Date().toISOString(),
+          assigned_preparer_id: preparerUserId, // Use User ID for CRM service
           // CRITICAL: Track referral attribution
-          referrerUsername: effectiveRef || null,
-          referrerType: effectiveRef ? 'tax_preparer' : null,
-          attributionMethod: effectiveRef ? 'ref_param' : (attributionResult.method || 'direct'),
-        },
-      });
+          referrer_username: effectiveRef || null,
+          referrer_type: effectiveRef ? 'tax_preparer' : null,
+          attribution_method: effectiveRef ? 'ref_param' : (attributionResult.method || 'direct'),
+        })
+        .select('id, email, referrerUsername:referrer_username, assignedPreparerId:assigned_preparer_id')
+        .single();
+
+      if (createError) {
+        throw new Error(`Failed to create CRM contact: ${createError.message}`);
+      }
+      crmContact = newContactData;
 
       logger.info('Created CRM contact for appointment', {
-        contactId: crmContact.id,
+        contactId: crmContact?.id,
         email: clientEmail,
         referrerUsername: effectiveRef,
         assignedPreparerId: preparerUserId,
       });
     } else if (effectiveRef && !crmContact.referrerUsername) {
       // Update existing contact with referrer info if not already set
-      await prisma.cRMContact.update({
-        where: { id: crmContact.id },
-        data: {
-          referrerUsername: effectiveRef,
-          referrerType: 'tax_preparer',
-          attributionMethod: 'ref_param',
-          assignedPreparerId: preparerUserId || crmContact.assignedPreparerId,
-        },
-      });
+      await db
+        .from('crm_contacts')
+        .update({
+          referrer_username: effectiveRef,
+          referrer_type: 'tax_preparer',
+          attribution_method: 'ref_param',
+          assigned_preparer_id: preparerUserId || crmContact.assignedPreparerId,
+        })
+        .eq('id', crmContact.id);
       logger.info('Updated CRM contact with referrer info', {
         contactId: crmContact.id,
         referrerUsername: effectiveRef,
@@ -302,39 +332,43 @@ export async function POST(req: NextRequest) {
     const appointmentPreparerId = preparerProfileId || 'unassigned';
 
     // Determine appointment status based on preparer preferences
-    const preparerPrefs = await prisma.profile.findUnique({
-      where: { id: appointmentPreparerId },
-      select: { requireApprovalForBookings: true },
-    });
+    const { data: preparerPrefsData } = await db
+      .from('profiles')
+      .select('requireApprovalForBookings:require_approval_for_bookings')
+      .eq('id', appointmentPreparerId)
+      .limit(1);
+    const preparerPrefs = firstOrNull<{ requireApprovalForBookings: boolean | null }>(preparerPrefsData);
 
     const appointmentStatus = preparerPrefs?.requireApprovalForBookings
       ? 'PENDING_APPROVAL'
       : 'REQUESTED';
 
     // Create appointment
-    const appointment = await prisma.appointment.create({
-      data: {
-        clientId: crmContact.id,
-        clientName,
-        clientEmail: clientEmail.toLowerCase(),
-        clientPhone,
-        preparerId: appointmentPreparerId,
-        serviceId: serviceId || null,
-        type: appointmentType as
-          | 'PHONE_CALL'
-          | 'VIDEO_CALL'
-          | 'IN_PERSON'
-          | 'CONSULTATION'
-          | 'FOLLOW_UP',
+    const { data: appointmentData, error: appointmentError } = await db
+      .from('appointments')
+      .insert({
+        client_id: crmContact?.id,
+        client_name: clientName,
+        client_email: clientEmail.toLowerCase(),
+        client_phone: clientPhone,
+        preparer_id: appointmentPreparerId,
+        service_id: serviceId || null,
+        type: appointmentType,
         status: appointmentStatus,
-        scheduledFor: scheduledDate,
-        scheduledEnd: scheduledDate ? addMinutes(scheduledDate, duration) : null,
+        scheduled_for: scheduledDate?.toISOString() || null,
+        scheduled_end: scheduledDate ? addMinutes(scheduledDate, duration).toISOString() : null,
         duration,
         timezone,
-        clientNotes: notes || null,
+        client_notes: notes || null,
         subject: `${appointmentType.replace(/_/g, ' ')} - ${clientName}`,
-      },
-    });
+      })
+      .select('id, createdAt:created_at')
+      .single();
+
+    if (appointmentError) {
+      throw new Error(`Failed to create appointment: ${appointmentError.message}`);
+    }
+    const appointment = appointmentData;
 
     logger.info('Created appointment', {
       appointmentId: appointment.id,
@@ -345,20 +379,18 @@ export async function POST(req: NextRequest) {
 
     // Create CRM interaction record for this booking
     try {
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: crmContact.id,
-          type: 'MEETING',
-          direction: 'INBOUND',
-          subject: `Appointment Requested: ${appointmentType.replace(/_/g, ' ')}`,
-          body: `Client requested a ${appointmentType.replace(/_/g, ' ').toLowerCase()} appointment${scheduledDate ? ` for ${scheduledDate.toLocaleString()}` : ''}.\n\nNotes: ${notes || 'No additional notes provided'}`,
-          occurredAt: new Date(),
-        },
+      await db.from('crm_interactions').insert({
+        contact_id: crmContact?.id,
+        type: 'MEETING',
+        direction: 'INBOUND',
+        subject: `Appointment Requested: ${appointmentType.replace(/_/g, ' ')}`,
+        body: `Client requested a ${appointmentType.replace(/_/g, ' ').toLowerCase()} appointment${scheduledDate ? ` for ${scheduledDate.toLocaleString()}` : ''}.\n\nNotes: ${notes || 'No additional notes provided'}`,
+        occurred_at: new Date().toISOString(),
       });
 
       logger.info('Created CRM interaction for appointment booking', {
         appointmentId: appointment.id,
-        contactId: crmContact.id,
+        contactId: crmContact?.id,
       });
     } catch (interactionError) {
       logger.error('Failed to create CRM interaction for appointment', interactionError);
@@ -371,10 +403,12 @@ export async function POST(req: NextRequest) {
     // Get preparer name for email
     let preparerName: string | undefined;
     if (preparerProfileId) {
-      const assignedPreparer = await prisma.profile.findUnique({
-        where: { id: preparerProfileId },
-        select: { firstName: true, lastName: true },
-      });
+      const { data: assignedPreparerData } = await db
+        .from('profiles')
+        .select('firstName:first_name, lastName:last_name')
+        .eq('id', preparerProfileId)
+        .limit(1);
+      const assignedPreparer = firstOrNull<{ firstName: string | null; lastName: string | null }>(assignedPreparerData);
       if (assignedPreparer) {
         preparerName = `${assignedPreparer.firstName} ${assignedPreparer.lastName}`;
       }

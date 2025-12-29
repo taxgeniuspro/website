@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { DashboardLayoutClient } from '@/components/DashboardLayoutClient';
 import { getUserPermissions, UserRole, UserPermissions } from '@/lib/permissions';
 import { getEffectiveRole } from '@/lib/utils/role-switcher';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Get real authenticated user from Clerk
@@ -36,22 +36,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (effectiveRole === 'client') {
     try {
-      // Use findFirst with OR conditions to match by supabaseUserId, userId, or email
+      // Use OR conditions to match by supabaseUserId, userId, or email
       // This handles both legacy NextAuth users and new Supabase Auth users
-      const profile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { supabaseUserId: user.id },
-            { userId: user.id },
-            { email: user.email }
-          ]
-        },
-        select: {
-          affiliateStatus: true,
-          hasFiledTaxes: true,
-          hideReferralProgram: true,
-        },
-      });
+      const { data: profiles, error } = await db
+        .from('profiles')
+        .select('affiliateStatus, hasFiledTaxes, hideReferralProgram')
+        .or(`supabaseUserId.eq.${user.id},userId.eq.${user.id},email.eq.${user.email}`)
+        .limit(1);
+
+      if (error) {
+        console.error('[Dashboard Layout] Failed to fetch profile:', error);
+      }
+
+      const profile = firstOrNull(profiles);
       if (profile) {
         affiliateStatus = profile.affiliateStatus;
         hasFiledTaxes = profile.hasFiledTaxes;

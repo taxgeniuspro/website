@@ -11,13 +11,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOneOfRoles } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
-import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
 import { EmailService } from '@/lib/services/email.service';
+
+// Local type definitions (replacing @prisma/client imports)
+type UserRole = 'client' | 'affiliate' | 'tax_preparer' | 'admin';
 
 const createUserSchema = z.object({
   role: z.enum(['client', 'affiliate', 'tax_preparer']),
@@ -51,17 +53,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { role, sendInviteEmail } = createUserSchema.parse(body);
 
     // Get the CRM contact
-    const contact = await prisma.cRMContact.findUnique({
-      where: { id: contactId },
-      select: {
-        id: true,
-        userId: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-      },
-    });
+    const { data: contacts } = await db
+      .from('crm_contacts')
+      .select('id, userId, firstName, lastName, email, phone')
+      .eq('id', contactId)
+      .limit(1);
+
+    const contact = firstOrNull(contacts);
 
     if (!contact) {
       return NextResponse.json(
@@ -79,16 +77,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if a user with this email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: contact.email.toLowerCase() },
-    });
+    const { data: existingUsers } = await db
+      .from('users')
+      .select('id')
+      .eq('email', contact.email.toLowerCase())
+      .limit(1);
+
+    const existingUser = firstOrNull(existingUsers);
 
     if (existingUser) {
       // Link existing user to this contact
-      await prisma.cRMContact.update({
-        where: { id: contactId },
-        data: { userId: existingUser.id },
-      });
+      await db
+        .from('crm_contacts')
+        .update({ userId: existingUser.id })
+        .eq('id', contactId);
 
       return NextResponse.json({
         success: true,
@@ -105,57 +107,58 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const tempPassword = nanoid(12);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // Create the user and profile in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const newUser = await tx.user.create({
-        data: {
-          email: contact.email.toLowerCase(),
-          hashedPassword: hashedPassword,
-          emailVerified: null, // Not verified yet
-        },
-      });
+    // Create user
+    const { data: newUser, error: userError } = await db
+      .from('users')
+      .insert({
+        email: contact.email.toLowerCase(),
+        hashedPassword: hashedPassword,
+        emailVerified: null, // Not verified yet
+      })
+      .select('id, email')
+      .single();
 
-      // Generate tracking code for affiliate/preparer roles
-      const initials = `${(contact.firstName?.[0] || 'u').toLowerCase()}${(contact.lastName?.[0] || 'p').toLowerCase()}`;
-      const trackingCode = role !== 'client' ? `${initials}-${nanoid(6)}` : null;
+    if (userError || !newUser) {
+      throw new Error(userError?.message || 'Failed to create user');
+    }
 
-      // Create profile
-      await tx.profile.create({
-        data: {
-          userId: newUser.id,
-          role: role as UserRole,
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          phone: contact.phone,
-          trackingCode,
-          shortLinkUsername: role !== 'client' ? initials : null,
-          affiliateStatus: role === 'affiliate' || role === 'tax_preparer' ? 'APPROVED' : undefined,
-        },
-      });
+    // Generate tracking code for affiliate/preparer roles
+    const initials = `${(contact.firstName?.[0] || 'u').toLowerCase()}${(contact.lastName?.[0] || 'p').toLowerCase()}`;
+    const trackingCode = role !== 'client' ? `${initials}-${nanoid(6)}` : null;
 
-      // Link the user to the CRM contact
-      await tx.cRMContact.update({
-        where: { id: contactId },
-        data: { userId: newUser.id },
-      });
-
-      // Update CRM contact type to match role
-      let contactType: 'CLIENT' | 'AFFILIATE' | 'PREPARER' = 'CLIENT';
-      if (role === 'affiliate') contactType = 'AFFILIATE';
-      if (role === 'tax_preparer') contactType = 'PREPARER';
-
-      await tx.cRMContact.update({
-        where: { id: contactId },
-        data: { contactType },
-      });
-
-      return {
+    // Create profile
+    const { error: profileError } = await db
+      .from('profiles')
+      .insert({
         userId: newUser.id,
-        email: newUser.email,
+        role: role as UserRole,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
         trackingCode,
-      };
-    });
+        shortLinkUsername: role !== 'client' ? initials : null,
+        affiliateStatus: role === 'affiliate' || role === 'tax_preparer' ? 'APPROVED' : undefined,
+      });
+
+    if (profileError) {
+      throw new Error(profileError.message || 'Failed to create profile');
+    }
+
+    // Link the user to the CRM contact and update contact type
+    let contactType: 'CLIENT' | 'AFFILIATE' | 'PREPARER' = 'CLIENT';
+    if (role === 'affiliate') contactType = 'AFFILIATE';
+    if (role === 'tax_preparer') contactType = 'PREPARER';
+
+    await db
+      .from('crm_contacts')
+      .update({ userId: newUser.id, contactType })
+      .eq('id', contactId);
+
+    const result = {
+      userId: newUser.id,
+      email: newUser.email,
+      trackingCode,
+    };
 
     // Send invite email if requested
     if (sendInviteEmail) {
@@ -168,13 +171,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           const magicLinkUrl = `${process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax'}/auth/set-password?token=${magicLinkToken}&email=${encodeURIComponent(result.email)}`;
 
           // Store token in database for verification (expires in 24 hours)
-          await prisma.verificationToken.create({
-            data: {
+          await db
+            .from('verification_tokens')
+            .insert({
               identifier: result.email,
               token: magicLinkToken,
-              expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-            },
-          });
+              expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+            });
 
           await EmailService.sendTaxPreparerWelcomeEmail(
             result.email,

@@ -5,8 +5,28 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  createdAt: string;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  isActive: boolean;
+  affiliateStatus: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -32,87 +52,91 @@ export async function GET(req: NextRequest) {
     const roleFilter = searchParams.get('role') || '';
     const status = searchParams.get('status') || '';
 
-    const skip = (page - 1) * limit;
-
-    // Build where clause
-    const where: any = {};
+    // Build users query
+    let usersQuery = db.from('users')
+      .select('id, email, name, createdAt', { count: 'exact' });
 
     if (search) {
-      where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
-        { profile: { firstName: { contains: search, mode: 'insensitive' } } },
-        { profile: { lastName: { contains: search, mode: 'insensitive' } } },
-      ];
+      usersQuery = usersQuery.or(`email.ilike.%${search}%,name.ilike.%${search}%`);
     }
 
+    usersQuery = usersQuery
+      .order('createdAt', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    const { data: users, count: total, error: usersError } = await usersQuery;
+
+    if (usersError) {
+      throw usersError;
+    }
+
+    // Get user IDs
+    const userIds = (users || []).map((u: User) => u.id);
+
+    // Fetch profiles for users
+    let profilesQuery = db.from('profiles')
+      .select('id, userId, firstName, lastName, role, isActive, affiliateStatus, avatarUrl, createdAt')
+      .in('userId', userIds);
+
     if (roleFilter) {
-      where.profile = {
-        ...where.profile,
-        role: roleFilter,
-      };
+      profilesQuery = profilesQuery.eq('role', roleFilter);
     }
 
     if (status === 'active') {
-      where.profile = {
-        ...where.profile,
-        isActive: true,
-      };
+      profilesQuery = profilesQuery.eq('isActive', true);
     } else if (status === 'inactive') {
-      where.profile = {
-        ...where.profile,
-        isActive: false,
-      };
+      profilesQuery = profilesQuery.eq('isActive', false);
     }
 
-    // Fetch users with profiles
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          profile: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              role: true,
-              isActive: true,
-              affiliateStatus: true,
-              avatarUrl: true,
-              createdAt: true,
-            },
-          },
-        },
-      }),
-      prisma.user.count({ where }),
-    ]);
+    const { data: profiles, error: profilesError } = await profilesQuery;
+
+    if (profilesError) {
+      throw profilesError;
+    }
+
+    // Create profile lookup map
+    const profilesByUserId = new Map<string, Profile>();
+    (profiles || []).forEach((p: Profile) => {
+      profilesByUserId.set(p.userId, p);
+    });
 
     // Format response
-    const formattedUsers = users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      firstName: user.profile?.firstName,
-      lastName: user.profile?.lastName,
-      role: user.profile?.role || 'client',
-      isActive: user.profile?.isActive ?? true,
-      affiliateStatus: user.profile?.affiliateStatus,
-      avatarUrl: user.profile?.avatarUrl,
-      createdAt: user.createdAt,
-      profileCreatedAt: user.profile?.createdAt,
-    }));
+    const formattedUsers = (users || []).map((user: User) => {
+      const profile = profilesByUserId.get(user.id);
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        firstName: profile?.firstName,
+        lastName: profile?.lastName,
+        role: profile?.role || 'client',
+        isActive: profile?.isActive ?? true,
+        affiliateStatus: profile?.affiliateStatus,
+        avatarUrl: profile?.avatarUrl,
+        createdAt: user.createdAt,
+        profileCreatedAt: profile?.createdAt,
+      };
+    });
+
+    // Filter by role/status after joining (since we can't do nested joins in Supabase)
+    let filteredUsers = formattedUsers;
+    if (roleFilter) {
+      filteredUsers = filteredUsers.filter((u: any) => u.role === roleFilter);
+    }
+    if (status === 'active') {
+      filteredUsers = filteredUsers.filter((u: any) => u.isActive === true);
+    } else if (status === 'inactive') {
+      filteredUsers = filteredUsers.filter((u: any) => u.isActive === false);
+    }
 
     return NextResponse.json({
       success: true,
-      users: formattedUsers,
+      users: filteredUsers,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: total || 0,
+        totalPages: Math.ceil((total || 0) / limit),
       },
     });
   } catch (error: any) {

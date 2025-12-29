@@ -1,7 +1,24 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Order {
+  id: string;
+  profileId: string;
+  total: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Profile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+}
 
 /**
  * GET /api/admin/orders
@@ -16,39 +33,55 @@ export async function GET() {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const orders = await prisma.order.findMany({
-      include: {
-        profile: {
-          select: {
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    // Fetch orders
+    const { data: orders, error: ordersError } = await db.from('orders')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (ordersError) {
+      throw ordersError;
+    }
+
+    // Get profile IDs and fetch profiles
+    const profileIds = [...new Set((orders || []).map((o: Order) => o.profileId))];
+
+    const { data: profiles } = await db.from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', profileIds);
+
+    // Create lookup map
+    const profilesById = new Map<string, Profile>();
+    (profiles || []).forEach((p: Profile) => {
+      profilesById.set(p.id, p);
     });
 
-    // Serialize orders (convert Decimal to number)
-    const serializedOrders = orders.map((order) => ({
-      ...order,
-      total: Number(order.total),
-    }));
+    // Serialize orders (convert Decimal to number and add profile)
+    const serializedOrders = (orders || []).map((order: Order) => {
+      const orderProfile = profilesById.get(order.profileId);
+      return {
+        ...order,
+        total: Number(order.total),
+        profile: orderProfile ? {
+          firstName: orderProfile.firstName,
+          lastName: orderProfile.lastName,
+        } : null,
+      };
+    });
 
     return NextResponse.json(serializedOrders);
   } catch (error) {

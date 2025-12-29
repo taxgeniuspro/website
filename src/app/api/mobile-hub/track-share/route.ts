@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -31,43 +31,41 @@ export async function POST(request: NextRequest) {
     const linkType = trackingId.split('-')[0]; // e.g., "intake-userId" -> "intake"
 
     // Create share record
-    await prisma.mobileHubShare.create({
-      data: {
-        userId: userId,
-        userRole,
-        linkType,
-        linkUrl: url,
-        trackingId,
-        shareMethod: method,
-      },
-    });
+    await db
+      .from('mobile_hub_shares')
+      .insert({
+        user_id: userId,
+        user_role: userRole,
+        link_type: linkType,
+        link_url: url,
+        tracking_id: trackingId,
+        share_method: method,
+      });
 
     // Increment share count in stats - use findFirst then update/create pattern
-    const existingStats = await prisma.mobileHubStats.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      }
-    });
+    const { data: existingStatsRecords } = await db
+      .from('mobile_hub_stats')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    const existingStats = firstOrNull(existingStatsRecords);
 
     if (existingStats) {
-      await prisma.mobileHubStats.update({
-        where: { id: existingStats.id },
-        data: {
-          linkShares: { increment: 1 },
-        },
-      });
+      await db
+        .from('mobile_hub_stats')
+        .update({
+          link_shares: (existingStats.link_shares || 0) + 1,
+        })
+        .eq('id', existingStats.id);
     } else {
-      await prisma.mobileHubStats.create({
-        data: {
-          userId: userId,
-          userRole,
-          linkShares: 1,
-        },
-      });
+      await db
+        .from('mobile_hub_stats')
+        .insert({
+          user_id: userId,
+          user_role: userRole,
+          link_shares: 1,
+        });
     }
 
     return NextResponse.json({

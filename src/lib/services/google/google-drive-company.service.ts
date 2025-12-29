@@ -18,11 +18,53 @@
  */
 
 import { drive_v3 } from 'googleapis';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { googleAuthService } from './google-auth.service';
 import { logger } from '@/lib/logger';
-import { GoogleDriveFolderType } from '@prisma/client';
 import { Readable } from 'stream';
+
+// Local type definition (replacing @prisma/client)
+type GoogleDriveFolderType = 'ROOT' | 'CLIENT_ARCHIVES' | 'MARKETING' | 'FINANCIAL' | 'COMPANY' | 'YEAR' | 'PREPARER' | 'CLIENT';
+
+interface GoogleDriveFolderRecord {
+  id: string;
+  folderId: string;
+  folderName: string;
+  parentId?: string | null;
+  folderPath: string;
+  folderType: string;
+  preparerId?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface GoogleDriveBackupRecord {
+  id: string;
+  documentId: string;
+  driveFileId: string;
+  driveFolderId: string;
+  driveFileName: string;
+  driveFileUrl?: string | null;
+  fileSize?: number | null;
+  mimeType: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface DocumentRecord {
+  id: string;
+  fileName: string;
+  fileSize?: number | null;
+  mimeType: string;
+  taxYear?: number | null;
+  profileId?: string | null;
+}
+
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
 
 // Root folder name in Google Drive
 const ROOT_FOLDER_NAME = 'Tax Genius Pro';
@@ -110,32 +152,49 @@ class GoogleDriveCompanyService {
       // Calculate folder path
       let folderPath = name;
       if (parentId) {
-        const parentFolder = await prisma.googleDriveFolder.findUnique({
-          where: { folderId: parentId },
-        });
+        const { data: parentFolderData } = await db
+          .from('google_drive_folders')
+          .select('*')
+          .eq('folderId', parentId)
+          .limit(1);
+
+        const parentFolder = firstOrNull(parentFolderData) as GoogleDriveFolderRecord | null;
         if (parentFolder) {
           folderPath = `${parentFolder.folderPath}/${name}`;
         }
       }
 
-      // Save to database
+      // Save to database (upsert via check + insert/update)
       if (folderType) {
-        await prisma.googleDriveFolder.upsert({
-          where: { folderId },
-          update: {
-            folderName: name,
-            parentId,
-            folderPath,
-            folderType,
-          },
-          create: {
-            folderId,
-            folderName: name,
-            parentId,
-            folderPath,
-            folderType,
-          },
-        });
+        const { data: existingData } = await db
+          .from('google_drive_folders')
+          .select('id')
+          .eq('folderId', folderId)
+          .limit(1);
+
+        const existing = firstOrNull(existingData);
+
+        if (existing) {
+          await db
+            .from('google_drive_folders')
+            .update({
+              folderName: name,
+              parentId,
+              folderPath,
+              folderType,
+            })
+            .eq('folderId', folderId);
+        } else {
+          await db
+            .from('google_drive_folders')
+            .insert({
+              folderId,
+              folderName: name,
+              parentId,
+              folderPath,
+              folderType,
+            });
+        }
       }
 
       logger.info(`Created folder: ${name}`, { folderId, folderUrl });
@@ -155,9 +214,13 @@ class GoogleDriveCompanyService {
     }
 
     // Check database first
-    const existing = await prisma.googleDriveFolder.findFirst({
-      where: { folderType: 'ROOT' },
-    });
+    const { data: existingData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', 'ROOT')
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as GoogleDriveFolderRecord | null;
 
     if (existing) {
       this.rootFolderId = existing.folderId;
@@ -168,14 +231,14 @@ class GoogleDriveCompanyService {
     const existingFolderId = await this.findFolder(ROOT_FOLDER_NAME);
     if (existingFolderId) {
       // Save to database
-      await prisma.googleDriveFolder.create({
-        data: {
+      await db
+        .from('google_drive_folders')
+        .insert({
           folderId: existingFolderId,
           folderName: ROOT_FOLDER_NAME,
           folderPath: ROOT_FOLDER_NAME,
           folderType: 'ROOT',
-        },
-      });
+        });
       this.rootFolderId = existingFolderId;
       return existingFolderId;
     }
@@ -208,22 +271,26 @@ class GoogleDriveCompanyService {
 
     for (const config of folderConfigs) {
       // Check if already exists
-      const existing = await prisma.googleDriveFolder.findFirst({
-        where: { folderType: config.type },
-      });
+      const { data: existingData } = await db
+        .from('google_drive_folders')
+        .select('id')
+        .eq('folderType', config.type)
+        .limit(1);
+
+      const existing = firstOrNull(existingData);
 
       if (!existing) {
         const existingInDrive = await this.findFolder(config.name, rootId);
         if (existingInDrive) {
-          await prisma.googleDriveFolder.create({
-            data: {
+          await db
+            .from('google_drive_folders')
+            .insert({
               folderId: existingInDrive,
               folderName: config.name,
               parentId: rootId,
               folderPath: `${ROOT_FOLDER_NAME}/${config.name}`,
               folderType: config.type,
-            },
-          });
+            });
         } else {
           await this.createFolder(config.name, rootId, config.type);
         }
@@ -237,9 +304,13 @@ class GoogleDriveCompanyService {
    * Get or create a year folder under Client Archives
    */
   async getOrCreateYearFolder(year: number): Promise<string> {
-    const archivesFolder = await prisma.googleDriveFolder.findFirst({
-      where: { folderType: 'CLIENT_ARCHIVES' },
-    });
+    const { data: archivesFolderData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', 'CLIENT_ARCHIVES')
+      .limit(1);
+
+    const archivesFolder = firstOrNull(archivesFolderData) as GoogleDriveFolderRecord | null;
 
     if (!archivesFolder) {
       await this.initializeFolderStructure();
@@ -249,13 +320,15 @@ class GoogleDriveCompanyService {
     const yearStr = year.toString();
 
     // Check if year folder exists
-    const existing = await prisma.googleDriveFolder.findFirst({
-      where: {
-        folderType: 'YEAR',
-        folderName: yearStr,
-        parentId: archivesFolder.folderId,
-      },
-    });
+    const { data: existingData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', 'YEAR')
+      .eq('folderName', yearStr)
+      .eq('parentId', archivesFolder.folderId)
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as GoogleDriveFolderRecord | null;
 
     if (existing) {
       return existing.folderId;
@@ -267,15 +340,15 @@ class GoogleDriveCompanyService {
       archivesFolder.folderId
     );
     if (existingInDrive) {
-      await prisma.googleDriveFolder.create({
-        data: {
+      await db
+        .from('google_drive_folders')
+        .insert({
           folderId: existingInDrive,
           folderName: yearStr,
           parentId: archivesFolder.folderId,
           folderPath: `${archivesFolder.folderPath}/${yearStr}`,
           folderType: 'YEAR',
-        },
-      });
+        });
       return existingInDrive;
     }
 
@@ -298,21 +371,27 @@ class GoogleDriveCompanyService {
     const yearFolderId = await this.getOrCreateYearFolder(year);
 
     // Get preparer name
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerId },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparerData) as ProfileRecord | null;
     const preparerName =
       `${preparer?.firstName || ''} ${preparer?.lastName || ''}`.trim() ||
       'Unknown';
 
     // Check if preparer folder exists
-    const existing = await prisma.googleDriveFolder.findFirst({
-      where: {
-        folderType: 'PREPARER',
-        preparerId,
-        parentId: yearFolderId,
-      },
-    });
+    const { data: existingData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', 'PREPARER')
+      .eq('preparerId', preparerId)
+      .eq('parentId', yearFolderId)
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as GoogleDriveFolderRecord | null;
 
     if (existing) {
       return existing.folderId;
@@ -321,16 +400,16 @@ class GoogleDriveCompanyService {
     // Check in Drive
     const existingInDrive = await this.findFolder(preparerName, yearFolderId);
     if (existingInDrive) {
-      await prisma.googleDriveFolder.create({
-        data: {
+      await db
+        .from('google_drive_folders')
+        .insert({
           folderId: existingInDrive,
           folderName: preparerName,
           parentId: yearFolderId,
           folderPath: `${ROOT_FOLDER_NAME}/${FOLDER_STRUCTURE.CLIENT_ARCHIVES}/${year}/${preparerName}`,
           folderType: 'PREPARER',
           preparerId,
-        },
-      });
+        });
       return existingInDrive;
     }
 
@@ -342,10 +421,10 @@ class GoogleDriveCompanyService {
     );
 
     // Update with preparer ID
-    await prisma.googleDriveFolder.update({
-      where: { folderId },
-      data: { preparerId },
-    });
+    await db
+      .from('google_drive_folders')
+      .update({ preparerId })
+      .eq('folderId', folderId);
 
     return folderId;
   }
@@ -364,13 +443,15 @@ class GoogleDriveCompanyService {
     );
 
     // Check if client folder exists
-    const existing = await prisma.googleDriveFolder.findFirst({
-      where: {
-        folderType: 'CLIENT',
-        folderName: clientName,
-        parentId: preparerFolderId,
-      },
-    });
+    const { data: existingData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', 'CLIENT')
+      .eq('folderName', clientName)
+      .eq('parentId', preparerFolderId)
+      .limit(1);
+
+    const existing = firstOrNull(existingData) as GoogleDriveFolderRecord | null;
 
     if (existing) {
       return existing.folderId;
@@ -382,15 +463,15 @@ class GoogleDriveCompanyService {
       preparerFolderId
     );
     if (existingInDrive) {
-      await prisma.googleDriveFolder.create({
-        data: {
+      await db
+        .from('google_drive_folders')
+        .insert({
           folderId: existingInDrive,
           folderName: clientName,
           parentId: preparerFolderId,
           folderPath: `Client Archives/${year}/*/${clientName}`,
           folderType: 'CLIENT',
-        },
-      });
+        });
       return existingInDrive;
     }
 
@@ -451,21 +532,26 @@ class GoogleDriveCompanyService {
     }
   ): Promise<{ driveFileId: string; driveFileUrl: string }> {
     // Get document details
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-      include: {
-        profile: true,
-      },
-    });
+    const { data: documentData } = await db
+      .from('documents')
+      .select('id, fileName, fileSize, mimeType, taxYear, profileId')
+      .eq('id', documentId)
+      .limit(1);
+
+    const document = firstOrNull(documentData) as DocumentRecord | null;
 
     if (!document) {
       throw new Error(`Document not found: ${documentId}`);
     }
 
     // Check if already backed up
-    const existingBackup = await prisma.googleDriveBackup.findUnique({
-      where: { documentId },
-    });
+    const { data: existingBackupData } = await db
+      .from('google_drive_backups')
+      .select('*')
+      .eq('documentId', documentId)
+      .limit(1);
+
+    const existingBackup = firstOrNull(existingBackupData) as GoogleDriveBackupRecord | null;
 
     if (existingBackup) {
       logger.info(`Document already backed up: ${documentId}`);
@@ -491,9 +577,13 @@ class GoogleDriveCompanyService {
       folderId = await this.getOrCreatePreparerFolder(options.preparerId, year);
     } else {
       // Default to Company Documents
-      const companyFolder = await prisma.googleDriveFolder.findFirst({
-        where: { folderType: 'COMPANY' },
-      });
+      const { data: companyFolderData } = await db
+        .from('google_drive_folders')
+        .select('*')
+        .eq('folderType', 'COMPANY')
+        .limit(1);
+
+      const companyFolder = firstOrNull(companyFolderData) as GoogleDriveFolderRecord | null;
       if (!companyFolder) {
         await this.initializeFolderStructure();
         return this.backupDocument(documentId, fileContent, options);
@@ -510,8 +600,9 @@ class GoogleDriveCompanyService {
     );
 
     // Save backup record
-    await prisma.googleDriveBackup.create({
-      data: {
+    await db
+      .from('google_drive_backups')
+      .insert({
         documentId,
         driveFileId: fileId,
         driveFolderId: folderId,
@@ -519,8 +610,7 @@ class GoogleDriveCompanyService {
         driveFileUrl: fileUrl,
         fileSize: document.fileSize,
         mimeType: document.mimeType,
-      },
-    });
+      });
 
     logger.info(`Backed up document: ${documentId}`, { driveFileId: fileId });
     return { driveFileId: fileId, driveFileUrl: fileUrl };
@@ -561,9 +651,13 @@ class GoogleDriveCompanyService {
     folderPath: string;
     fileCount: number;
   } | null> {
-    const folder = await prisma.googleDriveFolder.findFirst({
-      where: { folderType },
-    });
+    const { data: folderData } = await db
+      .from('google_drive_folders')
+      .select('*')
+      .eq('folderType', folderType)
+      .limit(1);
+
+    const folder = firstOrNull(folderData) as GoogleDriveFolderRecord | null;
 
     if (!folder) {
       return null;
@@ -587,14 +681,17 @@ class GoogleDriveCompanyService {
     totalSize: number;
     byFolder: { folderType: string; count: number }[];
   }> {
-    const backups = await prisma.googleDriveBackup.findMany({
-      select: {
-        fileSize: true,
-        driveFolderId: true,
-      },
-    });
+    const { data: backupsData } = await db
+      .from('google_drive_backups')
+      .select('fileSize, driveFolderId');
 
-    const folders = await prisma.googleDriveFolder.findMany();
+    const backups = (backupsData || []) as { fileSize: number | null; driveFolderId: string }[];
+
+    const { data: foldersData } = await db
+      .from('google_drive_folders')
+      .select('folderId, folderType');
+
+    const folders = (foldersData || []) as { folderId: string; folderType: string }[];
     const folderMap = new Map(folders.map((f) => [f.folderId, f.folderType]));
 
     const byFolder = new Map<string, number>();

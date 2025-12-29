@@ -4,9 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interface
+interface UserProfile {
+  id: string;
+  role: string | null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,9 +22,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile to check role and permissions
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const { data: userProfileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', session.user.id)
+      .limit(1);
+    const userProfile = firstOrNull<UserProfile>(userProfileData);
 
     if (!userProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -27,26 +36,26 @@ export async function GET(request: NextRequest) {
     const { role } = userProfile;
 
     // Build query based on role
-    const whereClause: any = {};
+    let query = db.from('appointments').select('*');
 
     if (role === 'tax_preparer') {
       // Tax preparers see only their assigned appointments
-      whereClause.preparerId = userProfile.id;
+      query = query.eq('preparer_id', userProfile.id);
     } else if (role === 'client') {
       // Clients see only their own appointments
-      whereClause.clientId = userProfile.id;
+      query = query.eq('client_id', userProfile.id);
     }
-    // Admins and super_admins see all appointments (no where clause)
+    // Admins and super_admins see all appointments (no filter)
 
-    // Fetch appointments
-    const appointments = await prisma.appointment.findMany({
-      where: whereClause,
-      orderBy: [
-        { scheduledFor: 'asc' },
-        { createdAt: 'desc' },
-      ],
-      take: 100, // Limit for performance
-    });
+    // Fetch appointments with ordering and limit
+    const { data: appointments, error: fetchError } = await query
+      .order('scheduled_for', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch appointments: ${fetchError.message}`);
+    }
 
     return NextResponse.json({
       success: true,

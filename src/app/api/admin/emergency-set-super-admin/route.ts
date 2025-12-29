@@ -9,8 +9,15 @@
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interface
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+}
 
 export async function GET() {
   try {
@@ -42,25 +49,34 @@ export async function GET() {
     // Update or create profile in database
     logger.info('Updating database profile...');
     try {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-      });
+      const { data: profileData } = await db.from('profiles')
+        .select('*')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const profile = firstOrNull<Profile>(profileData);
 
       if (!profile) {
-        await prisma.profile.create({
-          data: {
+        const { error: createError } = await db.from('profiles')
+          .insert({
             userId: user.id,
             role: 'admin',
             firstName: user.name?.split(' ')[0] || 'Admin',
             lastName: user.name?.split(' ').slice(1).join(' ') || '',
-          },
-        });
+          });
+
+        if (createError) {
+          throw createError;
+        }
         logger.info('Profile created in database with super_admin role');
       } else {
-        await prisma.profile.update({
-          where: { id: profile.id },
-          data: { role: 'admin' },
-        });
+        const { error: updateError } = await db.from('profiles')
+          .update({ role: 'admin' })
+          .eq('id', profile.id);
+
+        if (updateError) {
+          throw updateError;
+        }
         logger.info('Profile updated to super_admin role');
       }
     } catch (dbError) {

@@ -4,9 +4,36 @@
  * Manages tasks and reminders associated with CRM contacts
  */
 
-import { prisma } from '@/lib/prisma';
-import { TaskPriority, TaskStatus, type Prisma } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+
+interface TaskRecord {
+  id: string;
+  contactId: string;
+  title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  priority: TaskPriority;
+  status: TaskStatus;
+  assignedTo?: string | null;
+  createdBy?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  contact?: ContactBasic | null;
+}
+
+interface ContactBasic {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email: string;
+}
 
 export interface CreateTaskInput {
   contactId: string;
@@ -48,34 +75,38 @@ export class CRMTaskService {
         title: data.title,
       });
 
-      const task = await prisma.cRMTask.create({
-        data: {
+      const { data: task, error } = await db
+        .from('crm_tasks')
+        .insert({
           contactId: data.contactId,
           title: data.title,
           description: data.description,
-          dueDate: data.dueDate,
-          priority: data.priority || TaskPriority.MEDIUM,
-          status: TaskStatus.TODO,
+          dueDate: data.dueDate?.toISOString(),
+          priority: data.priority || ('MEDIUM' as TaskPriority),
+          status: 'TODO' as TaskStatus,
           assignedTo: data.assignedTo,
           createdBy: data.createdBy,
-        },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
+        })
+        .select()
+        .single();
 
-      logger.info('[CRMTaskService] Task created', { taskId: task.id });
-      return task;
+      if (error) throw error;
+
+      // Get contact info
+      const { data: contactData } = await db
+        .from('crm_contacts')
+        .select('id, firstName, lastName, email')
+        .eq('id', data.contactId)
+        .limit(1);
+
+      const contact = firstOrNull(contactData) as ContactBasic | null;
+
+      logger.info('[CRMTaskService] Task created', { taskId: task?.id });
+      return { ...task, contact } as TaskRecord;
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error creating task', { error: error.message });
-      throw new Error(`Failed to create task: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error creating task', { error: errorMessage });
+      throw new Error(`Failed to create task: ${errorMessage}`);
     }
   }
 
@@ -84,27 +115,33 @@ export class CRMTaskService {
    */
   static async getTaskById(taskId: string) {
     try {
-      const task = await prisma.cRMTask.findUnique({
-        where: { id: taskId },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
+      const { data: taskData, error } = await db
+        .from('crm_tasks')
+        .select('*')
+        .eq('id', taskId)
+        .limit(1);
+
+      if (error) throw error;
+
+      const task = firstOrNull(taskData) as TaskRecord | null;
 
       if (!task) {
         throw new Error('Task not found');
       }
 
+      // Get contact info
+      const { data: contactData } = await db
+        .from('crm_contacts')
+        .select('id, firstName, lastName, email')
+        .eq('id', task.contactId)
+        .limit(1);
+
+      task.contact = firstOrNull(contactData) as ContactBasic | null;
+
       return task;
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error getting task', { error: error.message, taskId });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error getting task', { error: errorMessage, taskId });
       throw error;
     }
   }
@@ -118,62 +155,94 @@ export class CRMTaskService {
   ) {
     try {
       const { page = 1, limit = 50 } = pagination;
-      const skip = (page - 1) * limit;
+      const offset = (page - 1) * limit;
 
-      // Build where clause
-      const where: Prisma.CRMTaskWhereInput = {};
+      // Build query
+      let query = db.from('crm_tasks').select('*');
 
-      if (filters.contactId) where.contactId = filters.contactId;
-      if (filters.assignedTo) where.assignedTo = filters.assignedTo;
-      if (filters.status) where.status = filters.status;
-      if (filters.priority) where.priority = filters.priority;
+      if (filters.contactId) query = query.eq('contactId', filters.contactId);
+      if (filters.assignedTo) query = query.eq('assignedTo', filters.assignedTo);
+      if (filters.status) query = query.eq('status', filters.status);
+      if (filters.priority) query = query.eq('priority', filters.priority);
 
       if (filters.overdue) {
-        where.AND = [
-          { dueDate: { lte: new Date() } },
-          { status: { not: TaskStatus.DONE } },
-          { status: { not: TaskStatus.CANCELLED } },
-        ];
+        query = query
+          .lte('dueDate', new Date().toISOString())
+          .not('status', 'eq', 'DONE')
+          .not('status', 'eq', 'CANCELLED');
       }
 
       if (filters.dueBefore) {
-        where.dueDate = { ...where.dueDate, lte: filters.dueBefore };
+        query = query.lte('dueDate', filters.dueBefore.toISOString());
       }
 
       if (filters.dueAfter) {
-        where.dueDate = { ...where.dueDate, gte: filters.dueAfter };
+        query = query.gte('dueDate', filters.dueAfter.toISOString());
       }
 
-      const [tasks, total] = await Promise.all([
-        prisma.cRMTask.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: [{ dueDate: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
-          include: {
-            contact: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        }),
-        prisma.cRMTask.count({ where }),
-      ]);
+      // Order by dueDate first, then priority, then createdAt
+      query = query
+        .order('dueDate', { ascending: true, nullsFirst: false })
+        .order('createdAt', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data: tasksData, error } = await query;
+
+      if (error) throw error;
+
+      const tasks = (tasksData || []) as TaskRecord[];
+
+      // Get contact info for all tasks
+      const contactIds = [...new Set(tasks.map((t) => t.contactId))];
+      if (contactIds.length > 0) {
+        const { data: contactsData } = await db
+          .from('crm_contacts')
+          .select('id, firstName, lastName, email')
+          .in('id', contactIds);
+
+        const contactsMap = new Map((contactsData || []).map((c: ContactBasic) => [c.id, c]));
+
+        for (const task of tasks) {
+          task.contact = contactsMap.get(task.contactId) || null;
+        }
+      }
+
+      // Get total count with same filters
+      let countQuery = db.from('crm_tasks').select('id', { count: 'exact', head: true });
+
+      if (filters.contactId) countQuery = countQuery.eq('contactId', filters.contactId);
+      if (filters.assignedTo) countQuery = countQuery.eq('assignedTo', filters.assignedTo);
+      if (filters.status) countQuery = countQuery.eq('status', filters.status);
+      if (filters.priority) countQuery = countQuery.eq('priority', filters.priority);
+
+      if (filters.overdue) {
+        countQuery = countQuery
+          .lte('dueDate', new Date().toISOString())
+          .not('status', 'eq', 'DONE')
+          .not('status', 'eq', 'CANCELLED');
+      }
+
+      if (filters.dueBefore) {
+        countQuery = countQuery.lte('dueDate', filters.dueBefore.toISOString());
+      }
+
+      if (filters.dueAfter) {
+        countQuery = countQuery.gte('dueDate', filters.dueAfter.toISOString());
+      }
+
+      const { count: total } = await countQuery;
 
       return {
         tasks,
-        total,
+        total: total || 0,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil((total || 0) / limit),
       };
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error listing tasks', { error: error.message });
-      throw new Error(`Failed to list tasks: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error listing tasks', { error: errorMessage });
+      throw new Error(`Failed to list tasks: ${errorMessage}`);
     }
   }
 
@@ -184,34 +253,48 @@ export class CRMTaskService {
     try {
       logger.info('[CRMTaskService] Updating task', { taskId, updates: Object.keys(data) });
 
-      // If marking as done, set completedAt and completedBy
-      const updateData: Prisma.CRMTaskUpdateInput = { ...data };
+      // Build update data
+      const updateData: Record<string, unknown> = {};
 
-      if (data.status === TaskStatus.DONE) {
-        updateData.completedAt = new Date();
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.dueDate !== undefined) updateData.dueDate = data.dueDate?.toISOString();
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.status !== undefined) updateData.status = data.status;
+      if (data.assignedTo !== undefined) updateData.assignedTo = data.assignedTo;
+
+      // If marking as done, set completedAt and completedBy
+      if (data.status === 'DONE') {
+        updateData.completedAt = new Date().toISOString();
         updateData.completedBy = updatedBy;
       }
 
-      const task = await prisma.cRMTask.update({
-        where: { id: taskId },
-        data: updateData,
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
+      const { data: task, error } = await db
+        .from('crm_tasks')
+        .update(updateData)
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Get contact info
+      if (task) {
+        const { data: contactData } = await db
+          .from('crm_contacts')
+          .select('id, firstName, lastName, email')
+          .eq('id', (task as TaskRecord).contactId)
+          .limit(1);
+
+        (task as TaskRecord).contact = firstOrNull(contactData) as ContactBasic | null;
+      }
 
       logger.info('[CRMTaskService] Task updated', { taskId });
-      return task;
+      return task as TaskRecord;
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error updating task', { error: error.message, taskId });
-      throw new Error(`Failed to update task: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error updating task', { error: errorMessage, taskId });
+      throw new Error(`Failed to update task: ${errorMessage}`);
     }
   }
 
@@ -222,15 +305,16 @@ export class CRMTaskService {
     try {
       logger.info('[CRMTaskService] Deleting task', { taskId });
 
-      await prisma.cRMTask.delete({
-        where: { id: taskId },
-      });
+      const { error } = await db.from('crm_tasks').delete().eq('id', taskId);
+
+      if (error) throw error;
 
       logger.info('[CRMTaskService] Task deleted', { taskId });
       return { success: true };
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error deleting task', { error: error.message, taskId });
-      throw new Error(`Failed to delete task: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error deleting task', { error: errorMessage, taskId });
+      throw new Error(`Failed to delete task: ${errorMessage}`);
     }
   }
 
@@ -242,34 +326,39 @@ export class CRMTaskService {
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + days);
 
-      const tasks = await prisma.cRMTask.findMany({
-        where: {
-          assignedTo,
-          dueDate: {
-            gte: new Date(),
-            lte: dueDate,
-          },
-          status: {
-            notIn: [TaskStatus.DONE, TaskStatus.CANCELLED],
-          },
-        },
-        orderBy: { dueDate: 'asc' },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
+      const { data: tasksData, error } = await db
+        .from('crm_tasks')
+        .select('*')
+        .eq('assignedTo', assignedTo)
+        .gte('dueDate', new Date().toISOString())
+        .lte('dueDate', dueDate.toISOString())
+        .not('status', 'in', '(DONE,CANCELLED)')
+        .order('dueDate', { ascending: true });
+
+      if (error) throw error;
+
+      const tasks = (tasksData || []) as TaskRecord[];
+
+      // Get contact info for all tasks
+      const contactIds = [...new Set(tasks.map((t) => t.contactId))];
+      if (contactIds.length > 0) {
+        const { data: contactsData } = await db
+          .from('crm_contacts')
+          .select('id, firstName, lastName, email')
+          .in('id', contactIds);
+
+        const contactsMap = new Map((contactsData || []).map((c: ContactBasic) => [c.id, c]));
+
+        for (const task of tasks) {
+          task.contact = contactsMap.get(task.contactId) || null;
+        }
+      }
 
       return tasks;
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error getting tasks due soon', { error: error.message });
-      throw new Error(`Failed to get tasks due soon: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error getting tasks due soon', { error: errorMessage });
+      throw new Error(`Failed to get tasks due soon: ${errorMessage}`);
     }
   }
 
@@ -278,36 +367,43 @@ export class CRMTaskService {
    */
   static async getOverdueTasks(assignedTo?: string) {
     try {
-      const where: Prisma.CRMTaskWhereInput = {
-        dueDate: { lt: new Date() },
-        status: {
-          notIn: [TaskStatus.DONE, TaskStatus.CANCELLED],
-        },
-      };
+      let query = db
+        .from('crm_tasks')
+        .select('*')
+        .lt('dueDate', new Date().toISOString())
+        .not('status', 'in', '(DONE,CANCELLED)')
+        .order('dueDate', { ascending: true });
 
       if (assignedTo) {
-        where.assignedTo = assignedTo;
+        query = query.eq('assignedTo', assignedTo);
       }
 
-      const tasks = await prisma.cRMTask.findMany({
-        where,
-        orderBy: { dueDate: 'asc' },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
+      const { data: tasksData, error } = await query;
+
+      if (error) throw error;
+
+      const tasks = (tasksData || []) as TaskRecord[];
+
+      // Get contact info for all tasks
+      const contactIds = [...new Set(tasks.map((t) => t.contactId))];
+      if (contactIds.length > 0) {
+        const { data: contactsData } = await db
+          .from('crm_contacts')
+          .select('id, firstName, lastName, email')
+          .in('id', contactIds);
+
+        const contactsMap = new Map((contactsData || []).map((c: ContactBasic) => [c.id, c]));
+
+        for (const task of tasks) {
+          task.contact = contactsMap.get(task.contactId) || null;
+        }
+      }
 
       return tasks;
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error getting overdue tasks', { error: error.message });
-      throw new Error(`Failed to get overdue tasks: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error getting overdue tasks', { error: errorMessage });
+      throw new Error(`Failed to get overdue tasks: ${errorMessage}`);
     }
   }
 
@@ -316,31 +412,52 @@ export class CRMTaskService {
    */
   static async getTaskStats(assignedTo: string) {
     try {
-      const [total, todo, inProgress, done, overdue] = await Promise.all([
-        prisma.cRMTask.count({ where: { assignedTo } }),
-        prisma.cRMTask.count({ where: { assignedTo, status: TaskStatus.TODO } }),
-        prisma.cRMTask.count({ where: { assignedTo, status: TaskStatus.IN_PROGRESS } }),
-        prisma.cRMTask.count({ where: { assignedTo, status: TaskStatus.DONE } }),
-        prisma.cRMTask.count({
-          where: {
-            assignedTo,
-            dueDate: { lt: new Date() },
-            status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-          },
-        }),
+      const [
+        { count: total },
+        { count: todo },
+        { count: inProgress },
+        { count: done },
+        { count: overdue },
+      ] = await Promise.all([
+        db
+          .from('crm_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', assignedTo),
+        db
+          .from('crm_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', assignedTo)
+          .eq('status', 'TODO'),
+        db
+          .from('crm_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', assignedTo)
+          .eq('status', 'IN_PROGRESS'),
+        db
+          .from('crm_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', assignedTo)
+          .eq('status', 'DONE'),
+        db
+          .from('crm_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assignedTo', assignedTo)
+          .lt('dueDate', new Date().toISOString())
+          .not('status', 'in', '(DONE,CANCELLED)'),
       ]);
 
       return {
-        total,
-        todo,
-        inProgress,
-        done,
-        overdue,
-        active: todo + inProgress,
+        total: total || 0,
+        todo: todo || 0,
+        inProgress: inProgress || 0,
+        done: done || 0,
+        overdue: overdue || 0,
+        active: (todo || 0) + (inProgress || 0),
       };
     } catch (error: unknown) {
-      logger.error('[CRMTaskService] Error getting task stats', { error: error.message });
-      throw new Error(`Failed to get task stats: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[CRMTaskService] Error getting task stats', { error: errorMessage });
+      throw new Error(`Failed to get task stats: ${errorMessage}`);
     }
   }
 }

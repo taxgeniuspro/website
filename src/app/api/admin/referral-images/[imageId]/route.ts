@@ -6,16 +6,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { v2 as cloudinary } from 'cloudinary';
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Local interfaces
+interface Profile {
+  role: string;
+}
+
+interface ReferralImage {
+  id: string;
+  imageUrl: string;
+}
 
 export async function DELETE(
   req: NextRequest,
@@ -30,41 +33,49 @@ export async function DELETE(
     }
 
     // Check if user is admin
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { role: true },
-    });
+    const { data: profileData } = await db.from('profiles')
+      .select('role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get the image
-    const image = await prisma.referralImage.findUnique({
-      where: { id: imageId },
-    });
+    const { data: imageData } = await db.from('referral_images')
+      .select('*')
+      .eq('id', imageId)
+      .limit(1);
+
+    const image = firstOrNull<ReferralImage>(imageData);
 
     if (!image) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
-    // Try to delete from Cloudinary
-    try {
-      // Extract public_id from Cloudinary URL
-      const urlParts = image.imageUrl.split('/');
-      const publicIdWithExt = urlParts.slice(-2).join('/'); // e.g., "referral-images/abc123.jpg"
-      const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ''); // Remove extension
-
-      await cloudinary.uploader.destroy(publicId);
-      logger.info('Deleted image from Cloudinary', { publicId });
-    } catch (cloudinaryError) {
-      logger.warn('Failed to delete from Cloudinary (continuing anyway)', { error: String(cloudinaryError) });
+    // Delete from disk storage
+    const urlMatch = image.imageUrl.match(/\/api\/uploads\/(.+)$/);
+    if (urlMatch) {
+      const storageKey = urlMatch[1];
+      try {
+        await DiskStorageService.deleteFile(storageKey);
+        logger.info('Deleted image from disk storage', { storageKey });
+      } catch (storageError) {
+        logger.warn('Failed to delete from disk storage (continuing anyway)', { error: String(storageError) });
+      }
     }
 
     // Delete from database
-    await prisma.referralImage.delete({
-      where: { id: imageId },
-    });
+    const { error: deleteError } = await db.from('referral_images')
+      .delete()
+      .eq('id', imageId);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     logger.info('Deleted referral image', { imageId });
 

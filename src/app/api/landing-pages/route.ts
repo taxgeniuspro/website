@@ -1,10 +1,27 @@
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { isAdmin } from '@/lib/auth';
 import { logger } from '@/lib/logger';
-import type { Prisma } from '@prisma/client';
+
+// Local TypeScript interface (replacing Prisma types)
+interface LandingPage {
+  id: string;
+  slug: string;
+  city: string;
+  state: string | null;
+  headline: string;
+  bodyContent: string;
+  metaTitle: string;
+  metaDescription: string;
+  qaAccordion: { question: string; answer: string }[];
+  generatedBy: string | null;
+  version: number;
+  isPublished: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 // Zod validation schema for saving landing pages
 const SaveLandingPageSchema = z.object({
@@ -60,9 +77,14 @@ export async function POST(request: Request) {
 
     const data = validationResult.data;
 
-    const existingPage = await prisma.landingPage.findUnique({
-      where: { slug: data.slug },
-    });
+    // Check if landing page already exists
+    const { data: existingPages } = await db
+      .from('landing_pages')
+      .select('id')
+      .eq('slug', data.slug)
+      .limit(1);
+
+    const existingPage = firstOrNull(existingPages);
 
     if (existingPage) {
       return NextResponse.json(
@@ -71,14 +93,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const landingPage = await prisma.landingPage.create({
-      data: {
-        ...data,
-        generatedBy: data.generatedBy || userId,
+    // Create landing page
+    const { data: landingPage, error } = await db
+      .from('landing_pages')
+      .insert({
+        slug: data.slug,
+        city: data.city,
+        state: data.state || null,
+        headline: data.headline,
+        body_content: data.bodyContent,
+        meta_title: data.metaTitle,
+        meta_description: data.metaDescription,
+        qa_accordion: data.qaAccordion,
+        generated_by: data.generatedBy || userId,
         version: 1,
-        isPublished: false,
-      },
-    });
+        is_published: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('[Save Landing Page Error]:', error);
+      return NextResponse.json({ error: 'Failed to save landing page' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -106,15 +143,22 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const publishedFilter = searchParams.get('published');
 
-    const where: Prisma.LandingPageWhereInput = {};
+    // Build query
+    let query = db
+      .from('landing_pages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     if (publishedFilter !== null) {
-      where.isPublished = publishedFilter === 'true';
+      query = query.eq('is_published', publishedFilter === 'true');
     }
 
-    const landingPages = await prisma.landingPage.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: landingPages, error } = await query;
+
+    if (error) {
+      logger.error('[List Landing Pages Error]:', error);
+      return NextResponse.json({ error: 'Failed to fetch landing pages' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, data: landingPages });
   } catch (error) {

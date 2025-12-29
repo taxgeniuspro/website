@@ -1,136 +1,117 @@
-import Redis from 'ioredis';
+/**
+ * In-Memory Cache Utility
+ *
+ * Replaces Redis with a simple in-memory store.
+ * Suitable for single-instance deployments on Coolify VPS.
+ *
+ * Features:
+ * - TTL-based expiration
+ * - Automatic cleanup of expired entries
+ * - Compatible API with previous Redis implementation
+ */
+
 import { logger } from '@/lib/logger';
 
-// Check if we're in a build environment
-const isBuildTime = process.env.DOCKER_BUILD === 'true' ||
-                    process.env.NEXT_PHASE === 'phase-production-build' ||
-                    process.env.SKIP_REDIS === 'true';
+// In-memory store with TTL tracking
+interface CacheEntry<T = unknown> {
+  value: T;
+  expiresAt: number | null; // null = no expiration
+}
 
-const globalForRedis = global as unknown as {
-  redis: Redis | undefined;
-};
+class InMemoryCache {
+  private store: Map<string, CacheEntry> = new Map();
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
-// Parse REDIS_URL if provided, otherwise use individual env vars
-function createRedisClient(): Redis {
-  const redisUrl = process.env.REDIS_URL;
-
-  if (redisUrl) {
-    // Use URL-based connection (Docker-friendly)
-    return new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true, // Don't connect immediately
-      retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      reconnectOnError(err) {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          return true;
-        }
-        return false;
-      },
-    });
+  constructor() {
+    // Cleanup expired entries every 60 seconds
+    if (typeof setInterval !== 'undefined') {
+      this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+    }
   }
 
-  // Fallback to host/port configuration
-  return new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    password: process.env.REDIS_PASSWORD,
-    maxRetriesPerRequest: 3,
-    lazyConnect: true, // Don't connect immediately
-    retryStrategy(times) {
-      const delay = Math.min(times * 50, 2000);
-      return delay;
-    },
-    reconnectOnError(err) {
-      const targetError = 'READONLY';
-      if (err.message.includes(targetError)) {
-        return true;
+  private cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.store.entries()) {
+      if (entry.expiresAt && entry.expiresAt < now) {
+        this.store.delete(key);
       }
-      return false;
-    },
-  });
-}
-
-// Lazy-load Redis client - only create when needed, not at module load time
-let _redis: Redis | null = null;
-
-function getRedis(): Redis {
-  if (isBuildTime) {
-    // During build, return a mock that will error on actual use
-    throw new Error('Redis not available during build time');
-  }
-
-  if (!_redis) {
-    _redis = globalForRedis.redis ?? createRedisClient();
-    if (process.env.NODE_ENV !== 'production') {
-      globalForRedis.redis = _redis;
     }
   }
-  return _redis;
-}
 
-// Export getter function for lazy access
-export { getRedis };
-
-// For backwards compatibility, export redis as a getter that lazily initializes
-// This will throw if accessed during build time
-export const redis = new Proxy({} as Redis, {
-  get(_target, prop) {
-    const client = getRedis();
-    const value = (client as any)[prop];
-    if (typeof value === 'function') {
-      return value.bind(client);
-    }
-    return value;
-  },
-});
-
-// Helper functions for common operations
-export const cache = {
   async get<T>(key: string): Promise<T | null> {
-    try {
-      const value = await redis.get(key);
-      return value ? JSON.parse(value) : null;
-    } catch (error) {
-      logger.error(`Redis GET error for key ${key}:`, error);
+    const entry = this.store.get(key);
+    if (!entry) return null;
+
+    // Check if expired
+    if (entry.expiresAt && entry.expiresAt < Date.now()) {
+      this.store.delete(key);
       return null;
     }
-  },
+
+    return entry.value as T;
+  }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
-    try {
-      const serialized = JSON.stringify(value);
-      if (ttlSeconds) {
-        await redis.setex(key, ttlSeconds, serialized);
-      } else {
-        await redis.set(key, serialized);
-      }
-    } catch (error) {
-      logger.error(`Redis SET error for key ${key}:`, error);
-    }
-  },
+    const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : null;
+    this.store.set(key, { value, expiresAt });
+  }
 
   async del(key: string): Promise<void> {
-    try {
-      await redis.del(key);
-    } catch (error) {
-      logger.error(`Redis DEL error for key ${key}:`, error);
-    }
-  },
+    this.store.delete(key);
+  }
 
   async invalidate(pattern: string): Promise<void> {
-    try {
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
+    // Simple pattern matching (supports * at end)
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    for (const key of this.store.keys()) {
+      if (regex.test(key)) {
+        this.store.delete(key);
       }
-    } catch (error) {
-      logger.error(`Redis invalidate error for pattern ${pattern}:`, error);
     }
-  },
+  }
+
+  async incr(key: string): Promise<number> {
+    const entry = this.store.get(key);
+    const current = entry ? (typeof entry.value === 'number' ? entry.value : 0) : 0;
+    const newValue = current + 1;
+    this.store.set(key, { value: newValue, expiresAt: entry?.expiresAt || null });
+    return newValue;
+  }
+
+  async expire(key: string, seconds: number): Promise<void> {
+    const entry = this.store.get(key);
+    if (entry) {
+      entry.expiresAt = Date.now() + seconds * 1000;
+    }
+  }
+
+  async ttl(key: string): Promise<number> {
+    const entry = this.store.get(key);
+    if (!entry || !entry.expiresAt) return -1;
+    const remaining = Math.ceil((entry.expiresAt - Date.now()) / 1000);
+    return remaining > 0 ? remaining : -2;
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    const matches: string[] = [];
+    for (const key of this.store.keys()) {
+      if (regex.test(key)) {
+        matches.push(key);
+      }
+    }
+    return matches;
+  }
+
+  async exists(key: string): Promise<number> {
+    const entry = this.store.get(key);
+    if (!entry) return 0;
+    if (entry.expiresAt && entry.expiresAt < Date.now()) {
+      this.store.delete(key);
+      return 0;
+    }
+    return 1;
+  }
 
   // Rate limiting helper
   async rateLimit(
@@ -138,30 +119,89 @@ export const cache = {
     limit: number,
     windowSeconds: number
   ): Promise<{ allowed: boolean; remaining: number; reset: number }> {
+    const current = await this.incr(key);
+
+    if (current === 1) {
+      await this.expire(key, windowSeconds);
+    }
+
+    const ttl = await this.ttl(key);
+    const reset = Date.now() + ttl * 1000;
+
+    return {
+      allowed: current <= limit,
+      remaining: Math.max(0, limit - current),
+      reset,
+    };
+  }
+}
+
+// Singleton instance
+const cacheInstance = new InMemoryCache();
+
+// Export cache object for compatibility
+export const cache = {
+  async get<T>(key: string): Promise<T | null> {
     try {
-      const current = await redis.incr(key);
-
-      if (current === 1) {
-        await redis.expire(key, windowSeconds);
-      }
-
-      const ttl = await redis.ttl(key);
-      const reset = Date.now() + ttl * 1000;
-
-      return {
-        allowed: current <= limit,
-        remaining: Math.max(0, limit - current),
-        reset,
-      };
+      return await cacheInstance.get<T>(key);
     } catch (error) {
-      logger.error(`Redis rate limit error for key ${key}:`, error);
-      // Fail open - allow the request if Redis is down
+      logger.error(`Cache GET error for key ${key}:`, error);
+      return null;
+    }
+  },
+
+  async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    try {
+      await cacheInstance.set(key, value, ttlSeconds);
+    } catch (error) {
+      logger.error(`Cache SET error for key ${key}:`, error);
+    }
+  },
+
+  async del(key: string): Promise<void> {
+    try {
+      await cacheInstance.del(key);
+    } catch (error) {
+      logger.error(`Cache DEL error for key ${key}:`, error);
+    }
+  },
+
+  async invalidate(pattern: string): Promise<void> {
+    try {
+      await cacheInstance.invalidate(pattern);
+    } catch (error) {
+      logger.error(`Cache invalidate error for pattern ${pattern}:`, error);
+    }
+  },
+
+  async rateLimit(
+    key: string,
+    limit: number,
+    windowSeconds: number
+  ): Promise<{ allowed: boolean; remaining: number; reset: number }> {
+    try {
+      return await cacheInstance.rateLimit(key, limit, windowSeconds);
+    } catch (error) {
+      logger.error(`Cache rate limit error for key ${key}:`, error);
       return { allowed: true, remaining: limit, reset: Date.now() + windowSeconds * 1000 };
     }
   },
 };
 
-// Session storage helpers for Lucia Auth
+// Export redis-like interface for compatibility with existing code
+export const redis = {
+  get: (key: string) => cacheInstance.get<string>(key).then((v) => (v === null ? null : String(v))),
+  set: (key: string, value: string) => cacheInstance.set(key, value),
+  setex: (key: string, ttl: number, value: string) => cacheInstance.set(key, value, ttl),
+  del: (...keys: string[]) => Promise.all(keys.map((k) => cacheInstance.del(k))),
+  incr: (key: string) => cacheInstance.incr(key),
+  expire: (key: string, seconds: number) => cacheInstance.expire(key, seconds),
+  ttl: (key: string) => cacheInstance.ttl(key),
+  keys: (pattern: string) => cacheInstance.keys(pattern),
+  exists: (key: string) => cacheInstance.exists(key),
+};
+
+// Session storage helpers
 export const sessionStorage = {
   async get(sessionId: string): Promise<unknown | null> {
     return cache.get(`session:${sessionId}`);
@@ -179,8 +219,7 @@ export const sessionStorage = {
 // Cache keys generator
 export const cacheKeys = {
   referrerStats: (referrerId: string) => `referrer:stats:${referrerId}`,
-  referrerActivity: (referrerId: string, limit: number) =>
-    `referrer:activity:${referrerId}:${limit}`,
+  referrerActivity: (referrerId: string, limit: number) => `referrer:activity:${referrerId}:${limit}`,
   contestLeaderboard: (limit: number) => `contest:leaderboard:${limit}`,
   activeContests: () => 'contests:active',
   vanitySlug: (slug: string) => `vanity:${slug}`,

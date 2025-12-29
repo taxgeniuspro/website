@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface Order {
+  id: string;
+  profileId: string;
+  total: number;
+  status: string;
+  trackingNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * PATCH /api/admin/orders/[id]
@@ -16,15 +32,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile || (profile.role !== 'admin' && profile.role !== 'admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -34,14 +51,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
     const { status, trackingNumber } = body;
 
+    // Build update data
+    const updateData: Record<string, any> = {};
+    if (status) updateData.status = status;
+    if (trackingNumber) updateData.trackingNumber = trackingNumber;
+
     // Update order
-    const order = await prisma.order.update({
-      where: { id },
-      data: {
-        status: status || undefined,
-        trackingNumber: trackingNumber || undefined,
-      },
-    });
+    const { data: order, error: updateError } = await db.from('orders')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     logger.info('Order updated', { orderId: order.id, status, userId: profile.id });
 

@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { Prisma, ContactType } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { nanoid } from 'nanoid';
 import { adminRoleChangeRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
+// Contact type enum values (replaces @prisma/client import)
+const ContactType = {
+  CLIENT: 'CLIENT',
+  PREPARER: 'PREPARER',
+  AFFILIATE: 'AFFILIATE',
+  VENDOR: 'VENDOR',
+} as const;
+
+type ContactTypeValue = (typeof ContactType)[keyof typeof ContactType];
+
 // Map user role to CRM contact type
-function roleToContactType(role: string): ContactType {
+function roleToContactType(role: string): ContactTypeValue {
   switch (role) {
     case 'admin':
       return ContactType.PREPARER; // Admins are treated as preparers in CRM
@@ -19,6 +28,48 @@ function roleToContactType(role: string): ContactType {
     default:
       return ContactType.CLIENT;
   }
+}
+
+// Local interfaces
+interface User {
+  id: string;
+  email: string;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  affiliateStatus: string | null;
+  affiliateBondedToPreparerId: string | null;
+  affiliateGroupId: string | null;
+  customCommissionType: string | null;
+  customCommissionRate: number | null;
+  customFlatAmount: number | null;
+  hasFiledTaxes: boolean;
+  firstFilingDate: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  trackingCodeFinalized: boolean;
+  shortLinkUsername: string | null;
+  shortLinkUsernameChanged: boolean;
+  totalConversions: number;
+  lifetimeEarnings: number;
+  currentTier: string | null;
+  hideReferralProgram: boolean;
+}
+
+interface CRMContact {
+  id: string;
+  userId: string | null;
+  email: string;
+  firstName: string;
+  lastName: string;
+  contactType: string;
+  stage: string;
+  source: string | null;
 }
 
 // Authorized emails from environment variable (comma-separated list)
@@ -118,19 +169,33 @@ export async function POST(request: NextRequest) {
     logger.info(`🔍 Looking for user with email: ${email}`);
 
     // Get user by email from database
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { profile: true },
-    });
+    const { data: userData, error: userError } = await db.from('users')
+      .select('*')
+      .eq('email', email)
+      .limit(1);
+
+    if (userError) {
+      throw userError;
+    }
+
+    const user = firstOrNull<User>(userData);
 
     if (!user) {
       return NextResponse.json({ error: `No user found with email: ${email}` }, { status: 404 });
     }
 
-    logger.info(`✅ Found user: ${user.profile?.firstName || ''} ${user.profile?.lastName || ''} (${user.id})`);
+    // Get profile for this user
+    const { data: profileData } = await db.from('profiles')
+      .select('*')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
+
+    logger.info(`✅ Found user: ${profile?.firstName || ''} ${profile?.lastName || ''} (${user.id})`);
 
     // Check current role
-    const currentRole = user.profile?.role;
+    const currentRole = profile?.role;
     logger.info(`📋 Current role: ${currentRole || 'none'}`);
 
     // SPECIAL CASE: Client → Tax Preparer conversion requires account reset
@@ -139,16 +204,15 @@ export async function POST(request: NextRequest) {
 
     if (isClientToPreparerConversion) {
       // Generate new tracking code for the preparer
-      const firstName = user.profile?.firstName || 'User';
-      const lastName = user.profile?.lastName || '';
+      const firstName = profile?.firstName || 'User';
+      const lastName = profile?.lastName || '';
       const initials = `${firstName[0] || 'u'}${lastName[0] || 'p'}`.toLowerCase();
       const newTrackingCode = `${initials}-${nanoid(6)}`;
       const newShortLinkUsername = initials;
 
       // Reset client data and set up as tax preparer
-      await prisma.profile.update({
-        where: { userId: user.id },
-        data: {
+      const { error: updateError } = await db.from('profiles')
+        .update({
           role: 'tax_preparer',
           // Reset client affiliate fields
           affiliateStatus: 'APPROVED', // Tax preparers auto-approved
@@ -168,12 +232,16 @@ export async function POST(request: NextRequest) {
           shortLinkUsernameChanged: false,
           // Reset performance stats (will rebuild as preparer)
           totalConversions: 0,
-          lifetimeEarnings: new Prisma.Decimal(0),
+          lifetimeEarnings: 0,
           currentTier: null,
           // Reset referral program opt-out (preparers use different system)
           hideReferralProgram: false,
-        },
-      });
+        })
+        .eq('userId', user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       resetDetails = [
         'Client data has been reset',
@@ -189,10 +257,13 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Standard role update (no reset)
-      await prisma.profile.update({
-        where: { userId: user.id },
-        data: { role: role as any },
-      });
+      const { error: updateError } = await db.from('profiles')
+        .update({ role: role })
+        .eq('userId', user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
     }
 
     logger.info(`✅ Successfully set ${role} role for ${email}`);
@@ -200,32 +271,33 @@ export async function POST(request: NextRequest) {
     // Sync CRM contact type to match new role
     // This keeps CRM People Hub in sync with User Management role changes
     try {
-      const crmContact = await prisma.cRMContact.findFirst({
-        where: { userId: user.id },
-      });
+      const { data: crmContactData } = await db.from('crm_contacts')
+        .select('*')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const crmContact = firstOrNull<CRMContact>(crmContactData);
 
       if (crmContact) {
-        await prisma.cRMContact.update({
-          where: { id: crmContact.id },
-          data: {
+        await db.from('crm_contacts')
+          .update({
             contactType: roleToContactType(role),
-            lastContactedAt: new Date(),
-          },
-        });
+            lastContactedAt: new Date().toISOString(),
+          })
+          .eq('id', crmContact.id);
         logger.info(`✅ Synced CRM contact type to ${roleToContactType(role)} for ${email}`);
       } else {
         // User doesn't have a CRM contact yet - create one
-        await prisma.cRMContact.create({
-          data: {
+        await db.from('crm_contacts')
+          .insert({
             userId: user.id,
             email: email.toLowerCase(),
-            firstName: user.profile?.firstName || 'Unknown',
-            lastName: user.profile?.lastName || '',
+            firstName: profile?.firstName || 'Unknown',
+            lastName: profile?.lastName || '',
             contactType: roleToContactType(role),
             stage: 'NEW',
             source: 'admin_role_change',
-          },
-        });
+          });
         logger.info(`✅ Created CRM contact for user ${email} during role change`);
       }
     } catch (crmError) {
@@ -245,7 +317,7 @@ export async function POST(request: NextRequest) {
       user: {
         id: user.id,
         email: user.email,
-        name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`,
+        name: `${profile?.firstName || ''} ${profile?.lastName || ''}`,
         previousRole: currentRole,
         newRole: role,
       },

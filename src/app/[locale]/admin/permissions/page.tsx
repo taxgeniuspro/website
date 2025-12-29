@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ShieldCheck, Users, AlertCircle, UserCog, Settings, BookOpen } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { PermissionManager } from '@/components/admin/PermissionManager';
 import { PermissionPresets } from '@/components/admin/PermissionPresets';
 import { CRMPermissionsTab } from '@/components/admin/CRMPermissionsTab';
@@ -32,14 +32,19 @@ export default async function PermissionsPage() {
   let adminUsers: any[] = [];
 
   try {
-    adminUsers = await prisma.profile.findMany({
-      where: {
-        role: 'admin',
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const { data: adminUsersData, error } = await db
+      .from('profiles')
+      .select('*')
+      .eq('role', 'admin')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    adminUsers = (adminUsersData || []).map((u: any) => ({
+      ...u,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      userId: u.user_id,
+    }));
   } catch (error) {
     logger.error('Error fetching admin users:', error);
     // Continue with empty array - will show "No admin users found" message
@@ -48,15 +53,19 @@ export default async function PermissionsPage() {
   // Fetch all role permission templates from database
   const roleTemplates: Record<string, any> = {};
   try {
-    const templates = await prisma.rolePermissionTemplate.findMany();
-    templates.forEach((template) => {
+    const { data: templates, error } = await db
+      .from('role_permission_templates')
+      .select('*');
+
+    if (error) throw error;
+    (templates || []).forEach((template: any) => {
       roleTemplates[template.role] = template.permissions;
     });
   } catch (error) {
     logger.error('Error fetching role templates:', error);
   }
 
-  // Count users for each role using Prisma
+  // Count users for each role using Supabase
   // Only 3 valid roles: admin, client, tax_preparer
   const userCountsByRole: Record<string, number> = {
     admin: 0,
@@ -65,16 +74,18 @@ export default async function PermissionsPage() {
   };
 
   try {
-    const roleCounts = await prisma.profile.groupBy({
-      by: ['role'],
-      _count: { role: true },
-    });
+    // Fetch count for each role
+    const roles = ['admin', 'tax_preparer', 'client'];
+    for (const role of roles) {
+      const { count, error } = await db
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', role);
 
-    roleCounts.forEach((count) => {
-      if (count.role && userCountsByRole.hasOwnProperty(count.role)) {
-        userCountsByRole[count.role] = count._count.role;
+      if (!error && count !== null) {
+        userCountsByRole[role] = count;
       }
-    });
+    }
   } catch (error) {
     logger.error('Error counting users by role:', error);
   }

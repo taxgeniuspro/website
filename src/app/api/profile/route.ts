@@ -7,8 +7,38 @@
 
 import { auth } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+/** Profile data interface */
+interface Profile {
+  id: string;
+  userId: string | null;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  middleName: string | null;
+  phone: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  companyName: string | null;
+  licenseNo: string | null;
+  qrCodeLogoUrl: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  trackingCodeQRUrl: string | null;
+  professionalTitle: string | null;
+  website: string | null;
+  publicAddress: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  linkedinUrl: string | null;
+  twitterUrl: string | null;
+  youtubeUrl: string | null;
+  tiktokUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * GET: Fetch user's profile
@@ -22,45 +52,20 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile with all fields needed for marketing - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: {
-        id: true,
-        userId: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        middleName: true,
-        phone: true,
-        avatarUrl: true,
-        bio: true,
-        companyName: true,
-        licenseNo: true,
-        qrCodeLogoUrl: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeQRUrl: true,
-        professionalTitle: true,
-        website: true,
-        publicAddress: true,
-        // Social media links
-        facebookUrl: true,
-        instagramUrl: true,
-        linkedinUrl: true,
-        twitterUrl: true,
-        youtubeUrl: true,
-        tiktokUrl: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Get profile with all fields needed for marketing - use OR conditions for Supabase Auth compatibility
+    const { data: profiles, error } = await db
+      .from('profiles')
+      .select(
+        'id, userId, role, firstName, lastName, middleName, phone, avatarUrl, bio, companyName, licenseNo, qrCodeLogoUrl, trackingCode, customTrackingCode, trackingCodeQRUrl, professionalTitle, website, publicAddress, facebookUrl, instagramUrl, linkedinUrl, twitterUrl, youtubeUrl, tiktokUrl, createdAt, updatedAt'
+      )
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`);
+
+    if (error) {
+      logger.error('Error fetching profile:', error);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -85,17 +90,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Get profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    // Get profile - use OR conditions for Supabase Auth compatibility
+    const { data: profiles, error: fetchError } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`);
+
+    if (fetchError) {
+      logger.error('Error fetching profile:', fetchError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<{ id: string }>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -126,7 +132,7 @@ export async function PATCH(request: NextRequest) {
     ];
 
     // Filter out any fields that aren't allowed
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) {
         updateData[field] = body[field];
@@ -134,10 +140,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update profile
-    const updatedProfile = await prisma.profile.update({
-      where: { id: profile.id },
-      data: updateData,
-    });
+    const { data: updatedProfile, error: updateError } = await db
+      .from('profiles')
+      .update(updateData)
+      .eq('id', profile.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      logger.error('Error updating profile:', updateError);
+      return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
+    }
 
     logger.info(`Profile updated for user ${userId}`, { fields: Object.keys(updateData) });
 

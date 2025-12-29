@@ -5,7 +5,31 @@
  * This prevents data drift between cached analytics and actual database records.
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
+
+// Local type definitions
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  creatorId: string;
+  clicks: number;
+  uniqueClicks: number;
+  intakeStarts: number;
+  intakeCompletes: number;
+  returnsFiled: number;
+  conversions: number;
+  returns?: number;
+  intakeConversionRate: number;
+  completeConversionRate: number;
+  filedConversionRate: number;
+  conversionRate: number;
+  isActive: boolean;
+}
+
+interface ProfileRecord {
+  id: string;
+  shortLinkUsername?: string | null;
+}
 
 interface ReconciliationResult {
   linkId: string;
@@ -40,10 +64,13 @@ interface ReconciliationSummary {
  * Get the creator's shortLinkUsername from their profile
  */
 async function getCreatorUsername(creatorId: string): Promise<string | null> {
-  const profile = await prisma.profile.findUnique({
-    where: { id: creatorId },
-    select: { shortLinkUsername: true },
-  });
+  const { data: profileData } = await db
+    .from('profiles')
+    .select('shortLinkUsername')
+    .eq('id', creatorId)
+    .limit(1);
+
+  const profile = firstOrNull(profileData) as ProfileRecord | null;
   return profile?.shortLinkUsername ?? null;
 }
 
@@ -52,44 +79,50 @@ async function getCreatorUsername(creatorId: string): Promise<string | null> {
  */
 async function countActualMetrics(referrerUsername: string, creatorId: string) {
   // Count clicks from LinkClick records linked to any MarketingLink for this creator
-  const links = await prisma.marketingLink.findMany({
-    where: { creatorId },
-    select: { id: true },
-  });
-  const linkIds = links.map((l) => l.id);
+  const { data: linksData } = await db
+    .from('marketing_links')
+    .select('id')
+    .eq('creatorId', creatorId);
 
-  const clicksCount = linkIds.length > 0
-    ? await prisma.linkClick.count({
-        where: { linkId: { in: linkIds } },
-      })
-    : 0;
+  const linkIds = (linksData || []).map((l: { id: string }) => l.id);
+
+  let clicksCount = 0;
+  if (linkIds.length > 0) {
+    const { count } = await db
+      .from('link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .in('linkId', linkIds);
+    clicksCount = count || 0;
+  }
 
   // Count intake starts (TaxIntakeLead records, not completed)
-  const intakeStartsCount = await prisma.taxIntakeLead.count({
-    where: { referrerUsername },
-  });
+  const { count: intakeStartsCount } = await db
+    .from('tax_intake_leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('referrerUsername', referrerUsername);
 
   // Count intake completes (TaxIntakeLead records where completed=true)
-  const intakeCompletesCount = await prisma.taxIntakeLead.count({
-    where: { referrerUsername, completed: true },
-  });
+  const { count: intakeCompletesCount } = await db
+    .from('tax_intake_leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('referrerUsername', referrerUsername)
+    .eq('completed', true);
 
   // Count returns filed (Leads that are CONVERTED or have associated TaxReturn)
-  const returnsFiledCount = await prisma.lead.count({
-    where: {
-      referrerUsername,
-      status: 'CONVERTED',
-    },
-  });
+  const { count: returnsFiledCount } = await db
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('referrerUsername', referrerUsername)
+    .eq('status', 'CONVERTED');
 
   // Conversions = intake completes (form submissions)
-  const conversionsCount = intakeCompletesCount;
+  const conversionsCount = intakeCompletesCount || 0;
 
   return {
     clicks: clicksCount,
-    intakeStarts: intakeStartsCount,
-    intakeCompletes: intakeCompletesCount,
-    returnsFiled: returnsFiledCount,
+    intakeStarts: intakeStartsCount || 0,
+    intakeCompletes: intakeCompletesCount || 0,
+    returnsFiled: returnsFiledCount || 0,
     conversions: conversionsCount,
   };
 }
@@ -98,9 +131,13 @@ async function countActualMetrics(referrerUsername: string, creatorId: string) {
  * Reconcile a single MarketingLink's cached counters with actual data
  */
 async function reconcileLink(linkId: string): Promise<ReconciliationResult | null> {
-  const link = await prisma.marketingLink.findUnique({
-    where: { id: linkId },
-  });
+  const { data: linkData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('id', linkId)
+    .limit(1);
+
+  const link = firstOrNull(linkData) as MarketingLinkRecord | null;
 
   if (!link) {
     return null;
@@ -137,9 +174,9 @@ async function reconcileLink(linkId: string): Promise<ReconciliationResult | nul
     const filedConversionRate = actual.clicks > 0 ? (actual.returnsFiled / actual.clicks) * 100 : 0;
     const conversionRate = actual.clicks > 0 ? (actual.conversions / actual.clicks) * 100 : 0;
 
-    await prisma.marketingLink.update({
-      where: { id: linkId },
-      data: {
+    await db
+      .from('marketing_links')
+      .update({
         clicks: actual.clicks,
         uniqueClicks: actual.clicks, // Assuming unique for simplicity
         intakeStarts: actual.intakeStarts,
@@ -150,8 +187,8 @@ async function reconcileLink(linkId: string): Promise<ReconciliationResult | nul
         completeConversionRate,
         filedConversionRate,
         conversionRate,
-      },
-    });
+      })
+      .eq('id', linkId);
   }
 
   return {
@@ -193,11 +230,12 @@ export async function reconcileFunnelData(linkId?: string): Promise<Reconciliati
       }
     } else {
       // Reconcile all active links
-      const links = await prisma.marketingLink.findMany({
-        where: { isActive: true },
-        select: { id: true },
-      });
+      const { data: linksData } = await db
+        .from('marketing_links')
+        .select('id')
+        .eq('isActive', true);
 
+      const links = (linksData || []) as { id: string }[];
       summary.totalLinks = links.length;
 
       for (const link of links) {
@@ -230,20 +268,12 @@ export async function checkFunnelDrift(): Promise<{
   hasDrift: boolean;
   driftedLinks: string[];
 }> {
-  const links = await prisma.marketingLink.findMany({
-    where: { isActive: true },
-    select: {
-      id: true,
-      code: true,
-      creatorId: true,
-      clicks: true,
-      intakeStarts: true,
-      intakeCompletes: true,
-      returnsFiled: true,
-      conversions: true,
-    },
-  });
+  const { data: linksData } = await db
+    .from('marketing_links')
+    .select('id, code, creatorId, clicks, intakeStarts, intakeCompletes, returnsFiled, conversions')
+    .eq('isActive', true);
 
+  const links = (linksData || []) as MarketingLinkRecord[];
   const driftedLinks: string[] = [];
 
   for (const link of links) {

@@ -7,8 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { subDays, startOfDay } from 'date-fns';
+
+interface MarketingLinkRow {
+  clicks: number | null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,64 +50,82 @@ export async function GET(request: NextRequest) {
     let profileId: string | null = null;
 
     if (role === 'tax_preparer' || preparerId) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: preparerId || user.id },
-        select: { id: true },
-      });
-      profileId = profile?.id || null;
+      const { data: profileData } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', preparerId || user.id)
+        .limit(1);
+      profileId = firstOrNull(profileData)?.id || null;
     }
 
     // Get click data from MarketingLink analytics
-    const clicksData = await prisma.marketingLink.aggregate({
-      where: {
-        ...(profileId && { profileId }),
-        createdAt: { gte: startDate },
-      },
-      _sum: {
-        clicks: true,
-      },
-    });
+    let clicksQuery = db
+      .from('marketing_links')
+      .select('clicks')
+      .gte('createdAt', startDate.toISOString());
 
-    // Get leads at various stages
-    const leadsFilter = {
-      created_at: { gte: startDate },
-      ...(profileId && { assignedPreparerId: profileId }),
-    };
+    if (profileId) {
+      clicksQuery = clicksQuery.eq('profileId', profileId);
+    }
 
-    const [intakeStarted, intakeCompleted, assigned, converted] = await Promise.all([
-      // Intake started (all leads created)
-      prisma.taxIntakeLead.count({
-        where: leadsFilter,
-      }),
-      // Intake completed
-      prisma.taxIntakeLead.count({
-        where: {
-          ...leadsFilter,
-          completed: true,
-        },
-      }),
-      // Assigned to preparer
-      prisma.taxIntakeLead.count({
-        where: {
-          ...leadsFilter,
-          assignedPreparerId: { not: null },
-        },
-      }),
-      // Converted to client
-      prisma.taxIntakeLead.count({
-        where: {
-          ...leadsFilter,
-          convertedToClient: true,
-        },
-      }),
+    const { data: clicksData } = await clicksQuery;
+    const totalClicks = ((clicksData || []) as MarketingLinkRow[]).reduce(
+      (sum, l) => sum + (l.clicks || 0),
+      0
+    );
+
+    // Get leads at various stages using count queries
+    const startDateIso = startDate.toISOString();
+
+    // Build base query conditions
+    let intakeStartedQuery = db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startDateIso);
+
+    let intakeCompletedQuery = db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startDateIso)
+      .eq('completed', true);
+
+    let assignedQuery = db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startDateIso)
+      .not('assignedPreparerId', 'is', null);
+
+    let convertedQuery = db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startDateIso)
+      .eq('convertedToClient', true);
+
+    if (profileId) {
+      intakeStartedQuery = intakeStartedQuery.eq('assignedPreparerId', profileId);
+      intakeCompletedQuery = intakeCompletedQuery.eq('assignedPreparerId', profileId);
+      assignedQuery = assignedQuery.eq('assignedPreparerId', profileId);
+      convertedQuery = convertedQuery.eq('assignedPreparerId', profileId);
+    }
+
+    const [
+      { count: intakeStarted },
+      { count: intakeCompleted },
+      { count: assigned },
+      { count: converted },
+    ] = await Promise.all([
+      intakeStartedQuery,
+      intakeCompletedQuery,
+      assignedQuery,
+      convertedQuery,
     ]);
 
     return NextResponse.json({
-      clicks: clicksData._sum.clicks || 0,
-      intakeStarted,
-      intakeCompleted,
-      assigned,
-      converted,
+      clicks: totalClicks,
+      intakeStarted: intakeStarted || 0,
+      intakeCompleted: intakeCompleted || 0,
+      assigned: assigned || 0,
+      converted: converted || 0,
       dateRange,
     });
   } catch (error) {

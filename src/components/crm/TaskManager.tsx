@@ -53,7 +53,25 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
-import { TaskStatus, TaskPriority } from '@prisma/client';
+// Task types (migrated from Prisma to local interfaces)
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+// TaskStatus enum object for runtime value access
+export const TaskStatus = {
+  TODO: 'TODO' as TaskStatus,
+  IN_PROGRESS: 'IN_PROGRESS' as TaskStatus,
+  DONE: 'DONE' as TaskStatus,
+  CANCELLED: 'CANCELLED' as TaskStatus,
+};
+
+// TaskPriority enum object for runtime value access
+export const TaskPriority = {
+  LOW: 'LOW' as TaskPriority,
+  MEDIUM: 'MEDIUM' as TaskPriority,
+  HIGH: 'HIGH' as TaskPriority,
+  URGENT: 'URGENT' as TaskPriority,
+};
 import { logger } from '@/lib/logger';
 import { format, isPast, isToday, isTomorrow } from 'date-fns';
 

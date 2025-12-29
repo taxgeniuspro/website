@@ -10,9 +10,28 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { EmailService } from '@/lib/services/email.service';
+
+// TypeScript interfaces
+interface PreparerProfile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface AppointmentWithPreparer {
+  id: string;
+  clientEmail: string;
+  clientName: string;
+  type: string;
+  scheduledFor: string;
+  duration: number | null;
+  meetingLink: string | null;
+  location: string | null;
+  preparer: PreparerProfile | null;
+}
 
 // Coolify cron jobs use GET requests
 export async function GET(req: NextRequest) {
@@ -40,34 +59,48 @@ export async function GET(req: NextRequest) {
     // 24-HOUR REMINDERS
     // ========================================
     // Find appointments scheduled between 23.5 and 24.5 hours from now
-    const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const twentyThreeAndHalfHours = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
     const twentyFourAndHalfHours = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
-    const appointments24h = await prisma.appointment.findMany({
-      where: {
-        scheduledFor: {
-          gte: twentyThreeAndHalfHours,
-          lte: twentyFourAndHalfHours,
-        },
-        reminder24hSent: false,
-        status: {
-          in: ['SCHEDULED', 'CONFIRMED'],
-        },
-      },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            user: {
-              select: { email: true },
-            },
-          },
-        },
-      },
-    });
+    const { data: appointments24hRaw, error: error24h } = await db
+      .from('appointments')
+      .select(`
+        id,
+        clientEmail,
+        clientName,
+        type,
+        scheduledFor,
+        duration,
+        meetingLink,
+        location,
+        preparerId
+      `)
+      .gte('scheduledFor', twentyThreeAndHalfHours.toISOString())
+      .lte('scheduledFor', twentyFourAndHalfHours.toISOString())
+      .eq('reminder24hSent', false)
+      .in('status', ['SCHEDULED', 'CONFIRMED']);
+
+    if (error24h) {
+      throw error24h;
+    }
+
+    // Fetch preparer details for each appointment
+    const appointments24h: AppointmentWithPreparer[] = [];
+    for (const appt of appointments24hRaw || []) {
+      let preparer: PreparerProfile | null = null;
+      if (appt.preparerId) {
+        const { data: preparerData } = await db
+          .from('profiles')
+          .select('id, firstName, lastName')
+          .eq('id', appt.preparerId)
+          .single();
+        preparer = preparerData as PreparerProfile | null;
+      }
+      appointments24h.push({
+        ...appt,
+        preparer,
+      } as AppointmentWithPreparer);
+    }
 
     logger.info(`Found ${appointments24h.length} appointments for 24h reminder`);
 
@@ -80,7 +113,7 @@ export async function GET(req: NextRequest) {
             clientName: appointment.clientName,
             preparerName: `${appointment.preparer?.firstName || ''} ${appointment.preparer?.lastName || ''}`.trim() || 'Your Tax Preparer',
             appointmentType: formatAppointmentType(appointment.type),
-            scheduledFor: appointment.scheduledFor!,
+            scheduledFor: new Date(appointment.scheduledFor),
             duration: appointment.duration || 30,
             reminderType: '24h',
             meetingLink: appointment.meetingLink || undefined,
@@ -89,13 +122,17 @@ export async function GET(req: NextRequest) {
         );
 
         // Update flag to prevent duplicate emails
-        await prisma.appointment.update({
-          where: { id: appointment.id },
-          data: {
+        const { error: updateError } = await db
+          .from('appointments')
+          .update({
             reminder24hSent: true,
-            reminderSentAt: new Date(),
-          },
-        });
+            reminderSentAt: new Date().toISOString(),
+          })
+          .eq('id', appointment.id);
+
+        if (updateError) {
+          throw updateError;
+        }
 
         results.sent24h++;
         logger.info('24h reminder sent', {
@@ -115,34 +152,48 @@ export async function GET(req: NextRequest) {
     // 1-HOUR REMINDERS
     // ========================================
     // Find appointments scheduled between 45 min and 1h 15min from now
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
     const fortyFiveMinutes = new Date(now.getTime() + 45 * 60 * 1000);
     const oneHourFifteen = new Date(now.getTime() + 75 * 60 * 1000);
 
-    const appointments1h = await prisma.appointment.findMany({
-      where: {
-        scheduledFor: {
-          gte: fortyFiveMinutes,
-          lte: oneHourFifteen,
-        },
-        reminder1hSent: false,
-        status: {
-          in: ['SCHEDULED', 'CONFIRMED'],
-        },
-      },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            user: {
-              select: { email: true },
-            },
-          },
-        },
-      },
-    });
+    const { data: appointments1hRaw, error: error1h } = await db
+      .from('appointments')
+      .select(`
+        id,
+        clientEmail,
+        clientName,
+        type,
+        scheduledFor,
+        duration,
+        meetingLink,
+        location,
+        preparerId
+      `)
+      .gte('scheduledFor', fortyFiveMinutes.toISOString())
+      .lte('scheduledFor', oneHourFifteen.toISOString())
+      .eq('reminder1hSent', false)
+      .in('status', ['SCHEDULED', 'CONFIRMED']);
+
+    if (error1h) {
+      throw error1h;
+    }
+
+    // Fetch preparer details for each appointment
+    const appointments1h: AppointmentWithPreparer[] = [];
+    for (const appt of appointments1hRaw || []) {
+      let preparer: PreparerProfile | null = null;
+      if (appt.preparerId) {
+        const { data: preparerData } = await db
+          .from('profiles')
+          .select('id, firstName, lastName')
+          .eq('id', appt.preparerId)
+          .single();
+        preparer = preparerData as PreparerProfile | null;
+      }
+      appointments1h.push({
+        ...appt,
+        preparer,
+      } as AppointmentWithPreparer);
+    }
 
     logger.info(`Found ${appointments1h.length} appointments for 1h reminder`);
 
@@ -155,7 +206,7 @@ export async function GET(req: NextRequest) {
             clientName: appointment.clientName,
             preparerName: `${appointment.preparer?.firstName || ''} ${appointment.preparer?.lastName || ''}`.trim() || 'Your Tax Preparer',
             appointmentType: formatAppointmentType(appointment.type),
-            scheduledFor: appointment.scheduledFor!,
+            scheduledFor: new Date(appointment.scheduledFor),
             duration: appointment.duration || 30,
             reminderType: '1h',
             meetingLink: appointment.meetingLink || undefined,
@@ -164,13 +215,17 @@ export async function GET(req: NextRequest) {
         );
 
         // Update flag to prevent duplicate emails
-        await prisma.appointment.update({
-          where: { id: appointment.id },
-          data: {
+        const { error: updateError } = await db
+          .from('appointments')
+          .update({
             reminder1hSent: true,
-            reminderSentAt: new Date(),
-          },
-        });
+            reminderSentAt: new Date().toISOString(),
+          })
+          .eq('id', appointment.id);
+
+        if (updateError) {
+          throw updateError;
+        }
 
         results.sent1h++;
         logger.info('1h reminder sent', {

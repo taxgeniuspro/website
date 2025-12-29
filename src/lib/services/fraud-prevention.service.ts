@@ -7,8 +7,26 @@
  * Part of Epic 6: Lead Tracking Dashboard Enhancement - Story 8
  */
 
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions
+interface LeadRecord {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  ipAddress?: string | null;
+  status: string;
+  referrerUsername?: string | null;
+  createdAt: string;
+}
+
+interface ProfileRecord {
+  id: string;
+  role: string;
+  shortLinkUsername?: string | null;
+  createdAt: string;
+}
 
 /**
  * Fraud check result interface
@@ -44,28 +62,22 @@ export async function checkDuplicateLead(
     const cutoffTime = new Date();
     cutoffTime.setHours(cutoffTime.getHours() - timeWindowHours);
 
+    const normalizedEmail = email.toLowerCase();
+    const normalizedPhone = phone.replace(/\D/g, ''); // Strip non-numeric
+
     // Check for existing leads with same email or phone
-    const existingLead = await prisma.lead.findFirst({
-      where: {
-        OR: [
-          { email: email.toLowerCase() },
-          { phone: phone.replace(/\D/g, '') }, // Strip non-numeric
-        ],
-        createdAt: {
-          gte: cutoffTime,
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        createdAt: true,
-      },
-    });
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id, createdAt')
+      .or(`email.eq.${normalizedEmail},phone.eq.${normalizedPhone}`)
+      .gte('createdAt', cutoffTime.toISOString())
+      .order('createdAt', { ascending: false })
+      .limit(1);
+
+    const existingLead = firstOrNull(leadsData) as { id: string; createdAt: string } | null;
 
     if (existingLead) {
-      const timeSinceLastSubmission = Date.now() - existingLead.createdAt.getTime();
+      const timeSinceLastSubmission = Date.now() - new Date(existingLead.createdAt).getTime();
       const minutesAgo = Math.floor(timeSinceLastSubmission / 1000 / 60);
 
       logger.warn('Duplicate lead detected', {
@@ -105,23 +117,21 @@ export async function checkIPRateLimit(
     cutoffTime.setMinutes(cutoffTime.getMinutes() - timeWindowMinutes);
 
     // Count recent submissions from this IP
-    const recentSubmissions = await prisma.lead.count({
-      where: {
-        ipAddress,
-        createdAt: {
-          gte: cutoffTime,
-        },
-      },
-    });
+    const { count: recentSubmissions } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('ipAddress', ipAddress)
+      .gte('createdAt', cutoffTime.toISOString());
 
-    const remaining = Math.max(0, maxSubmissions - recentSubmissions);
+    const submissionCount = recentSubmissions || 0;
+    const remaining = Math.max(0, maxSubmissions - submissionCount);
     const resetAt = new Date();
     resetAt.setMinutes(resetAt.getMinutes() + timeWindowMinutes);
 
-    if (recentSubmissions >= maxSubmissions) {
+    if (submissionCount >= maxSubmissions) {
       logger.warn('IP rate limit exceeded', {
         ipAddress,
-        submissions: recentSubmissions,
+        submissions: submissionCount,
         limit: maxSubmissions,
       });
 
@@ -158,15 +168,13 @@ export async function validateReferrer(username: string): Promise<{
   reason?: string;
 }> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { shortLinkUsername: username },
-      select: {
-        id: true,
-        role: true,
-        shortLinkUsername: true,
-        createdAt: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role, shortLinkUsername, createdAt')
+      .eq('shortLinkUsername', username)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return {
@@ -179,10 +187,11 @@ export async function validateReferrer(username: string): Promise<{
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-    if (profile.createdAt > oneDayAgo) {
+    const profileCreatedAt = new Date(profile.createdAt);
+    if (profileCreatedAt > oneDayAgo) {
       logger.warn('New referrer account used', {
         username,
-        accountAge: Date.now() - profile.createdAt.getTime(),
+        accountAge: Date.now() - profileCreatedAt.getTime(),
       });
       // Allow but flag as potentially suspicious
     }
@@ -271,16 +280,15 @@ export async function detectSuspiciousPatterns(data: {
     }
 
     // Check 7: IP reputation - check if this IP has submitted multiple invalid leads
-    const ipFraudCount = await prisma.lead.count({
-      where: {
-        ipAddress: data.ipAddress,
-        status: 'DISQUALIFIED',
-        createdAt: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
-        },
-      },
-    });
-    if (ipFraudCount > 3) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const { count: ipFraudCount } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('ipAddress', data.ipAddress)
+      .eq('status', 'DISQUALIFIED')
+      .gte('createdAt', thirtyDaysAgo.toISOString());
+
+    if ((ipFraudCount || 0) > 3) {
       flags.push('SUSPICIOUS_IP_HISTORY');
       riskScore += 35;
     }
@@ -307,21 +315,30 @@ export async function detectSuspiciousPatterns(data: {
  */
 async function calculateReferrerFraudRate(username: string): Promise<number> {
   try {
-    const stats = await prisma.lead.groupBy({
-      by: ['status'],
-      where: {
-        referrerUsername: username,
-        createdAt: {
-          gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // Last 90 days
-        },
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+    // Fetch leads and group by status in JavaScript (Supabase doesn't support groupBy)
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('id, status')
+      .eq('referrerUsername', username)
+      .gte('createdAt', ninetyDaysAgo.toISOString());
+
+    const leads = (leadsData || []) as { id: string; status: string }[];
+
+    if (leads.length === 0) return 0;
+
+    // Count by status
+    const statusCounts = leads.reduce(
+      (acc, lead) => {
+        acc[lead.status] = (acc[lead.status] || 0) + 1;
+        return acc;
       },
-      _count: true,
-    });
+      {} as Record<string, number>
+    );
 
-    const totalLeads = stats.reduce((sum, s) => sum + s._count, 0);
-    const disqualifiedLeads = stats.find((s) => s.status === 'DISQUALIFIED')?._count || 0;
-
-    if (totalLeads === 0) return 0;
+    const totalLeads = leads.length;
+    const disqualifiedLeads = statusCounts['DISQUALIFIED'] || 0;
 
     return disqualifiedLeads / totalLeads;
   } catch (error) {

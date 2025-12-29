@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import {
   createSavedReply,
   getSavedReplies,
@@ -27,12 +27,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
@@ -86,17 +89,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: postProfileData, error: postProfileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(postProfileData);
+
+    if (postProfileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Only preparers and admins can create saved replies
-    const canCreate = profile.role === 'tax_preparer' || profile.role === 'admin';
+    const canCreate = profile.role === 'tax_preparer' || profile.role === 'admin' || profile.role === 'super_admin';
 
     if (!canCreate) {
       return NextResponse.json(
@@ -118,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only admins can create global replies
-    const globalFlag = isGlobal && profile.role === 'admin';
+    const globalFlag = isGlobal && (profile.role === 'admin' || profile.role === 'super_admin');
 
     // Create saved reply
     const savedReply = await createSavedReply({

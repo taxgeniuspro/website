@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -15,25 +15,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const landingPageEntries: MetadataRoute.Sitemap = [];
 
   try {
-    const landingPages = await prisma.landingPage.findMany({
-      where: { isPublished: true },
-      select: {
-        slug: true,
-        updatedAt: true,
-      },
-    });
+    const { data: landingPages, error } = await db
+      .from('landing_pages')
+      .select('slug, updated_at')
+      .eq('is_published', true);
+
+    if (error) throw error;
 
     // Generate sitemap entries for landing pages (both languages)
-    landingPages.forEach((page) => {
-      locales.forEach((locale) => {
-        landingPageEntries.push({
-          url: `${baseUrl}/${locale}/locations/${page.slug}`,
-          lastModified: page.updatedAt,
-          changeFrequency: 'monthly',
-          priority: 0.8,
+    if (landingPages) {
+      landingPages.forEach((page) => {
+        locales.forEach((locale) => {
+          landingPageEntries.push({
+            url: `${baseUrl}/${locale}/locations/${page.slug}`,
+            lastModified: page.updated_at ? new Date(page.updated_at) : new Date(),
+            changeFrequency: 'monthly',
+            priority: 0.8,
+          });
         });
       });
-    });
+    }
   } catch (error) {
     // During Docker build, database isn't available - return empty array
     // Sitemap will be regenerated at runtime with actual data

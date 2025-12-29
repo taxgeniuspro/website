@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import QRCode from 'qrcode';
+
+// Local interfaces
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  customTrackingCode: string | null;
+  trackingCode: string | null;
+  avatarUrl: string | null;
+  phone: string | null;
+  createdAt: string;
+}
 
 // Authorized emails for admin actions
 const getAuthorizedAdminEmails = (): string[] => {
@@ -57,32 +77,42 @@ async function generateTrackingCode(firstName: string, lastName: string, exclude
   const baseCode = `${(firstName?.[0] || 'x').toLowerCase()}${(lastName?.[0] || 'x').toLowerCase()}`;
 
   // Check if base code is available
-  const existing = await prisma.profile.findFirst({
-    where: {
-      OR: [{ customTrackingCode: baseCode }, { trackingCode: baseCode }],
-      NOT: excludeProfileId ? { id: excludeProfileId } : undefined,
-    },
-  });
+  let query = db.from('profiles')
+    .select('id')
+    .or(`customTrackingCode.eq.${baseCode},trackingCode.eq.${baseCode}`);
 
-  if (!existing) {
+  if (excludeProfileId) {
+    query = query.neq('id', excludeProfileId);
+  }
+
+  const { data: existing } = await query.limit(1);
+
+  if (!existing || existing.length === 0) {
     return baseCode;
   }
 
   // Try with number suffix
   let counter = 1;
   let code = `${baseCode}${counter}`;
-  while (
-    await prisma.profile.findFirst({
-      where: {
-        OR: [{ customTrackingCode: code }, { trackingCode: code }],
-        NOT: excludeProfileId ? { id: excludeProfileId } : undefined,
-      },
-    })
-  ) {
+
+  while (true) {
+    let checkQuery = db.from('profiles')
+      .select('id')
+      .or(`customTrackingCode.eq.${code},trackingCode.eq.${code}`);
+
+    if (excludeProfileId) {
+      checkQuery = checkQuery.neq('id', excludeProfileId);
+    }
+
+    const { data: existingCode } = await checkQuery.limit(1);
+
+    if (!existingCode || existingCode.length === 0) {
+      return code;
+    }
+
     counter++;
     code = `${baseCode}${counter}`;
   }
-  return code;
 }
 
 /**
@@ -96,11 +126,12 @@ async function createMarketingLinks(profileId: string, trackingCode: string): Pr
     const url = `${config.targetPage}?ref=${trackingCode}`;
 
     // Check if link already exists
-    const existing = await prisma.marketingLink.findUnique({
-      where: { code },
-    });
+    const { data: existing } = await db.from('marketing_links')
+      .select('id')
+      .eq('code', code)
+      .limit(1);
 
-    if (existing) {
+    if (existing && existing.length > 0) {
       logger.info(`Marketing link ${code} already exists, skipping`, { profileId });
       continue;
     }
@@ -109,8 +140,8 @@ async function createMarketingLinks(profileId: string, trackingCode: string): Pr
     const fullUrl = `https://taxgeniuspro.tax/go/${code}`;
     const qrCodeImageUrl = await generateQRCode(fullUrl);
 
-    await prisma.marketingLink.create({
-      data: {
+    await db.from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'TAX_PREPARER',
         linkType: type as 'LEAD' | 'INTAKE' | 'APPOINTMENT',
@@ -121,8 +152,7 @@ async function createMarketingLinks(profileId: string, trackingCode: string): Pr
         targetPage: config.targetPage,
         qrCodeImageUrl,
         isActive: true,
-      },
-    });
+      });
 
     createdLinks.push(`/go/${code}`);
     logger.info(`Created marketing link: ${code}`, { profileId, url });
@@ -177,29 +207,45 @@ export async function POST(request: NextRequest) {
     logger.info(`Promoting user to tax preparer: ${email}`, { customCode, by: currentUserEmail });
 
     // Find user by email
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: {
-        profile: true,
-      },
-    });
+    const { data: userData, error: userError } = await db.from('users')
+      .select('id, email, name')
+      .eq('email', email.toLowerCase())
+      .limit(1);
+
+    if (userError) {
+      throw userError;
+    }
+
+    const user = firstOrNull<User>(userData);
 
     if (!user) {
       return NextResponse.json({ error: `No user found with email: ${email}` }, { status: 404 });
     }
 
-    if (!user.profile) {
+    // Get profile
+    const { data: profileData, error: profileError } = await db.from('profiles')
+      .select('*')
+      .eq('userId', user.id)
+      .limit(1);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
+
+    if (!profile) {
       return NextResponse.json({ error: 'User has no profile' }, { status: 400 });
     }
 
     // Check if already a tax preparer
-    if (user.profile.role === 'tax_preparer') {
+    if (profile.role === 'tax_preparer') {
       // Still allow updating tracking code
       if (!customCode) {
         return NextResponse.json(
           {
             error: 'User is already a tax preparer',
-            currentTrackingCode: user.profile.customTrackingCode || user.profile.trackingCode,
+            currentTrackingCode: profile.customTrackingCode || profile.trackingCode,
           },
           { status: 400 }
         );
@@ -210,22 +256,21 @@ export async function POST(request: NextRequest) {
     let trackingCode: string;
     if (customCode) {
       // Check if custom code is available
-      const existing = await prisma.profile.findFirst({
-        where: {
-          OR: [{ customTrackingCode: customCode }, { trackingCode: customCode }],
-          NOT: { id: user.profile.id },
-        },
-      });
+      const { data: existing } = await db.from('profiles')
+        .select('id')
+        .or(`customTrackingCode.eq.${customCode},trackingCode.eq.${customCode}`)
+        .neq('id', profile.id)
+        .limit(1);
 
-      if (existing) {
+      if (existing && existing.length > 0) {
         return NextResponse.json({ error: `Tracking code '${customCode}' is already taken` }, { status: 400 });
       }
       trackingCode = customCode.toLowerCase();
     } else {
       trackingCode = await generateTrackingCode(
-        user.profile.firstName || user.name?.split(' ')[0] || 'x',
-        user.profile.lastName || user.name?.split(' ').slice(1).join(' ') || 'x',
-        user.profile.id
+        profile.firstName || user.name?.split(' ')[0] || 'x',
+        profile.lastName || user.name?.split(' ').slice(1).join(' ') || 'x',
+        profile.id
       );
     }
 
@@ -234,31 +279,34 @@ export async function POST(request: NextRequest) {
     const qrCodeImageUrl = await generateQRCode(profileQrUrl);
 
     // Update profile to tax_preparer
-    await prisma.profile.update({
-      where: { id: user.profile.id },
-      data: {
+    const { error: updateError } = await db.from('profiles')
+      .update({
         role: 'tax_preparer',
         customTrackingCode: trackingCode,
         trackingCode: trackingCode,
         trackingCodeFinalized: true,
         shortLinkUsername: trackingCode,
         usePhotoInQRCodes: true,
-        qrCodeLogoUrl: user.profile.avatarUrl,
+        qrCodeLogoUrl: profile.avatarUrl,
         trackingCodeQRUrl: qrCodeImageUrl,
         // Reset affiliate status for tax preparers
         affiliateStatus: 'APPROVED',
         affiliateBondedToPreparerId: null,
-      },
-    });
+      })
+      .eq('id', profile.id);
+
+    if (updateError) {
+      throw updateError;
+    }
 
     logger.info(`Profile updated to tax_preparer`, {
       userId: user.id,
-      profileId: user.profile.id,
+      profileId: profile.id,
       trackingCode,
     });
 
     // Create marketing links
-    const createdLinks = await createMarketingLinks(user.profile.id, trackingCode);
+    const createdLinks = await createMarketingLinks(profile.id, trackingCode);
 
     return NextResponse.json({
       success: true,
@@ -266,8 +314,8 @@ export async function POST(request: NextRequest) {
       user: {
         id: user.id,
         email: user.email,
-        name: `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() || user.name,
-        profileId: user.profile.id,
+        name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || user.name,
+        profileId: profile.id,
         trackingCode,
       },
       marketingLinks: {
@@ -320,31 +368,41 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all client users who could be promoted
-    const clients = await prisma.profile.findMany({
-      where: { role: 'client' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
+    const { data: clients, error: clientsError } = await db.from('profiles')
+      .select('id, userId, firstName, lastName, phone, createdAt')
+      .eq('role', 'client')
+      .order('createdAt', { ascending: false });
+
+    if (clientsError) {
+      throw clientsError;
+    }
+
+    // Get user emails
+    const userIds = (clients || []).map((c: Profile) => c.userId);
+    const { data: users } = await db.from('users')
+      .select('id, email, name')
+      .in('id', userIds);
+
+    // Create lookup map
+    const usersById = new Map<string, User>();
+    (users || []).forEach((u: User) => {
+      usersById.set(u.id, u);
     });
 
     return NextResponse.json({
       success: true,
-      count: clients.length,
-      clients: clients.map((p) => ({
-        userId: p.userId,
-        profileId: p.id,
-        email: p.user.email,
-        name: `${p.firstName || ''} ${p.lastName || ''}`.trim() || p.user.name,
-        phone: p.phone,
-        createdAt: p.createdAt,
-      })),
+      count: (clients || []).length,
+      clients: (clients || []).map((p: Profile) => {
+        const user = usersById.get(p.userId);
+        return {
+          userId: p.userId,
+          profileId: p.id,
+          email: user?.email,
+          name: `${p.firstName || ''} ${p.lastName || ''}`.trim() || user?.name,
+          phone: p.phone,
+          createdAt: p.createdAt,
+        };
+      }),
     });
   } catch (error) {
     logger.error('Error listing clients:', error);

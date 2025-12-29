@@ -1,6 +1,51 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
+
+// TypeScript interfaces (replaces @prisma/client types)
+interface Lead {
+  id: string;
+  type: string;
+  status: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  taxSituation?: string | null;
+  estimatedIncome?: string | null;
+  source?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  commissionRate?: number | null;
+  commissionRateLockedAt?: Date | null;
+  attributionMethod?: string | null;
+  attributionConfidence?: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CRMContact {
+  id: string;
+  contactType: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string | null;
+  stage: string;
+  source?: string | null;
+  lastContactedAt?: Date | null;
+  referrerUsername?: string | null;
+  referrerType?: string | null;
+  commissionRate?: number | null;
+  commissionRateLockedAt?: Date | null;
+  attributionMethod?: string | null;
+  attributionConfidence?: number | null;
+}
 import {
   extractRequestMetadata,
   extractUtmParams,
@@ -82,44 +127,158 @@ export async function POST(request: NextRequest) {
     // Add fraud check metadata
     const leadDataWithFraud = addFraudMetadata(leadData, fraudCheck.result);
 
-    const lead = await prisma.lead.create({
-      data: leadDataWithFraud,
-    });
+    // Convert camelCase to snake_case for Supabase
+    const supabaseLeadData = {
+      type: leadDataWithFraud.type,
+      status: leadDataWithFraud.status,
+      first_name: leadDataWithFraud.firstName,
+      last_name: leadDataWithFraud.lastName,
+      email: leadDataWithFraud.email,
+      phone: leadDataWithFraud.phone,
+      tax_situation: leadDataWithFraud.taxSituation,
+      estimated_income: leadDataWithFraud.estimatedIncome,
+      source: leadDataWithFraud.source,
+      utm_source: leadDataWithFraud.utmSource,
+      utm_medium: leadDataWithFraud.utmMedium,
+      utm_campaign: leadDataWithFraud.utmCampaign,
+      ip_address: leadDataWithFraud.ipAddress,
+      user_agent: leadDataWithFraud.userAgent,
+      referrer_username: leadDataWithFraud.referrerUsername,
+      referrer_type: leadDataWithFraud.referrerType,
+      commission_rate: leadDataWithFraud.commissionRate,
+      commission_rate_locked_at: leadDataWithFraud.commissionRateLockedAt?.toISOString?.() || leadDataWithFraud.commissionRateLockedAt || null,
+      attribution_method: leadDataWithFraud.attributionMethod,
+      attribution_confidence: leadDataWithFraud.attributionConfidence,
+      // Fraud check fields (if they exist)
+      ...(leadDataWithFraud.fraudScore !== undefined && { fraud_score: leadDataWithFraud.fraudScore }),
+      ...(leadDataWithFraud.fraudFlags !== undefined && { fraud_flags: leadDataWithFraud.fraudFlags }),
+      ...(leadDataWithFraud.fraudCheckPassed !== undefined && { fraud_check_passed: leadDataWithFraud.fraudCheckPassed }),
+    };
+
+    const { data: createdLeadData, error: leadError } = await db.from('leads')
+      .insert(supabaseLeadData)
+      .select()
+      .single();
+
+    if (leadError) {
+      throw new Error(`Failed to create lead: ${leadError.message}`);
+    }
+
+    // Map snake_case to camelCase for downstream usage
+    const lead = {
+      id: createdLeadData.id,
+      type: createdLeadData.type,
+      status: createdLeadData.status,
+      firstName: createdLeadData.first_name,
+      lastName: createdLeadData.last_name,
+      email: createdLeadData.email,
+      phone: createdLeadData.phone,
+      taxSituation: createdLeadData.tax_situation,
+      estimatedIncome: createdLeadData.estimated_income,
+      source: createdLeadData.source,
+      utmSource: createdLeadData.utm_source,
+      utmMedium: createdLeadData.utm_medium,
+      utmCampaign: createdLeadData.utm_campaign,
+      ipAddress: createdLeadData.ip_address,
+      userAgent: createdLeadData.user_agent,
+      referrerUsername: createdLeadData.referrer_username,
+      referrerType: createdLeadData.referrer_type,
+      commissionRate: createdLeadData.commission_rate,
+      commissionRateLockedAt: createdLeadData.commission_rate_locked_at ? new Date(createdLeadData.commission_rate_locked_at) : null,
+      attributionMethod: createdLeadData.attribution_method,
+      attributionConfidence: createdLeadData.attribution_confidence,
+      createdAt: new Date(createdLeadData.created_at),
+      updatedAt: new Date(createdLeadData.updated_at),
+    };
 
     // ========================================
     // CRM INTEGRATION: Create CRM contact and interaction
     // ========================================
     try {
-      const crmContact = await prisma.cRMContact.upsert({
-        where: { email: lead.email.toLowerCase() },
-        create: {
-          contactType: 'LEAD',
-          firstName: lead.firstName,
-          lastName: lead.lastName,
-          email: lead.email.toLowerCase(),
-          phone: lead.phone,
-          stage: 'NEW',
-          source: lead.source || 'customer_lead_form',
-          lastContactedAt: new Date(),
-          // Epic 6 Attribution Integration
-          referrerUsername: lead.referrerUsername,
-          referrerType: lead.referrerType,
-          commissionRate: lead.commissionRate,
-          commissionRateLockedAt: lead.commissionRateLockedAt,
-          attributionMethod: lead.attributionMethod,
-          attributionConfidence: lead.attributionConfidence,
-        },
-        update: {
-          firstName: lead.firstName,
-          lastName: lead.lastName,
-          phone: lead.phone,
-          lastContactedAt: new Date(),
-          // Update attribution if changed
-          referrerUsername: lead.referrerUsername,
-          referrerType: lead.referrerType,
-          attributionMethod: lead.attributionMethod,
-        },
-      });
+      // Try to find existing CRM contact by email
+      const { data: existingContacts } = await db.from('crm_contacts')
+        .select('*')
+        .eq('email', lead.email.toLowerCase())
+        .limit(1);
+
+      const existingContact = firstOrNull(existingContacts);
+      let crmContact: CRMContact;
+
+      if (existingContact) {
+        // Update existing contact
+        const { data: updatedContact, error: updateError } = await db.from('crm_contacts')
+          .update({
+            first_name: lead.firstName,
+            last_name: lead.lastName,
+            phone: lead.phone,
+            last_contacted_at: new Date().toISOString(),
+            referrer_username: lead.referrerUsername,
+            referrer_type: lead.referrerType,
+            attribution_method: lead.attributionMethod,
+          })
+          .eq('id', existingContact.id)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+        crmContact = {
+          id: updatedContact.id,
+          contactType: updatedContact.contact_type,
+          firstName: updatedContact.first_name,
+          lastName: updatedContact.last_name,
+          email: updatedContact.email,
+          phone: updatedContact.phone,
+          stage: updatedContact.stage,
+          source: updatedContact.source,
+          lastContactedAt: updatedContact.last_contacted_at,
+          referrerUsername: updatedContact.referrer_username,
+          referrerType: updatedContact.referrer_type,
+          commissionRate: updatedContact.commission_rate,
+          commissionRateLockedAt: updatedContact.commission_rate_locked_at,
+          attributionMethod: updatedContact.attribution_method,
+          attributionConfidence: updatedContact.attribution_confidence,
+        };
+      } else {
+        // Create new contact
+        const { data: newContact, error: createError } = await db.from('crm_contacts')
+          .insert({
+            contact_type: 'LEAD',
+            first_name: lead.firstName,
+            last_name: lead.lastName,
+            email: lead.email.toLowerCase(),
+            phone: lead.phone,
+            stage: 'NEW',
+            source: lead.source || 'customer_lead_form',
+            last_contacted_at: new Date().toISOString(),
+            referrer_username: lead.referrerUsername,
+            referrer_type: lead.referrerType,
+            commission_rate: lead.commissionRate,
+            commission_rate_locked_at: lead.commissionRateLockedAt?.toISOString() || null,
+            attribution_method: lead.attributionMethod,
+            attribution_confidence: lead.attributionConfidence,
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        crmContact = {
+          id: newContact.id,
+          contactType: newContact.contact_type,
+          firstName: newContact.first_name,
+          lastName: newContact.last_name,
+          email: newContact.email,
+          phone: newContact.phone,
+          stage: newContact.stage,
+          source: newContact.source,
+          lastContactedAt: newContact.last_contacted_at,
+          referrerUsername: newContact.referrer_username,
+          referrerType: newContact.referrer_type,
+          commissionRate: newContact.commission_rate,
+          commissionRateLockedAt: newContact.commission_rate_locked_at,
+          attributionMethod: newContact.attribution_method,
+          attributionConfidence: newContact.attribution_confidence,
+        };
+      }
 
       logger.info('CRM contact created/updated from customer lead', {
         contactId: crmContact.id,
@@ -128,13 +287,12 @@ export async function POST(request: NextRequest) {
       });
 
       // Create CRMInteraction to log the lead submission
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: crmContact.id,
-          type: 'NOTE',
-          direction: 'INBOUND',
-          subject: '💼 Customer Lead Inquiry',
-          body: `**Customer Lead Submitted**
+      const { error: interactionError } = await db.from('crm_interactions').insert({
+        contact_id: crmContact.id,
+        type: 'NOTE',
+        direction: 'INBOUND',
+        subject: 'Customer Lead Inquiry',
+        body: `**Customer Lead Submitted**
 
 **Contact Information:**
 - Name: ${lead.firstName} ${lead.lastName}
@@ -156,9 +314,10 @@ ${utmMedium ? `- Medium: ${utmMedium}` : ''}
 ${utmCampaign ? `- Campaign: ${utmCampaign}` : ''}
 
 **Lead ID:** ${lead.id}`,
-          occurredAt: new Date(),
-        },
+        occurred_at: new Date().toISOString(),
       });
+
+      if (interactionError) throw interactionError;
 
       logger.info('CRM interaction created for customer lead', {
         contactId: crmContact.id,

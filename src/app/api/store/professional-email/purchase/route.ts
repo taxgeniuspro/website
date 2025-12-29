@@ -8,8 +8,36 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces (replaces @prisma/client imports)
+interface Profile {
+  id: string;
+  user_id: string;
+  role: string;
+  first_name: string | null;
+  last_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ProfessionalEmailAlias {
+  id: string;
+  profile_id: string;
+  email_address: string;
+  forward_to_email: string;
+  display_name: string;
+  status: string;
+  annual_price: number;
+  is_primary: boolean;
+  gmail_send_as_configured: boolean;
+  smtp_enabled: boolean;
+  dns_configured: boolean;
+  forwarding_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 /**
  * Professional email pricing
@@ -46,13 +74,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      include: {
-        professionalEmails: true,
-      },
-    });
+    // Get user's profile with professional emails
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile', { error: profileError });
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -64,6 +98,17 @@ export async function POST(request: NextRequest) {
         { error: 'Only tax preparers can purchase professional email addresses' },
         { status: 403 }
       );
+    }
+
+    // Get existing professional emails for this profile
+    const { data: existingEmails, error: emailsError } = await db
+      .from('professional_email_aliases')
+      .select('*')
+      .eq('profile_id', profile.id);
+
+    if (emailsError) {
+      logger.error('Error fetching professional emails', { error: emailsError });
+      return NextResponse.json({ error: 'Failed to fetch email aliases' }, { status: 500 });
     }
 
     const body = await request.json();
@@ -99,9 +144,18 @@ export async function POST(request: NextRequest) {
     const emailAddress = `${normalizedUsername}@taxgeniuspro.tax`;
 
     // Check if email is already taken
-    const existing = await prisma.professionalEmailAlias.findUnique({
-      where: { emailAddress },
-    });
+    const { data: existingData, error: existingError } = await db
+      .from('professional_email_aliases')
+      .select('id')
+      .eq('email_address', emailAddress)
+      .limit(1);
+
+    if (existingError) {
+      logger.error('Error checking email availability', { error: existingError });
+      return NextResponse.json({ error: 'Failed to check email availability' }, { status: 500 });
+    }
+
+    const existing = firstOrNull(existingData);
 
     if (existing) {
       return NextResponse.json(
@@ -111,8 +165,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate price based on existing aliases
-    const existingAliasesCount = profile.professionalEmails.filter(
-      (alias) => alias.status === 'ACTIVE' || alias.status === 'PROVISIONING'
+    const existingAliasesCount = (existingEmails || []).filter(
+      (alias: any) => alias.status === 'ACTIVE' || alias.status === 'PROVISIONING'
     ).length;
 
     const isFirstAlias = existingAliasesCount === 0;
@@ -127,25 +181,34 @@ export async function POST(request: NextRequest) {
     });
 
     // Create professional email alias with PENDING_PAYMENT status
-    const alias = await prisma.professionalEmailAlias.create({
-      data: {
-        profileId: profile.id,
-        emailAddress,
-        forwardToEmail,
-        displayName,
+    const { data: aliasData, error: createError } = await db
+      .from('professional_email_aliases')
+      .insert({
+        profile_id: profile.id,
+        email_address: emailAddress,
+        forward_to_email: forwardToEmail,
+        display_name: displayName,
         status: 'PENDING_PAYMENT',
-        annualPrice,
-        isPrimary: isFirstAlias, // First alias is primary by default
-        gmailSendAsConfigured: false,
-        smtpEnabled: true,
-        dnsConfigured: false,
-        forwardingActive: false,
-      },
-    });
+        annual_price: annualPrice,
+        is_primary: isFirstAlias, // First alias is primary by default
+        gmail_send_as_configured: false,
+        smtp_enabled: true,
+        dns_configured: false,
+        forwarding_active: false,
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      logger.error('Error creating professional email alias', { error: createError });
+      return NextResponse.json({ error: 'Failed to create email alias' }, { status: 500 });
+    }
+
+    const alias = aliasData;
 
     logger.info('Professional email alias created', {
       aliasId: alias.id,
-      emailAddress: alias.emailAddress,
+      emailAddress: alias.email_address,
       status: alias.status,
     });
 
@@ -161,14 +224,14 @@ export async function POST(request: NextRequest) {
     //   items: [{ price: PROFESSIONAL_EMAIL_PRICE_ID }],
     //   metadata: {
     //     aliasId: alias.id,
-    //     emailAddress: alias.emailAddress,
+    //     emailAddress: alias.email_address,
     //   },
     // });
 
     return NextResponse.json({
       success: true,
       aliasId: alias.id,
-      email: alias.emailAddress,
+      email: alias.email_address,
       checkoutUrl,
       amount: annualPrice,
       message: 'Professional email alias created. Complete payment to activate.',
@@ -202,23 +265,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's existing aliases count
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      include: {
-        professionalEmails: {
-          where: {
-            OR: [{ status: 'ACTIVE' }, { status: 'PROVISIONING' }],
-          },
-        },
-      },
-    });
+    // Get user's profile
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile', { error: profileError });
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const existingAliasesCount = profile.professionalEmails.length;
+    // Get user's existing active/provisioning aliases count
+    const { data: existingEmails, error: emailsError } = await db
+      .from('professional_email_aliases')
+      .select('id')
+      .eq('profile_id', profile.id)
+      .in('status', ['ACTIVE', 'PROVISIONING']);
+
+    if (emailsError) {
+      logger.error('Error fetching professional emails', { error: emailsError });
+      return NextResponse.json({ error: 'Failed to fetch email aliases' }, { status: 500 });
+    }
+
+    const existingAliasesCount = (existingEmails || []).length;
     const nextAliasPrice = existingAliasesCount === 0 ? PRICING.FIRST_ALIAS : PRICING.ADDITIONAL_ALIAS;
 
     return NextResponse.json({

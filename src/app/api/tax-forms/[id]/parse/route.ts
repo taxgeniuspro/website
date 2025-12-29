@@ -8,11 +8,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { parsePDFFormFields } from '@/lib/services/pdf-form-parser.service';
 import { logger } from '@/lib/logger';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+
+// TypeScript interface for TaxForm
+interface TaxForm {
+  id: string;
+  formNumber: string;
+  title: string;
+  fileUrl: string;
+  fileName: string;
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,16 +34,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
 
     // Get the tax form
-    const taxForm = await prisma.taxForm.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        formNumber: true,
-        title: true,
-        fileUrl: true,
-        fileName: true,
-      },
-    });
+    const { data: taxFormData, error: taxFormError } = await db
+      .from('tax_forms')
+      .select('id, formNumber, title, fileUrl, fileName')
+      .eq('id', id)
+      .limit(1);
+
+    if (taxFormError) {
+      logger.error('Error fetching tax form:', taxFormError);
+      return NextResponse.json({ error: 'Failed to fetch tax form' }, { status: 500 });
+    }
+
+    const taxForm = firstOrNull<TaxForm>(taxFormData);
 
     if (!taxForm) {
       return NextResponse.json({ error: 'Tax form not found' }, { status: 404 });

@@ -7,9 +7,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { emailTemplateService } from '@/lib/services/email-template.service';
+
+// TypeScript interface for Profile (replaces @prisma/client import)
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 /**
  * GET /api/email-templates
@@ -28,9 +39,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    const { data: profiles, error } = await db.from('profiles').select('*').eq('userId', userId);
+
+    if (error) {
+      logger.error('Error fetching profile', { error });
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -72,9 +88,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
+    const { data: profiles, error } = await db.from('profiles').select('*').eq('userId', userId);
+
+    if (error) {
+      logger.error('Error fetching profile', { error });
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

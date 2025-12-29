@@ -6,8 +6,26 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local TypeScript interface
+interface MobileHubStats {
+  id: string;
+  userId: string;
+  supabaseUserId?: string;
+  email?: string;
+  userRole: string;
+  linkShares: number;
+  linkViews: number;
+  linkClicks: number;
+  formsStarted: number;
+  formsCompleted: number;
+  referrals: number;
+  conversions: number;
+  earningsCents: number;
+  lastCalculated: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,42 +36,42 @@ export async function GET(request: NextRequest) {
     }
 
     // Get or create stats record
-    let stats = await prisma.mobileHubStats.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: statsRecords } = await db
+      .from('mobile_hub_stats')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
+
+    let stats = firstOrNull(statsRecords) as MobileHubStats | null;
 
     if (!stats) {
       // Create initial stats record
-      stats = await prisma.mobileHubStats.create({
-        data: {
-          userId: userId,
-          userRole: 'client', // Will be updated
-        },
-      });
+      const { data: newStats } = await db
+        .from('mobile_hub_stats')
+        .insert({
+          user_id: userId,
+          user_role: 'client', // Will be updated
+        })
+        .select()
+        .single();
+
+      stats = newStats as MobileHubStats;
     }
 
     // Calculate real-time stats if needed
     const shouldRecalculate =
-      new Date().getTime() - new Date(stats.lastCalculated).getTime() > 5 * 60 * 1000; // 5 minutes
+      new Date().getTime() - new Date(stats?.lastCalculated || 0).getTime() > 5 * 60 * 1000; // 5 minutes
 
-    if (shouldRecalculate) {
-      await recalculateStats(userId);
+    if (shouldRecalculate && stats) {
+      await recalculateStats(userId, stats.id);
       // Refetch updated stats
-      stats = await prisma.mobileHubStats.findFirst({
-        where: {
-          OR: [
-            { supabaseUserId: userId },
-            { userId: userId },
-            { email: session?.user?.email }
-          ]
-        },
-      });
+      const { data: refreshedStats } = await db
+        .from('mobile_hub_stats')
+        .select('*')
+        .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+        .limit(1);
+
+      stats = firstOrNull(refreshedStats) as MobileHubStats | null;
     }
 
     return NextResponse.json({
@@ -75,36 +93,37 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function recalculateStats(userId: string) {
+async function recalculateStats(userId: string, statsId: string) {
   try {
     // Count shares
-    const shareCount = await prisma.mobileHubShare.count({
-      where: { userId: userId },
-    });
+    const { count: shareCount } = await db
+      .from('mobile_hub_shares')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
 
     // Count clicks
-    const clickCount = await prisma.mobileHubLinkClick.count({
-      where: { userId: userId },
-    });
+    const { count: clickCount } = await db
+      .from('mobile_hub_link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
 
     // Count conversions
-    const conversionCount = await prisma.mobileHubLinkClick.count({
-      where: {
-        userId: userId,
-        converted: true,
-      },
-    });
+    const { count: conversionCount } = await db
+      .from('mobile_hub_link_clicks')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('converted', true);
 
     // Update stats
-    await prisma.mobileHubStats.update({
-      where: { userId: userId },
-      data: {
-        linkShares: shareCount,
-        linkClicks: clickCount,
-        formsCompleted: conversionCount,
-        lastCalculated: new Date(),
-      },
-    });
+    await db
+      .from('mobile_hub_stats')
+      .update({
+        link_shares: shareCount || 0,
+        link_clicks: clickCount || 0,
+        forms_completed: conversionCount || 0,
+        last_calculated: new Date().toISOString(),
+      })
+      .eq('id', statsId);
   } catch (error) {
     logger.error('Error recalculating stats', { error });
   }

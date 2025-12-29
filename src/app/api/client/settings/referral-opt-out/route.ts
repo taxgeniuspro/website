@@ -9,8 +9,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase data
+interface Profile {
+  id: string;
+  hideReferralProgram: boolean | null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,36 +37,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find profile first, then update - use findFirst with OR conditions for Supabase Auth compatibility
-    const existingProfile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true },
-    });
+    // Find profile first - use OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const existingProfile = firstOrNull<{ id: string }>(profileData);
 
     if (!existingProfile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const profile = await prisma.profile.update({
-      where: { id: existingProfile.id },
-      data: { hideReferralProgram },
-      select: {
-        id: true,
-        hideReferralProgram: true,
-      },
-    });
+    // Update profile
+    const { data: updatedProfile, error: updateError } = await db
+      .from('profiles')
+      .update({ hide_referral_program: hideReferralProgram })
+      .eq('id', existingProfile.id)
+      .select('id, hide_referral_program')
+      .single();
 
-    logger.info(`🔧 User ${userId} set hideReferralProgram to ${hideReferralProgram}`);
+    if (updateError) {
+      logger.error('Error updating profile:', updateError);
+      return NextResponse.json({ error: 'Failed to update preference' }, { status: 500 });
+    }
+
+    logger.info(`User ${userId} set hideReferralProgram to ${hideReferralProgram}`);
 
     return NextResponse.json({
       success: true,
-      hideReferralProgram: profile.hideReferralProgram,
+      hideReferralProgram: updatedProfile?.hide_referral_program ?? hideReferralProgram,
     });
   } catch (error) {
     logger.error('Error updating referral program preference', { error });
@@ -80,22 +92,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: {
-        hideReferralProgram: true,
-      },
-    });
+    // Use OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('hide_referral_program')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch preference' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<{ hide_referral_program: boolean | null }>(profileData);
 
     return NextResponse.json({
-      hideReferralProgram: profile?.hideReferralProgram ?? false,
+      hideReferralProgram: profile?.hide_referral_program ?? false,
     });
   } catch (error) {
     logger.error('Error fetching referral program preference', { error });

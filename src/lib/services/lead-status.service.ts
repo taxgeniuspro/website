@@ -5,7 +5,8 @@
  * Prevents data corruption from invalid status changes.
  */
 
-import { LeadStatus } from '@prisma/client';
+// Local type definition (replacing @prisma/client)
+export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'DISQUALIFIED';
 
 /**
  * Valid status transitions for leads.
@@ -13,9 +14,9 @@ import { LeadStatus } from '@prisma/client';
  * Empty array = terminal state (no transitions allowed)
  */
 const VALID_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
-  NEW: [LeadStatus.CONTACTED, LeadStatus.DISQUALIFIED],
-  CONTACTED: [LeadStatus.QUALIFIED, LeadStatus.DISQUALIFIED],
-  QUALIFIED: [LeadStatus.CONVERTED, LeadStatus.DISQUALIFIED],
+  NEW: ['CONTACTED', 'DISQUALIFIED'],
+  CONTACTED: ['QUALIFIED', 'DISQUALIFIED'],
+  QUALIFIED: ['CONVERTED', 'DISQUALIFIED'],
   CONVERTED: [], // Terminal state - cannot change once converted
   DISQUALIFIED: [], // Terminal state - cannot change once disqualified
 };

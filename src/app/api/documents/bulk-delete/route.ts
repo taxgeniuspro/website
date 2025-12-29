@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -23,46 +23,35 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user's profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profiles } = await db.from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`);
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const now = new Date();
+    const now = new Date().toISOString();
 
     // Soft delete files
     if (fileIds.length > 0) {
       // Verify ownership or permissions
-      const files = await prisma.document.findMany({
-        where: {
-          id: { in: fileIds },
-          isDeleted: false,
-        },
-        select: {
-          id: true,
-          profileId: true,
-        },
-      });
+      const { data: files } = await db.from('documents')
+        .select('id, profile_id')
+        .in('id', fileIds)
+        .eq('is_deleted', false);
 
       // Check permissions
-      const authorizedFileIds = files
+      const authorizedFileIds = (files || [])
         .filter((file) => {
-          // ❌ CLIENTS CANNOT DELETE DOCUMENTS (security requirement)
+          // CLIENTS CANNOT DELETE DOCUMENTS (security requirement)
           if (profile.role === 'client') {
             return false;
           }
 
           // Owner can delete (if not client)
-          if (file.profileId === profile.id) return true;
+          if (file.profile_id === profile.id) return true;
 
           // Admins can delete
           if (profile.role === 'admin') return true;
@@ -73,31 +62,26 @@ export async function POST(req: NextRequest) {
         .map((f) => f.id);
 
       if (authorizedFileIds.length > 0) {
-        await prisma.document.updateMany({
-          where: {
-            id: { in: authorizedFileIds },
-          },
-          data: {
-            isDeleted: true,
-            deletedAt: now,
-            deletedBy: profile.id,
-          },
-        });
+        await db.from('documents')
+          .update({
+            is_deleted: true,
+            deleted_at: now,
+            deleted_by: profile.id,
+          })
+          .in('id', authorizedFileIds);
 
         // Log deletions
         for (const fileId of authorizedFileIds) {
-          await prisma.fileOperation.create({
-            data: {
-              operation: 'DELETE',
-              performedBy: profile.id,
-              documentId: fileId,
-              details: {
-                deletedAt: now.toISOString(),
-              },
-              ipAddress:
-                req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-              userAgent: req.headers.get('user-agent') || undefined,
+          await db.from('file_operations').insert({
+            operation: 'DELETE',
+            performed_by: profile.id,
+            document_id: fileId,
+            details: {
+              deletedAt: now,
             },
+            ip_address:
+              req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+            user_agent: req.headers.get('user-agent') || null,
           });
         }
       }
@@ -106,26 +90,20 @@ export async function POST(req: NextRequest) {
     // Soft delete folders (and cascade to contents)
     if (folderIds.length > 0) {
       // Verify ownership
-      const folders = await prisma.folder.findMany({
-        where: {
-          id: { in: folderIds },
-          isDeleted: false,
-        },
-        select: {
-          id: true,
-          ownerId: true,
-        },
-      });
+      const { data: folders } = await db.from('folders')
+        .select('id, owner_id')
+        .in('id', folderIds)
+        .eq('is_deleted', false);
 
-      const authorizedFolderIds = folders
+      const authorizedFolderIds = (folders || [])
         .filter((folder) => {
-          // ❌ CLIENTS CANNOT DELETE FOLDERS (security requirement)
+          // CLIENTS CANNOT DELETE FOLDERS (security requirement)
           if (profile.role === 'client') {
             return false;
           }
 
           // Owner can delete (if not client)
-          if (folder.ownerId === profile.id) return true;
+          if (folder.owner_id === profile.id) return true;
 
           // Admins can delete
           if (profile.role === 'admin') return true;
@@ -136,44 +114,36 @@ export async function POST(req: NextRequest) {
 
       if (authorizedFolderIds.length > 0) {
         // Soft delete folders
-        await prisma.folder.updateMany({
-          where: {
-            id: { in: authorizedFolderIds },
-          },
-          data: {
-            isDeleted: true,
-            deletedAt: now,
-            deletedBy: profile.id,
-          },
-        });
+        await db.from('folders')
+          .update({
+            is_deleted: true,
+            deleted_at: now,
+            deleted_by: profile.id,
+          })
+          .in('id', authorizedFolderIds);
 
         // Soft delete all documents in these folders
-        await prisma.document.updateMany({
-          where: {
-            folderId: { in: authorizedFolderIds },
-            isDeleted: false,
-          },
-          data: {
-            isDeleted: true,
-            deletedAt: now,
-            deletedBy: profile.id,
-          },
-        });
+        await db.from('documents')
+          .update({
+            is_deleted: true,
+            deleted_at: now,
+            deleted_by: profile.id,
+          })
+          .in('folder_id', authorizedFolderIds)
+          .eq('is_deleted', false);
 
         // Log deletions
         for (const folderId of authorizedFolderIds) {
-          await prisma.fileOperation.create({
-            data: {
-              operation: 'FOLDER_DELETE',
-              performedBy: profile.id,
-              folderId,
-              details: {
-                deletedAt: now.toISOString(),
-              },
-              ipAddress:
-                req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-              userAgent: req.headers.get('user-agent') || undefined,
+          await db.from('file_operations').insert({
+            operation: 'FOLDER_DELETE',
+            performed_by: profile.id,
+            folder_id: folderId,
+            details: {
+              deletedAt: now,
             },
+            ip_address:
+              req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+            user_agent: req.headers.get('user-agent') || null,
           });
         }
       }

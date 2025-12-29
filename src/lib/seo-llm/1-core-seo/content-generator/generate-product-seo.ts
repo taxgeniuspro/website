@@ -5,7 +5,21 @@
  */
 
 import { ollamaClient } from './ollama-client'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
+
+// TypeScript interfaces (replaces Prisma types)
+interface ProductSEOContent {
+  id: string
+  productId: string
+  city: string | null
+  state: string | null
+  content: string
+  wordCount: number
+  model: string
+  approved: boolean
+  generatedAt: Date
+  publishedAt: Date | null
+}
 
 export interface ProductSEOOptions {
   productId: string
@@ -44,23 +58,35 @@ export async function generateProductSEO(options: ProductSEOOptions): Promise<Pr
 
   // Check cache first (unless force regenerate)
   if (!forceRegenerate) {
-    const cached = await prisma.productSEOContent.findFirst({
-      where: {
-        productId,
-        city: city || null,
-        state: state || null,
-        approved: true,
-      },
-      orderBy: {
-        generatedAt: 'desc',
-      },
-    })
+    let query = db
+      .from('product_seo_contents')
+      .select('*')
+      .eq('productId', productId)
+      .eq('approved', true)
+      .order('generatedAt', { ascending: false })
+      .limit(1)
+
+    // Handle null values for city and state
+    if (city) {
+      query = query.eq('city', city)
+    } else {
+      query = query.is('city', null)
+    }
+
+    if (state) {
+      query = query.eq('state', state)
+    } else {
+      query = query.is('state', null)
+    }
+
+    const { data } = await query
+    const cached = firstOrNull<ProductSEOContent>(data)
 
     if (cached) {
       return {
         content: cached.content,
         wordCount: cached.wordCount,
-        generatedAt: cached.generatedAt,
+        generatedAt: new Date(cached.generatedAt),
         model: cached.model,
         fromCache: true,
       }
@@ -100,8 +126,9 @@ IMPORTANT: Output ONLY the final content. No reasoning, no explanations, just th
   const actualWordCount = content.trim().split(/\s+/).length
 
   // Save to database
-  const saved = await prisma.productSEOContent.create({
-    data: {
+  const { data: savedData, error } = await db
+    .from('product_seo_contents')
+    .insert({
       productId,
       city: city || null,
       state: state || null,
@@ -109,13 +136,21 @@ IMPORTANT: Output ONLY the final content. No reasoning, no explanations, just th
       wordCount: actualWordCount,
       model: process.env.OLLAMA_MODEL || 'qwen2.5:32b',
       approved: false, // Require manual approval
-    },
-  })
+      generatedAt: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to save SEO content: ${error.message}`)
+  }
+
+  const saved = savedData as ProductSEOContent
 
   return {
     content: saved.content,
     wordCount: saved.wordCount,
-    generatedAt: saved.generatedAt,
+    generatedAt: new Date(saved.generatedAt),
     model: saved.model,
     fromCache: false,
   }
@@ -195,13 +230,17 @@ IMPORTANT: Output ONLY valid JSON, no markdown formatting, no explanations.`
  * Approve SEO content for publishing
  */
 export async function approveProductSEO(seoContentId: string): Promise<void> {
-  await prisma.productSEOContent.update({
-    where: { id: seoContentId },
-    data: {
+  const { error } = await db
+    .from('product_seo_contents')
+    .update({
       approved: true,
-      publishedAt: new Date(),
-    },
-  })
+      publishedAt: new Date().toISOString(),
+    })
+    .eq('id', seoContentId)
+
+  if (error) {
+    throw new Error(`Failed to approve SEO content: ${error.message}`)
+  }
 }
 
 /**
@@ -212,17 +251,29 @@ export async function getApprovedProductSEO(
   city?: string,
   state?: string
 ): Promise<string | null> {
-  const seoContent = await prisma.productSEOContent.findFirst({
-    where: {
-      productId,
-      city: city || null,
-      state: state || null,
-      approved: true,
-    },
-    orderBy: {
-      publishedAt: 'desc',
-    },
-  })
+  let query = db
+    .from('product_seo_contents')
+    .select('content')
+    .eq('productId', productId)
+    .eq('approved', true)
+    .order('publishedAt', { ascending: false })
+    .limit(1)
+
+  // Handle null values for city and state
+  if (city) {
+    query = query.eq('city', city)
+  } else {
+    query = query.is('city', null)
+  }
+
+  if (state) {
+    query = query.eq('state', state)
+  } else {
+    query = query.is('state', null)
+  }
+
+  const { data } = await query
+  const seoContent = firstOrNull<{ content: string }>(data)
 
   return seoContent?.content || null
 }

@@ -11,10 +11,47 @@
  * 4. Google Analytics tracks clicks, leads, conversions
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { getUserTrackingCode } from './tracking-code.service';
 import { generateTrackingQRCode } from './tracking-code.service';
 import { buildTrackingUrl } from '@/lib/utils/tracking-integration';
+
+// Local types (replacing @prisma/client)
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface MarketingLink {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: string;
+  code: string;
+  url: string;
+  shortUrl?: string | null;
+  targetPage: string;
+  title?: string | null;
+  description?: string | null;
+  campaign?: string | null;
+  qrCodeImageUrl?: string | null;
+  clicks: number;
+  uniqueClicks: number;
+  conversions: number;
+  intakeStarts?: number | null;
+  returnsFiled: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+interface LinkClick {
+  id: string;
+  clickedAt: string;
+  ipAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  converted: boolean;
+}
 
 export interface ShortLinkDestination {
   type: 'INTAKE_FORM' | 'CONTACT_FORM' | 'BOOK_APPOINTMENT' | 'CUSTOM';
@@ -124,11 +161,13 @@ export function validateShortCode(code: string): { valid: boolean; error?: strin
  * Check if short code is available
  */
 export async function isShortCodeAvailable(code: string): Promise<boolean> {
-  const existing = await prisma.marketingLink.findUnique({
-    where: { code: code.toLowerCase() },
-  });
+  const { data: existing } = await db
+    .from('marketing_links')
+    .select('id')
+    .eq('code', code.toLowerCase())
+    .limit(1);
 
-  return !existing;
+  return !existing || existing.length === 0;
 }
 
 /**
@@ -162,10 +201,13 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
   }
 
   // Get creator profile info
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    select: { role: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     throw new Error('Profile not found');
@@ -180,7 +222,7 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
   // Build full URL with tracking
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
   const fullUrl = buildTrackingUrl(`${baseUrl}${targetPage}`, {
-    trackingCode: trackingData.activeCode,
+    trackingCode: trackingData.code,
     source: 'short-link',
     medium: 'referral',
     campaign: campaign || 'short-link-campaign',
@@ -191,10 +233,10 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
   const urlWithLink = `${fullUrl}&link=${normalizedCode}`;
 
   // Generate QR code
-  const qrCodeDataUrl = await generateTrackingQRCode(urlWithLink);
+  const qrCodeResult = await generateTrackingQRCode(normalizedCode, profileId, baseUrl);
 
   // Determine link type based on destination
-  const linkTypeMap: Record<string, any> = {
+  const linkTypeMap: Record<string, string> = {
     INTAKE_FORM: 'LANDING_PAGE',
     CONTACT_FORM: 'REFERRAL',
     BOOK_APPOINTMENT: 'LANDING_PAGE',
@@ -202,8 +244,9 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
   };
 
   // Create MarketingLink
-  const link = await prisma.marketingLink.create({
-    data: {
+  const { data: link } = await db
+    .from('marketing_links')
+    .insert({
       creatorId: profileId,
       creatorType: profile.role,
       linkType: linkTypeMap[destination.type] || 'CUSTOM',
@@ -214,25 +257,28 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
       description: description || null,
       campaign: campaign || 'short-link-campaign',
       targetPage,
-      qrCodeImageUrl: qrCodeDataUrl,
+      qrCodeImageUrl: qrCodeResult.dataUrl,
       isActive: true,
-    },
-  });
+    })
+    .select()
+    .single();
+
+  const createdLink = link as MarketingLink;
 
   return {
-    id: link.id,
+    id: createdLink.id,
     shortCode: normalizedCode,
     shortUrl: `${baseUrl}/go/${normalizedCode}`,
     fullUrl: urlWithLink,
     destination: targetPage,
-    title: link.title,
-    description: link.description,
-    qrCodeUrl: link.qrCodeImageUrl,
-    clicks: link.clicks,
-    leads: link.conversions,
-    conversions: link.returnsFiled,
-    isActive: link.isActive,
-    createdAt: link.createdAt,
+    title: createdLink.title || null,
+    description: createdLink.description || null,
+    qrCodeUrl: createdLink.qrCodeImageUrl || null,
+    clicks: createdLink.clicks || 0,
+    leads: createdLink.conversions || 0,
+    conversions: createdLink.returnsFiled || 0,
+    isActive: createdLink.isActive,
+    createdAt: new Date(createdLink.createdAt),
   };
 }
 
@@ -240,31 +286,32 @@ export async function createShortLink(params: CreateShortLinkParams): Promise<Sh
  * Get all short links for a user
  */
 export async function getUserShortLinks(profileId: string): Promise<ShortLinkData[]> {
-  const links = await prisma.marketingLink.findMany({
-    where: {
-      creatorId: profileId,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', profileId)
+    .order('createdAt', { ascending: false });
+
+  if (!links) {
+    return [];
+  }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
-  return links.map((link) => ({
+  return links.map((link: MarketingLink) => ({
     id: link.id,
     shortCode: link.code,
     shortUrl: link.shortUrl || `${baseUrl}/go/${link.code}`,
     fullUrl: link.url,
     destination: link.targetPage,
-    title: link.title,
-    description: link.description,
-    qrCodeUrl: link.qrCodeImageUrl,
-    clicks: link.clicks,
-    leads: link.conversions,
-    conversions: link.returnsFiled,
+    title: link.title || null,
+    description: link.description || null,
+    qrCodeUrl: link.qrCodeImageUrl || null,
+    clicks: link.clicks || 0,
+    leads: link.conversions || 0,
+    conversions: link.returnsFiled || 0,
     isActive: link.isActive,
-    createdAt: link.createdAt,
+    createdAt: new Date(link.createdAt),
   }));
 }
 
@@ -272,9 +319,13 @@ export async function getUserShortLinks(profileId: string): Promise<ShortLinkDat
  * Get short link by code
  */
 export async function getShortLinkByCode(code: string): Promise<ShortLinkData | null> {
-  const link = await prisma.marketingLink.findUnique({
-    where: { code: code.toLowerCase() },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', code.toLowerCase())
+    .limit(1);
+
+  const link = firstOrNull(links) as MarketingLink | null;
 
   if (!link) {
     return null;
@@ -288,14 +339,14 @@ export async function getShortLinkByCode(code: string): Promise<ShortLinkData | 
     shortUrl: link.shortUrl || `${baseUrl}/go/${link.code}`,
     fullUrl: link.url,
     destination: link.targetPage,
-    title: link.title,
-    description: link.description,
-    qrCodeUrl: link.qrCodeImageUrl,
-    clicks: link.clicks,
-    leads: link.conversions,
-    conversions: link.returnsFiled,
+    title: link.title || null,
+    description: link.description || null,
+    qrCodeUrl: link.qrCodeImageUrl || null,
+    clicks: link.clicks || 0,
+    leads: link.conversions || 0,
+    conversions: link.returnsFiled || 0,
     isActive: link.isActive,
-    createdAt: link.createdAt,
+    createdAt: new Date(link.createdAt),
   };
 }
 
@@ -312,9 +363,13 @@ export async function updateShortLink(
   }
 ): Promise<ShortLinkData> {
   // Verify ownership
-  const link = await prisma.marketingLink.findUnique({
-    where: { code: code.toLowerCase() },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', code.toLowerCase())
+    .limit(1);
+
+  const link = firstOrNull(links) as MarketingLink | null;
 
   if (!link) {
     throw new Error('Short link not found');
@@ -325,15 +380,18 @@ export async function updateShortLink(
   }
 
   // Update link
-  const updated = await prisma.marketingLink.update({
-    where: { code: code.toLowerCase() },
-    data: {
+  const { data: updatedLinks } = await db
+    .from('marketing_links')
+    .update({
       title: updates.title,
       description: updates.description,
       isActive: updates.isActive,
-    },
-  });
+    })
+    .eq('code', code.toLowerCase())
+    .select()
+    .single();
 
+  const updated = updatedLinks as MarketingLink;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
 
   return {
@@ -342,14 +400,14 @@ export async function updateShortLink(
     shortUrl: updated.shortUrl || `${baseUrl}/go/${updated.code}`,
     fullUrl: updated.url,
     destination: updated.targetPage,
-    title: updated.title,
-    description: updated.description,
-    qrCodeUrl: updated.qrCodeImageUrl,
-    clicks: updated.clicks,
-    leads: updated.conversions,
-    conversions: updated.returnsFiled,
+    title: updated.title || null,
+    description: updated.description || null,
+    qrCodeUrl: updated.qrCodeImageUrl || null,
+    clicks: updated.clicks || 0,
+    leads: updated.conversions || 0,
+    conversions: updated.returnsFiled || 0,
     isActive: updated.isActive,
-    createdAt: updated.createdAt,
+    createdAt: new Date(updated.createdAt),
   };
 }
 
@@ -358,9 +416,13 @@ export async function updateShortLink(
  */
 export async function deleteShortLink(code: string, profileId: string): Promise<void> {
   // Verify ownership
-  const link = await prisma.marketingLink.findUnique({
-    where: { code: code.toLowerCase() },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', code.toLowerCase())
+    .limit(1);
+
+  const link = firstOrNull(links) as MarketingLink | null;
 
   if (!link) {
     throw new Error('Short link not found');
@@ -371,9 +433,10 @@ export async function deleteShortLink(code: string, profileId: string): Promise<
   }
 
   // Delete link
-  await prisma.marketingLink.delete({
-    where: { code: code.toLowerCase() },
-  });
+  await db
+    .from('marketing_links')
+    .delete()
+    .eq('code', code.toLowerCase());
 }
 
 /**
@@ -381,13 +444,21 @@ export async function deleteShortLink(code: string, profileId: string): Promise<
  * Called by the redirect handler
  */
 export async function incrementShortLinkClick(code: string): Promise<void> {
-  await prisma.marketingLink.update({
-    where: { code: code.toLowerCase() },
-    data: {
-      clicks: { increment: 1 },
-      uniqueClicks: { increment: 1 }, // Simplified - in production, track unique IPs
-    },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('clicks, uniqueClicks')
+    .eq('code', code.toLowerCase())
+    .single();
+
+  if (links) {
+    await db
+      .from('marketing_links')
+      .update({
+        clicks: (links.clicks || 0) + 1,
+        uniqueClicks: (links.uniqueClicks || 0) + 1, // Simplified - in production, track unique IPs
+      })
+      .eq('code', code.toLowerCase());
+  }
 }
 
 /**
@@ -395,15 +466,13 @@ export async function incrementShortLinkClick(code: string): Promise<void> {
  */
 export async function getShortLinkAnalytics(code: string, profileId: string) {
   // Verify ownership
-  const link = await prisma.marketingLink.findUnique({
-    where: { code: code.toLowerCase() },
-    include: {
-      linkClicks: {
-        orderBy: { clickedAt: 'desc' },
-        take: 100,
-      },
-    },
-  });
+  const { data: links } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('code', code.toLowerCase())
+    .limit(1);
+
+  const link = firstOrNull(links) as MarketingLink | null;
 
   if (!link) {
     throw new Error('Short link not found');
@@ -413,25 +482,36 @@ export async function getShortLinkAnalytics(code: string, profileId: string) {
     throw new Error('You do not have permission to view this link');
   }
 
-  // Calculate conversion rates
-  const conversionRate = link.clicks > 0 ? (link.conversions / link.clicks) * 100 : 0;
+  // Get recent clicks
+  const { data: linkClicks } = await db
+    .from('link_clicks')
+    .select('id, clickedAt, ipAddress, city, state, converted')
+    .eq('linkId', link.id)
+    .order('clickedAt', { ascending: false })
+    .limit(100);
 
-  const leadConversionRate = link.clicks > 0 ? ((link.intakeStarts || 0) / link.clicks) * 100 : 0;
+  // Calculate conversion rates
+  const clicks = link.clicks || 0;
+  const conversions = link.conversions || 0;
+  const intakeStarts = link.intakeStarts || 0;
+
+  const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+  const leadConversionRate = clicks > 0 ? (intakeStarts / clicks) * 100 : 0;
 
   return {
     code: link.code,
     shortUrl: link.shortUrl,
     fullUrl: link.url,
     title: link.title,
-    clicks: link.clicks,
-    uniqueClicks: link.uniqueClicks,
-    leads: link.conversions,
-    conversions: link.returnsFiled,
+    clicks: link.clicks || 0,
+    uniqueClicks: link.uniqueClicks || 0,
+    leads: link.conversions || 0,
+    conversions: link.returnsFiled || 0,
     conversionRate,
     leadConversionRate,
     isActive: link.isActive,
     createdAt: link.createdAt,
-    recentClicks: link.linkClicks.map((click) => ({
+    recentClicks: (linkClicks || []).map((click: LinkClick) => ({
       id: click.id,
       clickedAt: click.clickedAt,
       ipAddress: click.ipAddress,

@@ -7,9 +7,39 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+
+// Local TypeScript interfaces
+interface ServiceInfo {
+  name: string;
+  duration: number | null;
+}
+
+interface PrepararProfile {
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+  userId: string;
+}
+
+interface Appointment {
+  id: string;
+  preparerId: string;
+  clientName: string;
+  clientEmail: string;
+  type: string;
+  status: string;
+  subject: string | null;
+  scheduledFor: string | null;
+  scheduledEnd: string | null;
+  duration: number | null;
+  timezone: string | null;
+  serviceId: string | null;
+  location: string | null;
+  meetingLink: string | null;
+}
 
 const TOKEN_SECRET = process.env.AUTH_SECRET || 'appointment-management-secret';
 const TOKEN_EXPIRY_DAYS = 7;
@@ -84,25 +114,40 @@ export async function GET(
       return NextResponse.json({ error: 'Token does not match appointment' }, { status: 401 });
     }
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
-      include: {
-        preparer: {
-          select: {
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-            user: { select: { email: true } },
-          },
-        },
-        service: {
-          select: {
-            name: true,
-            duration: true,
-          },
-        },
-      },
-    });
+    const { data: appointmentData } = await db
+      .from('appointments')
+      .select('id, preparerId:preparer_id, clientName:client_name, clientEmail:client_email, type, status, subject, scheduledFor:scheduled_for, scheduledEnd:scheduled_end, duration, timezone, serviceId:service_id, location, meetingLink:meeting_link')
+      .eq('id', id)
+      .limit(1);
+    const appointment = firstOrNull<Appointment>(appointmentData);
+
+    // Get preparer info
+    let preparerInfo: { name: string; avatarUrl: string | null } | null = null;
+    if (appointment?.preparerId) {
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('firstName:first_name, lastName:last_name, avatarUrl:avatar_url')
+        .eq('id', appointment.preparerId)
+        .limit(1);
+      const preparer = firstOrNull<PrepararProfile>(preparerData);
+      if (preparer) {
+        preparerInfo = {
+          name: `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim(),
+          avatarUrl: preparer.avatarUrl,
+        };
+      }
+    }
+
+    // Get service info
+    let serviceInfo: { name: string; duration: number | null } | null = null;
+    if (appointment?.serviceId) {
+      const { data: serviceData } = await db
+        .from('services')
+        .select('name, duration')
+        .eq('id', appointment.serviceId)
+        .limit(1);
+      serviceInfo = firstOrNull<ServiceInfo>(serviceData);
+    }
 
     if (!appointment) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 });
@@ -126,14 +171,8 @@ export async function GET(
       subject: appointment.subject,
       meetingLink: appointment.meetingLink,
       location: appointment.location,
-      preparer: appointment.preparer ? {
-        name: `${appointment.preparer.firstName || ''} ${appointment.preparer.lastName || ''}`.trim(),
-        avatarUrl: appointment.preparer.avatarUrl,
-      } : null,
-      service: appointment.service ? {
-        name: appointment.service.name,
-        duration: appointment.service.duration,
-      } : null,
+      preparer: preparerInfo,
+      service: serviceInfo,
       canReschedule: appointment.status !== 'CANCELLED' && appointment.status !== 'COMPLETED',
       canCancel: appointment.status !== 'CANCELLED' && appointment.status !== 'COMPLETED',
     });

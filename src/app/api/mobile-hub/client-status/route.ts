@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
@@ -18,20 +18,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Get client's documents count
-    const documentsCount = await prisma.document.count({
-      where: { userId: userId },
-    });
+    const { count: documentsCount } = await db
+      .from('documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
 
     // Get latest tax return (if exists)
-    const latestReturn = await prisma.taxReturn.findFirst({
-      where: { userId: userId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: taxReturns } = await db
+      .from('tax_returns')
+      .select('status, updated_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const latestReturn = firstOrNull(taxReturns);
 
     const status = {
       returnStatus: latestReturn?.status || 'not_started',
-      documentsCount,
-      lastUpdated: latestReturn?.updatedAt || null,
+      documentsCount: documentsCount || 0,
+      lastUpdated: latestReturn?.updated_at || null,
     };
 
     return NextResponse.json({

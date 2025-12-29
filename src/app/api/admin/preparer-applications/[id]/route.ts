@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { hash } from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
@@ -15,6 +15,41 @@ interface RouteParams {
   params: Promise<{
     id: string;
   }>;
+}
+
+// Local interfaces
+interface PreparerApplication {
+  id: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  email: string;
+  phone: string;
+  languages: string[];
+  smsConsent: boolean;
+  status: string;
+  notes: string | null;
+  stage: string | null;
+  createdAt: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+interface Profile {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  middleName: string | null;
+  phone: string | null;
+  role: string;
+  affiliateStatus: string | null;
+  affiliateApprovedAt: string | null;
+  customTrackingCode: string | null;
 }
 
 // GET: Get single preparer application (admin only)
@@ -33,9 +68,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    const application = await prisma.preparerApplication.findUnique({
-      where: { id },
-    });
+    const { data: applicationData, error: findError } = await db.from('preparer_applications')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const application = firstOrNull<PreparerApplication>(applicationData);
 
     if (!application) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 });
@@ -69,9 +111,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Note: 'affiliate' is not a role - it's a status (affiliateStatus) on Profile
     // convertTo: 'client' | 'affiliate' - for reject action, optionally convert to client/affiliate
 
-    const application = await prisma.preparerApplication.findUnique({
-      where: { id },
-    });
+    const { data: applicationData, error: findError } = await db.from('preparer_applications')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const application = firstOrNull<PreparerApplication>(applicationData);
 
     if (!application) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 });
@@ -84,73 +133,100 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       const role = targetRole && validRoles.includes(targetRole) ? targetRole : 'tax_preparer';
 
       // Check if user already exists with this email (look up User, not Profile)
-      const existingUser = await prisma.user.findUnique({
-        where: { email: application.email.toLowerCase() },
-        include: { profile: true },
-      });
+      const { data: existingUserData } = await db.from('users')
+        .select('id, email, name')
+        .eq('email', application.email.toLowerCase())
+        .limit(1);
 
-      let profile = existingUser?.profile || null;
-      const isNewProfile = !profile;
+      const existingUser = firstOrNull<User>(existingUserData);
 
-      if (profile) {
-        // User exists, update their role
-        profile = await prisma.profile.update({
-          where: { id: profile.id },
-          data: {
+      let profile: Profile | null = null;
+      let newUser: User | null = null;
+      const isNewProfile = !existingUser;
+
+      if (existingUser) {
+        // Get existing profile
+        const { data: profileData } = await db.from('profiles')
+          .select('*')
+          .eq('userId', existingUser.id)
+          .limit(1);
+
+        profile = firstOrNull<Profile>(profileData);
+
+        if (profile) {
+          // User exists, update their role
+          const { data: updatedProfile, error: updateError } = await db.from('profiles')
+            .update({
+              role: role,
+              // Update name/phone if not already set
+              firstName: profile.firstName || application.firstName,
+              lastName: profile.lastName || application.lastName,
+              phone: profile.phone || application.phone,
+              // Ensure affiliate status is approved
+              affiliateStatus: 'APPROVED',
+              affiliateApprovedAt: profile.affiliateApprovedAt || new Date().toISOString(),
+            })
+            .eq('id', profile.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            throw updateError;
+          }
+
+          profile = updatedProfile;
+
+          logger.info(`Existing user upgraded to ${role}`, {
+            profileId: profile.id,
+            email: application.email,
+            applicationId: application.id,
             role: role,
-            // Update name/phone if not already set
-            firstName: profile.firstName || application.firstName,
-            lastName: profile.lastName || application.lastName,
-            phone: profile.phone || application.phone,
-            // Ensure affiliate status is approved
-            affiliateStatus: 'APPROVED',
-            affiliateApprovedAt: profile.affiliateApprovedAt || new Date(),
-          },
-        });
-
-        logger.info(`Existing user upgraded to ${role}`, {
-          profileId: profile.id,
-          email: application.email,
-          applicationId: application.id,
-          role: role,
-        });
+          });
+        }
       } else {
         // Create new user account with selected role
-        // Profile requires a User, so we must create both in a transaction
+        // Profile requires a User, so we must create both
         const tempPassword = nanoid();
         const hashedPassword = await hash(tempPassword, 10);
         const fullName = [application.firstName, application.lastName].filter(Boolean).join(' ');
 
-        const { user: newUser, profile: newProfile } = await prisma.$transaction(async (tx) => {
-          // First create the User (required for Profile)
-          const createdUser = await tx.user.create({
-            data: {
-              name: fullName,
-              email: application.email.toLowerCase(),
-              hashedPassword,
-              emailVerified: new Date(), // Auto-verify since admin approved
-            },
-          });
+        // First create the User (required for Profile)
+        const { data: createdUser, error: userCreateError } = await db.from('users')
+          .insert({
+            name: fullName,
+            email: application.email.toLowerCase(),
+            hashedPassword,
+            emailVerified: new Date().toISOString(), // Auto-verify since admin approved
+          })
+          .select()
+          .single();
 
-          // Then create the Profile linked to the User
-          // Note: Profile doesn't have an 'email' field - email is on User
-          const createdProfile = await tx.profile.create({
-            data: {
-              userId: createdUser.id,
-              firstName: application.firstName,
-              lastName: application.lastName,
-              middleName: application.middleName,
-              phone: application.phone,
-              role: role,
-              affiliateStatus: 'APPROVED', // Auto-approve as affiliate
-              affiliateApprovedAt: new Date(),
-            },
-          });
+        if (userCreateError) {
+          throw userCreateError;
+        }
 
-          return { user: createdUser, profile: createdProfile };
-        });
+        newUser = createdUser;
 
-        profile = newProfile;
+        // Then create the Profile linked to the User
+        const { data: createdProfile, error: profileCreateError } = await db.from('profiles')
+          .insert({
+            userId: createdUser.id,
+            firstName: application.firstName,
+            lastName: application.lastName,
+            middleName: application.middleName,
+            phone: application.phone,
+            role: role,
+            affiliateStatus: 'APPROVED', // Auto-approve as affiliate
+            affiliateApprovedAt: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (profileCreateError) {
+          throw profileCreateError;
+        }
+
+        profile = createdProfile;
 
         logger.info(`New ${role} user and profile created`, {
           userId: newUser.id,
@@ -166,28 +242,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           const magicLinkToken = nanoid();
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-          await prisma.magicLink.create({
-            data: {
+          await db.from('magic_links')
+            .insert({
               token: magicLinkToken,
               userId: newUser.id,
-              expiresAt,
-            },
-          });
+              expiresAt: expiresAt.toISOString(),
+            });
 
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://taxgeniuspro.tax';
           const magicLinkUrl = `${appUrl}/auth/verify?token=${magicLinkToken}`;
 
           // Get tracking code if assigned
-          const profileWithCode = await prisma.profile.findUnique({
-            where: { id: profile.id },
-            select: { customTrackingCode: true },
-          });
+          const { data: profileWithCode } = await db.from('profiles')
+            .select('customTrackingCode')
+            .eq('id', profile.id)
+            .limit(1);
+
+          const trackingCode = firstOrNull<{ customTrackingCode: string | null }>(profileWithCode);
 
           await EmailService.sendTaxPreparerWelcomeEmail(
             application.email,
             fullName,
             application.email,
-            profileWithCode?.customTrackingCode || 'pending',
+            trackingCode?.customTrackingCode || 'pending',
             magicLinkUrl,
             '24 hours'
           );
@@ -208,7 +285,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       // For tax_preparer role, set up tracking code + referral links
       // (all users get affiliate status, but only tax_preparers need tracking codes for marketing)
-      if (role === 'tax_preparer') {
+      if (role === 'tax_preparer' && profile) {
         try {
           await assignTrackingCodeToUser(profile.id);
           logger.info(`Assigned tracking code to ${role}`, {
@@ -225,21 +302,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
         // Create referral image folder for new preparer
         try {
-          const existingFolder = await prisma.referralImageSet.findFirst({
-            where: { preparerId: profile.id, category: 'preparer' },
-          });
+          const { data: existingFolder } = await db.from('referral_image_sets')
+            .select('id')
+            .eq('preparerId', profile.id)
+            .eq('category', 'preparer')
+            .limit(1);
 
-          if (!existingFolder) {
+          if (!existingFolder || existingFolder.length === 0) {
             const fullName = [application.firstName, application.lastName].filter(Boolean).join(' ');
-            await prisma.referralImageSet.create({
-              data: {
+            await db.from('referral_image_sets')
+              .insert({
                 category: 'preparer',
                 preparerId: profile.id,
                 name: fullName,
                 description: `Custom referral images for ${fullName}`,
                 isActive: true,
-              },
-            });
+              });
             logger.info('Created referral image folder for new preparer', {
               profileId: profile.id,
               name: fullName,
@@ -255,53 +333,71 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
 
       // Update application status to APPROVED with conversion tracking and audit fields
-      const updatedApplication = await prisma.preparerApplication.update({
-        where: { id },
-        data: {
+      const { data: updatedApplication, error: updateAppError } = await db.from('preparer_applications')
+        .update({
           status: 'APPROVED',
           notes: notes || application.notes,
           stage: 'DECISION',
           convertedToRole: role,
-          convertedProfileId: profile.id,
-          convertedAt: new Date(),
+          convertedProfileId: profile?.id,
+          convertedAt: new Date().toISOString(),
           // Audit fields
           reviewedBy: session.user.id,
-          reviewedAt: new Date(),
+          reviewedAt: new Date().toISOString(),
           lastModifiedBy: session.user.id,
-          lastModifiedAt: new Date(),
-        },
-      });
+          lastModifiedAt: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateAppError) {
+        throw updateAppError;
+      }
 
       // Get email from the user relation for response
-      const userWithEmail = await prisma.user.findUnique({
-        where: { id: profile.userId },
-        select: { email: true },
-      });
+      let userEmail = application.email;
+      if (profile) {
+        const { data: userWithEmail } = await db.from('users')
+          .select('email')
+          .eq('id', profile.userId)
+          .limit(1);
+
+        const foundUser = firstOrNull<{ email: string }>(userWithEmail);
+        if (foundUser) {
+          userEmail = foundUser.email;
+        }
+      }
 
       return NextResponse.json({
         success: true,
         message: `Application approved - ${isNewProfile ? 'Created new' : 'Updated existing'} ${role} account`,
         application: updatedApplication,
         profile: {
-          id: profile.id,
-          email: userWithEmail?.email || application.email,
-          role: profile.role,
+          id: profile?.id,
+          email: userEmail,
+          role: profile?.role,
         },
       });
     } else if (action === 'reject') {
       // Update application status to REJECTED with audit fields
-      const updatedApplication = await prisma.preparerApplication.update({
-        where: { id },
-        data: {
+      const { data: updatedApplication, error: updateError } = await db.from('preparer_applications')
+        .update({
           status: 'REJECTED',
           notes: notes || application.notes,
           // Audit fields
           reviewedBy: session.user.id,
-          reviewedAt: new Date(),
+          reviewedAt: new Date().toISOString(),
           lastModifiedBy: session.user.id,
-          lastModifiedAt: new Date(),
-        },
-      });
+          lastModifiedAt: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
 
       logger.info('Preparer application rejected', {
         applicationId: id,
@@ -421,9 +517,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    await prisma.preparerApplication.delete({
-      where: { id },
-    });
+    const { error: deleteError } = await db.from('preparer_applications')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     logger.info('Preparer application deleted', { applicationId: id });
 

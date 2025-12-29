@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { applySavedReply } from '@/lib/services/saved-reply.service';
 import { logger } from '@/lib/logger';
 
@@ -21,14 +21,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('user_id', userId)
+      .limit(1);
 
-    if (!profile) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
+
+    const { id: replyId } = await params;
 
     // Parse request body
     const body = await request.json();
@@ -40,13 +45,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Apply saved reply with variable substitution
     const result = await applySavedReply({
-      replyId: params.id,
+      replyId,
       ticketId,
       variables: variables || {},
     });
 
     logger.info('Saved reply applied via API', {
-      savedReplyId: params.id,
+      savedReplyId: replyId,
       ticketId,
       userId: profile.id,
     });
@@ -58,7 +63,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
   } catch (error) {
-    logger.error('Failed to apply saved reply', { error, id: params.id });
+    const { id: errorId } = await params;
+    logger.error('Failed to apply saved reply', { error, id: errorId });
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to apply saved reply',

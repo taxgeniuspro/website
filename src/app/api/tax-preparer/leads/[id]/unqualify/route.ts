@@ -9,24 +9,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 const VALID_REASONS = [
-  'wrong_state',      // We don't service their state
-  'no_income',        // No taxable income to file
-  'already_filed',    // Already filed elsewhere
-  'unresponsive',     // No response after multiple attempts
-  'not_interested',   // Lead declined services
-  'other',            // Other reason (requires notes)
+  'wrong_state', // We don't service their state
+  'no_income', // No taxable income to file
+  'already_filed', // Already filed elsewhere
+  'unresponsive', // No response after multiple attempts
+  'not_interested', // Lead declined services
+  'other', // Other reason (requires notes)
 ] as const;
 
-type UnqualifyReason = typeof VALID_REASONS[number];
+type UnqualifyReason = (typeof VALID_REASONS)[number];
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     const user = session?.user;
@@ -67,17 +64,13 @@ export async function POST(
     }
 
     // Fetch the lead
-    const lead = await prisma.taxIntakeLead.findUnique({
-      where: { id: leadId },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        assignedPreparerId: true,
-        convertedToClient: true,
-        unqualified: true,
-      },
-    });
+    const { data: leads } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, assignedPreparerId, convertedToClient, unqualified')
+      .eq('id', leadId)
+      .limit(1);
+
+    const lead = firstOrNull(leads);
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -101,16 +94,16 @@ export async function POST(
 
     // Tax preparers can only unqualify their assigned leads
     if (isTaxPreparer) {
-      const preparerProfile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+
+      const preparerProfile = firstOrNull(profiles);
 
       if (!preparerProfile) {
-        return NextResponse.json(
-          { error: 'Tax preparer profile not found' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Tax preparer profile not found' }, { status: 404 });
       }
 
       if (lead.assignedPreparerId !== preparerProfile.id) {
@@ -122,30 +115,28 @@ export async function POST(
     }
 
     // Update lead as unqualified
-    const updatedLead = await prisma.taxIntakeLead.update({
-      where: { id: leadId },
-      data: {
+    await db
+      .from('tax_intake_leads')
+      .update({
         unqualified: true,
         unqualifiedReason: reason,
-        unqualifiedAt: new Date(),
+        unqualifiedAt: new Date().toISOString(),
         unqualifiedNotes: notes || null,
-        updated_at: new Date(),
-      },
-    });
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', leadId);
 
     // Create lead activity
-    await prisma.leadActivity.create({
-      data: {
-        leadId,
-        activityType: 'STATUS_CHANGED',
-        title: `Lead marked as UNQUALIFIED`,
-        description: `Reason: ${reason}${notes ? ` - ${notes}` : ''}`,
-        metadata: {
-          previousStatus: 'active',
-          newStatus: 'unqualified',
-          reason,
-          notes: notes || null,
-        },
+    await db.from('lead_activities').insert({
+      leadId,
+      activityType: 'STATUS_CHANGED',
+      title: `Lead marked as UNQUALIFIED`,
+      description: `Reason: ${reason}${notes ? ` - ${notes}` : ''}`,
+      metadata: {
+        previousStatus: 'active',
+        newStatus: 'unqualified',
+        reason,
+        notes: notes || null,
       },
     });
 
@@ -164,9 +155,6 @@ export async function POST(
     });
   } catch (error) {
     logger.error('Error marking lead as unqualified:', error);
-    return NextResponse.json(
-      { error: 'Failed to mark lead as unqualified' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to mark lead as unqualified' }, { status: 500 });
   }
 }

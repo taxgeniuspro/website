@@ -5,8 +5,91 @@
  * Used by tax preparer dashboards and admin oversight
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  userId?: string | null;
+  role?: string | null;
+}
+
+interface LeadRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  status: string;
+  source?: string | null;
+  assignedPreparerId?: string | null;
+  createdAt: Date | string;
+  lastContactedAt?: Date | string | null;
+  contactMethod?: string | null;
+  contactRequested?: boolean;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  assignedPreparerId?: string | null;
+  contactRequested?: boolean;
+  lastContactedAt?: Date | string | null;
+  contactMethod?: string | null;
+  created_at: Date | string;
+  completed?: boolean;
+  attributionMethod?: string | null;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  title?: string | null;
+  url: string;
+  creatorId?: string | null;
+  creatorType?: string | null;
+  isActive: boolean;
+  clicks: number;
+  conversions: number;
+  conversionRate?: number | null;
+  intakeStarts?: number;
+  intakeCompletes?: number;
+  updatedAt?: Date | string;
+}
+
+interface LinkClickRecord {
+  id: string;
+  linkId: string;
+  clickedAt: Date | string;
+  converted?: boolean;
+  signedUp?: boolean;
+  userEmail?: string | null;
+  userPhone?: string | null;
+}
+
+interface AppointmentRecord {
+  id: string;
+  preparerId: string;
+  clientName: string;
+  status: string;
+  scheduledFor?: Date | string | null;
+  requestedAt: Date | string;
+}
+
+interface PaymentRecord {
+  id: string;
+  profileId?: string | null;
+  amount: number;
+  status: string;
+  type?: string | null;
+  createdAt: Date | string;
+}
 
 export interface PreparerDashboardStats {
   totalIntakesForms: number;
@@ -130,63 +213,79 @@ export async function getPreparerDashboardStats(
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Count intake forms assigned to this preparer
-    const totalIntakeForms = await prisma.clientIntake.count({
-      where: { assignedPreparerId: preparerId },
-    });
+    const { count: totalIntakeForms } = await db
+      .from('client_intakes')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId);
 
-    // Count referrals (clients referred TO this preparer)
-    const totalReferrals = await prisma.referral.count({
-      where: {
-        client: {
-          preparerClients: {
-            some: { preparerId },
-          },
-        },
-      },
-    });
+    // Count referrals - get client IDs for this preparer, then count referrals for those clients
+    const { data: preparerClientsData } = await db
+      .from('preparer_clients')
+      .select('clientId')
+      .eq('preparerId', preparerId);
+    const clientIds = (preparerClientsData || []).map((pc: { clientId: string }) => pc.clientId);
+
+    let totalReferrals = 0;
+    if (clientIds.length > 0) {
+      const { count } = await db
+        .from('referrals')
+        .select('id', { count: 'exact', head: true })
+        .in('clientId', clientIds);
+      totalReferrals = count || 0;
+    }
+
+    // Get profile IDs for this preparer's clients for tax returns queries
+    let profileIds: string[] = [];
+    if (clientIds.length > 0) {
+      const { data: profilesData } = await db
+        .from('profiles')
+        .select('id')
+        .in('id', clientIds);
+      profileIds = (profilesData || []).map((p: { id: string }) => p.id);
+    }
 
     // Count returns in progress
-    const returnsInProgress = await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: { preparerId },
-          },
-        },
-        status: { in: ['DRAFT', 'IN_REVIEW'] },
-      },
-    });
+    let returnsInProgress = 0;
+    if (profileIds.length > 0) {
+      const { count } = await db
+        .from('tax_returns')
+        .select('id', { count: 'exact', head: true })
+        .in('profileId', profileIds)
+        .in('status', ['DRAFT', 'IN_REVIEW']);
+      returnsInProgress = count || 0;
+    }
 
     // Count returns completed
-    const returnsCompleted = await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: { preparerId },
-          },
-        },
-        status: { in: ['FILED', 'ACCEPTED'] },
-      },
-    });
+    let returnsCompleted = 0;
+    if (profileIds.length > 0) {
+      const { count } = await db
+        .from('tax_returns')
+        .select('id', { count: 'exact', head: true })
+        .in('profileId', profileIds)
+        .in('status', ['FILED', 'ACCEPTED']);
+      returnsCompleted = count || 0;
+    }
 
     // Calculate earnings this month (if preparers earn commissions)
-    const earningsThisMonth = await prisma.payment.aggregate({
-      where: {
-        profileId: preparerId,
-        status: 'COMPLETED',
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { amount: true },
-    });
+    const { data: earningsThisMonthData } = await db
+      .from('payments')
+      .select('amount')
+      .eq('profileId', preparerId)
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfMonth.toISOString());
+
+    const earningsThisMonthTotal = ((earningsThisMonthData || []) as PaymentRecord[])
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     // Total earnings
-    const totalEarnings = await prisma.payment.aggregate({
-      where: {
-        profileId: preparerId,
-        status: 'COMPLETED',
-      },
-      _sum: { amount: true },
-    });
+    const { data: totalEarningsData } = await db
+      .from('payments')
+      .select('amount')
+      .eq('profileId', preparerId)
+      .eq('status', 'COMPLETED');
+
+    const totalEarningsSum = ((totalEarningsData || []) as PaymentRecord[])
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     // Calculate average response time
     const avgResponseTime = await calculateAverageResponseTime(preparerId);
@@ -195,12 +294,12 @@ export async function getPreparerDashboardStats(
     const missedFollowUps = await getMissedFollowUpsCount(preparerId);
 
     return {
-      totalIntakesForms: totalIntakeForms,
+      totalIntakesForms: totalIntakeForms || 0,
       totalReferrals,
       returnsInProgress,
       returnsCompleted,
-      earningsThisMonth: Number(earningsThisMonth._sum.amount || 0),
-      totalEarnings: Number(totalEarnings._sum.amount || 0),
+      earningsThisMonth: earningsThisMonthTotal,
+      totalEarnings: totalEarningsSum,
       averageResponseTime: avgResponseTime,
       missedFollowUpsCount: missedFollowUps,
     };
@@ -225,23 +324,22 @@ export async function getPreparerDashboardStats(
 async function calculateAverageResponseTime(preparerId: string): Promise<number> {
   try {
     // Get leads assigned to this preparer that were contacted
-    const leads = await prisma.lead.findMany({
-      where: {
-        assignedPreparerId: preparerId,
-        lastContactedAt: { not: null },
-      },
-      select: {
-        createdAt: true,
-        lastContactedAt: true,
-      },
-    });
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('createdAt, lastContactedAt')
+      .eq('assignedPreparerId', preparerId)
+      .not('lastContactedAt', 'is', null);
+
+    const leads = (leadsData || []) as Array<{ createdAt: string | Date; lastContactedAt: string | Date | null }>;
 
     if (leads.length === 0) return 0;
 
     // Calculate average time difference
     const totalHours = leads.reduce((sum, lead) => {
       if (!lead.lastContactedAt) return sum;
-      const diff = lead.lastContactedAt.getTime() - lead.createdAt.getTime();
+      const createdAt = new Date(lead.createdAt);
+      const contactedAt = new Date(lead.lastContactedAt);
+      const diff = contactedAt.getTime() - createdAt.getTime();
       return sum + diff / (1000 * 60 * 60); // Convert to hours
     }, 0);
 
@@ -257,27 +355,23 @@ async function calculateAverageResponseTime(preparerId: string): Promise<number>
  */
 async function getMissedFollowUpsCount(preparerId: string): Promise<number> {
   try {
-    const now = new Date();
-
     // Count leads that requested contact but haven't been contacted
-    const missedLeads = await prisma.lead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        contactRequested: true,
-        lastContactedAt: null,
-      },
-    });
+    const { count: missedLeads } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null);
 
     // Count tax intakes that requested contact but haven't been contacted
-    const missedIntakes = await prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        contactRequested: true,
-        lastContactedAt: null,
-      },
-    });
+    const { count: missedIntakes } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null);
 
-    return missedLeads + missedIntakes;
+    return (missedLeads || 0) + (missedIntakes || 0);
   } catch (error) {
     logger.error('Error getting missed follow-ups count:', error);
     return 0;
@@ -293,18 +387,20 @@ export async function getPreparerMissedFollowUps(preparerId: string): Promise<Mi
     const results: MissedFollowUp[] = [];
 
     // Get leads that need follow-up
-    const leads = await prisma.lead.findMany({
-      where: {
-        assignedPreparerId: preparerId,
-        contactRequested: true,
-        lastContactedAt: null,
-      },
-      orderBy: { createdAt: 'asc' }, // Oldest first
-    });
+    const { data: leadsData } = await db
+      .from('leads')
+      .select('*')
+      .eq('assignedPreparerId', preparerId)
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .order('createdAt', { ascending: true });
+
+    const leads = (leadsData || []) as LeadRecord[];
 
     leads.forEach((lead) => {
+      const createdAt = new Date(lead.createdAt);
       const daysWaiting = Math.floor(
-        (now.getTime() - lead.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+        (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
       );
       results.push({
         id: lead.id,
@@ -314,24 +410,26 @@ export async function getPreparerMissedFollowUps(preparerId: string): Promise<Mi
         clientPhone: lead.phone,
         contactMethod: lead.contactMethod || 'UNKNOWN',
         daysWaiting,
-        requestedAt: lead.createdAt,
+        requestedAt: createdAt,
         source: 'Lead',
       });
     });
 
     // Get tax intakes that need follow-up
-    const intakes = await prisma.taxIntakeLead.findMany({
-      where: {
-        assignedPreparerId: preparerId,
-        contactRequested: true,
-        lastContactedAt: null,
-      },
-      orderBy: { created_at: 'asc' },
-    });
+    const { data: intakesData } = await db
+      .from('tax_intake_leads')
+      .select('*')
+      .eq('assignedPreparerId', preparerId)
+      .eq('contactRequested', true)
+      .is('lastContactedAt', null)
+      .order('created_at', { ascending: true });
+
+    const intakes = (intakesData || []) as TaxIntakeLeadRecord[];
 
     intakes.forEach((intake) => {
+      const createdAt = new Date(intake.created_at);
       const daysWaiting = Math.floor(
-        (now.getTime() - intake.created_at.getTime()) / (1000 * 60 * 60 * 24)
+        (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
       );
       results.push({
         id: intake.id,
@@ -341,7 +439,7 @@ export async function getPreparerMissedFollowUps(preparerId: string): Promise<Mi
         clientPhone: intake.phone,
         contactMethod: intake.contactMethod || 'UNKNOWN',
         daysWaiting,
-        requestedAt: intake.created_at,
+        requestedAt: createdAt,
         source: 'TaxIntake',
       });
     });
@@ -364,54 +462,52 @@ export async function getPreparerTopReferrers(
   limit: number = 10
 ): Promise<TopReferrer[]> {
   try {
-    // Get all referrals where the client was assigned to this preparer
-    const referrals = await prisma.referral.groupBy({
-      by: ['referrerId'],
-      where: {
-        client: {
-          preparerClients: {
-            some: { preparerId },
-          },
-        },
-      },
-      _count: true,
+    // Get client IDs for this preparer
+    const { data: preparerClientsData } = await db
+      .from('preparer_clients')
+      .select('clientId')
+      .eq('preparerId', preparerId);
+    const clientIds = (preparerClientsData || []).map((pc: { clientId: string }) => pc.clientId);
+
+    if (clientIds.length === 0) return [];
+
+    // Get referrals for those clients
+    const { data: referralsData } = await db
+      .from('referrals')
+      .select('referrerId, status')
+      .in('clientId', clientIds);
+
+    const allReferrals = (referralsData || []) as Array<{ referrerId: string; status: string }>;
+
+    // Group by referrerId in JS
+    const referrerCountMap = new Map<string, { total: number; completed: number }>();
+    allReferrals.forEach((r) => {
+      const current = referrerCountMap.get(r.referrerId) || { total: 0, completed: 0 };
+      current.total++;
+      if (r.status === 'COMPLETED') current.completed++;
+      referrerCountMap.set(r.referrerId, current);
     });
 
-    // Get referrer details
-    const referrerIds = referrals.map((r) => r.referrerId);
-    const referrers = await prisma.profile.findMany({
-      where: { id: { in: referrerIds } },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        referrerReferrals: {
-          where: {
-            client: {
-              preparerClients: {
-                some: { preparerId },
-              },
-            },
-          },
-          select: {
-            status: true,
-          },
-        },
-      },
-    });
+    const referrerIds = Array.from(referrerCountMap.keys());
+    if (referrerIds.length === 0) return [];
+
+    // Get referrer profiles
+    const { data: referrersData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .in('id', referrerIds);
+
+    const referrers = (referrersData || []) as ProfileRecord[];
 
     const topReferrers: TopReferrer[] = referrers.map((referrer) => {
-      const totalReferrals = referrer.referrerReferrals.length;
-      const completedReferrals = referrer.referrerReferrals.filter(
-        (r) => r.status === 'COMPLETED'
-      ).length;
+      const counts = referrerCountMap.get(referrer.id) || { total: 0, completed: 0 };
       const conversionRate =
-        totalReferrals > 0 ? Math.round((completedReferrals / totalReferrals) * 100) : 0;
+        counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0;
 
       return {
         id: referrer.id,
         name: `${referrer.firstName || ''} ${referrer.lastName || ''}`.trim() || 'Unknown',
-        referralCount: totalReferrals,
+        referralCount: counts.total,
         conversionRate,
       };
     });
@@ -433,14 +529,15 @@ export async function getPreparerTopLinks(
   limit: number = 10
 ): Promise<PreparerLinkPerformance[]> {
   try {
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: preparerId,
-        isActive: true,
-      },
-      orderBy: [{ conversions: 'desc' }, { clicks: 'desc' }],
-      take: limit,
-    });
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('id, code, title, clicks, conversions, conversionRate')
+      .eq('creatorId', preparerId)
+      .eq('isActive', true)
+      .order('conversions', { ascending: false })
+      .limit(limit);
+
+    const links = (linksData || []) as MarketingLinkRecord[];
 
     return links.map((link) => ({
       linkId: link.id,
@@ -463,50 +560,76 @@ export async function getTopPreparers(
   limit: number = 10
 ) {
   try {
-    // This is a complex query - we'll get all preparers and calculate stats
-    const preparers = await prisma.profile.findMany({
-      where: { role: 'tax_preparer' },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        preparerClients: {
-          select: {
-            clientId: true,
-            client: {
-              select: {
-                taxReturns: {
-                  select: {
-                    status: true,
-                  },
-                },
-                payments: {
-                  where: { status: 'COMPLETED' },
-                  select: {
-                    amount: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    // Get all tax preparers
+    const { data: preparersData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName')
+      .eq('role', 'tax_preparer');
 
+    const preparers = (preparersData || []) as ProfileRecord[];
+    const preparerIds = preparers.map(p => p.id);
+
+    if (preparerIds.length === 0) return [];
+
+    // Get all preparer_clients for these preparers
+    const { data: preparerClientsData } = await db
+      .from('preparer_clients')
+      .select('preparerId, clientId')
+      .in('preparerId', preparerIds);
+
+    const allPreparerClients = (preparerClientsData || []) as Array<{ preparerId: string; clientId: string }>;
+
+    // Get unique client IDs
+    const allClientIds = [...new Set(allPreparerClients.map(pc => pc.clientId))];
+
+    // Get tax returns for all clients
+    let taxReturnsMap = new Map<string, Array<{ status: string }>>();
+    if (allClientIds.length > 0) {
+      const { data: taxReturnsData } = await db
+        .from('tax_returns')
+        .select('profileId, status')
+        .in('profileId', allClientIds);
+
+      const taxReturns = (taxReturnsData || []) as Array<{ profileId: string; status: string }>;
+      taxReturns.forEach(tr => {
+        const existing = taxReturnsMap.get(tr.profileId) || [];
+        existing.push({ status: tr.status });
+        taxReturnsMap.set(tr.profileId, existing);
+      });
+    }
+
+    // Get completed payments for all clients
+    let paymentsMap = new Map<string, number>();
+    if (allClientIds.length > 0) {
+      const { data: paymentsData } = await db
+        .from('payments')
+        .select('profileId, amount')
+        .in('profileId', allClientIds)
+        .eq('status', 'COMPLETED');
+
+      const payments = (paymentsData || []) as Array<{ profileId: string; amount: number }>;
+      payments.forEach(p => {
+        const existing = paymentsMap.get(p.profileId) || 0;
+        paymentsMap.set(p.profileId, existing + Number(p.amount || 0));
+      });
+    }
+
+    // Build preparer stats
     const preparerStats = preparers.map((preparer) => {
-      const totalClients = preparer.preparerClients.length;
+      const clientRelations = allPreparerClients.filter(pc => pc.preparerId === preparer.id);
+      const totalClients = clientRelations.length;
 
       let totalReturns = 0;
       let totalRevenue = 0;
 
-      preparer.preparerClients.forEach((pc) => {
-        const returns = pc.client.taxReturns.filter(
+      clientRelations.forEach((pc) => {
+        const clientReturns = taxReturnsMap.get(pc.clientId) || [];
+        const filedReturns = clientReturns.filter(
           (tr) => tr.status === 'FILED' || tr.status === 'ACCEPTED'
         );
-        totalReturns += returns.length;
+        totalReturns += filedReturns.length;
 
-        const revenue = pc.client.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-        totalRevenue += revenue;
+        totalRevenue += paymentsMap.get(pc.clientId) || 0;
       });
 
       return {
@@ -543,17 +666,23 @@ export async function getPreparerPerformanceComparison(preparerId: string) {
     const preparerStats = await getPreparerDashboardStats(preparerId);
 
     // Get platform averages
-    const allPreparers = await prisma.profile.count({
-      where: { role: 'tax_preparer' },
-    });
+    const { count: allPreparers } = await db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'tax_preparer');
 
-    const totalIntakes = await prisma.clientIntake.count();
-    const totalReturns = await prisma.taxReturn.count({
-      where: { status: { in: ['FILED', 'ACCEPTED'] } },
-    });
+    const { count: totalIntakes } = await db
+      .from('client_intakes')
+      .select('id', { count: 'exact', head: true });
 
-    const avgIntakesPerPreparer = allPreparers > 0 ? Math.round(totalIntakes / allPreparers) : 0;
-    const avgReturnsPerPreparer = allPreparers > 0 ? Math.round(totalReturns / allPreparers) : 0;
+    const { count: totalReturns } = await db
+      .from('tax_returns')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['FILED', 'ACCEPTED']);
+
+    const preparerCount = allPreparers || 0;
+    const avgIntakesPerPreparer = preparerCount > 0 ? Math.round((totalIntakes || 0) / preparerCount) : 0;
+    const avgReturnsPerPreparer = preparerCount > 0 ? Math.round((totalReturns || 0) / preparerCount) : 0;
 
     return {
       preparer: {
@@ -618,26 +747,24 @@ export async function getTodaysDashboardData(preparerId: string): Promise<Todays
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
 
     // Get preparer's marketing links
-    const preparerLinks = await prisma.marketingLink.findMany({
-      where: { creatorId: preparerId },
-      select: { id: true },
-    });
-    const linkIds = preparerLinks.map(l => l.id);
+    const { data: preparerLinksData } = await db
+      .from('marketing_links')
+      .select('id')
+      .eq('creatorId', preparerId);
+    const linkIds = (preparerLinksData || []).map((l: { id: string }) => l.id);
 
-    // Today's appointments by status
-    const todayAppointments = await prisma.appointment.groupBy({
-      by: ['status'],
-      where: {
-        preparerId,
-        scheduledFor: {
-          gte: startOfToday,
-          lt: new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000),
-        },
-      },
-      _count: true,
-    });
+    // Today's appointments - fetch all and group in JS
+    const { data: todayAppointmentsData } = await db
+      .from('appointments')
+      .select('id, status')
+      .eq('preparerId', preparerId)
+      .gte('scheduledFor', startOfToday.toISOString())
+      .lt('scheduledFor', endOfToday.toISOString());
+
+    const todayAppointmentsList = (todayAppointmentsData || []) as Array<{ id: string; status: string }>;
 
     const appointments: TodayScheduleData = {
       scheduled: 0,
@@ -646,103 +773,96 @@ export async function getTodaysDashboardData(preparerId: string): Promise<Todays
       cancelled: 0,
     };
 
-    todayAppointments.forEach(apt => {
+    todayAppointmentsList.forEach(apt => {
       if (apt.status === 'SCHEDULED' || apt.status === 'CONFIRMED') {
-        appointments.scheduled += apt._count;
+        appointments.scheduled++;
       } else if (apt.status === 'PENDING_APPROVAL' || apt.status === 'REQUESTED') {
-        appointments.pending += apt._count;
+        appointments.pending++;
       } else if (apt.status === 'COMPLETED') {
-        appointments.completed += apt._count;
+        appointments.completed++;
       } else if (apt.status === 'CANCELLED' || apt.status === 'NO_SHOW') {
-        appointments.cancelled += apt._count;
+        appointments.cancelled++;
       }
     });
 
     // Link clicks today vs yesterday
-    const clicksToday = linkIds.length > 0 ? await prisma.linkClick.count({
-      where: {
-        linkId: { in: linkIds },
-        clickedAt: { gte: startOfToday },
-      },
-    }) : 0;
+    let clicksToday = 0;
+    let clicksYesterday = 0;
+    if (linkIds.length > 0) {
+      const { count: todayCount } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .in('linkId', linkIds)
+        .gte('clickedAt', startOfToday.toISOString());
+      clicksToday = todayCount || 0;
 
-    const clicksYesterday = linkIds.length > 0 ? await prisma.linkClick.count({
-      where: {
-        linkId: { in: linkIds },
-        clickedAt: {
-          gte: startOfYesterday,
-          lt: startOfToday,
-        },
-      },
-    }) : 0;
+      const { count: yesterdayCount } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .in('linkId', linkIds)
+        .gte('clickedAt', startOfYesterday.toISOString())
+        .lt('clickedAt', startOfToday.toISOString());
+      clicksYesterday = yesterdayCount || 0;
+    }
 
     // Intake forms today vs yesterday
-    const intakesToday = await prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        created_at: { gte: startOfToday },
-      },
-    });
+    const { count: intakesTodayCount } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .gte('created_at', startOfToday.toISOString());
+    const intakesToday = intakesTodayCount || 0;
 
-    const intakesYesterday = await prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        created_at: {
-          gte: startOfYesterday,
-          lt: startOfToday,
-        },
-      },
-    });
+    const { count: intakesYesterdayCount } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .gte('created_at', startOfYesterday.toISOString())
+      .lt('created_at', startOfToday.toISOString());
+    const intakesYesterday = intakesYesterdayCount || 0;
 
     // Appointments booked today vs yesterday
-    const bookedToday = await prisma.appointment.count({
-      where: {
-        preparerId,
-        requestedAt: { gte: startOfToday },
-      },
-    });
+    const { count: bookedTodayCount } = await db
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('preparerId', preparerId)
+      .gte('requestedAt', startOfToday.toISOString());
+    const bookedToday = bookedTodayCount || 0;
 
-    const bookedYesterday = await prisma.appointment.count({
-      where: {
-        preparerId,
-        requestedAt: {
-          gte: startOfYesterday,
-          lt: startOfToday,
-        },
-      },
-    });
+    const { count: bookedYesterdayCount } = await db
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('preparerId', preparerId)
+      .gte('requestedAt', startOfYesterday.toISOString())
+      .lt('requestedAt', startOfToday.toISOString());
+    const bookedYesterday = bookedYesterdayCount || 0;
 
     // Earnings today vs yesterday
-    const earningsToday = await prisma.payment.aggregate({
-      where: {
-        profileId: preparerId,
-        status: 'COMPLETED',
-        createdAt: { gte: startOfToday },
-      },
-      _sum: { amount: true },
-    });
+    const { data: earningsTodayData } = await db
+      .from('payments')
+      .select('amount')
+      .eq('profileId', preparerId)
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfToday.toISOString());
+    const earningsTodaySum = ((earningsTodayData || []) as PaymentRecord[])
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-    const earningsYesterday = await prisma.payment.aggregate({
-      where: {
-        profileId: preparerId,
-        status: 'COMPLETED',
-        createdAt: {
-          gte: startOfYesterday,
-          lt: startOfToday,
-        },
-      },
-      _sum: { amount: true },
-    });
+    const { data: earningsYesterdayData } = await db
+      .from('payments')
+      .select('amount')
+      .eq('profileId', preparerId)
+      .eq('status', 'COMPLETED')
+      .gte('createdAt', startOfYesterday.toISOString())
+      .lt('createdAt', startOfToday.toISOString());
+    const earningsYesterdaySum = ((earningsYesterdayData || []) as PaymentRecord[])
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     return {
       appointments,
       linkClicks: calculateTrend(clicksToday, clicksYesterday),
       intakeForms: calculateTrend(intakesToday, intakesYesterday),
       appointmentsBooked: calculateTrend(bookedToday, bookedYesterday),
-      earnings: calculateTrend(
-        Number(earningsToday._sum.amount || 0),
-        Number(earningsYesterday._sum.amount || 0)
-      ),
+      earnings: calculateTrend(earningsTodaySum, earningsYesterdaySum),
     };
   } catch (error) {
     logger.error('Error fetching todays dashboard data:', error);
@@ -776,60 +896,67 @@ export async function getConversionFunnel(
     }
 
     // Get preparer's marketing links
-    const preparerLinks = await prisma.marketingLink.findMany({
-      where: { creatorId: preparerId },
-      select: { id: true, clicks: true, intakeStarts: true, intakeCompletes: true },
-    });
-    const linkIds = preparerLinks.map(l => l.id);
+    const { data: preparerLinksData } = await db
+      .from('marketing_links')
+      .select('id, clicks, intakeStarts, intakeCompletes')
+      .eq('creatorId', preparerId);
+    const linkIds = (preparerLinksData || []).map((l: { id: string }) => l.id);
 
     // Link clicks in period
-    const linkClicks = linkIds.length > 0 ? await prisma.linkClick.count({
-      where: {
-        linkId: { in: linkIds },
-        clickedAt: { gte: startDate },
-      },
-    }) : 0;
+    let linkClicks = 0;
+    if (linkIds.length > 0) {
+      const { count } = await db
+        .from('link_clicks')
+        .select('id', { count: 'exact', head: true })
+        .in('linkId', linkIds)
+        .gte('clickedAt', startDate.toISOString());
+      linkClicks = count || 0;
+    }
 
     // Intakes started (has referrer matching preparer)
-    const intakesStarted = await prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        created_at: { gte: startDate },
-      },
-    });
+    const { count: intakesStartedCount } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .gte('created_at', startDate.toISOString());
+    const intakesStarted = intakesStartedCount || 0;
 
     // Intakes completed
-    const intakesCompleted = await prisma.taxIntakeLead.count({
-      where: {
-        assignedPreparerId: preparerId,
-        completed: true,
-        created_at: { gte: startDate },
-      },
-    });
+    const { count: intakesCompletedCount } = await db
+      .from('tax_intake_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId)
+      .eq('completed', true)
+      .gte('created_at', startDate.toISOString());
+    const intakesCompleted = intakesCompletedCount || 0;
 
     // Appointments booked
-    const appointmentsBooked = await prisma.appointment.count({
-      where: {
-        preparerId,
-        requestedAt: { gte: startDate },
-        status: { in: ['SCHEDULED', 'CONFIRMED', 'COMPLETED'] },
-      },
-    });
+    const { count: appointmentsBookedCount } = await db
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('preparerId', preparerId)
+      .gte('requestedAt', startDate.toISOString())
+      .in('status', ['SCHEDULED', 'CONFIRMED', 'COMPLETED']);
+    const appointmentsBooked = appointmentsBookedCount || 0;
 
-    // Returns filed
-    const returnsFiled = await prisma.taxReturn.count({
-      where: {
-        profile: {
-          preparerClients: {
-            some: { preparerId },
-          },
-        },
-        status: { in: ['FILED', 'ACCEPTED'] },
-        createdAt: { gte: startDate },
-      },
-    });
+    // Returns filed - need to get client IDs for this preparer first
+    let returnsFiled = 0;
+    const { data: preparerClientsData } = await db
+      .from('preparer_clients')
+      .select('clientId')
+      .eq('preparerId', preparerId);
+    const clientIds = (preparerClientsData || []).map((pc: { clientId: string }) => pc.clientId);
 
-    const maxValue = Math.max(linkClicks, 1);
+    if (clientIds.length > 0) {
+      const { count } = await db
+        .from('tax_returns')
+        .select('id', { count: 'exact', head: true })
+        .in('profileId', clientIds)
+        .in('status', ['FILED', 'ACCEPTED'])
+        .gte('createdAt', startDate.toISOString());
+      returnsFiled = count || 0;
+    }
+
     const stages: ConversionFunnelStage[] = [
       {
         name: 'Link Clicks',
@@ -894,17 +1021,30 @@ export async function getClientSources(
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
-    const whereClause: any = { assignedPreparerId: preparerId };
+    // Build query for intakes
+    let query = db
+      .from('tax_intake_leads')
+      .select('attributionMethod')
+      .eq('assignedPreparerId', preparerId);
+
     if (startDate) {
-      whereClause.created_at = { gte: startDate };
+      query = query.gte('created_at', startDate.toISOString());
     }
 
-    // Group intakes by attribution method
-    const intakes = await prisma.taxIntakeLead.groupBy({
-      by: ['attributionMethod'],
-      where: whereClause,
-      _count: true,
+    const { data: intakesData } = await query;
+    const allIntakes = (intakesData || []) as Array<{ attributionMethod: string | null }>;
+
+    // Group by attribution method in JS
+    const intakesGrouped = new Map<string, number>();
+    allIntakes.forEach((intake) => {
+      const method = intake.attributionMethod || 'unknown';
+      intakesGrouped.set(method, (intakesGrouped.get(method) || 0) + 1);
     });
+
+    const intakes = Array.from(intakesGrouped.entries()).map(([attributionMethod, count]) => ({
+      attributionMethod,
+      _count: count,
+    }));
 
     const total = intakes.reduce((sum, i) => sum + i._count, 0);
 
@@ -979,20 +1119,32 @@ export async function getEarningsBreakdown(
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
-    const whereClause: any = {
-      profileId: preparerId,
-      status: 'COMPLETED',
-    };
+    // Build query for payments
+    let query = db
+      .from('payments')
+      .select('type, amount')
+      .eq('profileId', preparerId)
+      .eq('status', 'COMPLETED');
+
     if (startDate) {
-      whereClause.createdAt = { gte: startDate };
+      query = query.gte('createdAt', startDate.toISOString());
     }
 
-    // Get payments grouped by type/description
-    const payments = await prisma.payment.groupBy({
-      by: ['type'],
-      where: whereClause,
-      _sum: { amount: true },
+    const { data: paymentsData } = await query;
+    const allPayments = (paymentsData || []) as Array<{ type: string | null; amount: number }>;
+
+    // Group by type and sum amounts in JS
+    const paymentsGrouped = new Map<string, number>();
+    allPayments.forEach((payment) => {
+      const type = payment.type || 'OTHER';
+      const current = paymentsGrouped.get(type) || 0;
+      paymentsGrouped.set(type, current + Number(payment.amount || 0));
     });
+
+    const payments = Array.from(paymentsGrouped.entries()).map(([type, sumAmount]) => ({
+      type,
+      _sum: { amount: sumAmount },
+    }));
 
     const total = payments.reduce((sum, p) => sum + Number(p._sum.amount || 0), 0);
 
@@ -1041,41 +1193,47 @@ export async function getHotLeads(preparerId: string, limit: number = 10): Promi
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // Get preparer's marketing links
-    const preparerLinks = await prisma.marketingLink.findMany({
-      where: { creatorId: preparerId },
-      select: { id: true, code: true, title: true },
-    });
+    const { data: preparerLinksData } = await db
+      .from('marketing_links')
+      .select('id, code, title')
+      .eq('creatorId', preparerId);
+
+    const preparerLinks = (preparerLinksData || []) as Array<{ id: string; code: string; title: string | null }>;
     const linkIds = preparerLinks.map(l => l.id);
     const linkMap = new Map(preparerLinks.map(l => [l.id, { code: l.code, title: l.title }]));
 
     if (linkIds.length === 0) return [];
 
     // Get recent clicks that haven't converted
-    const recentClicks = await prisma.linkClick.findMany({
-      where: {
-        linkId: { in: linkIds },
-        clickedAt: { gte: twentyFourHoursAgo },
-        converted: false,
-        // Has some identifying info
-        OR: [
-          { userEmail: { not: null } },
-          { userPhone: { not: null } },
-        ],
-      },
-      orderBy: { clickedAt: 'desc' },
-      take: limit,
-    });
+    // Note: We need OR condition for userEmail or userPhone not null
+    // In Supabase, we'll fetch all and filter in JS for the OR condition
+    const { data: clicksData } = await db
+      .from('link_clicks')
+      .select('id, linkId, clickedAt, converted, userEmail, userPhone')
+      .in('linkId', linkIds)
+      .gte('clickedAt', twentyFourHoursAgo.toISOString())
+      .eq('converted', false)
+      .order('clickedAt', { ascending: false })
+      .limit(limit * 2); // Fetch more to account for filtering
+
+    const allClicks = (clicksData || []) as LinkClickRecord[];
+
+    // Filter for clicks with identifying info
+    const recentClicks = allClicks
+      .filter(click => click.userEmail || click.userPhone)
+      .slice(0, limit);
 
     const now = new Date();
     return recentClicks.map(click => {
       const linkInfo = linkMap.get(click.linkId);
-      const hoursAgo = Math.floor((now.getTime() - click.clickedAt.getTime()) / (1000 * 60 * 60));
+      const clickedAt = new Date(click.clickedAt);
+      const hoursAgo = Math.floor((now.getTime() - clickedAt.getTime()) / (1000 * 60 * 60));
       return {
         id: click.id,
         name: click.userEmail?.split('@')[0] || 'Unknown',
         email: click.userEmail || '',
         phone: click.userPhone || '',
-        clickedAt: click.clickedAt,
+        clickedAt,
         linkCode: linkInfo?.code || '',
         linkTitle: linkInfo?.title || linkInfo?.code || '',
         hoursAgo,
@@ -1098,72 +1256,85 @@ export async function getRecentActivity(
     const activities: RecentActivityItem[] = [];
 
     // Get preparer's marketing links
-    const preparerLinks = await prisma.marketingLink.findMany({
-      where: { creatorId: preparerId },
-      select: { id: true, code: true, title: true },
-    });
+    const { data: preparerLinksData } = await db
+      .from('marketing_links')
+      .select('id, code, title')
+      .eq('creatorId', preparerId);
+
+    const preparerLinks = (preparerLinksData || []) as Array<{ id: string; code: string; title: string | null }>;
     const linkIds = preparerLinks.map(l => l.id);
     const linkMap = new Map(preparerLinks.map(l => [l.id, { code: l.code, title: l.title }]));
 
     // Recent link clicks
     if (linkIds.length > 0) {
-      const recentClicks = await prisma.linkClick.findMany({
-        where: { linkId: { in: linkIds } },
-        orderBy: { clickedAt: 'desc' },
-        take: 5,
-      });
+      const { data: recentClicksData } = await db
+        .from('link_clicks')
+        .select('id, linkId, clickedAt')
+        .in('linkId', linkIds)
+        .order('clickedAt', { ascending: false })
+        .limit(5);
+
+      const recentClicks = (recentClicksData || []) as Array<{ id: string; linkId: string; clickedAt: string }>;
 
       recentClicks.forEach(click => {
         const linkInfo = linkMap.get(click.linkId);
+        const clickedAt = new Date(click.clickedAt);
         activities.push({
           id: `click-${click.id}`,
           type: 'link_click',
           description: `Someone clicked ${linkInfo?.code || 'your link'}`,
-          timestamp: click.clickedAt,
-          timeAgo: formatTimeAgo(click.clickedAt),
+          timestamp: clickedAt,
+          timeAgo: formatTimeAgo(clickedAt),
           metadata: { linkCode: linkInfo?.code },
         });
       });
     }
 
     // Recent intake submissions
-    const recentIntakes = await prisma.taxIntakeLead.findMany({
-      where: { assignedPreparerId: preparerId },
-      orderBy: { created_at: 'desc' },
-      take: 5,
-    });
+    const { data: recentIntakesData } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, completed, created_at')
+      .eq('assignedPreparerId', preparerId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const recentIntakes = (recentIntakesData || []) as TaxIntakeLeadRecord[];
 
     recentIntakes.forEach(intake => {
+      const createdAt = new Date(intake.created_at);
       activities.push({
         id: `intake-${intake.id}`,
         type: intake.completed ? 'intake_submitted' : 'intake_started',
         description: `${intake.first_name} ${intake.last_name} ${intake.completed ? 'submitted intake form' : 'started intake form'}`,
-        timestamp: intake.created_at,
-        timeAgo: formatTimeAgo(intake.created_at),
+        timestamp: createdAt,
+        timeAgo: formatTimeAgo(createdAt),
         metadata: { clientName: `${intake.first_name} ${intake.last_name}` },
       });
     });
 
     // Recent appointments
-    const recentAppointments = await prisma.appointment.findMany({
-      where: {
-        preparerId,
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-      },
-      orderBy: { requestedAt: 'desc' },
-      take: 5,
-    });
+    const { data: recentAppointmentsData } = await db
+      .from('appointments')
+      .select('id, clientName, scheduledFor, requestedAt, status')
+      .eq('preparerId', preparerId)
+      .in('status', ['SCHEDULED', 'CONFIRMED'])
+      .order('requestedAt', { ascending: false })
+      .limit(5);
+
+    const recentAppointments = (recentAppointmentsData || []) as AppointmentRecord[];
 
     recentAppointments.forEach(apt => {
-      const scheduledTime = apt.scheduledFor
-        ? apt.scheduledFor.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      const scheduledFor = apt.scheduledFor ? new Date(apt.scheduledFor) : null;
+      const scheduledTime = scheduledFor
+        ? scheduledFor.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         : 'TBD';
+      const requestedAt = new Date(apt.requestedAt);
       activities.push({
         id: `apt-${apt.id}`,
         type: 'appointment_booked',
         description: `${apt.clientName} booked appointment`,
-        timestamp: apt.requestedAt,
-        timeAgo: formatTimeAgo(apt.requestedAt),
+        timestamp: requestedAt,
+        timeAgo: formatTimeAgo(requestedAt),
         metadata: {
           clientName: apt.clientName,
           appointmentTime: scheduledTime,
@@ -1191,43 +1362,49 @@ export async function getTopLinksToday(
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    // Get preparer's links
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: preparerId,
-        isActive: true,
-      },
+    // Get preparer's active links
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('id, code, title')
+      .eq('creatorId', preparerId)
+      .eq('isActive', true);
+
+    const links = (linksData || []) as MarketingLinkRecord[];
+    if (links.length === 0) return [];
+
+    const linkIds = links.map(l => l.id);
+
+    // Get all today's clicks for these links in one query
+    const { data: clicksData } = await db
+      .from('link_clicks')
+      .select('linkId, converted')
+      .in('linkId', linkIds)
+      .gte('clickedAt', startOfToday.toISOString());
+
+    const clicks = (clicksData || []) as Array<{ linkId: string; converted: boolean }>;
+
+    // Group clicks by link in JS
+    const clicksByLink = new Map<string, { clicks: number; conversions: number }>();
+    clicks.forEach(click => {
+      const current = clicksByLink.get(click.linkId) || { clicks: 0, conversions: 0 };
+      current.clicks++;
+      if (click.converted) current.conversions++;
+      clicksByLink.set(click.linkId, current);
     });
 
-    // Get clicks for each link today
-    const linkPerformance: PreparerLinkPerformance[] = [];
-
-    for (const link of links) {
-      const todayClicks = await prisma.linkClick.count({
-        where: {
-          linkId: link.id,
-          clickedAt: { gte: startOfToday },
-        },
-      });
-
-      const todayConversions = await prisma.linkClick.count({
-        where: {
-          linkId: link.id,
-          clickedAt: { gte: startOfToday },
-          converted: true,
-        },
-      });
-
-      linkPerformance.push({
+    // Build performance data
+    const linkPerformance: PreparerLinkPerformance[] = links.map(link => {
+      const stats = clicksByLink.get(link.id) || { clicks: 0, conversions: 0 };
+      return {
         linkId: link.id,
         title: link.title || link.code,
-        clicks: todayClicks,
-        conversions: todayConversions,
-        conversionRate: todayClicks > 0
-          ? Math.round((todayConversions / todayClicks) * 100)
+        clicks: stats.clicks,
+        conversions: stats.conversions,
+        conversionRate: stats.clicks > 0
+          ? Math.round((stats.conversions / stats.clicks) * 100)
           : 0,
-      });
-    }
+      };
+    });
 
     // Sort by clicks descending
     linkPerformance.sort((a, b) => b.clicks - a.clicks);

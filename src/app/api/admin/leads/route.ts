@@ -5,8 +5,27 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interface
+interface CRMContact {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  phone: string | null;
+  contactType: string;
+  stage: string;
+  source: string | null;
+  assignedPreparerId: string | null;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  leadScore: number | null;
+  createdAt: string;
+  updatedAt: string;
+  lastContactedAt: string | null;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,62 +52,38 @@ export async function GET(req: NextRequest) {
     const contactType = searchParams.get('contactType') || '';
     const preparerId = searchParams.get('preparerId') || '';
 
-    const skip = (page - 1) * limit;
-
-    // Build where clause
-    const where: any = {};
+    // Build query
+    let query = db.from('crm_contacts')
+      .select('id, firstName, lastName, email, phone, contactType, stage, source, assignedPreparerId, referrerUsername, referrerType, leadScore, createdAt, updatedAt, lastContactedAt', { count: 'exact' });
 
     if (search) {
-      where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`email.ilike.%${search}%,firstName.ilike.%${search}%,lastName.ilike.%${search}%,phone.ilike.%${search}%`);
     }
 
     if (stage) {
-      where.stage = stage;
+      query = query.eq('stage', stage);
     }
 
     if (contactType) {
-      where.contactType = contactType;
+      query = query.eq('contactType', contactType);
     }
 
     if (preparerId) {
-      where.assignedPreparerId = preparerId;
+      query = query.eq('assignedPreparerId', preparerId);
     }
 
-    // Fetch leads
-    const [leads, total] = await Promise.all([
-      prisma.cRMContact.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          contactType: true,
-          stage: true,
-          source: true,
-          assignedPreparerId: true,
-          referrerUsername: true,
-          referrerType: true,
-          leadScore: true,
-          createdAt: true,
-          updatedAt: true,
-          lastContactedAt: true,
-        },
-      }),
-      prisma.cRMContact.count({ where }),
-    ]);
+    const { data: leads, error, count } = await query
+      .order('createdAt', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const total = count || 0;
 
     // Format response
-    const formattedLeads = leads.map((lead) => ({
+    const formattedLeads = (leads || []).map((lead: CRMContact) => ({
       id: lead.id,
       firstName: lead.firstName,
       lastName: lead.lastName,

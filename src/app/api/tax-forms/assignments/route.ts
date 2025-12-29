@@ -7,8 +7,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces
+interface Profile {
+  id: string;
+  role: string;
+}
+
+interface ClientTaxForm {
+  id: string;
+  clientId: string;
+  status: string;
+  assignedAt: string;
+}
+
+interface ClientPreparer {
+  clientId: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,16 +36,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get profile
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -47,32 +61,32 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all assignments for this form
-    const assignments = await prisma.clientTaxForm.findMany({
-      where: { taxFormId: formId },
-      select: {
-        id: true,
-        clientId: true,
-        status: true,
-        assignedAt: true,
-      },
-    });
+    const { data: assignmentsData, error: assignmentsError } = await db
+      .from('client_tax_forms')
+      .select('id, clientId, status, assignedAt')
+      .eq('taxFormId', formId);
+
+    if (assignmentsError) {
+      logger.error('Error fetching assignments:', assignmentsError);
+      return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 });
+    }
 
     // For tax preparers, filter to only their clients
     if (profile.role === 'tax_preparer') {
-      const preparerClients = await prisma.clientPreparer.findMany({
-        where: { preparerId: profile.id },
-        select: { clientId: true },
-      });
+      const { data: preparerClientsData } = await db
+        .from('client_preparers')
+        .select('clientId')
+        .eq('preparerId', profile.id);
 
-      const clientIds = preparerClients.map((pc) => pc.clientId);
+      const clientIds = (preparerClientsData || []).map((pc: ClientPreparer) => pc.clientId);
 
       return NextResponse.json({
-        assignments: assignments.filter((a) => clientIds.includes(a.clientId)),
+        assignments: (assignmentsData || []).filter((a: ClientTaxForm) => clientIds.includes(a.clientId)),
       });
     }
 
     // Admins can see all assignments
-    return NextResponse.json({ assignments });
+    return NextResponse.json({ assignments: assignmentsData || [] });
   } catch (error) {
     logger.error('Error fetching tax form assignments', { error });
     return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 });

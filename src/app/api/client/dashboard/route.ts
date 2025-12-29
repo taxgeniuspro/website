@@ -1,8 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getCurrentFilingTaxYear } from '@/lib/utils/tax-year';
+
+// TypeScript interfaces for Supabase data
+interface Profile {
+  id: string;
+  userId: string | null;
+  supabaseUserId: string | null;
+  email: string | null;
+  role: string;
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
+  affiliateStatus: string | null;
+  affiliateApprovedAt: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  hideReferralProgram: boolean | null;
+}
+
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  completed: boolean;
+  tax_year: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  full_form_data: Record<string, unknown> | null;
+  referrerUsername: string | null;
+  clientFolderId: string | null;
+}
+
+interface ClientFolder {
+  id: string;
+  name: string;
+  path: string;
+}
+
+interface ClientPreparer {
+  id: string;
+  clientId: string;
+  preparerId: string;
+  isActive: boolean;
+}
+
+interface PreparerProfile {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+  userId: string | null;
+}
+
+interface Document {
+  id: string;
+  type: string;
+  fileName: string;
+  fileUrl: string | null;
+  secureUrl: string | null;
+  fileSize: number | null;
+  createdAt: string;
+}
+
+interface TaxReturn {
+  id: string;
+  profileId: string;
+  taxYear: number;
+  status: string;
+  filedDate: string | null;
+  acceptedDate: string | null;
+  refundAmount: number | null;
+  oweAmount: number | null;
+  updatedAt: string;
+}
 
 /**
  * GET /api/client/dashboard
@@ -21,16 +105,19 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user's profile - create one if it doesn't exist (new OAuth users)
-    // Use findFirst with OR conditions to match by supabaseUserId, userId, or email
-    let profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    // Use OR conditions to match by supabaseUserId, userId, or email
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    let profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       // New user - create profile on-the-fly
@@ -39,12 +126,15 @@ export async function GET(req: NextRequest) {
 
       try {
         // First verify the User record exists in the database
-        const userExists = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true, email: true, name: true },
-        });
+        const { data: userData, error: userError } = await db
+          .from('users')
+          .select('id, email, name')
+          .eq('id', userId)
+          .limit(1);
 
-        if (!userExists) {
+        const userExists = firstOrNull<User>(userData);
+
+        if (userError || !userExists) {
           // User record doesn't exist yet - likely still being created by PrismaAdapter
           logger.warn('User record not found during dashboard access - race condition', { userId });
           return NextResponse.json({
@@ -70,19 +160,36 @@ export async function GET(req: NextRequest) {
           lastName = nameParts[nameParts.length - 1];
         }
 
-        profile = await prisma.profile.upsert({
-          where: { userId: userId },
-          update: {}, // Don't update if profile already exists - just return it
-          create: {
-            userId: userId,
-            role: 'client',
-            firstName,
-            middleName,
-            lastName,
-            affiliateStatus: 'APPROVED',
-            affiliateApprovedAt: new Date(),
-          },
-        });
+        // Try to upsert - first check if exists by userId
+        const { data: existingProfile } = await db
+          .from('profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .limit(1);
+
+        if (existingProfile && existingProfile.length > 0) {
+          profile = existingProfile[0] as Profile;
+        } else {
+          // Create new profile
+          const { data: newProfile, error: createError } = await db
+            .from('profiles')
+            .insert({
+              user_id: userId,
+              role: 'client',
+              first_name: firstName,
+              middle_name: middleName,
+              last_name: lastName,
+              affiliate_status: 'APPROVED',
+              affiliate_approved_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            throw createError;
+          }
+          profile = newProfile as Profile;
+        }
 
         logger.info('Created profile for new user', { userId, profileId: profile.id });
       } catch (profileCreateError) {
@@ -106,90 +213,104 @@ export async function GET(req: NextRequest) {
 
     // Check for completed tax intake for this specific tax year
     // Include full_form_data so client can see their intake summary
-    const taxIntake = await prisma.taxIntakeLead.findFirst({
-      where: {
-        OR: [
-          { profileId: profile.id },
-          { email: session.user?.email || '' },
-        ],
-        completed: true,
-        tax_year: taxYear,
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        completed: true,
-        tax_year: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        phone: true,
-        address_line_1: true,
-        address_line_2: true,
-        city: true,
-        state: true,
-        zip_code: true,
-        full_form_data: true,
-        referrerUsername: true,
-        clientFolder: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-      },
-    });
+    const { data: taxIntakeData } = await db
+      .from('tax_intake_leads')
+      .select('id, completed, tax_year, first_name, last_name, email, phone, address_line_1, address_line_2, city, state, zip_code, full_form_data, referrer_username, client_folder_id')
+      .or(`profile_id.eq.${profile.id},email.eq.${session.user?.email || ''}`)
+      .eq('completed', true)
+      .eq('tax_year', taxYear)
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    // Get assigned preparer (via ClientPreparer table)
-    const clientPreparer = await prisma.clientPreparer.findFirst({
-      where: {
-        clientId: profile.id,
-        isActive: true,
-      },
-      include: {
-        preparer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-            user: {
-              select: {
-                email: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const taxIntake = firstOrNull<TaxIntakeLead>(taxIntakeData);
+
+    // Get client folder if exists
+    let clientFolder: ClientFolder | null = null;
+    if (taxIntake?.clientFolderId) {
+      const { data: folderData } = await db
+        .from('client_folders')
+        .select('id, name, path')
+        .eq('id', taxIntake.clientFolderId)
+        .limit(1);
+      clientFolder = firstOrNull<ClientFolder>(folderData);
+    }
+
+    // Get assigned preparer (via client_preparers table)
+    const { data: clientPreparerData } = await db
+      .from('client_preparers')
+      .select('id, client_id, preparer_id, is_active')
+      .eq('client_id', profile.id)
+      .eq('is_active', true)
+      .limit(1);
+
+    const clientPreparer = firstOrNull<ClientPreparer>(clientPreparerData);
+
+    let assignedPreparer: { id: string; name: string; email: string; avatarUrl: string | null } | null = null;
+    if (clientPreparer) {
+      const { data: preparerData } = await db
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url, user_id')
+        .eq('id', clientPreparer.preparerId)
+        .limit(1);
+
+      const preparer = firstOrNull<PreparerProfile>(preparerData);
+      if (preparer) {
+        // Get preparer's email from users table
+        let preparerEmail = '';
+        if (preparer.userId) {
+          const { data: preparerUser } = await db
+            .from('users')
+            .select('email')
+            .eq('id', preparer.userId)
+            .limit(1);
+          preparerEmail = preparerUser?.[0]?.email || '';
+        }
+
+        assignedPreparer = {
+          id: preparer.id,
+          name: `${preparer.firstName || ''} ${preparer.lastName || ''}`.trim(),
+          email: preparerEmail,
+          avatarUrl: preparer.avatarUrl,
+        };
+      }
+    }
 
     // Count all documents for this client
-    const totalDocumentsCount = await prisma.document.count({
-      where: { profileId: profile.id },
-    });
+    const { count: totalDocumentsCount } = await db
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('profile_id', profile.id);
 
-    // Get tax return with documents (taxYear already defined above)
-    const taxReturn = await prisma.taxReturn.findUnique({
-      where: {
-        profileId_taxYear: {
-          profileId: profile.id,
-          taxYear,
-        },
-      },
-      include: {
-        documents: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
+    // Get tax return (taxYear already defined above)
+    const { data: taxReturnData } = await db
+      .from('tax_returns')
+      .select('*')
+      .eq('profile_id', profile.id)
+      .eq('tax_year', taxYear)
+      .limit(1);
+
+    const taxReturn = firstOrNull<TaxReturn>(taxReturnData);
+
+    // Get documents for this tax return
+    let taxReturnDocuments: Document[] = [];
+    if (taxReturn) {
+      const { data: docsData } = await db
+        .from('documents')
+        .select('id, type, file_name, file_url, secure_url, file_size, created_at')
+        .eq('tax_return_id', taxReturn.id)
+        .order('created_at', { ascending: false });
+      taxReturnDocuments = (docsData || []) as Document[];
+    }
 
     // Get recent activity (documents, status changes)
-    const recentDocuments = await prisma.document.findMany({
-      where: { profileId: profile.id },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
+    const { data: recentDocsData } = await db
+      .from('documents')
+      .select('id, type, file_name, file_url, secure_url, file_size, created_at')
+      .eq('profile_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const recentDocuments = (recentDocsData || []) as Document[];
 
     // Calculate progress based on status
     let progress = 0;
@@ -218,7 +339,7 @@ export async function GET(req: NextRequest) {
       type: 'document',
       title: 'Document Uploaded',
       description: `${doc.fileName} uploaded`,
-      timestamp: doc.createdAt.toISOString(),
+      timestamp: doc.createdAt,
     }));
 
     // Add status change activity if return exists
@@ -228,18 +349,20 @@ export async function GET(req: NextRequest) {
         type: 'status',
         title: 'Status Updated',
         description: `Your return is ${taxReturn.status.toLowerCase().replace('_', ' ')}`,
-        timestamp: taxReturn.updatedAt.toISOString(),
+        timestamp: taxReturn.updatedAt,
       });
     }
 
     // Get referral stats (by tracking code)
     const trackingCode = profile.customTrackingCode || profile.trackingCode;
-    const referralStats = await prisma.lead.aggregate({
-      where: {
-        referrerUsername: trackingCode || undefined,
-      },
-      _count: true,
-    });
+    let referralCount = 0;
+    if (trackingCode) {
+      const { count } = await db
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('referrer_username', trackingCode);
+      referralCount = count || 0;
+    }
 
     const response = {
       currentReturn: taxReturn
@@ -247,28 +370,28 @@ export async function GET(req: NextRequest) {
             id: taxReturn.id,
             taxYear: taxReturn.taxYear,
             status: taxReturn.status,
-            filedDate: taxReturn.filedDate?.toISOString(),
-            acceptedDate: taxReturn.acceptedDate?.toISOString(),
+            filedDate: taxReturn.filedDate,
+            acceptedDate: taxReturn.acceptedDate,
             refundAmount: taxReturn.refundAmount ? Number(taxReturn.refundAmount) : undefined,
             oweAmount: taxReturn.oweAmount ? Number(taxReturn.oweAmount) : undefined,
             progress,
-            documents: taxReturn.documents.map((doc) => ({
+            documents: taxReturnDocuments.map((doc) => ({
               id: doc.id,
               type: doc.type,
               fileName: doc.fileName,
               fileUrl: doc.secureUrl,
               fileSize: doc.fileSize,
-              uploadedAt: doc.createdAt.toISOString(),
+              uploadedAt: doc.createdAt,
               status: 'verified', // TODO: Add status field to document model
             })),
           }
         : null,
       recentActivity: activity.slice(0, 10),
       referralStats: {
-        totalLeads: referralStats._count || 0,
+        totalLeads: referralCount,
       },
       stats: {
-        documentsCount: totalDocumentsCount,
+        documentsCount: totalDocumentsCount || 0,
         estimatedRefund: taxReturn?.refundAmount ? Number(taxReturn.refundAmount) : 0,
         daysUntilDeadline: Math.ceil(
           (new Date(`${taxYear + 1}-04-15`).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -282,19 +405,12 @@ export async function GET(req: NextRequest) {
         currentFilingYear: currentFilingYear,
       },
       // Assigned tax preparer info
-      assignedPreparer: clientPreparer?.preparer
-        ? {
-            id: clientPreparer.preparer.id,
-            name: `${clientPreparer.preparer.firstName || ''} ${clientPreparer.preparer.lastName || ''}`.trim(),
-            email: clientPreparer.preparer.user?.email || '',
-            avatarUrl: clientPreparer.preparer.avatarUrl,
-          }
-        : null,
+      assignedPreparer,
       // Client's document folder
-      clientFolder: taxIntake?.clientFolder
+      clientFolder: clientFolder
         ? {
-            id: taxIntake.clientFolder.id,
-            name: taxIntake.clientFolder.name,
+            id: clientFolder.id,
+            name: clientFolder.name,
           }
         : null,
       // Intake form summary for client to view their submitted data
@@ -313,7 +429,7 @@ export async function GET(req: NextRequest) {
               state: taxIntake.state,
               zipCode: taxIntake.zip_code,
             },
-            formData: taxIntake.full_form_data as Record<string, unknown> | null,
+            formData: taxIntake.full_form_data,
           }
         : null,
       // User preference to hide referral program features

@@ -8,7 +8,16 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
+
+// TypeScript interfaces (replaces Prisma types)
+interface ProductCampaignQueue {
+  id: string
+  productName: string
+  status: string
+  generationStartedAt: string | null
+  generationCompletedAt: string | null
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,18 +34,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Get campaign
-    const campaign = await prisma.productCampaignQueue.findUnique({
-      where: { id: campaignId },
-    })
+    const { data: campaignData } = await db
+      .from('product_campaign_queues')
+      .select('*')
+      .eq('id', campaignId)
+      .limit(1)
+
+    const campaign = firstOrNull<ProductCampaignQueue>(campaignData)
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
 
     // Get city pages count
-    const cityPages = await prisma.cityLandingPage.count({
-      where: { landingPageSetId: campaignId },
-    })
+    const { count: cityPagesCount } = await db
+      .from('city_landing_pages')
+      .select('id', { count: 'exact', head: true })
+      .eq('landingPageSetId', campaignId)
+
+    const cityPages = cityPagesCount || 0
 
     // Calculate progress
     const totalCities = 200
@@ -45,7 +61,7 @@ export async function GET(request: NextRequest) {
     // Estimate time remaining (if generating)
     let estimatedTimeRemaining = null
     if (campaign.status === 'GENERATING' && campaign.generationStartedAt) {
-      const elapsed = Date.now() - campaign.generationStartedAt.getTime()
+      const elapsed = Date.now() - new Date(campaign.generationStartedAt).getTime()
       const avgTimePerCity = elapsed / cityPages
       const remaining = (totalCities - cityPages) * avgTimePerCity
       estimatedTimeRemaining = Math.round(remaining / 1000 / 60) // minutes

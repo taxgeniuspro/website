@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase responses
+interface ProfileWithUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+  companyName: string | null;
+  phone: string | null;
+  trackingCode: string | null;
+  customTrackingCode: string | null;
+  shortLinkUsername: string | null;
+  affiliateBondedToPreparerId: string | null;
+  role: string;
+  user: { email: string } | null;
+}
 
 // Default preparer (Owliver Owl) - used for affiliates and fallback
 const DEFAULT_PREPARER = {
@@ -19,28 +35,44 @@ const DEFAULT_PREPARER = {
  */
 async function getDefaultPreparer() {
   try {
-    const owliver = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { customTrackingCode: 'ow' },
-          { trackingCode: 'ow' },
-          { user: { email: 'taxgenius.tax@gmail.com' } },
-        ],
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        avatarUrl: true,
-        companyName: true,
-        phone: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        user: { select: { email: true } },
-      },
-    });
+    // Try to find by tracking codes first
+    const { data: owliverData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, avatarUrl, companyName, phone, trackingCode, customTrackingCode, userId')
+      .or('customTrackingCode.eq.ow,trackingCode.eq.ow')
+      .limit(1);
+
+    let owliver = firstOrNull(owliverData);
+
+    // If not found by tracking code, try to find by email via users table
+    if (!owliver) {
+      const { data: userWithProfile } = await db
+        .from('users')
+        .select('id, email, profiles(id, firstName, lastName, avatarUrl, companyName, phone, trackingCode, customTrackingCode)')
+        .eq('email', 'taxgenius.tax@gmail.com')
+        .limit(1);
+
+      const userResult = firstOrNull(userWithProfile);
+      if (userResult?.profiles) {
+        const profileData = Array.isArray(userResult.profiles) ? userResult.profiles[0] : userResult.profiles;
+        owliver = { ...profileData, userId: userResult.id };
+      }
+    }
 
     if (owliver) {
+      // Get user email if we have userId
+      let email = DEFAULT_PREPARER.email;
+      if (owliver.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('email')
+          .eq('id', owliver.userId)
+          .limit(1);
+        if (userData?.[0]) {
+          email = userData[0].email;
+        }
+      }
+
       return {
         id: owliver.id,
         firstName: owliver.firstName || DEFAULT_PREPARER.firstName,
@@ -48,7 +80,7 @@ async function getDefaultPreparer() {
         avatarUrl: owliver.avatarUrl || DEFAULT_PREPARER.avatarUrl,
         companyName: owliver.companyName || DEFAULT_PREPARER.companyName,
         phone: owliver.phone || DEFAULT_PREPARER.phone,
-        email: owliver.user?.email || DEFAULT_PREPARER.email,
+        email: email,
         trackingCode: owliver.customTrackingCode || owliver.trackingCode || DEFAULT_PREPARER.trackingCode,
       };
     }
@@ -82,32 +114,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Step 1: Try to find tax preparer or admin by tracking code
-    const preparerProfile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: code },
-          { customTrackingCode: code },
-          { shortLinkUsername: code },
-        ],
-        role: { in: ['tax_preparer', 'admin'] },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        avatarUrl: true,
-        companyName: true,
-        phone: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        shortLinkUsername: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, avatarUrl, companyName, phone, trackingCode, customTrackingCode, shortLinkUsername, userId, role')
+      .or(`trackingCode.eq.${code},customTrackingCode.eq.${code},shortLinkUsername.eq.${code}`)
+      .in('role', ['tax_preparer', 'admin'])
+      .limit(1);
+
+    const preparerProfile = firstOrNull(preparerData);
 
     if (preparerProfile && preparerProfile.firstName && preparerProfile.lastName) {
       // Found a tax preparer - return their info
@@ -115,6 +129,17 @@ export async function GET(req: NextRequest) {
         preparerProfile.customTrackingCode ||
         preparerProfile.shortLinkUsername ||
         preparerProfile.trackingCode;
+
+      // Get user email
+      let preparerEmail: string | undefined;
+      if (preparerProfile.userId) {
+        const { data: userData } = await db
+          .from('users')
+          .select('email')
+          .eq('id', preparerProfile.userId)
+          .limit(1);
+        preparerEmail = userData?.[0]?.email;
+      }
 
       return NextResponse.json(
         {
@@ -125,7 +150,7 @@ export async function GET(req: NextRequest) {
             avatarUrl: preparerProfile.avatarUrl,
             companyName: preparerProfile.companyName,
             phone: preparerProfile.phone,
-            email: preparerProfile.user?.email,
+            email: preparerEmail,
             trackingCode: linkCode,
           },
         },
@@ -134,41 +159,38 @@ export async function GET(req: NextRequest) {
     }
 
     // Step 2: Check if it's an affiliate or client code
-    const affiliateProfile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { trackingCode: code },
-          { customTrackingCode: code },
-        ],
-        role: { in: ['client', 'affiliate'] },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        affiliateBondedToPreparerId: true,
-      },
-    });
+    const { data: affiliateData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, affiliateBondedToPreparerId')
+      .or(`trackingCode.eq.${code},customTrackingCode.eq.${code}`)
+      .in('role', ['client', 'affiliate'])
+      .limit(1);
+
+    const affiliateProfile = firstOrNull(affiliateData);
 
     if (affiliateProfile) {
       // Found an affiliate - check if they're bonded to a specific preparer
       if (affiliateProfile.affiliateBondedToPreparerId) {
-        const bondedPreparer = await prisma.profile.findUnique({
-          where: { id: affiliateProfile.affiliateBondedToPreparerId },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-            companyName: true,
-            phone: true,
-            trackingCode: true,
-            customTrackingCode: true,
-            user: { select: { email: true } },
-          },
-        });
+        const { data: bondedData } = await db
+          .from('profiles')
+          .select('id, firstName, lastName, avatarUrl, companyName, phone, trackingCode, customTrackingCode, userId')
+          .eq('id', affiliateProfile.affiliateBondedToPreparerId)
+          .limit(1);
+
+        const bondedPreparer = firstOrNull(bondedData);
 
         if (bondedPreparer && bondedPreparer.firstName && bondedPreparer.lastName) {
+          // Get user email
+          let bondedEmail: string | undefined;
+          if (bondedPreparer.userId) {
+            const { data: userData } = await db
+              .from('users')
+              .select('email')
+              .eq('id', bondedPreparer.userId)
+              .limit(1);
+            bondedEmail = userData?.[0]?.email;
+          }
+
           const linkCode = bondedPreparer.customTrackingCode || bondedPreparer.trackingCode;
           return NextResponse.json(
             {
@@ -179,7 +201,7 @@ export async function GET(req: NextRequest) {
                 avatarUrl: bondedPreparer.avatarUrl,
                 companyName: bondedPreparer.companyName,
                 phone: bondedPreparer.phone,
-                email: bondedPreparer.user?.email,
+                email: bondedEmail,
                 trackingCode: linkCode,
               },
               referrerName: `${affiliateProfile.firstName || ''} ${affiliateProfile.lastName || ''}`.trim(),

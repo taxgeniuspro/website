@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -20,29 +20,31 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
     }
 
     // Get preparer profile using session user ID
-    const preparerProfile = await prisma.profile.findFirst({
-      where: {
-        userId: user.id,
-        role: 'tax_preparer',
-      },
-    });
+    const { data: preparerProfileData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .eq('role', 'tax_preparer')
+      .limit(1);
+
+    const preparerProfile = firstOrNull(preparerProfileData);
 
     if (!preparerProfile) {
       return NextResponse.json({ error: 'Preparer profile not found' }, { status: 404 });
     }
 
-    const clientId = params.clientId;
+    const { clientId } = await params;
 
     // Verify this client is assigned to this preparer
-    const assignment = await prisma.clientPreparer.findUnique({
-      where: {
-        clientId_preparerId: {
-          clientId,
-          preparerId: preparerProfile.id,
-        },
-        isActive: true,
-      },
-    });
+    const { data: assignmentData } = await db
+      .from('client_preparers')
+      .select('*')
+      .eq('clientId', clientId)
+      .eq('preparerId', preparerProfile.id)
+      .eq('isActive', true)
+      .limit(1);
+
+    const assignment = firstOrNull(assignmentData);
 
     if (!assignment) {
       return NextResponse.json(
@@ -51,56 +53,63 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
       );
     }
 
-    // Get full client details
-    const client = await prisma.profile.findUnique({
-      where: { id: clientId },
-      include: {
-        user: {
-          select: {
-            email: true,
-            emailVerified: true,
-          },
-        },
-        taxReturns: {
-          orderBy: {
-            taxYear: 'desc',
-          },
-          include: {
-            documents: {
-              orderBy: {
-                uploadedAt: 'desc',
-              },
-            },
-          },
-        },
-      },
-    });
+    // Get client profile
+    const { data: clientData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, phone, avatarUrl, dateOfBirth, address, userId')
+      .eq('id', clientId)
+      .limit(1);
+
+    const client = firstOrNull(clientData);
 
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Transform documents to include secure URLs
-    const taxReturnsWithSecureUrls = client.taxReturns.map((taxReturn) => ({
-      id: taxReturn.id,
-      taxYear: taxReturn.taxYear,
-      status: taxReturn.status,
-      formData: taxReturn.formData,
-      filedDate: taxReturn.filedDate,
-      refundAmount: taxReturn.refundAmount,
-      oweAmount: taxReturn.oweAmount,
-      createdAt: taxReturn.createdAt,
-      updatedAt: taxReturn.updatedAt,
-      documents: taxReturn.documents.map((doc) => ({
-        id: doc.id,
-        fileName: doc.fileName,
-        fileType: doc.fileType,
-        fileSize: doc.fileSize,
-        uploadedAt: doc.uploadedAt,
-        // Generate secure download URL (time-limited)
-        downloadUrl: `/api/documents/${doc.id}/download`,
-      })),
-    }));
+    // Get user email
+    let userEmail: string | undefined;
+    let emailVerified: string | null = null;
+    if (client.userId) {
+      const { data: userData } = await db
+        .from('users')
+        .select('email, emailVerified')
+        .eq('id', client.userId)
+        .limit(1);
+      if (userData?.[0]) {
+        userEmail = userData[0].email;
+        emailVerified = userData[0].emailVerified;
+      }
+    }
+
+    // Get tax returns with documents
+    const { data: taxReturns } = await db
+      .from('tax_returns')
+      .select('id, taxYear, status, formData, filedDate, refundAmount, oweAmount, createdAt, updatedAt')
+      .eq('profileId', clientId)
+      .order('taxYear', { ascending: false });
+
+    // Get documents for each tax return
+    const taxReturnsWithDocs = await Promise.all(
+      (taxReturns || []).map(async (taxReturn: any) => {
+        const { data: documents } = await db
+          .from('documents')
+          .select('id, fileName, fileType, fileSize, uploadedAt')
+          .eq('taxReturnId', taxReturn.id)
+          .order('uploadedAt', { ascending: false });
+
+        return {
+          ...taxReturn,
+          documents: (documents || []).map((doc: any) => ({
+            id: doc.id,
+            fileName: doc.fileName,
+            fileType: doc.fileType,
+            fileSize: doc.fileSize,
+            uploadedAt: doc.uploadedAt,
+            downloadUrl: `/api/documents/${doc.id}/download`,
+          })),
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -108,12 +117,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
         id: client.id,
         firstName: client.firstName,
         lastName: client.lastName,
-        email: client.user.email,
+        email: userEmail,
         phone: client.phone,
         avatarUrl: client.avatarUrl,
         dateOfBirth: client.dateOfBirth,
         address: client.address,
-        taxReturns: taxReturnsWithSecureUrls,
+        taxReturns: taxReturnsWithDocs,
         assignedAt: assignment.assignedAt,
       },
     });

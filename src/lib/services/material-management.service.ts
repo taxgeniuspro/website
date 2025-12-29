@@ -5,13 +5,46 @@
  * Part of Epic 6: Lead Tracking Dashboard Enhancement - Story 6.2
  */
 
-import { prisma } from '../prisma';
-import type { MarketingLink, LinkType } from '@prisma/client';
+import { db, firstOrNull } from '@/lib/db';
 import {
   generateQRCode,
   generateTrackingURL,
   generateMaterialTrackingCode,
 } from './qr-code.service';
+
+// Local type definitions (replacing @prisma/client)
+type LinkType = 'QR_CODE' | 'REFERRAL_LINK' | 'SHORT_LINK' | 'AFFILIATE_LINK' | 'TRACKING_LINK';
+
+interface MarketingLinkRecord {
+  id: string;
+  creatorId: string;
+  creatorType: string;
+  linkType: LinkType;
+  code: string;
+  title?: string | null;
+  campaign?: string | null;
+  targetPage: string;
+  location?: string | null;
+  notes?: string | null;
+  url: string;
+  qrCodeFormat?: string | null;
+  qrCodeImageUrl?: string | null;
+  dateActivated?: string | null;
+  dateExpired?: string | null;
+  isActive: boolean;
+  clicks: number;
+  uniqueClicks: number;
+  conversions: number;
+  conversionRate: number;
+  printCount?: number;
+  intakeStarts?: number;
+  intakeCompletes?: number;
+  returnsFiled?: number;
+  intakeConversionRate?: number;
+  completeConversionRate?: number;
+  filedConversionRate?: number;
+  createdAt: string;
+}
 
 export interface CreateMaterialParams {
   creatorId: string;
@@ -25,7 +58,7 @@ export interface CreateMaterialParams {
   brandColor?: string;
 }
 
-export interface MaterialWithStats extends MarketingLink {
+export interface MaterialWithStats extends MarketingLinkRecord {
   totalClicks: number;
   totalConversions: number;
   conversionRate: number;
@@ -34,7 +67,7 @@ export interface MaterialWithStats extends MarketingLink {
 /**
  * Create a new marketing material with QR code
  */
-export async function createMaterial(params: CreateMaterialParams): Promise<MarketingLink> {
+export async function createMaterial(params: CreateMaterialParams): Promise<MarketingLinkRecord> {
   const {
     creatorId,
     creatorType,
@@ -54,8 +87,9 @@ export async function createMaterial(params: CreateMaterialParams): Promise<Mark
   });
 
   // Create the marketing link first to get the ID
-  const material = await prisma.marketingLink.create({
-    data: {
+  const { data: material, error: createError } = await db
+    .from('marketing_links')
+    .insert({
       creatorId,
       creatorType,
       linkType: materialType,
@@ -66,11 +100,19 @@ export async function createMaterial(params: CreateMaterialParams): Promise<Mark
       location,
       notes,
       qrCodeFormat: 'PNG',
-      dateActivated: new Date(),
+      dateActivated: new Date().toISOString(),
       // Temporary URL, will be updated after QR generation
       url: `https://taxgeniuspro.tax${targetPage}`,
-    },
-  });
+      isActive: true,
+      clicks: 0,
+      uniqueClicks: 0,
+      conversions: 0,
+      conversionRate: 0,
+    })
+    .select()
+    .single();
+
+  if (createError) throw createError;
 
   // Generate tracking URL with UTM parameters
   const trackingURL = generateTrackingURL({
@@ -92,15 +134,19 @@ export async function createMaterial(params: CreateMaterialParams): Promise<Mark
   });
 
   // Update material with final URL and QR code
-  const updatedMaterial = await prisma.marketingLink.update({
-    where: { id: material.id },
-    data: {
+  const { data: updatedMaterial, error: updateError } = await db
+    .from('marketing_links')
+    .update({
       url: trackingURL,
       qrCodeImageUrl: qrResult.dataUrl,
-    },
-  });
+    })
+    .eq('id', material.id)
+    .select()
+    .single();
 
-  return updatedMaterial;
+  if (updateError) throw updateError;
+
+  return updatedMaterial as MarketingLinkRecord;
 }
 
 /**
@@ -116,20 +162,32 @@ export async function getCreatorMaterials(
 ): Promise<{ materials: MaterialWithStats[]; total: number }> {
   const { limit = 50, offset = 0, includeInactive = false } = options || {};
 
-  const where = {
-    creatorId,
-    ...(includeInactive ? {} : { isActive: true }),
-  };
+  // Build query for materials
+  let materialsQuery = db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', creatorId)
+    .order('createdAt', { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  const [materials, total] = await Promise.all([
-    prisma.marketingLink.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    }),
-    prisma.marketingLink.count({ where }),
+  // Build query for count
+  let countQuery = db
+    .from('marketing_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('creatorId', creatorId);
+
+  // Add isActive filter if not including inactive
+  if (!includeInactive) {
+    materialsQuery = materialsQuery.eq('isActive', true);
+    countQuery = countQuery.eq('isActive', true);
+  }
+
+  const [{ data: materialsData }, { count: total }] = await Promise.all([
+    materialsQuery,
+    countQuery,
   ]);
+
+  const materials = (materialsData || []) as MarketingLinkRecord[];
 
   // Calculate stats for each material
   const materialsWithStats: MaterialWithStats[] = materials.map((material) => ({
@@ -141,17 +199,21 @@ export async function getCreatorMaterials(
 
   return {
     materials: materialsWithStats,
-    total,
+    total: total || 0,
   };
 }
 
 /**
  * Get a single material by ID
  */
-export async function getMaterialById(materialId: string): Promise<MarketingLink | null> {
-  return await prisma.marketingLink.findUnique({
-    where: { id: materialId },
-  });
+export async function getMaterialById(materialId: string): Promise<MarketingLinkRecord | null> {
+  const { data: materialData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('id', materialId)
+    .limit(1);
+
+  return firstOrNull(materialData) as MarketingLinkRecord | null;
 }
 
 /**
@@ -167,42 +229,72 @@ export async function updateMaterial(
     dateExpired?: Date;
     isActive?: boolean;
   }
-): Promise<MarketingLink> {
-  return await prisma.marketingLink.update({
-    where: { id: materialId },
-    data: updates,
-  });
+): Promise<MarketingLinkRecord> {
+  // Convert Date to ISO string if present
+  const updateData: Record<string, unknown> = { ...updates };
+  if (updates.dateExpired) {
+    updateData.dateExpired = updates.dateExpired.toISOString();
+  }
+
+  const { data: material, error } = await db
+    .from('marketing_links')
+    .update(updateData)
+    .eq('id', materialId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return material as MarketingLinkRecord;
 }
 
 /**
  * Soft delete a material (mark as inactive)
  */
-export async function deleteMaterial(materialId: string): Promise<MarketingLink> {
-  return await prisma.marketingLink.update({
-    where: { id: materialId },
-    data: { isActive: false },
-  });
+export async function deleteMaterial(materialId: string): Promise<MarketingLinkRecord> {
+  const { data: material, error } = await db
+    .from('marketing_links')
+    .update({ isActive: false })
+    .eq('id', materialId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return material as MarketingLinkRecord;
 }
 
 /**
  * Hard delete a material (permanent)
  */
 export async function permanentlyDeleteMaterial(materialId: string): Promise<void> {
-  await prisma.marketingLink.delete({
-    where: { id: materialId },
-  });
+  const { error } = await db
+    .from('marketing_links')
+    .delete()
+    .eq('id', materialId);
+
+  if (error) throw error;
 }
 
 /**
  * Increment print count when QR code is downloaded
  */
 export async function incrementPrintCount(materialId: string): Promise<void> {
-  await prisma.marketingLink.update({
-    where: { id: materialId },
-    data: {
-      printCount: { increment: 1 },
-    },
-  });
+  // Fetch current print count
+  const { data: linkData } = await db
+    .from('marketing_links')
+    .select('printCount')
+    .eq('id', materialId)
+    .limit(1);
+
+  const link = firstOrNull(linkData) as { printCount?: number } | null;
+  const currentCount = link?.printCount || 0;
+
+  // Update with incremented value
+  await db
+    .from('marketing_links')
+    .update({ printCount: currentCount + 1 })
+    .eq('id', materialId);
 }
 
 /**
@@ -217,9 +309,13 @@ export async function getMaterialPerformance(materialId: string): Promise<{
   completeConversionRate: number;
   filedConversionRate: number;
 }> {
-  const material = await prisma.marketingLink.findUnique({
-    where: { id: materialId },
-  });
+  const { data: materialData } = await db
+    .from('marketing_links')
+    .select('clicks, intakeStarts, intakeCompletes, returnsFiled, intakeConversionRate, completeConversionRate, filedConversionRate')
+    .eq('id', materialId)
+    .limit(1);
+
+  const material = firstOrNull(materialData) as MarketingLinkRecord | null;
 
   if (!material) {
     throw new Error('Material not found');
@@ -248,20 +344,23 @@ export async function getTopMaterials(
 ): Promise<MaterialWithStats[]> {
   const { limit = 15, sortBy = 'conversions' } = options || {};
 
-  const orderByMap = {
-    clicks: { clicks: 'desc' as const },
-    conversions: { conversions: 'desc' as const },
-    conversion_rate: { conversionRate: 'desc' as const },
+  const orderByMap: Record<string, string> = {
+    clicks: 'clicks',
+    conversions: 'conversions',
+    conversion_rate: 'conversionRate',
   };
 
-  const materials = await prisma.marketingLink.findMany({
-    where: {
-      creatorId,
-      isActive: true,
-    },
-    orderBy: orderByMap[sortBy],
-    take: limit,
-  });
+  const orderColumn = orderByMap[sortBy] || 'conversions';
+
+  const { data: materialsData } = await db
+    .from('marketing_links')
+    .select('*')
+    .eq('creatorId', creatorId)
+    .eq('isActive', true)
+    .order(orderColumn, { ascending: false })
+    .limit(limit);
+
+  const materials = (materialsData || []) as MarketingLinkRecord[];
 
   return materials.map((material) => ({
     ...material,
@@ -278,16 +377,17 @@ export async function checkMaterialLimit(
   creatorId: string,
   limit: number = 100
 ): Promise<{ canCreate: boolean; current: number; limit: number }> {
-  const count = await prisma.marketingLink.count({
-    where: {
-      creatorId,
-      isActive: true,
-    },
-  });
+  const { count } = await db
+    .from('marketing_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('creatorId', creatorId)
+    .eq('isActive', true);
+
+  const currentCount = count || 0;
 
   return {
-    canCreate: count < limit,
-    current: count,
+    canCreate: currentCount < limit,
+    current: currentCount,
     limit,
   };
 }

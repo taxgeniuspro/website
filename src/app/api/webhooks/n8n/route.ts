@@ -1,5 +1,42 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { db, firstOrNull } from '@/lib/db'
+
+// TypeScript interfaces for database entities
+interface Order {
+  id: string;
+  orderNumber: string;
+  referenceNumber?: string;
+  status: string;
+  total: number;
+  adminNotes?: string;
+  trackingNumber?: string;
+  carrier?: string;
+  vendorId?: string;
+  shippingAddress?: unknown;
+  [key: string]: unknown;
+}
+
+interface Vendor {
+  id: string;
+  name: string;
+  isActive: boolean;
+  n8nWebhookUrl?: string;
+  [key: string]: unknown;
+}
+
+interface OrderItem {
+  id: string;
+  orderId: string;
+  [key: string]: unknown;
+}
+
+interface Notification {
+  id: string;
+  orderId: string;
+  type: string;
+  sent: boolean;
+  [key: string]: unknown;
+}
 
 // N8N webhook endpoint for order automation
 export async function POST(request: NextRequest) {
@@ -67,16 +104,20 @@ async function handleOrderCreated(identifier: string, payload: Record<string, un
     // Trigger any automated workflows
     // For example, assign to vendor based on product type
     if (payload.autoAssignVendor) {
-      const vendor = await prisma.vendor.findFirst({
-        where: { isActive: true },
-        orderBy: { orders: { _count: 'asc' } }, // Assign to vendor with least orders
-      })
+      // Get vendor with least orders (simplified - gets first active vendor)
+      const { data: vendors } = await db
+        .from('vendors')
+        .select('*')
+        .eq('is_active', true)
+        .limit(1)
+
+      const vendor = firstOrNull(vendors) as Vendor | null
 
       if (vendor) {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { vendorId: vendor.id },
-        })
+        await db
+          .from('orders')
+          .update({ vendor_id: vendor.id })
+          .eq('id', order.id)
       }
     }
 
@@ -102,53 +143,59 @@ async function handleOrderStatusUpdate(identifier: string, payload: Record<strin
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Update order status
-    const updatedOrder = await prisma.$transaction(async (tx) => {
-      // Update order
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          status: newStatus,
-          adminNotes: notes
-            ? `${order.adminNotes || ''}\n[${new Date().toISOString()}] ${notes}`
-            : order.adminNotes,
-        },
+    // Update order status (Supabase doesn't have transactions like Prisma,
+    // but individual operations are atomic)
+
+    // Update order
+    const { data: updatedData, error: updateError } = await db
+      .from('orders')
+      .update({
+        status: newStatus,
+        admin_notes: notes
+          ? `${order.adminNotes || ''}\n[${new Date().toISOString()}] ${notes}`
+          : order.adminNotes,
+      })
+      .eq('id', order.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    }
+
+    const updatedOrder = updatedData as Order
+
+    // Add status history
+    await db
+      .from('status_history')
+      .insert({
+        id: `${order.orderNumber}-status-${Date.now()}`,
+        order_id: order.id,
+        from_status: order.status,
+        to_status: newStatus,
+        notes,
+        changed_by: changedBy || 'N8N Automation',
       })
 
-      // Add status history
-      await tx.statusHistory.create({
-        data: {
-          id: `${order.orderNumber}-status-${Date.now()}`,
-          orderId: order.id,
-          fromStatus: order.status,
-          toStatus: newStatus,
-          notes,
-          changedBy: changedBy || 'N8N Automation',
-        },
-      })
+    // Create notification based on status
+    const notificationTypes: Record<string, string> = {
+      PAID: 'PAYMENT_RECEIVED',
+      PROCESSING: 'ORDER_PROCESSING',
+      SHIPPED: 'ORDER_SHIPPED',
+      DELIVERED: 'ORDER_DELIVERED',
+      REFUNDED: 'ORDER_REFUNDED',
+    }
 
-      // Create notification based on status
-      const notificationTypes: Record<string, string> = {
-        PAID: 'PAYMENT_RECEIVED',
-        PROCESSING: 'ORDER_PROCESSING',
-        SHIPPED: 'ORDER_SHIPPED',
-        DELIVERED: 'ORDER_DELIVERED',
-        REFUNDED: 'ORDER_REFUNDED',
-      }
-
-      if (notificationTypes[newStatus]) {
-        await tx.notification.create({
-          data: {
-            id: `${order.orderNumber}-notif-${Date.now()}`,
-            orderId: order.id,
-            type: notificationTypes[newStatus] as any,
-            sent: false,
-          },
+    if (notificationTypes[newStatus as string]) {
+      await db
+        .from('notifications')
+        .insert({
+          id: `${order.orderNumber}-notif-${Date.now()}`,
+          order_id: order.id,
+          type: notificationTypes[newStatus as string],
+          sent: false,
         })
-      }
-
-      return updated
-    })
+    }
 
     return NextResponse.json({
       success: true,
@@ -173,11 +220,21 @@ async function handleVendorAssignment(identifier: string, payload: Record<string
     }
 
     // Find vendor
-    let vendor = null
+    let vendor: Vendor | null = null
     if (vendorId) {
-      vendor = await prisma.vendor.findUnique({ where: { id: vendorId } })
+      const { data: vendorData } = await db
+        .from('vendors')
+        .select('*')
+        .eq('id', vendorId)
+        .single()
+      vendor = vendorData as Vendor | null
     } else if (vendorName) {
-      vendor = await prisma.vendor.findUnique({ where: { name: vendorName } })
+      const { data: vendorData } = await db
+        .from('vendors')
+        .select('*')
+        .eq('name', vendorName)
+        .single()
+      vendor = vendorData as Vendor | null
     }
 
     if (!vendor) {
@@ -185,19 +242,32 @@ async function handleVendorAssignment(identifier: string, payload: Record<string
     }
 
     // Update order with vendor
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        vendorId: vendor.id,
-        adminNotes: notes
+    const { data: updatedData, error: updateError } = await db
+      .from('orders')
+      .update({
+        vendor_id: vendor.id,
+        admin_notes: notes
           ? `${order.adminNotes || ''}\n[${new Date().toISOString()}] Assigned to ${vendor.name}: ${notes}`
           : order.adminNotes,
-      },
-    })
+      })
+      .eq('id', order.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    }
+
+    const updatedOrder = updatedData as Order
 
     // Send webhook to vendor's N8N if configured
     if (vendor.n8nWebhookUrl) {
       try {
+        const { data: orderItems } = await db
+          .from('order_items')
+          .select('*')
+          .eq('order_id', order.id)
+
         await fetch(vendor.n8nWebhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -206,7 +276,7 @@ async function handleVendorAssignment(identifier: string, payload: Record<string
             order: {
               orderNumber: order.orderNumber,
               referenceNumber: order.referenceNumber,
-              items: await prisma.orderItem.findMany({ where: { orderId: order.id } }),
+              items: orderItems || [],
               total: order.total,
               shippingAddress: order.shippingAddress,
             },
@@ -247,17 +317,25 @@ async function handleFulfillmentUpdate(identifier: string, payload: Record<strin
       shipped: 'SHIPPED',
     }
 
-    const newStatus = statusMap[status] || order.status
+    const newStatus = statusMap[status as string] || order.status
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: newStatus as any,
-        adminNotes: notes
+    const { data: updatedData, error: updateError } = await db
+      .from('orders')
+      .update({
+        status: newStatus,
+        admin_notes: notes
           ? `${order.adminNotes || ''}\n[${new Date().toISOString()}] Fulfillment: ${notes}`
           : order.adminNotes,
-      },
-    })
+      })
+      .eq('id', order.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    }
+
+    const updatedOrder = updatedData as Order
 
     return NextResponse.json({
       success: true,
@@ -274,7 +352,7 @@ async function handleFulfillmentUpdate(identifier: string, payload: Record<strin
 
 async function handleTrackingUpdate(identifier: string, payload: Record<string, unknown>) {
   try {
-    const { trackingNumber, carrier, trackingUrl } = payload
+    const { trackingNumber, carrier } = payload
 
     const order = await findOrder(identifier)
     if (!order) {
@@ -282,40 +360,44 @@ async function handleTrackingUpdate(identifier: string, payload: Record<string, 
     }
 
     // Update order with tracking info
-    const updatedOrder = await prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          trackingNumber,
-          carrier: carrier?.toUpperCase() as any,
-          status: 'SHIPPED',
-        },
+    const { data: updatedData, error: updateError } = await db
+      .from('orders')
+      .update({
+        tracking_number: trackingNumber,
+        carrier: (carrier as string)?.toUpperCase(),
+        status: 'SHIPPED',
+      })
+      .eq('id', order.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    }
+
+    const updatedOrder = updatedData as Order
+
+    // Add status history
+    await db
+      .from('status_history')
+      .insert({
+        id: `${order.orderNumber}-tracking-${Date.now()}`,
+        order_id: order.id,
+        from_status: order.status,
+        to_status: 'SHIPPED',
+        notes: `Tracking: ${trackingNumber} (${carrier})`,
+        changed_by: 'N8N Automation',
       })
 
-      // Add status history
-      await tx.statusHistory.create({
-        data: {
-          id: `${order.orderNumber}-tracking-${Date.now()}`,
-          orderId: order.id,
-          fromStatus: order.status,
-          toStatus: 'SHIPPED',
-          notes: `Tracking: ${trackingNumber} (${carrier})`,
-          changedBy: 'N8N Automation',
-        },
+    // Create shipping notification
+    await db
+      .from('notifications')
+      .insert({
+        id: `${order.orderNumber}-ship-notif-${Date.now()}`,
+        order_id: order.id,
+        type: 'ORDER_SHIPPED',
+        sent: false,
       })
-
-      // Create shipping notification
-      await tx.notification.create({
-        data: {
-          id: `${order.orderNumber}-ship-notif-${Date.now()}`,
-          orderId: order.id,
-          type: 'ORDER_SHIPPED',
-          sent: false,
-        },
-      })
-
-      return updated
-    })
 
     return NextResponse.json({
       success: true,
@@ -341,25 +423,35 @@ async function handleNotificationSend(identifier: string, payload: Record<string
     }
 
     // Create or update notification
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        orderId: order.id,
-        type: type,
-      },
-    })
+    const { data: existingNotifications } = await db
+      .from('notifications')
+      .select('*')
+      .eq('order_id', order.id)
+      .eq('type', type)
+      .limit(1)
 
-    let notification
+    const existingNotification = firstOrNull(existingNotifications) as Notification | null
+
+    let notification: Notification
     if (existingNotification && !force) {
       notification = existingNotification
     } else {
-      notification = await prisma.notification.create({
-        data: {
+      const { data: newNotification, error: createError } = await db
+        .from('notifications')
+        .insert({
           id: `${order.orderNumber}-${type}-${Date.now()}`,
-          orderId: order.id,
+          order_id: order.id,
           type: type,
           sent: false,
-        },
-      })
+        })
+        .select()
+        .single()
+
+      if (createError || !newNotification) {
+        return NextResponse.json({ error: 'Failed to create notification' }, { status: 500 })
+      }
+
+      notification = newNotification as Notification
     }
 
     // Trigger notification processing
@@ -380,18 +472,24 @@ async function handleNotificationSend(identifier: string, payload: Record<string
 }
 
 // Helper function to find order by ID or order number
-async function findOrder(identifier: string) {
+async function findOrder(identifier: string): Promise<Order | null> {
   // Try to find by ID first
-  let order = await prisma.order.findUnique({
-    where: { id: identifier },
-  })
+  const { data: orderById } = await db
+    .from('orders')
+    .select('*')
+    .eq('id', identifier)
+    .single()
 
-  // If not found, try by order number
-  if (!order) {
-    order = await prisma.order.findUnique({
-      where: { orderNumber: identifier },
-    })
+  if (orderById) {
+    return orderById as Order
   }
 
-  return order
+  // If not found, try by order number
+  const { data: orderByNumber } = await db
+    .from('orders')
+    .select('*')
+    .eq('order_number', identifier)
+    .single()
+
+  return orderByNumber as Order | null
 }

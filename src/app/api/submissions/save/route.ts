@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces (replacing Prisma types)
+interface TaxReturn {
+  id: string;
+  profileId: string;
+  taxYear: number;
+  status: string;
+  formData: any;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 /**
  * POST /api/submissions/save
@@ -19,9 +30,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Get user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -43,37 +58,50 @@ export async function POST(req: NextRequest) {
     }
 
     // Find or create tax return for this year
-    const existingReturn = await prisma.taxReturn.findUnique({
-      where: {
-        profileId_taxYear: {
-          profileId: profile.id,
-          taxYear: parseInt(taxYear),
-        },
-      },
-    });
+    const { data: existingReturns } = await db
+      .from('tax_returns')
+      .select('*')
+      .eq('profileId', profile.id)
+      .eq('taxYear', parseInt(taxYear))
+      .limit(1);
 
-    let taxReturn;
+    const existingReturn = firstOrNull(existingReturns);
+    let taxReturn: TaxReturn;
 
     if (existingReturn) {
       // Update existing draft
-      taxReturn = await prisma.taxReturn.update({
-        where: { id: existingReturn.id },
-        data: {
+      const { data: updated, error: updateError } = await db
+        .from('tax_returns')
+        .update({
           formData,
           status: status || 'DRAFT',
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', existingReturn.id)
+        .select()
+        .single();
+
+      if (updateError || !updated) {
+        throw new Error(`Failed to update tax return: ${updateError?.message}`);
+      }
+      taxReturn = updated as TaxReturn;
     } else {
       // Create new draft
-      taxReturn = await prisma.taxReturn.create({
-        data: {
+      const { data: created, error: createError } = await db
+        .from('tax_returns')
+        .insert({
           profileId: profile.id,
           taxYear: parseInt(taxYear),
           formData,
           status: status || 'DRAFT',
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (createError || !created) {
+        throw new Error(`Failed to create tax return: ${createError?.message}`);
+      }
+      taxReturn = created as TaxReturn;
     }
 
     return NextResponse.json({
@@ -112,26 +140,27 @@ export async function GET(req: NextRequest) {
     }
 
     // Get user profile using session user ID
-    const profile = await prisma.profile.findFirst({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('userId', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     // Get tax return for this year
-    const taxReturn = await prisma.taxReturn.findUnique({
-      where: {
-        profileId_taxYear: {
-          profileId: profile.id,
-          taxYear: parseInt(taxYear),
-        },
-      },
-      include: {
-        documents: true,
-      },
-    });
+    const { data: taxReturns } = await db
+      .from('tax_returns')
+      .select('*')
+      .eq('profileId', profile.id)
+      .eq('taxYear', parseInt(taxYear))
+      .limit(1);
+
+    const taxReturn = firstOrNull(taxReturns);
 
     if (!taxReturn) {
       return NextResponse.json({
@@ -140,6 +169,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Get documents for this tax return
+    const { data: documents } = await db
+      .from('documents')
+      .select('*')
+      .eq('taxReturnId', taxReturn.id);
+
     return NextResponse.json({
       success: true,
       taxReturn: {
@@ -147,7 +182,7 @@ export async function GET(req: NextRequest) {
         taxYear: taxReturn.taxYear,
         status: taxReturn.status,
         formData: taxReturn.formData,
-        documents: taxReturn.documents,
+        documents: documents || [],
         createdAt: taxReturn.createdAt,
         updatedAt: taxReturn.updatedAt,
       },

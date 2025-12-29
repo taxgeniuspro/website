@@ -7,8 +7,22 @@
  * @module lib/permissions/crm-permissions
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local type definition
+interface ProfileRecord {
+  id: string;
+  userId: string;
+  role: string;
+  crmEmailAutomation?: boolean;
+  crmWorkflowAutomation?: boolean;
+  crmActivityTracking?: boolean;
+  crmAdvancedAnalytics?: boolean;
+  crmTaskManagement?: boolean;
+  crmLeadScoring?: boolean;
+  crmBulkActions?: boolean;
+}
 
 /**
  * Available CRM features that can be enabled/disabled per tax preparer
@@ -52,19 +66,13 @@ export async function checkCRMPermission(
   feature: CRMFeature
 ): Promise<PermissionCheckResult> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        role: true,
-        crmEmailAutomation: true,
-        crmWorkflowAutomation: true,
-        crmActivityTracking: true,
-        crmAdvancedAnalytics: true,
-        crmTaskManagement: true,
-        crmLeadScoring: true,
-        crmBulkActions: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('role, crmEmailAutomation, crmWorkflowAutomation, crmActivityTracking, crmAdvancedAnalytics, crmTaskManagement, crmLeadScoring, crmBulkActions')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return {
@@ -137,19 +145,13 @@ export async function checkMultipleCRMPermissions(
 
   // Batch check - fetch profile once
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        role: true,
-        crmEmailAutomation: true,
-        crmWorkflowAutomation: true,
-        crmActivityTracking: true,
-        crmAdvancedAnalytics: true,
-        crmTaskManagement: true,
-        crmLeadScoring: true,
-        crmBulkActions: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('role, crmEmailAutomation, crmWorkflowAutomation, crmActivityTracking, crmAdvancedAnalytics, crmTaskManagement, crmLeadScoring, crmBulkActions')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       features.forEach((feature) => {
@@ -221,19 +223,13 @@ export async function checkMultipleCRMPermissions(
  */
 export async function getEnabledCRMFeatures(userId: string): Promise<CRMFeature[]> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        role: true,
-        crmEmailAutomation: true,
-        crmWorkflowAutomation: true,
-        crmActivityTracking: true,
-        crmAdvancedAnalytics: true,
-        crmTaskManagement: true,
-        crmLeadScoring: true,
-        crmBulkActions: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('role, crmEmailAutomation, crmWorkflowAutomation, crmActivityTracking, crmAdvancedAnalytics, crmTaskManagement, crmLeadScoring, crmBulkActions')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return [];
@@ -282,10 +278,13 @@ export async function grantCRMPermission(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Verify admin permission
-    const admin = await prisma.profile.findUnique({
-      where: { userId: adminUserId },
-      select: { role: true },
-    });
+    const { data: adminData } = await db
+      .from('profiles')
+      .select('role')
+      .eq('userId', adminUserId)
+      .limit(1);
+
+    const admin = firstOrNull(adminData) as { role: string } | null;
 
     if (!admin || admin.role !== 'admin') {
       return {
@@ -295,10 +294,13 @@ export async function grantCRMPermission(
     }
 
     // Verify preparer exists and is a tax preparer
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerProfileId },
-      select: { role: true },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('role')
+      .eq('id', preparerProfileId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparerData) as { role: string } | null;
 
     if (!preparer) {
       return {
@@ -315,12 +317,12 @@ export async function grantCRMPermission(
     }
 
     // Grant permission
-    await prisma.profile.update({
-      where: { id: preparerProfileId },
-      data: {
-        [feature]: true,
-      },
-    });
+    const { error: updateError } = await db
+      .from('profiles')
+      .update({ [feature]: true })
+      .eq('id', preparerProfileId);
+
+    if (updateError) throw updateError;
 
     logger.info(`Admin ${adminUserId} granted ${feature} to preparer ${preparerProfileId}`);
 
@@ -349,10 +351,13 @@ export async function revokeCRMPermission(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Verify admin permission
-    const admin = await prisma.profile.findUnique({
-      where: { userId: adminUserId },
-      select: { role: true },
-    });
+    const { data: adminData } = await db
+      .from('profiles')
+      .select('role')
+      .eq('userId', adminUserId)
+      .limit(1);
+
+    const admin = firstOrNull(adminData) as { role: string } | null;
 
     if (!admin || admin.role !== 'admin') {
       return {
@@ -362,12 +367,12 @@ export async function revokeCRMPermission(
     }
 
     // Revoke permission
-    await prisma.profile.update({
-      where: { id: preparerProfileId },
-      data: {
-        [feature]: false,
-      },
-    });
+    const { error: updateError } = await db
+      .from('profiles')
+      .update({ [feature]: false })
+      .eq('id', preparerProfileId);
+
+    if (updateError) throw updateError;
 
     logger.info(`Admin ${adminUserId} revoked ${feature} from preparer ${preparerProfileId}`);
 
@@ -396,10 +401,13 @@ export async function bulkUpdateCRMPermissions(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Verify admin permission
-    const admin = await prisma.profile.findUnique({
-      where: { userId: adminUserId },
-      select: { role: true },
-    });
+    const { data: adminData } = await db
+      .from('profiles')
+      .select('role')
+      .eq('userId', adminUserId)
+      .limit(1);
+
+    const admin = firstOrNull(adminData) as { role: string } | null;
 
     if (!admin || admin.role !== 'admin') {
       return {
@@ -409,10 +417,12 @@ export async function bulkUpdateCRMPermissions(
     }
 
     // Bulk update
-    await prisma.profile.update({
-      where: { id: preparerProfileId },
-      data: permissions,
-    });
+    const { error: updateError } = await db
+      .from('profiles')
+      .update(permissions)
+      .eq('id', preparerProfileId);
+
+    if (updateError) throw updateError;
 
     logger.info(
       `Admin ${adminUserId} bulk updated CRM permissions for preparer ${preparerProfileId}`

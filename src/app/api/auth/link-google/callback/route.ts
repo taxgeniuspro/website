@@ -8,9 +8,32 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { verifyStateToken } from '@/lib/utils/hmac';
+
+// Local TypeScript interfaces (replaces @prisma/client types)
+interface Account {
+  id: string;
+  userId: string;
+  type: string;
+  provider: string;
+  providerAccountId: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: number | null;
+  token_type: string | null;
+  scope: string | null;
+  id_token: string | null;
+}
+
+interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  image: string | null;
+  emailVerified: Date | null;
+}
 
 // Helper to get the base URL for redirects
 function getSettingsUrl(request: NextRequest): string {
@@ -104,14 +127,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if this Google account is already linked to another user
-    const existingAccount = await prisma.account.findUnique({
-      where: {
-        provider_providerAccountId: {
-          provider: 'google',
-          providerAccountId: googleUser.id,
-        },
-      },
-    });
+    const { data: existingAccountData } = await db
+      .from('accounts')
+      .select('*')
+      .eq('provider', 'google')
+      .eq('providerAccountId', googleUser.id)
+      .limit(1);
+
+    const existingAccount = firstOrNull<Account>(existingAccountData);
 
     if (existingAccount) {
       if (existingAccount.userId === userId) {
@@ -128,9 +151,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user still exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const { data: usersData } = await db
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .limit(1);
+
+    const user = firstOrNull<User>(usersData);
 
     if (!user) {
       logger.error('User not found during Google linking', { userId });
@@ -138,8 +165,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Create the account link
-    await prisma.account.create({
-      data: {
+    const { error: createAccountError } = await db
+      .from('accounts')
+      .insert({
         userId,
         type: 'oauth',
         provider: 'google',
@@ -152,25 +180,27 @@ export async function GET(request: NextRequest) {
         token_type: tokens.token_type,
         scope: tokens.scope,
         id_token: tokens.id_token,
-      },
-    });
+      });
+
+    if (createAccountError) {
+      logger.error('Error creating account link', { error: createAccountError.message });
+      return NextResponse.redirect(`${settingsUrl}?link_error=failed`);
+    }
 
     // Optionally update user profile with Google image if not set
     if (!user.image && googleUser.picture) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          image: googleUser.picture,
-        },
-      });
+      await db
+        .from('users')
+        .update({ image: googleUser.picture })
+        .eq('id', userId);
     }
 
     // Mark email as verified since Google verified it
     if (!user.emailVerified) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { emailVerified: new Date() },
-      });
+      await db
+        .from('users')
+        .update({ emailVerified: new Date().toISOString() })
+        .eq('id', userId);
     }
 
     logger.info('Successfully linked Google account', {

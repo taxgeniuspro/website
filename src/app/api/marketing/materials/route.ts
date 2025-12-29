@@ -1,8 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// Local TypeScript interfaces (replacing Prisma types)
+interface Profile {
+  id: string;
+  userId: string;
+  role: string;
+  affiliateStatus: string | null;
+}
+
+interface MarketingMaterial {
+  id: string;
+  title: string;
+  description: string | null;
+  materialType: string;
+  imageUrl: string | null;
+  adCopy: string | null;
+  templateHtml: string | null;
+  tags: string[];
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 /**
  * GET /api/marketing/materials
@@ -20,9 +42,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Get profile with role check
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -41,21 +67,25 @@ export async function GET(req: NextRequest) {
     const typeFilter = searchParams.get('type');
 
     // Build query
-    const whereClause: any = {
-      isActive: true,
-    };
+    let query = db
+      .from('marketing_materials')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
     if (typeFilter && ['IMAGE', 'TEXT', 'VIDEO', 'TEMPLATE'].includes(typeFilter)) {
-      whereClause.materialType = typeFilter;
+      query = query.eq('material_type', typeFilter);
     }
 
     // Fetch marketing materials
-    const materials = await prisma.marketingMaterial.findMany({
-      where: whereClause,
-      orderBy: [{ createdAt: 'desc' }],
-    });
+    const { data: materials, error } = await query;
 
-    // Return materials directly (Prisma uses camelCase)
+    if (error) {
+      logger.error('Error fetching marketing materials:', error);
+      return NextResponse.json({ error: 'Failed to fetch marketing materials' }, { status: 500 });
+    }
+
+    // Return materials directly
     return NextResponse.json(materials, { status: 200 });
   } catch (error) {
     logger.error('Error fetching marketing materials:', error);
@@ -76,9 +106,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Get profile with ADMIN role check
-    const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles) as Profile | null;
 
     if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Access denied. Admin role required.' }, { status: 403 });
@@ -101,18 +135,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Create marketing material
-    const material = await prisma.marketingMaterial.create({
-      data: {
+    const { data: material, error } = await db
+      .from('marketing_materials')
+      .insert({
         title,
         description: description || null,
-        materialType,
-        imageUrl: imageUrl || null,
-        adCopy: adCopy || null,
-        templateHtml: templateHtml || null,
+        material_type: materialType,
+        image_url: imageUrl || null,
+        ad_copy: adCopy || null,
+        template_html: templateHtml || null,
         tags: tags || [],
-        isActive: true,
-      },
-    });
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating marketing material:', error);
+      return NextResponse.json({ error: 'Failed to create marketing material' }, { status: 500 });
+    }
 
     return NextResponse.json(
       {

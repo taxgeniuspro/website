@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { AvailabilityService } from '@/lib/services/availability.service';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
+
+// Local TypeScript interfaces
+interface AvailabilityRule {
+  dayOfWeek: number;
+  startTime: string | null;
+  endTime: string | null;
+  isOverride: boolean;
+  overrideFrom: string | null;
+  overrideUntil: string | null;
+}
+
+interface ProfileWithAvailability {
+  bookingEnabled: boolean | null;
+}
+
+interface AppointmentSlot {
+  scheduledFor: string;
+  duration: number | null;
+}
 
 /**
  * GET /api/appointments/day-availability
@@ -43,27 +62,24 @@ export async function GET(req: NextRequest) {
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
     // Get preparer's availability settings
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        bookingEnabled: true,
-        availability: {
-          where: { isActive: true },
-          select: {
-            dayOfWeek: true,
-            startTime: true,
-            endTime: true,
-            isOverride: true,
-            overrideFrom: true,
-            overrideUntil: true,
-          },
-        },
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('bookingEnabled:booking_enabled')
+      .eq('id', preparerId)
+      .limit(1);
+    const profile = firstOrNull<ProfileWithAvailability>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Preparer not found' }, { status: 404 });
     }
+
+    // Get availability slots
+    const { data: availabilityData } = await db
+      .from('availability_slots')
+      .select('dayOfWeek:day_of_week, startTime:start_time, endTime:end_time, isOverride:is_override, overrideFrom:override_from, overrideUntil:override_until')
+      .eq('profile_id', preparerId)
+      .eq('is_active', true);
+    const availabilityRules = (availabilityData || []) as AvailabilityRule[];
 
     if (!profile.bookingEnabled) {
       // Return all days as unavailable
@@ -79,22 +95,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Get all appointments for the month
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        preparerId,
-        scheduledFor: {
-          gte: startDate,
-          lte: endDate,
-        },
-        status: {
-          in: ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL', 'REQUESTED'],
-        },
-      },
-      select: {
-        scheduledFor: true,
-        duration: true,
-      },
-    });
+    const { data: appointmentsData } = await db
+      .from('appointments')
+      .select('scheduledFor:scheduled_for, duration')
+      .eq('preparer_id', preparerId)
+      .gte('scheduled_for', startDate.toISOString())
+      .lte('scheduled_for', endDate.toISOString())
+      .in('status', ['SCHEDULED', 'CONFIRMED', 'PENDING_APPROVAL', 'REQUESTED']);
+    const appointments = (appointmentsData || []) as AppointmentSlot[];
 
     // Calculate availability for each day
     const availability: Record<string, { available: number; total: number; status: string }> = {};
@@ -104,11 +112,13 @@ export async function GET(req: NextRequest) {
       const dateStr = format(day, 'yyyy-MM-dd');
 
       // Find availability rules for this day
-      const dayRules = profile.availability.filter((rule) => {
+      const dayRules = availabilityRules.filter((rule) => {
         if (rule.isOverride) {
           // Check if override applies to this date
           if (rule.overrideFrom && rule.overrideUntil) {
-            return day >= rule.overrideFrom && day <= rule.overrideUntil;
+            const overrideFrom = new Date(rule.overrideFrom);
+            const overrideUntil = new Date(rule.overrideUntil);
+            return day >= overrideFrom && day <= overrideUntil;
           }
           return false;
         }
@@ -116,14 +126,13 @@ export async function GET(req: NextRequest) {
       });
 
       // Check for blocking override
-      const hasBlockingOverride = profile.availability.some(
-        (rule) =>
-          rule.isOverride &&
-          rule.overrideFrom &&
-          rule.overrideUntil &&
-          day >= rule.overrideFrom &&
-          day <= rule.overrideUntil &&
-          !rule.startTime // No start time = vacation/blocked
+      const hasBlockingOverride = availabilityRules.some(
+        (rule) => {
+          if (!rule.isOverride || !rule.overrideFrom || !rule.overrideUntil) return false;
+          const overrideFrom = new Date(rule.overrideFrom);
+          const overrideUntil = new Date(rule.overrideUntil);
+          return day >= overrideFrom && day <= overrideUntil && !rule.startTime;
+        }
       );
 
       if (hasBlockingOverride || dayRules.length === 0) {
@@ -150,6 +159,7 @@ export async function GET(req: NextRequest) {
 
       // Count booked appointments for this day
       const dayAppointments = appointments.filter((appt) => {
+        if (!appt.scheduledFor) return false;
         const apptDate = new Date(appt.scheduledFor);
         return (
           apptDate.getDate() === day.getDate() &&

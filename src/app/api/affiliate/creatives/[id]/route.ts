@@ -1,9 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { CreativePrivacy, CreativeStatus } from '@prisma/client';
 import { hasAffiliateAccess } from '@/lib/permissions';
+
+// TypeScript interfaces (replacing Prisma types)
+type CreativePrivacy = 'PUBLIC' | 'PRIVATE' | 'GROUP_ONLY';
+type CreativeStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+
+interface Profile {
+  id: string;
+  role: string | null;
+  affiliateStatus: string | null;
+  affiliateGroupId: string | null;
+}
+
+interface AffiliateCreative {
+  id: string;
+  status: CreativeStatus;
+  privacy: CreativePrivacy;
+  affiliateIds: string[];
+  groupIds: string[];
+  views: number;
+  groups?: { id: string; name: string }[];
+}
 
 /**
  * GET /api/affiliate/creatives/[id]
@@ -18,16 +38,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    // Get user profile - use Supabase OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, role, affiliateStatus, affiliateGroupId')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -40,25 +63,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
 
-    // Get creative with groups
-    const creative = await prisma.affiliateCreative.findUnique({
-      where: { id },
-      include: {
-        groups: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
+    // Get creative with groups (using Supabase join syntax)
+    const { data: creativeData, error: creativeError } = await db
+      .from('affiliate_creatives')
+      .select('*, affiliate_creative_groups(id, name)')
+      .eq('id', id)
+      .limit(1);
+
+    if (creativeError) {
+      logger.error('Error fetching creative:', creativeError);
+      return NextResponse.json({ error: 'Failed to fetch creative' }, { status: 500 });
+    }
+
+    const creative = firstOrNull<AffiliateCreative>(creativeData);
 
     if (!creative) {
       return NextResponse.json({ error: 'Creative not found' }, { status: 404 });
     }
 
     // Check if creative is active
-    if (creative.status !== CreativeStatus.ACTIVE) {
+    if (creative.status !== 'ACTIVE') {
       // Admins can see all
       if (profile.role !== 'admin') {
         return NextResponse.json({ error: 'Creative not found' }, { status: 404 });
@@ -66,7 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Check access based on privacy
-    if (creative.privacy === CreativePrivacy.PRIVATE) {
+    if (creative.privacy === 'PRIVATE') {
       // Check if affiliate is in the allowed list
       if (!creative.affiliateIds.includes(profile.id)) {
         // Admins can see all
@@ -74,7 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
       }
-    } else if (creative.privacy === CreativePrivacy.GROUP_ONLY) {
+    } else if (creative.privacy === 'GROUP_ONLY') {
       // Check if affiliate's group is in the allowed list
       const hasAccess =
         (profile.affiliateGroupId && creative.groupIds.includes(profile.affiliateGroupId)) ||
@@ -89,11 +113,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Increment views (don't wait for this)
-    prisma.affiliateCreative
-      .update({
-        where: { id },
-        data: { views: { increment: 1 } },
-      })
+    db.from('affiliate_creatives')
+      .update({ views: (creative.views || 0) + 1 })
+      .eq('id', id)
+      .then(() => {})
       .catch((err) => {
         logger.error('Failed to increment creative views', err);
       });

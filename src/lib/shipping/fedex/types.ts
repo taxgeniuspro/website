@@ -3,9 +3,11 @@
  * Comprehensive types for enhanced FedEx integration
  */
 
-import { type Carrier } from '@prisma/client'
 import type { FedExService } from './services'
 import type { FedExBox } from './box-definitions'
+
+// Local type definition (replacing @prisma/client)
+export type Carrier = 'FEDEX' | 'UPS' | 'SOUTHWEST_CARGO'
 
 // ============================================================================
 // CORE TYPES (from existing interfaces.ts)

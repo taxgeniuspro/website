@@ -8,11 +8,21 @@
  * 4. Delete the preparer's profile (cascades to other data)
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // Owliver Owl's profile ID - the default Tax Genius preparer
 const OWLIVER_PROFILE_ID = 'p_086ccd7b-6a51-406a-b157-bfc8a743c676';
+
+// Local type definitions (replacing @prisma/client)
+interface PreparerRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string | null;
+  customTrackingCode?: string | null;
+  userId?: string | null;
+}
 
 interface TerminationResult {
   success: boolean;
@@ -28,17 +38,13 @@ interface TerminationResult {
 export async function terminatePreparer(preparerId: string): Promise<TerminationResult> {
   try {
     // 1. Get the preparer info
-    const preparer = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        customTrackingCode: true,
-        userId: true,
-      },
-    });
+    const { data: preparerData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, role, customTrackingCode, userId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const preparer = firstOrNull(preparerData) as PreparerRecord | null;
 
     if (!preparer) {
       return {
@@ -81,20 +87,22 @@ export async function terminatePreparer(preparerId: string): Promise<Termination
     });
 
     // 2. Count clients and leads before reassignment
-    const clientCount = await prisma.profile.count({
-      where: { assignedPreparerId: preparerId },
-    });
+    const { count: clientCount } = await db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedPreparerId', preparerId);
 
-    const leadCount = await prisma.lead.count({
-      where: { assignedToId: preparerId },
-    });
+    const { count: leadCount } = await db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignedToId', preparerId);
 
     // 3. Reassign all clients to Owliver
-    if (clientCount > 0) {
-      await prisma.profile.updateMany({
-        where: { assignedPreparerId: preparerId },
-        data: { assignedPreparerId: OWLIVER_PROFILE_ID },
-      });
+    if ((clientCount || 0) > 0) {
+      await db
+        .from('profiles')
+        .update({ assignedPreparerId: OWLIVER_PROFILE_ID })
+        .eq('assignedPreparerId', preparerId);
 
       logger.info('Reassigned clients to Owliver', {
         preparerId,
@@ -104,11 +112,11 @@ export async function terminatePreparer(preparerId: string): Promise<Termination
     }
 
     // 4. Reassign all leads to Owliver
-    if (leadCount > 0) {
-      await prisma.lead.updateMany({
-        where: { assignedToId: preparerId },
-        data: { assignedToId: OWLIVER_PROFILE_ID },
-      });
+    if ((leadCount || 0) > 0) {
+      await db
+        .from('leads')
+        .update({ assignedToId: OWLIVER_PROFILE_ID })
+        .eq('assignedToId', preparerId);
 
       logger.info('Reassigned leads to Owliver', {
         preparerId,
@@ -118,35 +126,40 @@ export async function terminatePreparer(preparerId: string): Promise<Termination
     }
 
     // 5. Delete referral image folder (images will cascade delete)
-    await prisma.referralImageSet.deleteMany({
-      where: { preparerId },
-    });
+    await db
+      .from('referral_image_sets')
+      .delete()
+      .eq('preparerId', preparerId);
 
     logger.info('Deleted referral image folder', { preparerId });
 
     // 6. Delete client referral invitations from this preparer
-    await prisma.clientReferralInvitation.deleteMany({
-      where: { preparerId },
-    });
+    await db
+      .from('client_referral_invitations')
+      .delete()
+      .eq('preparerId', preparerId);
 
     // 7. Delete short links associated with this preparer
-    await prisma.shortLink.deleteMany({
-      where: { preparerId },
-    });
+    await db
+      .from('short_links')
+      .delete()
+      .eq('preparerId', preparerId);
 
     // 8. Delete the profile (this cascades to many related records)
-    await prisma.profile.delete({
-      where: { id: preparerId },
-    });
+    await db
+      .from('profiles')
+      .delete()
+      .eq('id', preparerId);
 
     logger.info('Deleted preparer profile', { preparerId, preparerName });
 
     // 9. Delete the user account if it exists
     if (preparer.userId) {
       try {
-        await prisma.user.delete({
-          where: { id: preparer.userId },
-        });
+        await db
+          .from('users')
+          .delete()
+          .eq('id', preparer.userId);
         logger.info('Deleted user account', { userId: preparer.userId });
       } catch (userDeleteError) {
         // User might have been deleted already or have other constraints
@@ -160,15 +173,15 @@ export async function terminatePreparer(preparerId: string): Promise<Termination
     logger.info('Preparer termination complete', {
       preparerId,
       preparerName,
-      clientsReassigned: clientCount,
-      leadsReassigned: leadCount,
+      clientsReassigned: clientCount || 0,
+      leadsReassigned: leadCount || 0,
     });
 
     return {
       success: true,
       preparerName,
-      clientsReassigned: clientCount,
-      leadsReassigned: leadCount,
+      clientsReassigned: clientCount || 0,
+      leadsReassigned: leadCount || 0,
     };
   } catch (error) {
     logger.error('Error terminating preparer', { error, preparerId });

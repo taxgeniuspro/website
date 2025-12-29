@@ -12,8 +12,35 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// TypeScript interfaces for Supabase data
+interface Profile {
+  id: string;
+  customTrackingCode: string | null;
+  trackingCode: string | null;
+  shortLinkUsername: string | null;
+}
+
+interface TaxIntakeLead {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  convertedToClient: boolean;
+  convertedAt: string | null;
+  unqualified: boolean;
+  unqualifiedReason: string | null;
+  created_at: string;
+}
+
+interface Commission {
+  id: string;
+  sourceId: string | null;
+  amount: number;
+  status: string;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,22 +51,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile with tracking code - use findFirst with OR conditions for Supabase Auth compatibility
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: {
-        id: true,
-        customTrackingCode: true,
-        trackingCode: true,
-        shortLinkUsername: true,
-      },
-    });
+    // Get user profile with tracking code - use OR conditions for Supabase Auth compatibility
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('id, custom_tracking_code, tracking_code, short_link_username')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (profileError) {
+      logger.error('Error fetching profile:', profileError);
+    }
+
+    const profile = firstOrNull<Profile>(profileData);
 
     if (!profile) {
       return NextResponse.json({
@@ -70,37 +93,46 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Fetch leads referred by this user (matching referrerUsername to tracking code)
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: {
-        referrerUsername: trackingCode,
-      },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        convertedToClient: true,
-        convertedAt: true,
-        unqualified: true,
-        unqualifiedReason: true,
-        created_at: true,
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    // Fetch leads referred by this user (matching referrer_username to tracking code)
+    const { data: leadsData, error: leadsError } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, converted_to_client, converted_at, unqualified, unqualified_reason, created_at')
+      .eq('referrer_username', trackingCode)
+      .order('created_at', { ascending: false });
+
+    if (leadsError) {
+      logger.error('Error fetching leads:', leadsError);
+      return NextResponse.json({ error: 'Failed to fetch referrals' }, { status: 500 });
+    }
+
+    const leads = (leadsData || []).map((l: Record<string, unknown>) => ({
+      id: l.id,
+      first_name: l.first_name,
+      last_name: l.last_name,
+      email: l.email,
+      convertedToClient: l.converted_to_client,
+      convertedAt: l.converted_at,
+      unqualified: l.unqualified,
+      unqualifiedReason: l.unqualified_reason,
+      created_at: l.created_at,
+    })) as TaxIntakeLead[];
 
     // Fetch commissions for this referrer
-    const commissions = await prisma.commission.findMany({
-      where: {
-        referrerId: profile.id,
-      },
-      select: {
-        id: true,
-        sourceId: true, // This is the leadId
-        amount: true,
-        status: true,
-      },
-    });
+    const { data: commissionsData, error: commissionsError } = await db
+      .from('commissions')
+      .select('id, source_id, amount, status')
+      .eq('referrer_id', profile.id);
+
+    if (commissionsError) {
+      logger.error('Error fetching commissions:', commissionsError);
+    }
+
+    const commissions = (commissionsData || []).map((c: Record<string, unknown>) => ({
+      id: c.id,
+      sourceId: c.source_id,
+      amount: Number(c.amount),
+      status: c.status,
+    })) as Commission[];
 
     // Create a map of leadId -> commission
     const commissionByLeadId = new Map(
@@ -132,7 +164,7 @@ export async function GET(req: NextRequest) {
         status,
         commissionAmount: commission ? Number(commission.amount) : null,
         commissionStatus: commission?.status || null,
-        createdAt: lead.created_at.toISOString(),
+        createdAt: lead.created_at,
       };
     });
 
@@ -152,7 +184,7 @@ export async function GET(req: NextRequest) {
         .reduce((sum, c) => sum + Number(c.amount), 0),
     };
 
-    logger.info(`📊 Fetched ${referrals.length} referrals for client ${profile.id}`);
+    logger.info(`Fetched ${referrals.length} referrals for client ${profile.id}`);
 
     return NextResponse.json({
       success: true,

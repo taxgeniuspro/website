@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+// Local interfaces
+interface PreparerApplication {
+  id: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  email: string;
+  phone: string;
+  languages: string[];
+  smsConsent: boolean;
+  status: string;
+  createdAt: string;
+}
 
 // POST: Submit a new preparer application
 export async function POST(request: NextRequest) {
@@ -27,8 +41,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the preparer application
-    const application = await prisma.preparerApplication.create({
-      data: {
+    const { data: application, error: createError } = await db.from('preparer_applications')
+      .insert({
         firstName,
         middleName: middleName || null,
         lastName,
@@ -37,8 +51,13 @@ export async function POST(request: NextRequest) {
         languages,
         smsConsent: smsConsent === 'yes',
         status: 'PENDING',
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
 
     logger.info('New preparer application submitted', {
       applicationId: application.id,
@@ -90,20 +109,27 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
 
-    const where = status ? { status } : {};
+    // Build query
+    let query = db.from('preparer_applications')
+      .select('*', { count: 'exact' });
 
-    const [applications, total] = await Promise.all([
-      prisma.preparerApplication.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: pageSize,
-        skip: (page - 1) * pageSize,
-      }),
-      prisma.preparerApplication.count({ where }),
-    ]);
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    query = query.order('createdAt', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
+
+    const { data: applications, count, error: fetchError } = await query;
+
+    if (fetchError) {
+      throw fetchError;
+    }
+
+    const total = count || 0;
 
     return NextResponse.json({
-      applications,
+      applications: applications || [],
       pagination: {
         page,
         pageSize,

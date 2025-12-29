@@ -7,20 +7,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { FolderType } from '@prisma/client';
-import { v2 as cloudinary } from 'cloudinary';
+import { DiskStorageService } from '@/lib/services/disk-storage.service';
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Define FolderType locally (matches database enum)
+type FolderType = 'preseason_loans' | 'tax_season_lead' | 'tax_season_intake' | 'client_referral';
 
 // Folder type display configuration
-const FOLDER_TYPE_INFO: Record<FolderType, { displayName: string; dateRange: string; description: string }> = {
+const FOLDER_TYPE_INFO: Record<
+  FolderType,
+  { displayName: string; dateRange: string; description: string }
+> = {
   preseason_loans: {
     displayName: 'Pre-Season Loans',
     dateRange: 'Dec 1 - Jan 14',
@@ -52,91 +50,97 @@ export async function GET() {
     }
 
     // Get preparer profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, role: true, firstName: true, lastName: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role, firstName, lastName')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile || !['tax_preparer', 'admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Not authorized as tax preparer' }, { status: 403 });
     }
 
-    // Get preparer's 4 image folders
-    const imageSets = await prisma.referralImageSet.findMany({
-      where: {
-        preparerId: profile.id,
-        category: 'preparer',
-      },
-      include: {
-        images: {
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-      orderBy: { folderType: 'asc' },
-    });
+    // Get preparer's 4 image folders with images
+    const { data: imageSets } = await db
+      .from('referral_image_sets')
+      .select(
+        `
+        *,
+        images:referral_images(*)
+      `
+      )
+      .eq('preparerId', profile.id)
+      .eq('category', 'preparer')
+      .order('folderType', { ascending: true });
 
     // Get default folders for fallback display
-    const defaultSets = await prisma.referralImageSet.findMany({
-      where: {
-        category: 'default',
-        preparerId: null,
-        isActive: true,
-      },
-      include: {
-        images: {
-          orderBy: { sortOrder: 'asc' },
-          take: 4,
-        },
-      },
-    });
+    const { data: defaultSets } = await db
+      .from('referral_image_sets')
+      .select(
+        `
+        *,
+        images:referral_images(*)
+      `
+      )
+      .eq('category', 'default')
+      .is('preparerId', null)
+      .eq('isActive', true);
 
     // Create a map of default images by folder type
-    const defaultImagesByType: Record<FolderType, typeof defaultSets[0]['images']> = {
+    type ImageRecord = { id: string; imageUrl: string; thumbnailUrl?: string; altText?: string };
+    const defaultImagesByType: Record<FolderType, ImageRecord[]> = {
       preseason_loans: [],
       tax_season_lead: [],
       tax_season_intake: [],
       client_referral: [],
     };
 
-    for (const set of defaultSets) {
-      defaultImagesByType[set.folderType] = set.images;
+    for (const set of defaultSets || []) {
+      const folderType = set.folderType as FolderType;
+      defaultImagesByType[folderType] = (set.images || []).slice(0, 4);
     }
 
     return NextResponse.json({
       success: true,
       folderTypeInfo: FOLDER_TYPE_INFO,
-      folders: imageSets.map((set) => ({
-        id: set.id,
-        name: set.name,
-        folderType: set.folderType,
-        isActive: set.isActive,
-        imageCount: set.images.length,
-        images: set.images.map((img) => ({
-          id: img.id,
-          imageUrl: img.imageUrl,
-          thumbnailUrl: img.thumbnailUrl,
-          fileName: img.fileName,
-          altText: img.altText,
-          platform: img.platform,
-          downloadCount: img.downloadCount,
-          sortOrder: img.sortOrder,
-        })),
-        // Include default images for preview when folder is empty
-        defaultImages: set.images.length === 0 ? defaultImagesByType[set.folderType].map((img) => ({
-          id: img.id,
-          imageUrl: img.imageUrl,
-          thumbnailUrl: img.thumbnailUrl,
-          altText: img.altText,
-        })) : [],
-        usingDefault: set.images.length === 0,
-      })),
+      folders: (imageSets || []).map((set) => {
+        const images = set.images || [];
+        const folderType = set.folderType as FolderType;
+        return {
+          id: set.id,
+          name: set.name,
+          folderType: set.folderType,
+          isActive: set.isActive,
+          imageCount: images.length,
+          images: images.map((img: ImageRecord & { fileName?: string; platform?: string; downloadCount?: number; sortOrder?: number }) => ({
+            id: img.id,
+            imageUrl: img.imageUrl,
+            thumbnailUrl: img.thumbnailUrl,
+            fileName: img.fileName,
+            altText: img.altText,
+            platform: img.platform,
+            downloadCount: img.downloadCount,
+            sortOrder: img.sortOrder,
+          })),
+          // Include default images for preview when folder is empty
+          defaultImages:
+            images.length === 0
+              ? defaultImagesByType[folderType].map((img) => ({
+                  id: img.id,
+                  imageUrl: img.imageUrl,
+                  thumbnailUrl: img.thumbnailUrl,
+                  altText: img.altText,
+                }))
+              : [],
+          usingDefault: images.length === 0,
+        };
+      }),
     });
   } catch (error) {
     logger.error('Error listing preparer referral images', { error });
-    return NextResponse.json(
-      { error: 'Failed to list image folders' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to list image folders' }, { status: 500 });
   }
 }
 
@@ -149,10 +153,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get preparer profile
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, role: true },
-    });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('userId', session.user.id)
+      .limit(1);
+
+    const profile = firstOrNull(profiles);
 
     if (!profile || !['tax_preparer', 'admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Not authorized as tax preparer' }, { status: 403 });
@@ -169,23 +176,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the folder belongs to this preparer
-    const imageSet = await prisma.referralImageSet.findFirst({
-      where: {
-        preparerId: profile.id,
-        folderType,
-        category: 'preparer',
-      },
-      include: {
-        _count: { select: { images: true } },
-      },
-    });
+    const { data: imageSetsData } = await db
+      .from('referral_image_sets')
+      .select('id, folderType')
+      .eq('preparerId', profile.id)
+      .eq('folderType', folderType)
+      .eq('category', 'preparer')
+      .limit(1);
+
+    const imageSet = firstOrNull(imageSetsData);
 
     if (!imageSet) {
       return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
     }
 
+    // Count existing images
+    const { count: imageCount } = await db
+      .from('referral_images')
+      .select('id', { count: 'exact', head: true })
+      .eq('setId', imageSet.id);
+
     // Limit to 4 images per folder
-    if (imageSet._count.images >= 4) {
+    if ((imageCount || 0) >= 4) {
       return NextResponse.json(
         { error: 'Maximum 4 images per folder. Delete an image first.' },
         { status: 400 }
@@ -196,45 +208,39 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary
-    const uploadResult = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: `taxgeniuspro/referral-images/${profile.id}/${folderType}`,
-          resource_type: 'image',
-          transformation: [{ quality: 'auto:good', fetch_format: 'auto' }],
-        },
-        (error, result) => {
-          if (error || !result) {
-            reject(error || new Error('Upload failed'));
-          } else {
-            resolve(result);
-          }
-        }
-      );
-      uploadStream.end(buffer);
-    });
+    // Generate storage key
+    const key = DiskStorageService.generateKey(profile.id, file.name, 'referral-images');
 
-    // Generate thumbnail URL
-    const thumbnailUrl = cloudinary.url(uploadResult.public_id, {
-      transformation: [{ width: 200, height: 200, crop: 'fill', quality: 'auto:low' }],
+    // Upload to disk storage
+    const uploadResult = await DiskStorageService.uploadFile(key, buffer, file.type, {
+      encrypt: false, // Referral images are public
+      generateThumbnail: true,
+      thumbnailOptions: { width: 200, height: 200, fit: 'cover', quality: 80 },
     });
 
     // Create database record
-    const image = await prisma.referralImage.create({
-      data: {
+    const { data: newImage, error: insertError } = await db
+      .from('referral_images')
+      .insert({
         setId: imageSet.id,
-        imageUrl: uploadResult.secure_url,
-        thumbnailUrl,
+        imageUrl: uploadResult.url,
+        thumbnailUrl: uploadResult.thumbnailUrl || uploadResult.url,
         fileName: file.name,
         altText: altText || `${FOLDER_TYPE_INFO[folderType].displayName} promotional image`,
         platform: platform || null,
-        sortOrder: imageSet._count.images,
-      },
-    });
+        sortOrder: imageCount || 0,
+        width: uploadResult.width,
+        height: uploadResult.height,
+      })
+      .select()
+      .single();
+
+    if (insertError || !newImage) {
+      throw new Error(insertError?.message || 'Failed to insert image');
+    }
 
     logger.info('Uploaded referral image', {
-      imageId: image.id,
+      imageId: newImage.id,
       preparerId: profile.id,
       folderType,
     });
@@ -242,19 +248,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       image: {
-        id: image.id,
-        imageUrl: image.imageUrl,
-        thumbnailUrl: image.thumbnailUrl,
-        fileName: image.fileName,
-        altText: image.altText,
-        platform: image.platform,
+        id: newImage.id,
+        imageUrl: newImage.imageUrl,
+        thumbnailUrl: newImage.thumbnailUrl,
+        fileName: newImage.fileName,
+        altText: newImage.altText,
+        platform: newImage.platform,
       },
     });
   } catch (error) {
     logger.error('Error uploading referral image', { error });
-    return NextResponse.json(
-      { error: 'Failed to upload image' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
   }
 }

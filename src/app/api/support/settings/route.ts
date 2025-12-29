@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 /**
@@ -16,17 +16,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Verify admin or tax preparer role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || !['admin', 'admin', 'tax_preparer'].includes(profile.role)) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile || !['admin', 'super_admin', 'tax_preparer'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -62,17 +60,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify admin role
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-    });
+    const { data: profileData, error: profileError } = await db
+      .from('profiles')
+      .select('*')
+      .or(`supabase_user_id.eq.${userId},user_id.eq.${userId},email.eq.${session?.user?.email || ''}`)
+      .limit(1);
 
-    if (!profile || !['admin', 'admin'].includes(profile.role)) {
+    const profile = firstOrNull(profileData);
+
+    if (profileError || !profile || !['admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -83,7 +79,7 @@ export async function POST(req: NextRequest) {
     logger.info('Support settings updated', {
       userId: profile.id,
       section,
-      updatedBy: `${profile.firstName} ${profile.lastName}`,
+      updatedBy: `${profile.first_name} ${profile.last_name}`,
     });
 
     // For now, just return success

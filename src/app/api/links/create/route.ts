@@ -8,7 +8,7 @@
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import {
   createShortLink,
@@ -16,6 +16,12 @@ import {
   isShortCodeAvailable,
   type ShortLinkDestination,
 } from '@/lib/services/short-link.service';
+
+// TypeScript interface for Profile
+interface Profile {
+  id: string;
+  role: string;
+}
 
 export async function POST(req: Request) {
   try {
@@ -26,16 +32,17 @@ export async function POST(req: Request) {
     }
 
     // Get profile with flexible lookup
-    const profile = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { supabaseUserId: userId },
-          { userId: userId },
-          { email: session?.user?.email }
-        ]
-      },
-      select: { id: true, role: true },
-    });
+    const { data: profileData, error: findError } = await db
+      .from('profiles')
+      .select('id, role')
+      .or(`supabaseUserId.eq.${userId},userId.eq.${userId},email.eq.${session?.user?.email}`)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });

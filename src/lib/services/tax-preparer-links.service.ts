@@ -12,11 +12,32 @@
  * - Leads become their clients directly
  */
 
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { generateQRCode } from './qr-code.service';
 import { logger } from '@/lib/logger';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://taxgeniuspro.tax';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  userId?: string | null;
+  trackingCode?: string | null;
+  customTrackingCode?: string | null;
+  trackingCodeFinalized?: boolean;
+  qrCodeLogoUrl?: string | null;
+  role?: string | null;
+}
+
+interface MarketingLinkRecord {
+  id: string;
+  code: string;
+  url: string;
+  shortUrl?: string | null;
+  qrCodeImageUrl?: string | null;
+  title?: string | null;
+  targetPage?: string | null;
+}
 
 interface LinkInfo {
   id: string;
@@ -43,18 +64,13 @@ export async function generateTaxPreparerStandardLinks(
     logger.info('🔗 Generating tax preparer standard links', { profileId });
 
     // Get profile with tracking code
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        id: true,
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-        trackingCodeFinalized: true,
-        qrCodeLogoUrl: true,
-        role: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, userId, trackingCode, customTrackingCode, trackingCodeFinalized, qrCodeLogoUrl, role')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
@@ -74,14 +90,13 @@ export async function generateTaxPreparerStandardLinks(
     logger.info('📝 Using tracking code', { trackingCode, profileId });
 
     // Check if all 3 links already exist
-    const existing = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
-        },
-      },
-    });
+    const { data: existingData } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`]);
+
+    const existing = (existingData || []) as MarketingLinkRecord[];
 
     if (existing.length === 3) {
       logger.info('✅ All 3 links already exist, returning existing links', { profileId });
@@ -137,8 +152,9 @@ export async function generateTaxPreparerStandardLinks(
       withLogo: true,
     });
 
-    const leadLink = await prisma.marketingLink.create({
-      data: {
+    const { data: leadLinkData, error: leadError } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'TAX_PREPARER',
         linkType: 'QR_CODE',
@@ -150,10 +166,16 @@ export async function generateTaxPreparerStandardLinks(
         description: 'Unified landing page with cash advance or tax filing options',
         qrCodeImageUrl: leadQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (leadError || !leadLinkData) {
+      throw new Error(`Failed to create lead link: ${leadError?.message}`);
+    }
+    const leadLink = leadLinkData as MarketingLinkRecord;
 
     links.push(leadLink);
     logger.info('✅ Created lead form link', { id: leadLink.id, code: leadLink.code });
@@ -174,8 +196,9 @@ export async function generateTaxPreparerStandardLinks(
       withLogo: true,
     });
 
-    const intakeLink = await prisma.marketingLink.create({
-      data: {
+    const { data: intakeLinkData, error: intakeError } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'TAX_PREPARER',
         linkType: 'QR_CODE',
@@ -187,10 +210,16 @@ export async function generateTaxPreparerStandardLinks(
         description: 'Complete tax intake form for clients ready to start their tax preparation',
         qrCodeImageUrl: intakeQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (intakeError || !intakeLinkData) {
+      throw new Error(`Failed to create intake link: ${intakeError?.message}`);
+    }
+    const intakeLink = intakeLinkData as MarketingLinkRecord;
 
     links.push(intakeLink);
     logger.info('✅ Created intake form link', { id: intakeLink.id, code: intakeLink.code });
@@ -211,8 +240,9 @@ export async function generateTaxPreparerStandardLinks(
       withLogo: true,
     });
 
-    const advanceLink = await prisma.marketingLink.create({
-      data: {
+    const { data: advanceLinkData, error: advanceError } = await db
+      .from('marketing_links')
+      .insert({
         creatorId: profileId,
         creatorType: 'TAX_PREPARER',
         linkType: 'QR_CODE',
@@ -224,10 +254,16 @@ export async function generateTaxPreparerStandardLinks(
         description: 'Get up to $7,000 preseason tax advance',
         qrCodeImageUrl: advanceQR.dataUrl,
         qrCodeFormat: 'PNG',
-        dateActivated: new Date(),
+        dateActivated: new Date().toISOString(),
         isActive: true,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (advanceError || !advanceLinkData) {
+      throw new Error(`Failed to create advance link: ${advanceError?.message}`);
+    }
+    const advanceLink = advanceLinkData as MarketingLinkRecord;
 
     links.push(advanceLink);
     logger.info('✅ Created cash advance link', { id: advanceLink.id, code: advanceLink.code });
@@ -277,13 +313,13 @@ export async function getTaxPreparerLinks(
   profileId: string
 ): Promise<TaxPreparerLinks | null> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return null;
@@ -295,14 +331,13 @@ export async function getTaxPreparerLinks(
       return null;
     }
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
-        },
-      },
-    });
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`]);
+
+    const links = (linksData || []) as MarketingLinkRecord[];
 
     if (links.length !== 3) {
       return null;
@@ -356,14 +391,13 @@ export async function regenerateTaxPreparerQRCodes(profileId: string): Promise<b
   try {
     logger.info('🔄 Regenerating QR codes for tax preparer', { profileId });
 
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        userId: true,
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('userId, trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       throw new Error('Profile not found');
@@ -375,14 +409,13 @@ export async function regenerateTaxPreparerQRCodes(profileId: string): Promise<b
       throw new Error('No tracking code found');
     }
 
-    const links = await prisma.marketingLink.findMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
-        },
-      },
-    });
+    const { data: linksData } = await db
+      .from('marketing_links')
+      .select('*')
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`]);
+
+    const links = (linksData || []) as MarketingLinkRecord[];
 
     for (const link of links) {
       const qr = await generateQRCode({
@@ -394,13 +427,13 @@ export async function regenerateTaxPreparerQRCodes(profileId: string): Promise<b
         withLogo: true,
       });
 
-      await prisma.marketingLink.update({
-        where: { id: link.id },
-        data: {
+      await db
+        .from('marketing_links')
+        .update({
           qrCodeImageUrl: qr.dataUrl,
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', link.id);
 
       logger.info('✅ Regenerated QR code', { linkId: link.id, code: link.code });
     }
@@ -422,13 +455,13 @@ export async function regenerateTaxPreparerQRCodes(profileId: string): Promise<b
  */
 export async function deleteTaxPreparerLinks(profileId: string): Promise<boolean> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId },
-      select: {
-        trackingCode: true,
-        customTrackingCode: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('trackingCode, customTrackingCode')
+      .eq('id', profileId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as ProfileRecord | null;
 
     if (!profile) {
       return false;
@@ -440,14 +473,11 @@ export async function deleteTaxPreparerLinks(profileId: string): Promise<boolean
       return false;
     }
 
-    await prisma.marketingLink.deleteMany({
-      where: {
-        creatorId: profileId,
-        code: {
-          in: [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`],
-        },
-      },
-    });
+    await db
+      .from('marketing_links')
+      .delete()
+      .eq('creatorId', profileId)
+      .in('code', [`${trackingCode}-lead`, `${trackingCode}-intake`, `${trackingCode}-advance`]);
 
     logger.info('🗑️ Deleted tax preparer links', { profileId });
 

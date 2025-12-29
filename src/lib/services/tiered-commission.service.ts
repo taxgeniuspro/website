@@ -7,9 +7,7 @@
  * - Rate hierarchy (custom > bonding > group tiered > group base > default)
  */
 
-import { prisma } from '@/lib/prisma';
-import { CommissionType, Prisma, type Profile, type AffiliateGroup } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
+import { db, firstOrNull } from '@/lib/db';
 import {
   FlexibleTierStructure,
   LegacyTierStructure,
@@ -18,9 +16,46 @@ import {
   DEFAULT_COMPANY_TIERS,
 } from '@/lib/types/commission-tiers';
 
+// Local enum definition (matches database)
+type CommissionType = 'PERCENTAGE' | 'FLAT' | 'TIERED';
+
+// Local type definitions (migrated from Prisma)
+interface Profile {
+  id: string;
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  totalConversions: number;
+  lifetimeEarnings?: number;
+  currentTier?: string | null;
+  customCommissionType?: CommissionType | null;
+  customCommissionRate?: number | null;
+  customFlatAmount?: number | null;
+  customMinimumPayout?: number | null;
+  affiliateBondedToPreparerId?: string | null;
+  affiliateGroupId?: string | null;
+  affiliateGroup?: AffiliateGroup | null;
+  useCompanyCommissionDefaults?: boolean;
+  customTierStructure?: unknown;
+  customTrackingCode?: string | null;
+}
+
+interface AffiliateGroup {
+  id: string;
+  name: string;
+  commissionType: CommissionType;
+  commissionRate?: number | null;
+  flatAmount?: number | null;
+  tieredRates?: unknown;
+  minimumPayout: number;
+  totalAffiliates?: number;
+  totalConversions?: number;
+  totalEarnings?: number;
+}
+
 // Default commission rate if no other rate applies
 const DEFAULT_COMMISSION_RATE = 10; // 10%
-const DEFAULT_COMMISSION_TYPE = CommissionType.PERCENTAGE;
+const DEFAULT_COMMISSION_TYPE: CommissionType = 'PERCENTAGE';
 
 // System settings key for company default tiers
 const COMMISSION_DEFAULTS_KEY = 'commission_default_tiers';
@@ -30,9 +65,13 @@ const COMMISSION_DEFAULTS_KEY = 'commission_default_tiers';
  */
 export async function getCompanyDefaultTiers(): Promise<FlexibleTierStructure> {
   try {
-    const setting = await prisma.systemSettings.findUnique({
-      where: { key: COMMISSION_DEFAULTS_KEY },
-    });
+    const { data: settings } = await db
+      .from('system_settings')
+      .select('value')
+      .eq('key', COMMISSION_DEFAULTS_KEY)
+      .limit(1);
+
+    const setting = firstOrNull(settings);
 
     if (setting) {
       const parsed = JSON.parse(setting.value);
@@ -57,21 +96,33 @@ export async function updateCompanyDefaultTiers(
   tiers: FlexibleTierStructure,
   updatedById?: string
 ): Promise<void> {
-  await prisma.systemSettings.upsert({
-    where: { key: COMMISSION_DEFAULTS_KEY },
-    update: {
-      value: JSON.stringify(tiers),
-      updatedById,
-      updatedAt: new Date(),
-    },
-    create: {
+  // Check if setting exists
+  const { data: existing } = await db
+    .from('system_settings')
+    .select('id')
+    .eq('key', COMMISSION_DEFAULTS_KEY)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    // Update existing
+    await db
+      .from('system_settings')
+      .update({
+        value: JSON.stringify(tiers),
+        updatedById,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('key', COMMISSION_DEFAULTS_KEY);
+  } else {
+    // Create new
+    await db.from('system_settings').insert({
       key: COMMISSION_DEFAULTS_KEY,
       value: JSON.stringify(tiers),
       category: 'commission',
       description: 'Company-wide default commission tier structure for referrals',
       updatedById,
-    },
-  });
+    });
+  }
 }
 
 /**
@@ -164,12 +215,16 @@ export async function getEffectiveCommissionRate(
   conversionCount?: number
 ): Promise<EffectiveRate> {
   // Fetch profile with group
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    include: {
-      affiliateGroup: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select(`
+      *,
+      affiliateGroup:affiliate_groups!affiliateGroupId (*)
+    `)
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile) {
     return {
@@ -187,23 +242,23 @@ export async function getEffectiveCommissionRate(
   if (profile.customCommissionType && (profile.customCommissionRate || profile.customFlatAmount)) {
     return {
       type: profile.customCommissionType,
-      rate: profile.customCommissionRate?.toNumber() ?? 0,
-      flatAmount: profile.customFlatAmount?.toNumber(),
+      rate: profile.customCommissionRate ?? 0,
+      flatAmount: profile.customFlatAmount ?? undefined,
       source: 'CUSTOM',
-      minimumPayout: profile.customMinimumPayout?.toNumber() ?? 50,
+      minimumPayout: profile.customMinimumPayout ?? 50,
     };
   }
 
   // 2. Check for bonding agreement rate
   if (profile.affiliateBondedToPreparerId) {
-    const bonding = await prisma.affiliateBonding.findUnique({
-      where: {
-        affiliateId_preparerId: {
-          affiliateId: profileId,
-          preparerId: profile.affiliateBondedToPreparerId,
-        },
-      },
-    });
+    const { data: bondings } = await db
+      .from('affiliate_bondings')
+      .select('*')
+      .eq('affiliateId', profileId)
+      .eq('preparerId', profile.affiliateBondedToPreparerId)
+      .limit(1);
+
+    const bonding = firstOrNull(bondings) as { commissionStructure?: unknown } | null;
 
     if (bonding?.commissionStructure) {
       const bondingStructure = bonding.commissionStructure as {
@@ -230,7 +285,7 @@ export async function getEffectiveCommissionRate(
     const group = profile.affiliateGroup;
 
     // 3a. Check for tiered rate based on conversions
-    if (group.commissionType === CommissionType.TIERED && group.tieredRates) {
+    if (group.commissionType === 'TIERED' && group.tieredRates) {
       const tieredRate = calculateTieredRate(
         group.tieredRates as unknown as TierConfig[],
         conversions
@@ -238,12 +293,12 @@ export async function getEffectiveCommissionRate(
 
       if (tieredRate) {
         return {
-          type: CommissionType.PERCENTAGE, // Tiered rates are percentage-based
+          type: 'PERCENTAGE' as CommissionType, // Tiered rates are percentage-based
           rate: tieredRate.rate,
           source: 'GROUP_TIERED',
           tier: tieredRate.tierName,
           groupId: group.id,
-          minimumPayout: group.minimumPayout.toNumber(),
+          minimumPayout: group.minimumPayout,
         };
       }
     }
@@ -252,11 +307,11 @@ export async function getEffectiveCommissionRate(
     if (group.commissionRate || group.flatAmount) {
       return {
         type: group.commissionType,
-        rate: group.commissionRate?.toNumber() ?? 0,
-        flatAmount: group.flatAmount?.toNumber(),
+        rate: group.commissionRate ?? 0,
+        flatAmount: group.flatAmount ?? undefined,
         source: 'GROUP_BASE',
         groupId: group.id,
-        minimumPayout: group.minimumPayout.toNumber(),
+        minimumPayout: group.minimumPayout,
       };
     }
   }
@@ -369,11 +424,13 @@ export async function calculateReturnFiledCommission(
   effectiveRate: EffectiveRate;
 }> {
   // Get the current conversion count for tier calculation
-  const profile = await prisma.profile.findUnique({
-    where: { id: referrerProfileId },
-    select: { totalConversions: true },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('totalConversions')
+    .eq('id', referrerProfileId)
+    .limit(1);
 
+  const profile = firstOrNull(profiles) as { totalConversions: number } | null;
   const conversionCount = profile?.totalConversions ?? 0;
 
   // Get effective rate
@@ -402,13 +459,13 @@ export async function lockCommissionRateForLead(
   const effectiveRate = await getEffectiveCommissionRate(referrerProfileId);
 
   // Store the rate in the lead record (Lead model has commissionRate field)
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
+  await db
+    .from('leads')
+    .update({
       commissionRate: effectiveRate.rate,
-      commissionRateLockedAt: new Date(),
-    },
-  });
+      commissionRateLockedAt: new Date().toISOString(),
+    })
+    .eq('id', leadId);
 }
 
 /**
@@ -426,12 +483,16 @@ export async function getTierProgress(
   progressPercentage: number;
   totalConversions: number;
 } | null> {
-  const profile = await prisma.profile.findUnique({
-    where: { id: profileId },
-    include: {
-      affiliateGroup: true,
-    },
-  });
+  const { data: profiles } = await db
+    .from('profiles')
+    .select(`
+      *,
+      affiliateGroup:affiliate_groups!affiliateGroupId (*)
+    `)
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as Profile | null;
 
   if (!profile?.affiliateGroup) {
     return null;
@@ -439,10 +500,10 @@ export async function getTierProgress(
 
   const group = profile.affiliateGroup;
 
-  if (group.commissionType !== CommissionType.TIERED || !group.tieredRates) {
+  if (group.commissionType !== 'TIERED' || !group.tieredRates) {
     return {
       currentTier: 'Standard',
-      currentRate: group.commissionRate?.toNumber() ?? DEFAULT_COMMISSION_RATE,
+      currentRate: group.commissionRate ?? DEFAULT_COMMISSION_RATE,
       progressPercentage: 100,
       totalConversions: profile.totalConversions,
     };
@@ -505,27 +566,32 @@ export async function updateAffiliateStats(
   profileId: string,
   commissionAmount: number
 ): Promise<void> {
-  await prisma.profile.update({
-    where: { id: profileId },
-    data: {
-      totalConversions: {
-        increment: 1,
-      },
-      lifetimeEarnings: {
-        increment: commissionAmount,
-      },
-    },
-  });
+  // Get current values first
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('totalConversions, lifetimeEarnings')
+    .eq('id', profileId)
+    .limit(1);
+
+  const profile = firstOrNull(profiles) as { totalConversions: number; lifetimeEarnings?: number } | null;
+
+  await db
+    .from('profiles')
+    .update({
+      totalConversions: (profile?.totalConversions ?? 0) + 1,
+      lifetimeEarnings: (profile?.lifetimeEarnings ?? 0) + commissionAmount,
+    })
+    .eq('id', profileId);
 
   // Update tier if applicable
   const tierProgress = await getTierProgress(profileId);
   if (tierProgress) {
-    await prisma.profile.update({
-      where: { id: profileId },
-      data: {
+    await db
+      .from('profiles')
+      .update({
         currentTier: tierProgress.currentTier,
-      },
-    });
+      })
+      .eq('id', profileId);
   }
 }
 
@@ -533,23 +599,24 @@ export async function updateAffiliateStats(
  * Update group's cached stats
  */
 export async function updateGroupStats(groupId: string): Promise<void> {
-  const stats = await prisma.profile.aggregate({
-    where: { affiliateGroupId: groupId },
-    _count: true,
-    _sum: {
-      totalConversions: true,
-      lifetimeEarnings: true,
-    },
-  });
+  // Get count and sum using Supabase
+  const { data: profiles } = await db
+    .from('profiles')
+    .select('id, totalConversions, lifetimeEarnings')
+    .eq('affiliateGroupId', groupId);
 
-  await prisma.affiliateGroup.update({
-    where: { id: groupId },
-    data: {
-      totalAffiliates: stats._count,
-      totalConversions: stats._sum.totalConversions ?? 0,
-      totalEarnings: stats._sum.lifetimeEarnings ?? new Decimal(0),
-    },
-  });
+  const count = profiles?.length ?? 0;
+  const totalConversions = profiles?.reduce((sum, p) => sum + (p.totalConversions || 0), 0) ?? 0;
+  const totalEarnings = profiles?.reduce((sum, p) => sum + (p.lifetimeEarnings || 0), 0) ?? 0;
+
+  await db
+    .from('affiliate_groups')
+    .update({
+      totalAffiliates: count,
+      totalConversions,
+      totalEarnings,
+    })
+    .eq('id', groupId);
 }
 
 /**
@@ -576,14 +643,14 @@ export async function calculateReferrerCommission(
   source: 'VIP' | 'PREPARER_CUSTOM' | 'COMPANY_DEFAULT';
 }> {
   // 1. Check for VIP rate (individual rate for this specific referrer)
-  const bonding = await prisma.affiliateBonding.findUnique({
-    where: {
-      affiliateId_preparerId: {
-        affiliateId: referrerId,
-        preparerId: preparerId,
-      },
-    },
-  });
+  const { data: bondings } = await db
+    .from('affiliate_bondings')
+    .select('*')
+    .eq('affiliateId', referrerId)
+    .eq('preparerId', preparerId)
+    .limit(1);
+
+  const bonding = firstOrNull(bondings) as { commissionStructure?: unknown } | null;
 
   if (bonding?.commissionStructure) {
     const structure = bonding.commissionStructure as {
@@ -605,13 +672,16 @@ export async function calculateReferrerCommission(
   }
 
   // 2. Check preparer's custom tier settings
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      useCompanyCommissionDefaults: true,
-      customTierStructure: true,
-    },
-  });
+  const { data: preparers } = await db
+    .from('profiles')
+    .select('useCompanyCommissionDefaults, customTierStructure')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(preparers) as {
+    useCompanyCommissionDefaults?: boolean;
+    customTierStructure?: unknown;
+  } | null;
 
   // Use custom tiers if preparer has them configured
   if (preparer && !preparer.useCompanyCommissionDefaults && preparer.customTierStructure) {
@@ -649,13 +719,16 @@ export async function getPreparerCommissionSettings(preparerId: string): Promise
   customTierStructure: FlexibleTierStructure | null;
   companyDefaultTiers: FlexibleTierStructure;
 }> {
-  const preparer = await prisma.profile.findUnique({
-    where: { id: preparerId },
-    select: {
-      useCompanyCommissionDefaults: true,
-      customTierStructure: true,
-    },
-  });
+  const { data: preparers } = await db
+    .from('profiles')
+    .select('useCompanyCommissionDefaults, customTierStructure')
+    .eq('id', preparerId)
+    .limit(1);
+
+  const preparer = firstOrNull(preparers) as {
+    useCompanyCommissionDefaults?: boolean;
+    customTierStructure?: unknown;
+  } | null;
 
   // Get company defaults from database
   const companyDefaultTiers = await getCompanyDefaultTiers();
@@ -686,16 +759,15 @@ export async function updatePreparerCommissionSettings(
     customTierStructure?: FlexibleTierStructure;
   }
 ): Promise<void> {
-  await prisma.profile.update({
-    where: { id: preparerId },
-    data: {
+  await db
+    .from('profiles')
+    .update({
       useCompanyCommissionDefaults: settings.useCompanyDefaults,
-      // Prisma Json type requires InputJsonValue
       customTierStructure: settings.useCompanyDefaults
-        ? undefined
-        : JSON.parse(JSON.stringify(settings.customTierStructure)),
-    },
-  });
+        ? null
+        : settings.customTierStructure,
+    })
+    .eq('id', preparerId);
 }
 
 /**
@@ -707,35 +779,36 @@ export async function setReferrerVIPRate(
   vipRate: number | null
 ): Promise<void> {
   // Find or create bonding record
-  const existingBonding = await prisma.affiliateBonding.findUnique({
-    where: {
-      affiliateId_preparerId: {
-        affiliateId: referrerId,
-        preparerId: preparerId,
-      },
-    },
-  });
+  const { data: existingBondings } = await db
+    .from('affiliate_bondings')
+    .select('id, commissionStructure')
+    .eq('affiliateId', referrerId)
+    .eq('preparerId', preparerId)
+    .limit(1);
+
+  const existingBonding = firstOrNull(existingBondings) as {
+    id: string;
+    commissionStructure?: Record<string, unknown>;
+  } | null;
 
   if (existingBonding) {
     // Update existing bonding
-    const currentStructure = (existingBonding.commissionStructure as Record<string, unknown>) || {};
-    await prisma.affiliateBonding.update({
-      where: { id: existingBonding.id },
-      data: {
+    const currentStructure = existingBonding.commissionStructure || {};
+    await db
+      .from('affiliate_bondings')
+      .update({
         commissionStructure: vipRate === null
-          ? Prisma.JsonNull
+          ? null
           : { ...currentStructure, vipRate },
-      },
-    });
+      })
+      .eq('id', existingBonding.id);
   } else if (vipRate !== null) {
     // Create new bonding with VIP rate
-    await prisma.affiliateBonding.create({
-      data: {
-        affiliateId: referrerId,
-        preparerId: preparerId,
-        commissionStructure: { vipRate },
-        isActive: true,
-      },
+    await db.from('affiliate_bondings').insert({
+      affiliateId: referrerId,
+      preparerId: preparerId,
+      commissionStructure: { vipRate },
+      isActive: true,
     });
   }
 }
@@ -753,62 +826,76 @@ export async function getPreparerReferrersWithRates(preparerId: string): Promise
   vipRate: number | null;
   totalEarnings: number;
 }>> {
-  // Get bonded affiliates
-  const bondings = await prisma.affiliateBonding.findMany({
-    where: { preparerId, isActive: true },
-    include: {
-      affiliate: {
-        include: {
-          user: { select: { email: true } },
-        },
-      },
-    },
-  });
+  // Get bonded affiliates with their user data
+  const { data: bondings } = await db
+    .from('affiliate_bondings')
+    .select(`
+      *,
+      affiliate:profiles!affiliateId (
+        id,
+        firstName,
+        lastName,
+        customTrackingCode,
+        user:users!userId (email)
+      )
+    `)
+    .eq('preparerId', preparerId)
+    .eq('isActive', true);
 
-  // Get preparer's settings for calculating rates
-  const preparerSettings = await getPreparerCommissionSettings(preparerId);
+  if (!bondings || bondings.length === 0) {
+    return [];
+  }
 
   const results = await Promise.all(
     bondings.map(async (bonding) => {
-      const affiliate = bonding.affiliate;
+      const affiliate = bonding.affiliate as {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        customTrackingCode?: string;
+        user?: { email: string };
+      };
+
+      if (!affiliate) {
+        return null;
+      }
 
       // Get completed referral count for this referrer
-      const completedReferrals = await prisma.taxIntakeLead.count({
-        where: {
-          assignedPreparerId: preparerId,
-          referrerUsername: affiliate.customTrackingCode ?? undefined,
-          convertedToClient: true,
-        },
-      });
+      const { count: completedReferrals } = await db
+        .from('tax_intake_leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('assignedPreparerId', preparerId)
+        .eq('referrerUsername', affiliate.customTrackingCode || '')
+        .eq('convertedToClient', true);
 
       // Calculate what rate they would get
-      const rateInfo = await calculateReferrerCommission(preparerId, affiliate.id, completedReferrals);
+      const rateInfo = await calculateReferrerCommission(preparerId, affiliate.id, completedReferrals || 0);
 
       // Get VIP rate if set
       const bondingStructure = bonding.commissionStructure as { vipRate?: number } | null;
       const vipRate = bondingStructure?.vipRate ?? null;
 
       // Get total earnings
-      const earnings = await prisma.commission.aggregate({
-        where: {
-          referrerId: affiliate.id,
-          status: 'PAID',
-        },
-        _sum: { amount: true },
-      });
+      const { data: commissions } = await db
+        .from('commissions')
+        .select('amount')
+        .eq('referrerId', affiliate.id)
+        .eq('status', 'PAID');
+
+      const totalEarnings = commissions?.reduce((sum, c) => sum + (c.amount || 0), 0) ?? 0;
 
       return {
         referrerId: affiliate.id,
-        referrerName: `${affiliate.firstName || ''} ${affiliate.lastName || ''}`.trim() || affiliate.user.email,
-        referrerEmail: affiliate.user.email,
-        completedReferrals,
+        referrerName: `${affiliate.firstName || ''} ${affiliate.lastName || ''}`.trim() || affiliate.user?.email || 'Unknown',
+        referrerEmail: affiliate.user?.email || 'Unknown',
+        completedReferrals: completedReferrals || 0,
         currentTier: rateInfo.tier,
         currentRate: rateInfo.rate,
         vipRate,
-        totalEarnings: earnings._sum.amount?.toNumber() ?? 0,
+        totalEarnings,
       };
     })
   );
 
-  return results;
+  return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }

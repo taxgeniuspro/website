@@ -1,8 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import DOMPurify from 'isomorphic-dompurify';
 
-// Initialize Google Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
+});
 
 export interface GeneratedLandingPageContent {
   headline: string;
@@ -19,7 +21,7 @@ export interface GenerateContentInput {
 }
 
 /**
- * Generate SEO-optimized landing page content using Google Gemini AI
+ * Generate SEO-optimized landing page content using OpenAI GPT
  *
  * @param input - City, state, and keywords for content generation
  * @returns Generated and sanitized landing page content
@@ -27,8 +29,6 @@ export interface GenerateContentInput {
 export async function generateLandingPageContent(
   input: GenerateContentInput
 ): Promise<GeneratedLandingPageContent> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
   // Construct structured prompt for consistent JSON output
   const prompt = `You are an expert tax professional and SEO copywriter. Generate SEO-optimized landing page content for a tax preparation service.
 
@@ -69,16 +69,21 @@ Generate a JSON object with the following structure (respond ONLY with valid JSO
 Make it professional, trustworthy, and locally relevant to ${input.city}.`;
 
   try {
-    // Generate content with 10-second timeout
-    const result = await Promise.race([
-      model.generateContent(prompt),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI generation timeout after 10 seconds')), 10000)
-      ),
-    ]);
+    // Generate content with OpenAI
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert tax professional and SEO copywriter. Always respond with valid JSON only, no markdown.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
+      timeout: 10000,
+    });
 
-    const response = await result.response;
-    const text = response.text();
+    const text = completion.choices[0]?.message?.content || '';
 
     // Extract JSON from response (handle markdown code blocks if present)
     let jsonText = text.trim();

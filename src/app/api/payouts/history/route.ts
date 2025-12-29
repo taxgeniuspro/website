@@ -9,28 +9,35 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { db, firstOrNull } from '@/lib/db';
 import { getPayoutHistory } from '@/lib/services/commission.service';
 import { logger } from '@/lib/logger';
+
+// TypeScript interface for profile
+interface Profile {
+  id: string;
+  shortLinkUsername: string | null;
+  role: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
     // Authenticate user
-    const session = await auth(); const userId = session?.user?.id;
+    const session = await auth();
+    const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get user profile with username
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        shortLinkUsername: true,
-        role: true,
-      },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('id, shortLinkUsername, role')
+      .eq('userId', userId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as Profile | null;
 
     if (!profile || !profile.shortLinkUsername) {
       return NextResponse.json({

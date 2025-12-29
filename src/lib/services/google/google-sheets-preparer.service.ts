@@ -12,10 +12,78 @@
  */
 
 import { sheets_v4 } from 'googleapis';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { googleAuthService } from './google-auth.service';
 import { logger } from '@/lib/logger';
 import { format } from 'date-fns';
+
+// Local type definitions (replacing @prisma/client)
+interface ProfileRecord {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  userId?: string | null;
+  googleDriveFolderId?: string | null;
+  googleSheetsClientsId?: string | null;
+  googleSheetsLeadsId?: string | null;
+  googleSheetsCommissionsId?: string | null;
+  googleSheetsPerformanceId?: string | null;
+}
+
+interface ClientPreparerRecord {
+  id: string;
+  preparerId: string;
+  clientId: string;
+  isActive: boolean;
+  assignedAt: Date | string;
+}
+
+interface TaxReturnRecord {
+  id: string;
+  profileId: string;
+  taxYear?: number | null;
+  status?: string | null;
+  refundAmount?: number | string | null;
+  filedDate?: Date | string | null;
+}
+
+interface TaxIntakeLeadRecord {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  attributionMethod?: string | null;
+  completed?: boolean | null;
+  referrerUsername?: string | null;
+  assignedPreparerId?: string | null;
+  created_at?: Date | string | null;
+}
+
+interface CommissionRecord {
+  id: string;
+  amount: number | string;
+  status: string;
+  sourceType?: string | null;
+  clientName?: string | null;
+  paymentMethod?: string | null;
+  referrerId: string;
+  referralId?: string | null;
+  createdAt: Date | string;
+  paidAt?: Date | string | null;
+}
+
+interface ReferralRecord {
+  id: string;
+  clientId?: string | null;
+}
+
+interface UserRecord {
+  id: string;
+  email: string;
+}
 
 // Sheet configurations for preparer spreadsheets
 const PREPARER_SHEET_CONFIGS = {
@@ -223,15 +291,15 @@ class GoogleSheetsPreparerService {
       );
 
       // Update profile with sheet IDs
-      await prisma.profile.update({
-        where: { id: preparerId },
-        data: {
+      await db
+        .from('profiles')
+        .update({
           googleSheetsClientsId: clients.spreadsheetId,
           googleSheetsLeadsId: leads.spreadsheetId,
           googleSheetsCommissionsId: commissions.spreadsheetId,
           googleSheetsPerformanceId: performance.spreadsheetId,
-        },
-      });
+        })
+        .eq('id', preparerId);
 
       logger.info('All spreadsheets created for preparer', {
         preparerId,
@@ -253,10 +321,13 @@ class GoogleSheetsPreparerService {
    * Sync preparer's clients to their sheet
    */
   async syncClientsSheet(preparerId: string): Promise<void> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleSheetsClientsId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleSheetsClientsId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleSheetsClientsId: string | null } | null;
 
     if (!profile?.googleSheetsClientsId) {
       logger.warn('No clients sheet for preparer', { preparerId });
@@ -265,28 +336,42 @@ class GoogleSheetsPreparerService {
 
     const sheets = await this.getClient();
 
-    // Get clients assigned to this preparer
-    const clientRelations = await prisma.clientPreparer.findMany({
-      where: { preparerId },
-      include: {
-        client: {
-          include: {
-            user: { select: { email: true } },
-          },
-        },
-      },
-      orderBy: { assignedAt: 'desc' },
-    });
+    // Get client-preparer relations
+    const { data: relationsData } = await db
+      .from('client_preparers')
+      .select('id, preparerId, clientId, isActive, assignedAt')
+      .eq('preparerId', preparerId)
+      .order('assignedAt', { ascending: false });
+
+    const clientRelations = (relationsData || []) as ClientPreparerRecord[];
+
+    // Get client profiles
+    const clientIds = clientRelations.map((c) => c.clientId);
+    const { data: clientsData } = clientIds.length > 0
+      ? await db.from('profiles').select('id, firstName, lastName, phone, userId').in('id', clientIds)
+      : { data: [] };
+    const clients = (clientsData || []) as ProfileRecord[];
+    const clientMap = new Map(clients.map((c) => [c.id, c]));
+
+    // Get user emails
+    const userIds = [...new Set(clients.map((c) => c.userId).filter(Boolean))] as string[];
+    const { data: usersData } = userIds.length > 0
+      ? await db.from('users').select('id, email').in('id', userIds)
+      : { data: [] };
+    const users = (usersData || []) as UserRecord[];
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     // Get tax returns for client info
-    const taxReturns = await prisma.taxReturn.findMany({
-      where: {
-        profileId: { in: clientRelations.map((c) => c.clientId) },
-      },
-      orderBy: { filedDate: 'desc' },
-    });
+    const { data: taxReturnsData } = clientIds.length > 0
+      ? await db
+          .from('tax_returns')
+          .select('id, profileId, taxYear, status, refundAmount, filedDate')
+          .in('profileId', clientIds)
+          .order('filedDate', { ascending: false })
+      : { data: [] };
 
-    const returnsByClient = new Map<string, typeof taxReturns[0]>();
+    const taxReturns = (taxReturnsData || []) as TaxReturnRecord[];
+    const returnsByClient = new Map<string, TaxReturnRecord>();
     for (const ret of taxReturns) {
       if (!returnsByClient.has(ret.profileId)) {
         returnsByClient.set(ret.profileId, ret);
@@ -295,18 +380,22 @@ class GoogleSheetsPreparerService {
 
     // Build data rows
     const rows = clientRelations.map((cp) => {
-      const client = cp.client;
+      const client = clientMap.get(cp.clientId);
+      const user = client?.userId ? userMap.get(client.userId) : null;
       const taxReturn = returnsByClient.get(cp.clientId);
+      const filedDateStr = taxReturn?.filedDate
+        ? format(new Date(taxReturn.filedDate), 'yyyy-MM-dd')
+        : '';
 
       return [
-        `${client.firstName || ''} ${client.lastName || ''}`.trim(),
-        client.user?.email || '',
-        client.phone || '',
+        `${client?.firstName || ''} ${client?.lastName || ''}`.trim(),
+        user?.email || '',
+        client?.phone || '',
         cp.isActive ? 'Active' : 'Inactive',
         taxReturn?.taxYear?.toString() || '',
         taxReturn?.status || '',
         taxReturn?.refundAmount?.toString() || '',
-        taxReturn?.filedDate ? format(taxReturn.filedDate, 'yyyy-MM-dd') : '',
+        filedDateStr,
         '', // Referred By - would need to query referrals
         '',
       ];
@@ -334,10 +423,13 @@ class GoogleSheetsPreparerService {
    * Sync preparer's leads to their sheet
    */
   async syncLeadsSheet(preparerId: string): Promise<void> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleSheetsLeadsId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleSheetsLeadsId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleSheetsLeadsId: string | null } | null;
 
     if (!profile?.googleSheetsLeadsId) {
       logger.warn('No leads sheet for preparer', { preparerId });
@@ -347,10 +439,13 @@ class GoogleSheetsPreparerService {
     const sheets = await this.getClient();
 
     // Get leads assigned to this preparer
-    const leads = await prisma.taxIntakeLead.findMany({
-      where: { assignedPreparerId: preparerId },
-      orderBy: { created_at: 'desc' },
-    });
+    const { data: leadsData } = await db
+      .from('tax_intake_leads')
+      .select('id, first_name, last_name, email, phone, attributionMethod, completed, created_at, referrerUsername')
+      .eq('assignedPreparerId', preparerId)
+      .order('created_at', { ascending: false });
+
+    const leads = (leadsData || []) as TaxIntakeLeadRecord[];
 
     // Build data rows
     const rows = leads.map((lead) => [
@@ -359,7 +454,7 @@ class GoogleSheetsPreparerService {
       lead.phone || '',
       lead.attributionMethod || 'Direct',
       lead.completed ? 'Complete' : 'Partial',
-      lead.created_at ? format(lead.created_at, 'yyyy-MM-dd HH:mm') : '',
+      lead.created_at ? format(new Date(lead.created_at), 'yyyy-MM-dd HH:mm') : '',
       '', // Last Contact - would need CRM data
       lead.referrerUsername || '',
       '',
@@ -387,10 +482,13 @@ class GoogleSheetsPreparerService {
    * Sync preparer's commissions to their sheet
    */
   async syncCommissionsSheet(preparerId: string): Promise<void> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleSheetsCommissionsId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleSheetsCommissionsId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleSheetsCommissionsId: string | null } | null;
 
     if (!profile?.googleSheetsCommissionsId) {
       logger.warn('No commissions sheet for preparer', { preparerId });
@@ -400,33 +498,52 @@ class GoogleSheetsPreparerService {
     const sheets = await this.getClient();
 
     // Get commissions for this preparer (referrerId is the earner)
-    const commissions = await prisma.commission.findMany({
-      where: { referrerId: preparerId },
-      include: {
-        referral: {
-          include: {
-            client: { select: { firstName: true, lastName: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { data: commissionsData } = await db
+      .from('commissions')
+      .select('id, amount, status, sourceType, clientName, paymentMethod, referrerId, referralId, createdAt, paidAt')
+      .eq('referrerId', preparerId)
+      .order('createdAt', { ascending: false });
+
+    const commissions = (commissionsData || []) as CommissionRecord[];
+
+    // Get referrals for client info
+    const referralIds = [...new Set(commissions.map((c) => c.referralId).filter(Boolean))] as string[];
+    const { data: referralsData } = referralIds.length > 0
+      ? await db.from('referrals').select('id, clientId').in('id', referralIds)
+      : { data: [] };
+    const referrals = (referralsData || []) as ReferralRecord[];
+    const referralMap = new Map(referrals.map((r) => [r.id, r]));
+
+    // Get client profiles from referrals
+    const clientIds = [...new Set(referrals.map((r) => r.clientId).filter(Boolean))] as string[];
+    const { data: clientsData } = clientIds.length > 0
+      ? await db.from('profiles').select('id, firstName, lastName').in('id', clientIds)
+      : { data: [] };
+    const clients = (clientsData || []) as ProfileRecord[];
+    const clientMap = new Map(clients.map((c) => [c.id, c]));
 
     // Build data rows
     const rows = commissions.map((comm) => {
       // Use clientName from commission if available, otherwise try referral
-      const clientName = comm.clientName ||
-        (comm.referral?.client
-          ? `${comm.referral.client.firstName || ''} ${comm.referral.client.lastName || ''}`.trim()
-          : 'Unknown');
+      let clientName = comm.clientName;
+      if (!clientName && comm.referralId) {
+        const referral = referralMap.get(comm.referralId);
+        if (referral?.clientId) {
+          const client = clientMap.get(referral.clientId);
+          if (client) {
+            clientName = `${client.firstName || ''} ${client.lastName || ''}`.trim();
+          }
+        }
+      }
+      clientName = clientName || 'Unknown';
 
       return [
         clientName,
         comm.sourceType || 'Referral',
         comm.amount.toString(),
         comm.status,
-        comm.createdAt ? format(comm.createdAt, 'yyyy-MM-dd') : '',
-        comm.paidAt ? format(comm.paidAt, 'yyyy-MM-dd') : '',
+        comm.createdAt ? format(new Date(comm.createdAt), 'yyyy-MM-dd') : '',
+        comm.paidAt ? format(new Date(comm.paidAt), 'yyyy-MM-dd') : '',
         comm.paymentMethod || '',
         '',
       ];
@@ -454,10 +571,13 @@ class GoogleSheetsPreparerService {
    * Sync preparer's performance metrics to their sheet
    */
   async syncPerformanceSheet(preparerId: string): Promise<void> {
-    const profile = await prisma.profile.findUnique({
-      where: { id: preparerId },
-      select: { googleSheetsPerformanceId: true },
-    });
+    const { data: profileData } = await db
+      .from('profiles')
+      .select('googleSheetsPerformanceId')
+      .eq('id', preparerId)
+      .limit(1);
+
+    const profile = firstOrNull(profileData) as { googleSheetsPerformanceId: string | null } | null;
 
     if (!profile?.googleSheetsPerformanceId) {
       logger.warn('No performance sheet for preparer', { preparerId });
@@ -470,61 +590,69 @@ class GoogleSheetsPreparerService {
     const now = new Date();
     const rows: string[][] = [];
 
+    // Calculate date range for all 12 months (optimize by fetching all data once)
+    const oldestMonthStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    // Fetch all leads for the preparer in the date range
+    const { data: leadsData } = await db
+      .from('tax_intake_leads')
+      .select('id, created_at, completed')
+      .eq('assignedPreparerId', preparerId)
+      .gte('created_at', oldestMonthStart.toISOString());
+    const leads = (leadsData || []) as { id: string; created_at: string; completed: boolean }[];
+
+    // Fetch all client assignments for the preparer in the date range
+    const { data: clientsData } = await db
+      .from('client_preparers')
+      .select('id, assignedAt')
+      .eq('preparerId', preparerId)
+      .gte('assignedAt', oldestMonthStart.toISOString());
+    const clients = (clientsData || []) as { id: string; assignedAt: string }[];
+
+    // Fetch all returns filed by the preparer in the date range
+    const { data: returnsData } = await db
+      .from('tax_returns')
+      .select('id, filedDate')
+      .eq('profileId', preparerId)
+      .gte('filedDate', oldestMonthStart.toISOString());
+    const returns = (returnsData || []) as { id: string; filedDate: string }[];
+
+    // Fetch all commissions earned by the preparer in the date range
+    const { data: commissionsData } = await db
+      .from('commissions')
+      .select('id, amount, createdAt')
+      .eq('referrerId', preparerId)
+      .gte('createdAt', oldestMonthStart.toISOString());
+    const commissions = (commissionsData || []) as { id: string; amount: number | string; createdAt: string }[];
+
+    // Fetch all referrals made by the preparer in the date range
+    const { data: referralsData } = await db
+      .from('referrals')
+      .select('id, createdAt')
+      .eq('referrerId', preparerId)
+      .gte('createdAt', oldestMonthStart.toISOString());
+    const referrals = (referralsData || []) as { id: string; createdAt: string }[];
+
+    // Calculate metrics per month
     for (let i = 0; i < 12; i++) {
       const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
       const monthLabel = format(monthStart, 'MMM yyyy');
 
-      // Count leads
-      const leadsCount = await prisma.taxIntakeLead.count({
-        where: {
-          assignedPreparerId: preparerId,
-          created_at: { gte: monthStart, lte: monthEnd },
-        },
-      });
+      // Filter data for this month
+      const inMonth = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return d >= monthStart && d <= monthEnd;
+      };
 
-      // Count conversions (completed leads)
-      const conversionsCount = await prisma.taxIntakeLead.count({
-        where: {
-          assignedPreparerId: preparerId,
-          completed: true,
-          created_at: { gte: monthStart, lte: monthEnd },
-        },
-      });
-
-      // Count clients served
-      const clientsServed = await prisma.clientPreparer.count({
-        where: {
-          preparerId,
-          assignedAt: { gte: monthStart, lte: monthEnd },
-        },
-      });
-
-      // Count returns filed
-      const returnsCount = await prisma.taxReturn.count({
-        where: {
-          profileId: preparerId,
-          filedDate: { gte: monthStart, lte: monthEnd },
-        },
-      });
-
-      // Sum commissions earned
-      const commissionsResult = await prisma.commission.aggregate({
-        where: {
-          referrerId: preparerId,
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-        _sum: { amount: true },
-      });
-      const commissionEarned = commissionsResult._sum?.amount?.toNumber() || 0;
-
-      // Count referrals made
-      const referralsCount = await prisma.referral.count({
-        where: {
-          referrerId: preparerId,
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      });
+      const leadsCount = leads.filter((l) => l.created_at && inMonth(l.created_at)).length;
+      const conversionsCount = leads.filter((l) => l.created_at && l.completed && inMonth(l.created_at)).length;
+      const clientsServed = clients.filter((c) => c.assignedAt && inMonth(c.assignedAt)).length;
+      const returnsCount = returns.filter((r) => r.filedDate && inMonth(r.filedDate)).length;
+      const commissionEarned = commissions
+        .filter((c) => c.createdAt && inMonth(c.createdAt))
+        .reduce((sum, c) => sum + Number(c.amount), 0);
+      const referralsCount = referrals.filter((r) => r.createdAt && inMonth(r.createdAt)).length;
 
       rows.push([
         monthLabel,
@@ -599,10 +727,10 @@ class GoogleSheetsPreparerService {
     }
 
     // Update last sync timestamp even if some syncs failed
-    await prisma.profile.update({
-      where: { id: preparerId },
-      data: { googleSheetsLastSync: new Date() },
-    });
+    await db
+      .from('profiles')
+      .update({ googleSheetsLastSync: new Date().toISOString() })
+      .eq('id', preparerId);
 
     const success = errors.length === 0;
     logger.info('Completed full sync for preparer', { preparerId, success, errorCount: errors.length });
@@ -621,13 +749,14 @@ class GoogleSheetsPreparerService {
     logger.info('Starting preparer sheets backfill');
 
     // Get preparers with Drive folders but no sheets
-    const preparers = await prisma.profile.findMany({
-      where: {
-        role: 'tax_preparer',
-        googleDriveFolderId: { not: null },
-        googleSheetsClientsId: null,
-      },
-    });
+    const { data: preparersData } = await db
+      .from('profiles')
+      .select('id, firstName, lastName, googleDriveFolderId, googleSheetsClientsId')
+      .eq('role', 'tax_preparer')
+      .not('googleDriveFolderId', 'is', null)
+      .is('googleSheetsClientsId', null);
+
+    const preparers = (preparersData || []) as ProfileRecord[];
 
     logger.info(`Found ${preparers.length} preparers needing sheets`);
 

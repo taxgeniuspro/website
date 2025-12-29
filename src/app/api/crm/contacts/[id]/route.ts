@@ -12,11 +12,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOneOfRoles } from '@/lib/auth';
 import { CRMService } from '@/lib/services/crm.service';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { z } from 'zod';
-import { PipelineStage } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import type { CRMAccessContext } from '@/types/crm';
+import { PipelineStage } from '@/types/crm';
 
 // Validation schema for updating a contact
 const updateContactSchema = z.object({
@@ -63,9 +63,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get preparer ID if user is a tax preparer
     let preparerId: string | undefined;
     if (role === 'tax_preparer') {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+      const profile = firstOrNull(profiles);
       preparerId = profile?.id;
     }
 
@@ -90,51 +93,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     // Fetch associated tax intake lead by email for full form data + client folder
-    // Use findFirst instead of findUnique since TaxIntakeLead has composite key (email + tax_year)
+    // Query separate tables since Supabase doesn't support nested includes like Prisma
     let taxIntakeLead = null;
     if (contact.email) {
-      taxIntakeLead = await prisma.taxIntakeLead.findFirst({
-        where: { email: contact.email.toLowerCase() },
-        orderBy: { created_at: 'desc' }, // Get most recent intake for this email
-        select: {
-          id: true,
-          first_name: true,
-          middle_name: true,
-          last_name: true,
-          email: true,
-          phone: true,
-          country_code: true,
-          address_line_1: true,
-          address_line_2: true,
-          city: true,
-          state: true,
-          zip_code: true,
-          full_form_data: true,
-          completed: true,
-          created_at: true,
-          updated_at: true,
-          referrerUsername: true,
-          referrerType: true,
-          attributionMethod: true,
-          assignedPreparerId: true,
-          contactRequested: true,
-          contactMethod: true,
-          lastContactedAt: true,
-          contactNotes: true,
-          convertedToClient: true,
-          leadScore: true,
-          urgency: true,
-          // Client folder data for Documents tab
-          clientFolderId: true,
-          clientFolder: {
-            select: {
-              id: true,
-              name: true,
-              path: true,
-            },
-          },
-        },
-      });
+      const { data: leads } = await db
+        .from('tax_intake_leads')
+        .select(`
+          id, first_name, middle_name, last_name, email, phone, country_code,
+          address_line_1, address_line_2, city, state, zip_code, full_form_data,
+          completed, created_at, updated_at, referrerUsername, referrerType,
+          attributionMethod, assignedPreparerId, contactRequested, contactMethod,
+          lastContactedAt, contactNotes, convertedToClient, leadScore, urgency,
+          clientFolderId
+        `)
+        .eq('email', contact.email.toLowerCase())
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const lead = firstOrNull(leads);
+
+      if (lead && lead.clientFolderId) {
+        // Fetch client folder separately
+        const { data: folders } = await db
+          .from('client_folders')
+          .select('id, name, path')
+          .eq('id', lead.clientFolderId)
+          .limit(1);
+        const clientFolder = firstOrNull(folders);
+        taxIntakeLead = { ...lead, clientFolder };
+      } else if (lead) {
+        taxIntakeLead = { ...lead, clientFolder: null };
+      }
     }
 
     logger.info('[CRM API] Contact retrieved successfully', {
@@ -197,9 +186,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Get preparer ID if user is a tax preparer
     let preparerId: string | undefined;
     if (role === 'tax_preparer') {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: user.id },
-      });
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id')
+        .eq('userId', user.id)
+        .limit(1);
+      const profile = firstOrNull(profiles);
       preparerId = profile?.id;
     }
 

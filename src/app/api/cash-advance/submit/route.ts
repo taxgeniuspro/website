@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
 import { CashAdvanceLeadNotification } from '../../../../../emails/cash-advance-lead-notification';
@@ -8,38 +8,89 @@ import { getEmailRecipients } from '@/config/email-routing';
 import { generateCashAdvancePDF } from '@/lib/services/pdf-form-generator.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 
+// TypeScript interfaces for database records
+interface Profile {
+  id: string;
+  role: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+}
+
+interface CRMContact {
+  id: string;
+  contactType: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  source: string;
+  stage: string;
+  leadScore: number | null;
+  lastContactedAt: Date | null;
+  assignedPreparerId: string | null;
+  referrerUsername: string | null;
+  referrerType: string | null;
+  attributionMethod: string | null;
+}
+
+interface User {
+  id: string;
+  email: string;
+}
+
+interface UserWithProfile extends User {
+  profiles?: Array<{
+    firstName: string | null;
+    professional_emails?: Array<{
+      emailAddress: string;
+    }>;
+  }>;
+}
+
 /**
  * Get Owliver Owl's Profile.id as the default preparer assignment.
  * All leads MUST be assigned to a preparer - Owliver is the fallback.
  */
 async function getDefaultPreparerId(): Promise<string | null> {
   try {
-    const owliver = await prisma.profile.findFirst({
-      where: {
-        OR: [
-          { customTrackingCode: 'ow' },
-          { trackingCode: 'ow' },
-          { user: { email: 'taxgenius.tax@gmail.com' } },
-        ],
-        role: { in: ['admin', 'tax_preparer'] },
-      },
-      select: { id: true },
-    });
+    // First try to find by tracking code
+    const { data: owliverByCode } = await db
+      .from('profiles')
+      .select('id')
+      .or('customTrackingCode.eq.ow,trackingCode.eq.ow')
+      .in('role', ['admin', 'tax_preparer'])
+      .limit(1);
+
+    let owliver = firstOrNull(owliverByCode);
+
+    // If not found by code, try by email via users table
+    if (!owliver) {
+      const { data: owliverByEmail } = await db
+        .from('profiles')
+        .select('id, users!inner(email)')
+        .eq('users.email', 'taxgenius.tax@gmail.com')
+        .in('role', ['admin', 'tax_preparer'])
+        .limit(1);
+
+      owliver = firstOrNull(owliverByEmail);
+    }
 
     if (owliver) {
       return owliver.id;
     }
 
     // Fallback: find any admin with booking enabled
-    const fallbackAdmin = await prisma.profile.findFirst({
-      where: {
-        role: 'admin',
-        bookingEnabled: true,
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
+    const { data: fallbackAdminData } = await db
+      .from('profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .eq('bookingEnabled', true)
+      .order('createdAt', { ascending: true })
+      .limit(1);
 
+    const fallbackAdmin = firstOrNull(fallbackAdminData);
     return fallbackAdmin?.id || null;
   } catch (error) {
     logger.error('Failed to get default preparer ID', { error });
@@ -140,24 +191,14 @@ export async function POST(req: NextRequest) {
 
     if (ref) {
       // Look up the preparer by tracking code
-      preparerProfile = await prisma.profile.findFirst({
-        where: {
-          OR: [
-            { trackingCode: ref },
-            { customTrackingCode: ref },
-            { shortLinkUsername: ref },
-          ],
-          role: 'tax_preparer',
-        },
-        select: {
-          id: true,
-          role: true,
-          userId: true,
-          firstName: true,
-          lastName: true,
-          phone: true,
-        },
-      });
+      const { data: preparerProfileData } = await db
+        .from('profiles')
+        .select('id, role, userId, firstName, lastName, phone')
+        .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
+        .eq('role', 'tax_preparer')
+        .limit(1);
+
+      preparerProfile = firstOrNull(preparerProfileData) as Profile | null;
 
       if (preparerProfile) {
         // Use Profile.id (not User.id) to match dashboard queries
@@ -169,16 +210,13 @@ export async function POST(req: NextRequest) {
         });
       } else {
         // Ref didn't match a tax_preparer - check if it's an affiliate/admin
-        const anyProfile = await prisma.profile.findFirst({
-          where: {
-            OR: [
-              { trackingCode: ref },
-              { customTrackingCode: ref },
-              { shortLinkUsername: ref },
-            ],
-          },
-          select: { id: true, role: true },
-        });
+        const { data: anyProfileData } = await db
+          .from('profiles')
+          .select('id, role')
+          .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
+          .limit(1);
+
+        const anyProfile = firstOrNull(anyProfileData);
 
         if (anyProfile?.role === 'admin') {
           assignedPreparerId = anyProfile.id;
@@ -206,31 +244,49 @@ export async function POST(req: NextRequest) {
     // ========================================
     // CRM INTEGRATION: Create or update contact
     // ========================================
-    let crmContact;
+    let crmContact: CRMContact;
     const contactEmail = email?.toLowerCase() || `${phoneDigits}@phone.lead`;
 
     // Check if CRMContact already exists by email or phone
-    const existingContact = email
-      ? await prisma.cRMContact.findUnique({ where: { email: contactEmail } })
-      : await prisma.cRMContact.findFirst({ where: { phone: phoneDigits } });
+    let existingContact: CRMContact | null = null;
+    if (email) {
+      const { data: existingByEmail } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('email', contactEmail)
+        .limit(1);
+      existingContact = firstOrNull(existingByEmail) as CRMContact | null;
+    } else {
+      const { data: existingByPhone } = await db
+        .from('crm_contacts')
+        .select('*')
+        .eq('phone', phoneDigits)
+        .limit(1);
+      existingContact = firstOrNull(existingByPhone) as CRMContact | null;
+    }
 
     if (existingContact) {
       // Update existing contact
-      crmContact = await prisma.cRMContact.update({
-        where: { id: existingContact.id },
-        data: {
+      const { data: updatedContact, error: updateError } = await db
+        .from('crm_contacts')
+        .update({
           firstName,
           phone: phoneDigits,
           email: email?.toLowerCase() || existingContact.email,
-          lastContactedAt: new Date(),
+          lastContactedAt: new Date().toISOString(),
           // Update preparer assignment if not already assigned
           assignedPreparerId: existingContact.assignedPreparerId || assignedPreparerId,
           // Update referrer info if not already set
           referrerUsername: existingContact.referrerUsername || ref || null,
           referrerType: existingContact.referrerType || (ref ? 'tax_preparer' : null),
           attributionMethod: existingContact.attributionMethod || (ref ? 'ref_param' : null),
-        },
-      });
+        })
+        .eq('id', existingContact.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      crmContact = updatedContact as CRMContact;
 
       logger.info('Updated existing CRM contact for cash advance', {
         contactId: crmContact.id,
@@ -239,8 +295,9 @@ export async function POST(req: NextRequest) {
       });
     } else {
       // Create new CRM contact
-      crmContact = await prisma.cRMContact.create({
-        data: {
+      const { data: newContact, error: createError } = await db
+        .from('crm_contacts')
+        .insert({
           contactType: 'LEAD',
           firstName,
           lastName: '', // Not collected in this form
@@ -249,14 +306,18 @@ export async function POST(req: NextRequest) {
           source: 'preseason_cash_advance',
           stage: 'NEW',
           leadScore: 80, // High intent - they want a cash advance
-          lastContactedAt: new Date(),
+          lastContactedAt: new Date().toISOString(),
           // Set preparer assignment if ref was provided
           assignedPreparerId,
           referrerUsername: ref || null,
           referrerType: ref ? 'tax_preparer' : null,
           attributionMethod: ref ? 'ref_param' : null,
-        },
-      });
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      crmContact = newContact as CRMContact;
 
       logger.info('Created new CRM contact for cash advance', {
         contactId: crmContact.id,
@@ -269,13 +330,12 @@ export async function POST(req: NextRequest) {
     // CRM INTERACTION: Log the form submission
     // ========================================
     try {
-      await prisma.cRMInteraction.create({
-        data: {
-          contactId: crmContact.id,
-          type: 'OTHER',
-          direction: 'INBOUND',
-          subject: '💰 Preseason Cash Advance Lead',
-          body: `**Lead Type:** Preseason Cash Advance (Up to $7,000)
+      const { error: interactionError } = await db.from('crm_interactions').insert({
+        contactId: crmContact.id,
+        type: 'OTHER',
+        direction: 'INBOUND',
+        subject: '💰 Preseason Cash Advance Lead',
+        body: `**Lead Type:** Preseason Cash Advance (Up to $7,000)
 
 **Contact Details:**
 - Name: ${firstName}
@@ -293,9 +353,12 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
 
 **Priority:** HIGH - Preseason Cash Advance Request
 **Action Required:** Contact within same day`,
-          occurredAt: new Date(),
-        },
+        occurredAt: new Date().toISOString(),
       });
+
+      if (interactionError) {
+        throw interactionError;
+      }
 
       logger.info('CRM interaction created for cash advance lead', {
         contactId: crmContact.id,
@@ -318,28 +381,29 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
 
     if (assignedPreparerId && preparerProfile) {
       // Get preparer's email address using preparerProfile.userId (NOT assignedPreparerId which is Profile.id)
-      const preparer = await prisma.user.findUnique({
-        where: { id: preparerProfile.userId },
-        select: {
-          email: true,
-          profile: {
-            select: {
-              firstName: true,
-              professionalEmails: {
-                where: { isPrimary: true, status: 'ACTIVE' },
-                select: { emailAddress: true },
-                take: 1,
-              },
-            },
-          },
-        },
-      });
+      const { data: preparerData } = await db
+        .from('users')
+        .select(`
+          email,
+          profiles!inner (
+            firstName,
+            professional_emails (
+              emailAddress
+            )
+          )
+        `)
+        .eq('id', preparerProfile.userId)
+        .eq('profiles.professional_emails.isPrimary', true)
+        .eq('profiles.professional_emails.status', 'ACTIVE')
+        .limit(1);
+
+      const preparer = firstOrNull(preparerData) as UserWithProfile | null;
 
       primaryRecipient =
-        preparer?.profile?.professionalEmails?.[0]?.emailAddress ||
+        preparer?.profiles?.[0]?.professional_emails?.[0]?.emailAddress ||
         preparer?.email ||
         recipients.primary;
-      recipientName = preparerProfile.firstName || preparer?.profile?.firstName || 'Tax Preparer';
+      recipientName = preparerProfile.firstName || preparer?.profiles?.[0]?.firstName || 'Tax Preparer';
 
       logger.info('Cash advance lead routed to assigned preparer', {
         ref,
