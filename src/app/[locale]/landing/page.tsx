@@ -646,7 +646,7 @@ function LandingPageContent() {
             *Advance amounts based on eligibility, IRS acceptance, and bank approval. Not all applicants qualify for the maximum amount. Funding timing varies by bank. 0% APR and $0 loan fees. Tax preparation fees apply.
           </p>
           <p className="text-xs text-muted-foreground">
-            © 2025 Tax Genius Pro. All rights reserved.
+            © 2025 Tax Genius Pro. All rights reserved. v2
           </p>
         </div>
       </footer>
