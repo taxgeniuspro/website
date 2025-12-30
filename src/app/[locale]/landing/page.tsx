@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckCircle, Phone, Clock, CreditCard, ArrowRight, Zap, Lock } from 'lucide-react';
+import { CheckCircle, Phone, ArrowRight, Zap, Lock } from 'lucide-react';
 import { ShortLinkTracker } from '@/components/tracking/ShortLinkTracker';
 import { logger } from '@/lib/logger';
 import Image from 'next/image';
@@ -55,6 +56,17 @@ function LandingPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // Parallax scroll effect
+  const { scrollY } = useScroll();
+  const heroY = useTransform(scrollY, [0, 500], [0, 100]);
+
+  // Check if we're past January 2, 2026
+  const isAvailableNow = () => {
+    const now = new Date();
+    const launchDate = new Date('2026-01-02T00:00:00');
+    return now >= launchDate;
+  };
 
   // Track if we've already captured this lead (to avoid duplicate API calls)
   const leadCapturedRef = useRef(false);
@@ -263,95 +275,144 @@ function LandingPageContent() {
       </header>
 
       {/* Hero Section */}
-      <main className="container mx-auto max-w-4xl px-4 py-8">
-        <section className="text-center mb-8">
-          {/* Preseason Badge */}
-          <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-lg shadow-green-500/30 mb-6">
-            <Zap className="w-4 h-4" />
-            PRESEASON 2025
-            <Zap className="w-4 h-4" />
-          </span>
+      <section className="relative pt-4 pb-8 overflow-hidden">
+        {/* Animated background */}
+        <motion.div
+          style={{ y: heroY }}
+          className="absolute inset-0 bg-gradient-to-b from-green-500/10 via-primary/5 to-background -z-10"
+        />
+
+        {/* Pulsing glow behind amount */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-96 h-96 bg-green-500/20 rounded-full blur-[100px] -z-10 animate-pulse" />
+
+        <div className="container mx-auto px-4 max-w-4xl text-center">
+          {/* Urgency badge */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-lg shadow-green-500/30 mb-6">
+              <Zap className="w-4 h-4" />
+              LIMITED TIME - PRESEASON 2026
+              <Zap className="w-4 h-4" />
+            </span>
+          </motion.div>
 
           {/* Referral Message - only show when client shares link (r=1) */}
           {hasCustomPreparer && isClientReferral && (
-            <p className="text-2xl sm:text-3xl lg:text-4xl text-green-500 font-black mb-6">
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="text-2xl sm:text-3xl lg:text-4xl text-green-500 font-black mb-6"
+            >
               &ldquo;I just got my taxes done by {preparerName}.&rdquo;
-            </p>
+            </motion.p>
           )}
 
-          {/* Headline */}
-          <h1 className="text-3xl sm:text-4xl lg:text-6xl font-black text-foreground mb-4 leading-tight">
-            Need cash now — or just want your taxes{' '}
-            <span className="text-green-500">done right?</span>
-          </h1>
-
-          {/* Subheadline with blinking text */}
-          <p className="text-lg sm:text-xl text-muted-foreground mb-6 max-w-2xl mx-auto">
-            File in-person or remotely.{' '}
-            <span className="text-green-500 font-bold text-xl sm:text-2xl animate-pulse">
-              Get up to $7,000 advance*
-            </span>{' '}
-            — or just professional filing. Your choice.
-          </p>
-
-          {/* Trust Items */}
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            {[
-              { icon: CreditCard, text: 'No Credit Check*' },
-              { icon: Clock, text: 'Same-Day Funding*' },
-              { icon: CheckCircle, text: '0% APR' },
-            ].map((item) => (
-              <div
-                key={item.text}
-                className="flex items-center gap-2 bg-white dark:bg-card px-4 py-2 rounded-full shadow-md border text-sm font-semibold"
+          {/* Main headline - THE STAR */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="mb-6"
+          >
+            <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-foreground mb-2">
+              Get Up To
+            </h1>
+            <div className="relative inline-block">
+              <motion.span
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="text-7xl sm:text-8xl lg:text-[12rem] font-black text-green-500 leading-none"
               >
-                <item.icon className="w-5 h-5 text-green-500" />
-                <span>{item.text}</span>
-              </div>
-            ))}
-          </div>
+                $7,000
+              </motion.span>
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.4, delay: 0.6 }}
+                className="absolute -top-2 -right-4 sm:-right-8 bg-yellow-400 text-yellow-900 text-xs sm:text-sm font-bold px-2 py-1 rounded-full rotate-12"
+              >
+                TAX ADVANCE*
+              </motion.div>
+            </div>
+          </motion.div>
+
+          {/* Subheadline */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            className="text-xl sm:text-2xl text-muted-foreground mb-6 max-w-2xl mx-auto"
+          >
+            {isAvailableNow() ? (
+              <><span className="text-foreground font-semibold">Available Now!</span> • Fast approval* • File in-person or remotely</>
+            ) : (
+              <>Available starting <span className="text-foreground font-semibold">January 2</span> • Fast approval* • File in-person or remotely</>
+            )}
+          </motion.p>
 
           {/* Preparer Card */}
-          <div className="bg-white dark:bg-card border-2 border-green-500/30 rounded-2xl p-4 shadow-xl max-w-md mx-auto mb-8">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.55 }}
+            className="bg-white dark:bg-card border-2 border-green-500/30 rounded-2xl p-4 sm:p-5 shadow-xl max-w-md mx-auto mb-8"
+          >
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3 text-center">
               {hasCustomPreparer ? 'Your Personal Tax Professional' : 'Contact Us Today'}
             </p>
             <div className="flex items-center gap-4">
-              {preparer.avatarUrl ? (
-                <img
-                  src={preparer.avatarUrl}
-                  alt={hasCustomPreparer ? preparerName : 'Tax Genius Pro'}
-                  className="w-20 h-20 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center border-4 border-green-500/30">
-                  <span className="text-2xl font-bold text-primary">
-                    {preparer.firstName?.[0]}{preparer.lastName?.[0]}
-                  </span>
-                </div>
-              )}
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                {preparer.avatarUrl ? (
+                  <img
+                    src={preparer.avatarUrl}
+                    alt={hasCustomPreparer ? preparerName : 'Tax Genius Pro'}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-green-500/30 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary/20 flex items-center justify-center border-4 border-green-500/30">
+                    <span className="text-3xl font-bold text-primary">
+                      {preparer.firstName?.[0]}{preparer.lastName?.[0]}
+                    </span>
+                  </div>
+                )}
+              </motion.div>
               <div className="flex-1 text-left">
-                <p className="font-bold text-xl text-foreground mb-0.5">
+                <p className="font-bold text-xl sm:text-2xl text-foreground mb-0.5">
                   {hasCustomPreparer ? preparerName : 'Tax Genius Pro'}
                 </p>
                 <p className="text-xs text-muted-foreground mb-2">
                   {hasCustomPreparer ? 'Licensed Tax Professional' : 'Professional Tax Services'}
                 </p>
                 {preparer.phone && (
-                  <a
+                  <motion.a
                     href={`tel:${cleanPhone}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-md hover:bg-green-600 transition-colors"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-shadow"
                   >
                     <Phone className="w-4 h-4" />
                     {preparer.phone}
-                  </a>
+                  </motion.a>
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
+        </div>
+      </section>
 
+      {/* FORM SECTION */}
+      <section className="py-8 bg-muted/30">
+        <div className="container mx-auto px-4 max-w-md">
           {/* Mode Toggle */}
-          <div className="flex bg-muted/50 rounded-lg p-1 max-w-md mx-auto mb-6">
+          <div className="flex bg-muted/50 rounded-lg p-1 mb-6">
             <button
               type="button"
               onClick={() => setMode('advance')}
@@ -377,7 +438,7 @@ function LandingPageContent() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-white dark:bg-card border rounded-xl shadow-lg max-w-md mx-auto overflow-hidden">
+          <div className="bg-white dark:bg-card border rounded-xl shadow-lg overflow-hidden">
             <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 text-center">
               <h2 className="text-xl font-bold text-white">
                 {mode === 'advance' ? 'Get Your Cash Advance' : 'Start Your Tax Filing'}
@@ -521,11 +582,13 @@ function LandingPageContent() {
               </p>
             </form>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Steps Section */}
-        <section className="py-8">
-          <h3 className="text-xl sm:text-2xl font-bold text-center mb-6">What Happens Next</h3>
+      {/* WHAT HAPPENS NEXT */}
+      <section className="py-12">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <h3 className="text-xl sm:text-2xl font-bold text-center mb-8">What Happens Next</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { step: 1, text: 'We call or text same day' },
@@ -534,19 +597,21 @@ function LandingPageContent() {
               { step: 4, text: 'Get your money' },
             ].map((item) => (
               <div key={item.step} className="text-center">
-                <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mx-auto mb-2">
+                <div className="w-12 h-12 bg-green-500 text-white rounded-full flex items-center justify-center font-bold text-lg mx-auto mb-3">
                   {item.step}
                 </div>
                 <p className="text-sm text-muted-foreground">{item.text}</p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* FAQ Section */}
-        <section className="py-8">
-          <h3 className="text-xl sm:text-2xl font-bold text-center mb-6">Common Questions</h3>
-          <div className="space-y-4 max-w-2xl mx-auto">
+      {/* FAQ SECTION */}
+      <section className="py-12 bg-muted/30">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <h3 className="text-xl sm:text-2xl font-bold text-center mb-8">Common Questions</h3>
+          <div className="space-y-4">
             {[
               {
                 q: 'Do I have to get an advance?',
@@ -571,12 +636,12 @@ function LandingPageContent() {
               </div>
             ))}
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
-      {/* Footer */}
+      {/* FOOTER */}
       <footer className="py-6 border-t">
-        <div className="container mx-auto max-w-4xl px-4 text-center">
+        <div className="container mx-auto px-4 max-w-3xl text-center">
           <p className="text-xs text-muted-foreground mb-4">
             *Advance amounts based on eligibility, IRS acceptance, and bank approval. Not all applicants qualify for the maximum amount. Funding timing varies by bank. 0% APR and $0 loan fees. Tax preparation fees apply.
           </p>
