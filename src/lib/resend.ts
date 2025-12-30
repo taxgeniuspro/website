@@ -5,7 +5,9 @@
  * Works with Postal, SendGrid, Mailgun, or any SMTP provider
  */
 import nodemailer from 'nodemailer';
+import { render } from '@react-email/render';
 import { logger } from '@/lib/logger';
+import type { ReactElement } from 'react';
 
 // SMTP configuration from environment variables
 const SMTP_HOST = process.env.SMTP_HOST || 'postal.toolboxhosting.com';
@@ -53,6 +55,7 @@ interface EmailOptions {
   subject: string;
   html?: string;
   text?: string;
+  react?: ReactElement;
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string;
@@ -86,11 +89,22 @@ class ResendCompatibleClient {
           contentType: att.type,
         }));
 
+        // Render React component to HTML if provided
+        let htmlContent = options.html;
+        if (options.react && !htmlContent) {
+          try {
+            htmlContent = await render(options.react);
+          } catch (renderError) {
+            logger.error('[Resend] Failed to render React email template', { error: renderError });
+            throw renderError;
+          }
+        }
+
         const mailOptions = {
           from: options.from,
           to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
           subject: options.subject,
-          html: options.html,
+          html: htmlContent,
           text: options.text,
           cc: options.cc ? (Array.isArray(options.cc) ? options.cc.join(', ') : options.cc) : undefined,
           bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined,
