@@ -463,13 +463,15 @@ export async function POST(req: NextRequest) {
 
     if (existingContact) {
       // Update existing contact
+      const updateNow = new Date().toISOString();
       const { data: updatedContact, error: updateError } = await db
         .from('crm_contacts')
         .update({
           firstName,
           phone: phoneDigits,
           email: email?.toLowerCase() || existingContact.email,
-          lastContactedAt: new Date().toISOString(),
+          lastContactedAt: updateNow,
+          updatedAt: updateNow,
           // Update preparer assignment if not already assigned
           assignedPreparerId: existingContact.assignedPreparerId || assignedPreparerId,
           // Update referrer info if not already set (preserve original attribution)
@@ -492,6 +494,7 @@ export async function POST(req: NextRequest) {
       });
     } else {
       // Create new CRM contact
+      const now = new Date().toISOString();
       const { data: newContact, error: createError } = await db
         .from('crm_contacts')
         .insert({
@@ -504,12 +507,15 @@ export async function POST(req: NextRequest) {
           source: 'preseason_cash_advance',
           stage: 'NEW',
           leadScore: 80, // High intent - they want a cash advance
-          lastContactedAt: new Date().toISOString(),
+          lastContactedAt: now,
+          createdAt: now,
+          updatedAt: now,
           // Set preparer assignment and attribution
           assignedPreparerId,
           referrerUsername: finalReferrerUsername,
           referrerType: finalReferrerType,
           attributionMethod: finalAttributionMethod,
+          attributionConfidence: finalAttributionConfidence,
         })
         .select()
         .single();
