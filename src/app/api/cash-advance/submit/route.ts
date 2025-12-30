@@ -7,6 +7,8 @@ import { apiRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/lib/ra
 import { getEmailRecipients } from '@/config/email-routing';
 import { generateCashAdvancePDF } from '@/lib/services/pdf-form-generator.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
+import { sendLeadToDiscord } from '@/lib/services/discord-notifier.service';
+import { getAttribution } from '@/lib/services/attribution.service';
 
 // TypeScript interfaces for database records
 interface Profile {
@@ -128,7 +130,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
     const {
       firstName,
       phone,
@@ -177,7 +188,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ========================================
-    // PREPARER ATTRIBUTION: Look up preparer from ref parameter
+    // PREPARER ATTRIBUTION: Use getAttribution service for full tracking
+    // Supports: URL ref param, cookie-based tracking, email/phone cross-device matching
     // ========================================
     let assignedPreparerId: string | null = null;
     let preparerProfile: {
@@ -189,12 +201,18 @@ export async function POST(req: NextRequest) {
       phone: string | null;
     } | null = null;
 
-    if (ref) {
+    // Get attribution from service (checks cookies, email/phone matching)
+    const attributionResult = await getAttribution(email || undefined, phoneDigits);
+
+    // Determine the referrer username - prefer URL ref, fallback to cookie/matching
+    const effectiveRef = ref || attributionResult.attribution.referrerUsername;
+
+    if (effectiveRef) {
       // Look up the preparer by tracking code
       const { data: preparerProfileData } = await db
         .from('profiles')
         .select('id, role, userId, firstName, lastName, phone')
-        .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
+        .or(`trackingCode.eq.${effectiveRef},customTrackingCode.eq.${effectiveRef},shortLinkUsername.eq.${effectiveRef}`)
         .eq('role', 'tax_preparer')
         .limit(1);
 
@@ -204,7 +222,8 @@ export async function POST(req: NextRequest) {
         // Use Profile.id (not User.id) to match dashboard queries
         assignedPreparerId = preparerProfile.id;
         logger.info('Cash advance lead attributed to preparer', {
-          ref,
+          ref: effectiveRef,
+          attributionMethod: ref ? 'ref_param' : attributionResult.attribution.attributionMethod,
           preparerId: assignedPreparerId,
           profileId: preparerProfile.id,
         });
@@ -213,19 +232,19 @@ export async function POST(req: NextRequest) {
         const { data: anyProfileData } = await db
           .from('profiles')
           .select('id, role')
-          .or(`trackingCode.eq.${ref},customTrackingCode.eq.${ref},shortLinkUsername.eq.${ref}`)
+          .or(`trackingCode.eq.${effectiveRef},customTrackingCode.eq.${effectiveRef},shortLinkUsername.eq.${effectiveRef}`)
           .limit(1);
 
         const anyProfile = firstOrNull(anyProfileData);
 
         if (anyProfile?.role === 'admin') {
           assignedPreparerId = anyProfile.id;
-          logger.info('Cash advance lead attributed to admin', { ref, preparerId: assignedPreparerId });
+          logger.info('Cash advance lead attributed to admin', { ref: effectiveRef, preparerId: assignedPreparerId });
         } else {
           // Affiliate or unknown code → assign to Owliver
           assignedPreparerId = await getDefaultPreparerId();
           logger.info('Cash advance lead assigned to default preparer (Owliver)', {
-            ref,
+            ref: effectiveRef,
             preparerId: assignedPreparerId,
             reason: anyProfile ? 'affiliate_referral' : 'unknown_ref',
           });
@@ -241,8 +260,184 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Determine final attribution fields
+    const finalReferrerUsername = effectiveRef || null;
+    const finalReferrerType = effectiveRef
+      ? (attributionResult.attribution.referrerType || 'tax_preparer')
+      : null;
+    const finalAttributionMethod = ref
+      ? 'ref_param'
+      : (attributionResult.attribution.attributionMethod || null);
+    const finalAttributionConfidence = attributionResult.attribution.attributionConfidence || (ref ? 100 : null);
+
+    // Prepare preparer info for notifications
+    const preparerName = preparerProfile
+      ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
+      : 'Owliver Owl';
+
+    // ========================================
+    // NOTIFICATIONS FIRST - Ensure we have a copy before CRM
+    // Discord, Telegram, and Email are sent BEFORE saving to CRM
+    // This ensures we always have lead data even if CRM fails
+    // ========================================
+
+    // Get preparer email for notifications
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax';
+    const recipients = getEmailRecipients((locale as 'en' | 'es') || 'en');
+    let primaryRecipient: string;
+    let recipientName: string;
+
+    if (assignedPreparerId && preparerProfile) {
+      const { data: preparerData } = await db
+        .from('users')
+        .select(`
+          email,
+          profiles!inner (
+            firstName,
+            professional_emails (
+              emailAddress
+            )
+          )
+        `)
+        .eq('id', preparerProfile.userId)
+        .eq('profiles.professional_emails.isPrimary', true)
+        .eq('profiles.professional_emails.status', 'ACTIVE')
+        .limit(1);
+
+      const preparer = firstOrNull(preparerData) as UserWithProfile | null;
+      primaryRecipient =
+        preparer?.profiles?.[0]?.professional_emails?.[0]?.emailAddress ||
+        preparer?.email ||
+        recipients.primary;
+      recipientName = preparerProfile.firstName || preparer?.profiles?.[0]?.firstName || 'Tax Preparer';
+    } else {
+      primaryRecipient = recipients.primary;
+      recipientName = recipients.recipientName;
+    }
+
+    // Temporary ID for PDF (will be replaced with CRM ID after save)
+    const tempLeadId = `LEAD-${Date.now().toString(36).toUpperCase()}`;
+
+    // 1. Send Discord notification
+    try {
+      await sendLeadToDiscord({
+        leadType: 'advance',
+        firstName,
+        lastName: '',
+        email: email || '',
+        phone: phoneDigits,
+        zipCode,
+        preferredFiling,
+        preparerName,
+        preparerCode: finalReferrerUsername || 'ow',
+        source: 'Landing Page - Cash Advance',
+      });
+      logger.info('Discord notification sent for cash advance lead');
+    } catch (discordError) {
+      logger.error('Discord notification failed', { error: discordError });
+    }
+
+    // 2. Send Telegram notification
+    try {
+      await sendLeadToTelegram({
+        formType: '💰 CASH ADVANCE LEAD',
+        firstName,
+        email,
+        phone,
+        zipCode,
+        locale: (locale as 'en' | 'es') || 'en',
+        refCode: finalReferrerUsername || undefined,
+        assignedPreparer: preparerName,
+        source: 'Landing Page',
+        additionalFields: {
+          'Preferred Filing': preferredFiling === 'in-person' ? 'In-Person' : 'Remote',
+          'Best Time': bestTimeToContact,
+          'Attribution': finalAttributionMethod || 'direct',
+        },
+      });
+      logger.info('Telegram notification sent for cash advance lead');
+    } catch (telegramError) {
+      logger.error('Telegram notification failed', { error: telegramError });
+    }
+
+    // 3. Send Email notification with PDF
+    try {
+      if (process.env.NODE_ENV !== 'development') {
+        // Generate PDF attachment with all form data
+        let pdfAttachment: { filename: string; content: Buffer } | undefined;
+        try {
+          const pdfBuffer = await generateCashAdvancePDF({
+            id: tempLeadId,
+            firstName,
+            phone: phoneDigits,
+            email: email || undefined,
+            zipCode,
+            preferredFiling,
+            bestTimeToContact,
+            referrerUsername: finalReferrerUsername || undefined,
+            referrerType: finalReferrerType || undefined,
+            createdAt: new Date(),
+          });
+          pdfAttachment = {
+            filename: `CashAdvanceLead_${firstName}_${tempLeadId}.pdf`,
+            content: pdfBuffer,
+          };
+          logger.info('PDF generated for cash advance lead', {
+            tempLeadId,
+            filename: pdfAttachment.filename,
+          });
+        } catch (pdfError) {
+          logger.error('Failed to generate PDF for cash advance lead', { error: pdfError });
+        }
+
+        const { data, error } = await getResendClient().emails.send({
+          from: fromEmail,
+          to: [primaryRecipient],
+          cc: [recipients.cc],
+          bcc: ['taxgenius.tax@gmail.com'],
+          subject: `💰 URGENT: Preseason Cash Advance Lead - ${firstName}`,
+          react: CashAdvanceLeadNotification({
+            firstName,
+            phone,
+            email,
+            zipCode,
+            preferredFiling,
+            bestTimeToContact,
+            submittedAt: new Date(),
+            recipientName,
+            referralCode: finalReferrerUsername || undefined,
+            preparerName: preparerProfile
+              ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
+              : undefined,
+          }),
+          ...(pdfAttachment && { attachments: [pdfAttachment] }),
+        });
+
+        if (error) {
+          logger.error('Failed to send cash advance email', error);
+        } else {
+          logger.info('Email notification sent for cash advance lead', {
+            emailId: data?.id,
+            to: primaryRecipient,
+          });
+        }
+      } else {
+        logger.info('Email notification skipped (dev mode)', { to: primaryRecipient });
+      }
+    } catch (emailError) {
+      logger.error('Email notification failed', { error: emailError });
+    }
+
+    logger.info('All notifications sent for cash advance lead', {
+      discord: true,
+      telegram: true,
+      email: true,
+      tempLeadId,
+    });
+
     // ========================================
     // CRM INTEGRATION: Create or update contact
+    // (After notifications are sent)
     // ========================================
     let crmContact: CRMContact;
     const contactEmail = email?.toLowerCase() || `${phoneDigits}@phone.lead`;
@@ -276,10 +471,10 @@ export async function POST(req: NextRequest) {
           lastContactedAt: new Date().toISOString(),
           // Update preparer assignment if not already assigned
           assignedPreparerId: existingContact.assignedPreparerId || assignedPreparerId,
-          // Update referrer info if not already set
-          referrerUsername: existingContact.referrerUsername || ref || null,
-          referrerType: existingContact.referrerType || (ref ? 'tax_preparer' : null),
-          attributionMethod: existingContact.attributionMethod || (ref ? 'ref_param' : null),
+          // Update referrer info if not already set (preserve original attribution)
+          referrerUsername: existingContact.referrerUsername || finalReferrerUsername,
+          referrerType: existingContact.referrerType || finalReferrerType,
+          attributionMethod: existingContact.attributionMethod || finalAttributionMethod,
         })
         .eq('id', existingContact.id)
         .select()
@@ -292,6 +487,7 @@ export async function POST(req: NextRequest) {
         contactId: crmContact.id,
         phone: phoneDigits,
         assignedPreparerId,
+        attributionMethod: finalAttributionMethod,
       });
     } else {
       // Create new CRM contact
@@ -307,11 +503,11 @@ export async function POST(req: NextRequest) {
           stage: 'NEW',
           leadScore: 80, // High intent - they want a cash advance
           lastContactedAt: new Date().toISOString(),
-          // Set preparer assignment if ref was provided
+          // Set preparer assignment and attribution
           assignedPreparerId,
-          referrerUsername: ref || null,
-          referrerType: ref ? 'tax_preparer' : null,
-          attributionMethod: ref ? 'ref_param' : null,
+          referrerUsername: finalReferrerUsername,
+          referrerType: finalReferrerType,
+          attributionMethod: finalAttributionMethod,
         })
         .select()
         .single();
@@ -323,6 +519,9 @@ export async function POST(req: NextRequest) {
         contactId: crmContact.id,
         phone: phoneDigits,
         assignedPreparerId,
+        referrerUsername: finalReferrerUsername,
+        attributionMethod: finalAttributionMethod,
+        attributionConfidence: finalAttributionConfidence,
       });
     }
 
@@ -348,7 +547,8 @@ export async function POST(req: NextRequest) {
 - Best Time to Contact: ${bestTimeToContact}
 
 **Attribution:**
-${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}
+${finalReferrerUsername ? `- Referrer: ${finalReferrerUsername} (${finalReferrerType})` : '- Direct (no referral)'}
+- Method: ${finalAttributionMethod || 'direct'}${finalAttributionConfidence ? ` (${finalAttributionConfidence}% confidence)` : ''}
 ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfile.lastName}` : ''}
 
 **Priority:** HIGH - Preseason Cash Advance Request
@@ -369,160 +569,6 @@ ${preparerProfile ? `- Assigned to: ${preparerProfile.firstName} ${preparerProfi
         contactId: crmContact.id,
       });
     }
-
-    // ========================================
-    // EMAIL NOTIFICATION ROUTING
-    // ========================================
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@taxgeniuspro.tax';
-    const recipients = getEmailRecipients((locale as 'en' | 'es') || 'en');
-
-    let primaryRecipient: string;
-    let recipientName: string;
-
-    if (assignedPreparerId && preparerProfile) {
-      // Get preparer's email address using preparerProfile.userId (NOT assignedPreparerId which is Profile.id)
-      const { data: preparerData } = await db
-        .from('users')
-        .select(`
-          email,
-          profiles!inner (
-            firstName,
-            professional_emails (
-              emailAddress
-            )
-          )
-        `)
-        .eq('id', preparerProfile.userId)
-        .eq('profiles.professional_emails.isPrimary', true)
-        .eq('profiles.professional_emails.status', 'ACTIVE')
-        .limit(1);
-
-      const preparer = firstOrNull(preparerData) as UserWithProfile | null;
-
-      primaryRecipient =
-        preparer?.profiles?.[0]?.professional_emails?.[0]?.emailAddress ||
-        preparer?.email ||
-        recipients.primary;
-      recipientName = preparerProfile.firstName || preparer?.profiles?.[0]?.firstName || 'Tax Preparer';
-
-      logger.info('Cash advance lead routed to assigned preparer', {
-        ref,
-        preparerId: assignedPreparerId,
-        preparerEmail: primaryRecipient,
-      });
-    } else {
-      // No preparer assigned - use language-based routing
-      primaryRecipient = recipients.primary;
-      recipientName = recipients.recipientName;
-
-      logger.info('Cash advance lead using language-based routing', {
-        locale: locale || 'en',
-        primary: primaryRecipient,
-      });
-    }
-
-    try {
-      if (process.env.NODE_ENV === 'development') {
-        logger.info('Cash advance email (Dev Mode)', {
-          to: primaryRecipient,
-          cc: recipients.cc,
-          from: fromEmail,
-          firstName,
-          phone,
-          email,
-          zipCode,
-          preferredFiling,
-          bestTimeToContact,
-        });
-      } else {
-        // Generate PDF attachment with all form data
-        let pdfAttachment: { filename: string; content: Buffer } | undefined;
-        try {
-          const pdfBuffer = await generateCashAdvancePDF({
-            id: crmContact.id,
-            firstName,
-            phone: phoneDigits,
-            email: email || undefined,
-            zipCode,
-            preferredFiling,
-            bestTimeToContact,
-            referrerUsername: ref || undefined,
-            referrerType: ref ? 'tax_preparer' : undefined,
-            createdAt: new Date(),
-          });
-          pdfAttachment = {
-            filename: `CashAdvanceLead_${firstName}_${crmContact.id.slice(-6).toUpperCase()}.pdf`,
-            content: pdfBuffer,
-          };
-          logger.info('PDF generated for cash advance lead', {
-            contactId: crmContact.id,
-            filename: pdfAttachment.filename,
-            size: pdfBuffer.length,
-          });
-        } catch (pdfError) {
-          // Log error but don't fail - email still sends without attachment
-          logger.error('Failed to generate PDF for cash advance lead', {
-            error: pdfError,
-            contactId: crmContact.id,
-          });
-        }
-
-        const { data, error } = await getResendClient().emails.send({
-          from: fromEmail,
-          to: [primaryRecipient],
-          cc: [recipients.cc],
-          bcc: ['taxgenius.tax@gmail.com'], // MANDATORY: Always BCC the main office on all form submissions
-          subject: `💰 URGENT: Preseason Cash Advance Lead - ${firstName}`,
-          react: CashAdvanceLeadNotification({
-            firstName,
-            phone,
-            email,
-            zipCode,
-            preferredFiling,
-            bestTimeToContact,
-            submittedAt: new Date(),
-            recipientName,
-            referralCode: ref || undefined,
-            preparerName: preparerProfile
-              ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
-              : undefined,
-          }),
-          // Attach PDF with all form data
-          ...(pdfAttachment && { attachments: [pdfAttachment] }),
-        });
-
-        if (error) {
-          logger.error('Failed to send cash advance email', error);
-        } else {
-          logger.info('Cash advance email sent', {
-            emailId: data?.id,
-            to: primaryRecipient,
-            cc: recipients.cc,
-            hasPdf: !!pdfAttachment,
-          });
-        }
-      }
-    } catch (emailError) {
-      logger.error('Error sending cash advance email', emailError);
-    }
-
-    // Send Telegram notification (non-blocking)
-    sendLeadToTelegram({
-      formType: '💰 CASH ADVANCE LEAD',
-      firstName,
-      email,
-      phone,
-      zipCode,
-      locale: (locale as 'en' | 'es') || 'en',
-      refCode: ref,
-      assignedPreparer: preparerProfile
-        ? `${preparerProfile.firstName} ${preparerProfile.lastName}`
-        : 'Owliver Owl',
-      additionalFields: {
-        'Preferred Filing': preferredFiling === 'in-person' ? 'In-Person' : 'Remote',
-        'Best Time': bestTimeToContact,
-      },
-    }).catch(err => logger.error('Telegram notification failed', { error: err }));
 
     return NextResponse.json({
       success: true,

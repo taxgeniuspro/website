@@ -14,6 +14,8 @@ import {
 import { scheduleReferralInvitationEmail } from '@/lib/services/scheduled-email.service';
 import { CRMLeadScoringService } from '@/lib/services/crm-lead-scoring.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
+import { sendLeadToDiscord } from '@/lib/services/discord-notifier.service';
+import { EmailService } from '@/lib/services/email.service';
 
 // TypeScript interfaces for database types (replacing @prisma/client imports)
 interface Profile {
@@ -111,7 +113,12 @@ async function getDefaultPreparerId(): Promise<string | null> {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
 
     const {
       // Personal Information & Address
@@ -330,6 +337,104 @@ export async function POST(req: NextRequest) {
         assignedPreparerId,
       });
     }
+
+    // ========================================
+    // NOTIFICATIONS FIRST - Ensure we have a copy before database operations
+    // Discord, Telegram, and Email are sent BEFORE saving to database
+    // This ensures we always have lead data even if database fails
+    // ========================================
+
+    // Get preparer name for notifications
+    let preparerName = 'Owliver Owl';
+    if (assignedPreparerId) {
+      const { data: preparerProfiles } = await db
+        .from('profiles')
+        .select('firstName, lastName')
+        .eq('id', assignedPreparerId)
+        .limit(1);
+      const preparerProfile = firstOrNull(preparerProfiles);
+      if (preparerProfile?.firstName) {
+        preparerName = `${preparerProfile.firstName} ${preparerProfile.lastName || ''}`.trim();
+      }
+    }
+
+    // Temporary lead ID for tracking
+    const tempLeadId = `LEAD-${Date.now().toString(36).toUpperCase()}`;
+
+    // 1. Send Discord notification (all leads)
+    try {
+      await sendLeadToDiscord({
+        leadType: 'filing',
+        firstName: first_name as string,
+        lastName: last_name as string,
+        email: email as string,
+        phone: phone as string,
+        zipCode: zip_code as string,
+        preparerName,
+        preparerCode: attributionResult.attribution.referrerUsername || 'ow',
+        source: 'Landing Page - Tax Filing',
+      });
+      logger.info('Discord notification sent for tax intake lead');
+    } catch (discordError) {
+      logger.error('Discord notification failed', { error: discordError });
+    }
+
+    // 2. Send Telegram notification (all leads, not just complete)
+    try {
+      await sendLeadToTelegram({
+        formType: '📋 TAX INTAKE LEAD',
+        firstName: first_name as string,
+        lastName: last_name as string,
+        email: email as string,
+        phone: phone as string,
+        zipCode: zip_code as string,
+        locale: (locale as 'en' | 'es') || 'en',
+        refCode: attributionResult.attribution.referrerUsername || undefined,
+        assignedPreparer: preparerName,
+        source: 'Landing Page',
+        additionalFields: {
+          'Form Type': isCompleteTaxIntake ? 'Complete Intake' : 'Basic Lead',
+          'Filing Status': filing_status || 'Not provided',
+          'Dependents': has_dependents ? (number_of_dependents || '1+') : '0',
+        },
+      });
+      logger.info('Telegram notification sent for tax intake lead');
+    } catch (telegramError) {
+      logger.error('Telegram notification failed', { error: telegramError });
+    }
+
+    // 3. Send Email notification to preparer
+    try {
+      await EmailService.sendNewLeadNotificationEmail(
+        assignedPreparerId || 'taxgenius.tax@gmail.com',
+        {
+          leadId: tempLeadId,
+          leadName: `${first_name} ${last_name}`,
+          leadEmail: email as string,
+          leadPhone: phone as string,
+          service: isCompleteTaxIntake ? 'Complete Tax Intake' : 'Tax Filing Lead',
+          message: `Zip: ${zip_code || 'Not provided'}\nFiling Status: ${filing_status || 'Not provided'}`,
+          source: 'Landing Page - Tax Filing',
+        },
+        'taxgenius.tax@gmail.com',
+        (locale as 'en' | 'es') || 'en'
+      );
+      logger.info('Email notification sent for tax intake lead');
+    } catch (emailError) {
+      logger.error('Email notification failed', { error: emailError });
+    }
+
+    logger.info('All notifications sent for tax intake lead', {
+      discord: true,
+      telegram: true,
+      email: true,
+      tempLeadId,
+      isCompleteTaxIntake,
+    });
+
+    // ========================================
+    // DATABASE OPERATIONS - After notifications are sent
+    // ========================================
 
     // Check if lead already exists for this email AND tax year (composite key)
     const { data: existingLeads } = await db
@@ -720,26 +825,8 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
       });
     }
 
-    // Send Telegram notification for complete tax intakes (non-blocking)
-    if (isCompleteTaxIntake) {
-      sendLeadToTelegram({
-        formType: '📋 TAX INTAKE (Complete)',
-        firstName: first_name,
-        lastName: last_name,
-        email,
-        phone,
-        zipCode: zip_code,
-        locale: (locale as 'en' | 'es') || 'en',
-        refCode: attributionResult.attribution.referrerUsername || undefined,
-        source: 'tax_intake_form',
-        additionalFields: {
-          'Filing Status': filing_status || 'Not provided',
-          'Employment': employment_type || 'Not provided',
-          'Dependents': has_dependents ? (number_of_dependents || '1+') : '0',
-          'Wants Advance': wants_refund_advance ? 'Yes' : 'No',
-        },
-      }).catch(err => logger.error('Telegram notification failed', { error: err }));
-    }
+    // Note: Discord, Telegram, and Email notifications are now sent at the beginning
+    // BEFORE any database operations (see NOTIFICATIONS FIRST block above)
 
     return NextResponse.json(
       {
