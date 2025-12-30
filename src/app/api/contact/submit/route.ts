@@ -8,6 +8,7 @@ import { getEmailRecipients } from '@/config/email-routing';
 import { generateContactFormPDF } from '@/lib/services/pdf-form-generator.service';
 import { sendLeadToTelegram } from '@/lib/services/telegram-lead-notifier.service';
 import { sendLeadToDiscord } from '@/lib/services/discord-notifier.service';
+import { nanoid } from 'nanoid';
 
 // Local TypeScript interfaces (replacing Prisma types)
 interface Profile {
@@ -190,50 +191,64 @@ export async function POST(req: NextRequest) {
 
     let crmContact = firstOrNull(existingContacts) as CRMContact | null;
 
+    const now = new Date().toISOString();
+
     if (crmContact) {
       // Update existing contact
-      const { data: updatedContacts } = await db
+      const { data: updatedContacts, error: updateError } = await db
         .from('crm_contacts')
         .update({
-          first_name: firstName,
-          last_name: lastName,
+          firstName,
+          lastName,
           phone: phone || crmContact.phone,
-          last_contacted_at: new Date().toISOString(),
+          lastContactedAt: now,
+          updatedAt: now,
           // Update preparer assignment if ref was provided and not already assigned
-          assigned_preparer_id: crmContact.assignedPreparerId || assignedPreparerId,
+          assignedPreparerId: crmContact.assignedPreparerId || assignedPreparerId,
           // Update referrer info if ref provided and not already set
-          referrer_username: crmContact.referrerUsername || ref || null,
-          referrer_type: crmContact.referrerType || (ref ? 'tax_preparer' : null),
-          attribution_method: crmContact.attributionMethod || (ref ? 'ref_param' : null),
+          referrerUsername: crmContact.referrerUsername || ref || null,
+          referrerType: crmContact.referrerType || (ref ? 'tax_preparer' : null),
+          attributionMethod: crmContact.attributionMethod || (ref ? 'ref_param' : null),
         })
         .eq('email', email.toLowerCase())
         .select()
         .single();
 
+      if (updateError) {
+        logger.error('Failed to update CRM contact', { error: updateError, email });
+        throw updateError;
+      }
       crmContact = updatedContacts as CRMContact;
       logger.info('Updated existing CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     } else {
       // Create new CRM contact
-      const { data: newContact } = await db
+      const { data: newContact, error: createError } = await db
         .from('crm_contacts')
         .insert({
-          contact_type: 'LEAD',
-          first_name: firstName,
-          last_name: lastName,
+          id: nanoid(),
+          contactType: 'LEAD',
+          firstName,
+          lastName,
           email: email.toLowerCase(),
           phone: phone || null,
           source: 'contact_form',
           stage: 'NEW',
-          last_contacted_at: new Date().toISOString(),
+          lastContactedAt: now,
+          createdAt: now,
+          updatedAt: now,
           // Set preparer assignment if ref was provided
-          assigned_preparer_id: assignedPreparerId,
-          referrer_username: ref || null,
-          referrer_type: ref ? 'tax_preparer' : null,
-          attribution_method: ref ? 'ref_param' : null,
+          assignedPreparerId,
+          referrerUsername: ref || null,
+          referrerType: ref ? 'tax_preparer' : null,
+          attributionMethod: ref ? 'ref_param' : null,
         })
         .select()
         .single();
 
+      if (createError) {
+        logger.error('Failed to create CRM contact', { error: createError, email });
+        throw createError;
+      }
       crmContact = newContact as CRMContact;
       logger.info('Created new CRM contact', { contactId: crmContact.id, email, assignedPreparerId });
     }
@@ -245,7 +260,8 @@ export async function POST(req: NextRequest) {
       await db
         .from('crm_interactions')
         .insert({
-          contact_id: crmContact.id,
+          id: nanoid(),
+          contactId: crmContact.id,
           type: 'OTHER',
           direction: 'INBOUND',
           subject: `Contact Form: ${service}`,
@@ -262,7 +278,8 @@ ${message}
 **Attribution:**
 - Source: Contact form submission
 ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
-          occurred_at: new Date().toISOString(),
+          occurredAt: now,
+          createdAt: now,
         });
 
       logger.info('CRM interaction created for contact form submission', {
@@ -300,24 +317,24 @@ ${ref ? `- Referrer: ${ref} (tax_preparer)` : '- Direct (no referral)'}`,
       // Get profile with firstName
       const { data: profileData } = await db
         .from('profiles')
-        .select('first_name')
-        .eq('user_id', preparerProfile.userId)
+        .select('firstName')
+        .eq('userId', preparerProfile.userId)
         .single();
 
       // Get professional emails
       const { data: professionalEmails } = await db
         .from('professional_emails')
-        .select('email_address')
-        .eq('profile_id', preparerProfile.id)
-        .eq('is_primary', true)
+        .select('emailAddress')
+        .eq('profileId', preparerProfile.id)
+        .eq('isPrimary', true)
         .eq('status', 'ACTIVE')
         .limit(1);
 
-      const primaryProfEmail = firstOrNull(professionalEmails) as { email_address: string } | null;
+      const primaryProfEmail = firstOrNull(professionalEmails) as { emailAddress: string } | null;
 
       // Use professional email if available, otherwise use signup email
-      primaryRecipient = primaryProfEmail?.email_address || userData?.email || recipients.primary;
-      recipientName = profileData?.first_name || 'Tax Preparer';
+      primaryRecipient = primaryProfEmail?.emailAddress || userData?.email || recipients.primary;
+      recipientName = profileData?.firstName || 'Tax Preparer';
 
       logger.info('Contact form routed to assigned preparer', {
         ref,
