@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { nanoid } from 'nanoid';
 import { db, firstOrNull } from '@/lib/db';
 import { trackJourneyStage } from '@/lib/services/journey-tracking.service';
 import { getUTMCookie } from '@/lib/utils/cookie-manager';
@@ -617,6 +618,7 @@ export async function POST(req: NextRequest) {
         const { data: newContact, error: createErr } = await db
           .from('crm_contacts')
           .insert({
+            id: nanoid(), // Generate unique ID
             contactType: 'LEAD',
             firstName: first_name,
             lastName: last_name,
@@ -697,6 +699,7 @@ ${attributionResult.attribution.referrerUsername ? `- Referrer: ${attributionRes
       await db
         .from('crm_interactions')
         .insert({
+          id: nanoid(), // Generate unique ID
           contactId: crmContact.id,
           type: 'NOTE',
           direction: 'INBOUND',
