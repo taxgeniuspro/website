@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { nanoid } from 'nanoid';
 import { db, firstOrNull } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getResendClient } from '@/lib/resend';
@@ -494,6 +495,7 @@ export async function POST(req: NextRequest) {
       const { data: newContact, error: createError } = await db
         .from('crm_contacts')
         .insert({
+          id: nanoid(), // Generate unique ID
           contactType: 'LEAD',
           firstName,
           lastName: '', // Not collected in this form
@@ -530,6 +532,7 @@ export async function POST(req: NextRequest) {
     // ========================================
     try {
       const { error: interactionError } = await db.from('crm_interactions').insert({
+        id: nanoid(), // Generate unique ID
         contactId: crmContact.id,
         type: 'OTHER',
         direction: 'INBOUND',
